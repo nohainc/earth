@@ -5,7 +5,7 @@ type ResearchInput = { humanId: string; buildingType: string; correlationId: str
 
 async function corporationForHuman(tx: PostgresRepository, humanId: string): Promise<string> {
   const membership = await tx.query<{ corporation_id: string | null }>(
-    "SELECT corporation_id FROM memberships WHERE human_id = $1 AND corporation_id IS NOT NULL LIMIT 1",
+    "SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' AND ha.corporation_id IS NOT NULL LIMIT 1",
     [humanId],
   );
   const corporationId = membership.rows[0]?.corporation_id;
@@ -135,7 +135,10 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
 }
 
 export async function listCorporationBuildingResearch(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const membership = await repository.query<{ corporation_id: string | null }>('SELECT corporation_id FROM memberships WHERE human_id = $1 LIMIT 1', [humanId]);
+  const membership = await repository.query<{ corporation_id: string | null }>(
+    'SELECT corporation_id FROM house_affiliations WHERE house_id = (SELECT house_id FROM humans WHERE id = $1) AND status = \'ACTIVE\' AND corporation_id IS NOT NULL LIMIT 1',
+    [humanId],
+  );
   const corporationId = membership.rows[0]?.corporation_id;
   if (!corporationId) return { corporationId: null, projects: [], unlocks: [] };
   const [projects, unlocks] = await Promise.all([

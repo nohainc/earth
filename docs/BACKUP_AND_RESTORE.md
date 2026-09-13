@@ -41,11 +41,10 @@ Before applying any migration to production:
 ## 4. Restore & Recovery Procedure
 
 ### Isolated Restore Procedure
-To restore a snapshot to a target database or staging instance:
+To restore a snapshot to a dedicated non-production target or staging instance:
 ```bash
-# 1. Provision an empty isolated recovery database and restore the encrypted
-#    backup file to a controlled operations host.
-createdb -h localhost -U postgres earth_recovery
+# 1. Provision an empty dedicated restore database on a controlled operations host.
+createdb -h localhost -U postgres earth_restore_test
 
 # 2. Restore custom dump with pg_restore (the script verifies its SHA-256 sidecar first)
 RECOVERY_DATABASE_URL="${RECOVERY_DATABASE_URL}" \
@@ -69,7 +68,7 @@ DATABASE_URL="${RECOVERY_DATABASE_URL}" npm run db:verify:invariants
 
 ## 6. Operational Certification
 
-Run the populated-world recovery drill against a dedicated recovery database:
+Run the populated-world restore drill against a dedicated restore database:
 
 ```bash
 DATABASE_URL="${DATABASE_URL}" \

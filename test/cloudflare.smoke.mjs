@@ -43,11 +43,10 @@ assert.equal(health.body.environment, 'production');
 assert.equal(health.body.checks.database, true);
 assert.equal(health.body.checks.coreSchema, true);
 assert.equal(health.body.checks.featureSchema, true);
-assert.equal(health.body.checks.maintenanceIdempotency, true);
 assert.equal(health.body.checks.marketCreditReservations, true);
 assert.equal(health.body.checks.businessGovernanceSchema, true);
 assert.equal(health.body.checks.balancesNonNegative, true);
-assert.equal(health.body.checks.machineConditionsBounded, true);
+assert.equal(health.body.checks.criticalInvariants, true);
 assert.equal(health.body.checks.migrationManifest, true);
 assert.equal(health.body.checks.schedulerFresh, true);
 assert.equal(health.body.checks.outboxPressure, true);
@@ -60,7 +59,6 @@ assert.equal(health.body.expectedSchemaVersion, schemaManifest.migrationVersion)
 assert.equal(health.body.readiness.migrationVersion, schemaManifest.migrationVersion);
 assert.equal(health.body.readiness.invariantScan.ok, true);
 assert.equal(health.body.readiness.invariantScan.balancesNonNegative, true);
-assert.equal(health.body.readiness.invariantScan.machineConditionsBounded, true);
 assert.equal(health.body.checks.postgresConfigured, true);
 assert.equal(health.body.checks.postgresReachable, true);
 assert.equal(typeof health.body.checks.postgresSchemaReady, 'boolean');
@@ -71,42 +69,29 @@ assert.equal(health.body.migration.target, 'planetscale-postgres');
 assert.equal(health.body.authority, 'postgres');
 
 const liquidity = await get('/api/finance/liquidity');
-assert.equal(liquidity.response.status, 200);
-assert.equal(liquidity.body.persistence, 'planetscale-postgres');
-assert.equal(typeof liquidity.body.activeHumans, 'number');
-assert.equal(typeof liquidity.body.moneySupply, 'number');
-assert.equal(typeof liquidity.body.target, 'number');
-assert.ok(['below-corridor', 'inside-corridor', 'above-corridor'].includes(liquidity.body.status));
+assert.equal(liquidity.response.status, 401);
+assert.equal(liquidity.body.ok, false);
 
-const marketBook = await get('/api/market/book');
-assert.equal(marketBook.response.status, 200);
-assert.equal(typeof marketBook.body.feeRate, 'number');
+const marketInstruments = await get('/api/market/instruments');
+assert.equal(marketInstruments.response.status, 200);
+assert.equal(marketInstruments.body.persistence, 'planetscale-postgres');
+assert.equal(Array.isArray(marketInstruments.body.instruments), true);
 for (const path of [
   '/api/institutions',
-  '/api/governance/roles',
-  '/api/governance/rules',
   '/api/rankings',
   '/api/history',
-  '/api/cities',
-  '/api/corporations',
-  '/api/technology',
 ]) {
   const read = await get(path);
   assert.equal(read.response.status, 200, `${path} should be public`);
   assert.equal(read.body.persistence, 'planetscale-postgres', `${path} must use PostgreSQL`);
 }
 
-const catalog = await get('/api/production/catalog');
-assert.equal(catalog.response.status, 200);
-assert.equal(catalog.body.persistence, 'planetscale-postgres');
-assert.ok(Array.isArray(catalog.body.sectors));
-for (const sector of catalog.body.sectors) {
-  assert.ok(Array.isArray(sector.machineTypes));
-  if (sector.acquisition) {
-    assert.equal(typeof sector.acquisition.credit, 'number');
-    assert.equal(typeof sector.acquisition.material, 'number');
-  }
-}
+const governanceRoles = await get('/api/governance/roles');
+assert.equal(governanceRoles.response.status, 401);
+const governanceRules = await get('/api/governance/rules');
+assert.equal(governanceRules.response.status, 401);
+const technology = await get('/api/technology');
+assert.equal(technology.response.status, 401);
 
 const session = await get('/api/auth/me');
 assert.equal(session.response.status, 200);
@@ -137,24 +122,20 @@ assert.equal(world.body.code, 'AUTHENTICATION_REQUIRED');
 assert.equal(world.body.correlationId, 'smoke-error-contract');
 
 const businessProfile = await get('/api/businesses/B-1048');
-assert.equal(businessProfile.response.status, 401);
-assert.equal(businessProfile.body.code, 'AUTHENTICATION_REQUIRED');
+assert.equal(businessProfile.response.status, 404);
 
 const opportunities = await get('/api/world');
 assert.equal(opportunities.response.status, 401);
 assert.equal(opportunities.body.code, 'AUTHENTICATION_REQUIRED');
 
 const marketCommand = await get('/edge/market', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(marketCommand.response.status, 401);
-assert.equal(marketCommand.body.error, 'Authentication required');
-assert.equal(marketCommand.body.code, 'AUTHENTICATION_REQUIRED');
+assert.equal(marketCommand.response.status, 404);
 assert.equal(typeof marketCommand.body.correlationId, 'string');
 const marketOrder = await get('/api/market/orders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ product: 'energy', side: 'buy', quantity: 1, limitPrice: 1, correlationId: 'smoke-market-order' }) });
 assert.equal(marketOrder.response.status, 401);
 assert.equal(marketOrder.body.error, 'Authentication required');
 const marketSnapshot = await get('/edge/market');
-assert.equal(marketSnapshot.response.status, 401);
-assert.equal(marketSnapshot.body.error, 'Authentication required');
+assert.equal(marketSnapshot.response.status, 404);
 
 const publicSpending = await get('/api/finance/public-spending', {
   method: 'POST',
@@ -180,21 +161,10 @@ assert.equal(corporationContribution.response.status, 401);
 assert.equal(corporationContribution.body.error, 'Authentication required');
 
 const proposals = await get('/api/governance/proposals');
-assert.equal(proposals.response.status, 200);
-assert.ok(Array.isArray(proposals.body.proposals));
-assert.equal(proposals.body.persistence, 'planetscale-postgres');
-
-const ownership = await get('/api/ownership/events');
-assert.equal(ownership.response.status, 401);
-assert.equal(ownership.body.error, 'Authentication required');
+assert.equal(proposals.response.status, 401);
 
 const liveEvents = await get('/edge/events');
-assert.equal(liveEvents.response.status, 401);
-assert.equal(liveEvents.body.error, 'Authentication required');
-
-const productionEvents = await get('/api/production/events');
-assert.equal(productionEvents.response.status, 401);
-assert.equal(productionEvents.body.error, 'Authentication required');
+assert.equal(liveEvents.response.status, 404);
 
 const services = await get('/api/services/status');
 assert.equal(services.response.status, 401);
@@ -212,42 +182,6 @@ const residency = await get('/api/cities/CITY-0084/residency', { method: 'POST',
 assert.equal(residency.response.status, 401);
 assert.equal(residency.body.error, 'Authentication required');
 
-
-const decommission = await get('/api/machines/unknown/decommission', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(decommission.response.status, 401);
-assert.equal(decommission.body.error, 'Authentication required');
-
-const maintenance = await get('/api/machines/unknown/maintenance', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amount: 10, correlationId: 'smoke-maintenance' }) });
-assert.equal(maintenance.response.status, 401);
-assert.equal(maintenance.body.error, 'Authentication required');
-
-const machineUpgrade = await get('/api/machines/unknown/upgrade', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(machineUpgrade.response.status, 401);
-assert.equal(machineUpgrade.body.error, 'Authentication required');
-
-const machineSale = await get('/api/machines/unknown/sell', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(machineSale.response.status, 401);
-assert.equal(machineSale.body.error, 'Authentication required');
-
-const machineAcquire = await get('/api/machines/acquire', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ machineType: 'extractor', correlationId: 'smoke-machine-acquisition' }) });
-assert.equal(machineAcquire.response.status, 401);
-assert.equal(machineAcquire.body.error, 'Authentication required');
-
-const businessCreate = await get('/api/businesses', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Smoke Business', sector: 'energy', correlationId: 'smoke-business-registration' }) });
-assert.equal(businessCreate.response.status, 401);
-assert.equal(businessCreate.body.error, 'Authentication required');
-const businessConstitution = await get('/api/businesses/B-SMOKE/constitution');
-assert.equal(businessConstitution.response.status, 401);
-assert.equal(businessConstitution.body.error, 'Authentication required');
-const businessConstitutionUpdate = await get('/api/businesses/B-SMOKE/constitution', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ shareholderVoteThreshold: 0.5, boardApprovalThreshold: 0.5, dilutionNoticeDays: 3 }) });
-assert.equal(businessConstitutionUpdate.response.status, 401);
-assert.equal(businessConstitutionUpdate.body.error, 'Authentication required');
-const businessManager = await get('/api/businesses/B-SMOKE/manager', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ managerId: 'H-SMOKE' }) });
-assert.equal(businessManager.response.status, 401);
-assert.equal(businessManager.body.error, 'Authentication required');
-const businessOwnership = await get('/api/businesses/B-SMOKE/ownership');
-assert.equal(businessOwnership.response.status, 401);
-assert.equal(businessOwnership.body.error, 'Authentication required');
 
 const communityCreate = await get('/api/communities', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Smoke Community', correlationId: 'smoke-community-formation' }) });
 assert.equal(communityCreate.response.status, 401);
@@ -269,8 +203,8 @@ assert.equal(proposalCreate.response.status, 401);
 assert.equal(proposalCreate.body.error, 'Authentication required');
 
 const membershipEvents = await get('/api/membership/events');
-assert.equal(membershipEvents.response.status, 401);
-assert.equal(membershipEvents.body.error, 'Authentication required');
+assert.equal(membershipEvents.response.status, 404);
+assert.equal(membershipEvents.body.error, 'API route not found');
 
 
 console.log(`EARTH remote smoke passed: ${baseUrl}`);

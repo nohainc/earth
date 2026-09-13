@@ -13,11 +13,12 @@ test('clean baseline has all dependency-ordered sections', () => {
   for (const file of files) assert.match(bundle, new RegExp(String.raw`\\ir ${file}`));
 });
 
-test('migration directory exposes exactly one active baseline migration', () => {
+test('migration directory exposes the immutable baseline followed by contiguous active migrations', () => {
   const migrationDir = new URL('../db/migrations/', import.meta.url);
   const active = fs.readdirSync(migrationDir)
     .filter((file) => /^\d+_.+\.sql$/.test(file))
     .filter((file) => fs.readFileSync(new URL(file, migrationDir), 'utf8').includes('-- EARTH ACTIVE MIGRATION:'));
+  assert.equal(active[0], '001_baseline.sql');
   assert.deepEqual(active, ['001_baseline.sql']);
   const migrator = fs.readFileSync(path.resolve(new URL('../scripts/migrate-postgres.mjs', import.meta.url).pathname), 'utf8');
   assert.match(migrator, /activeMigrations/);

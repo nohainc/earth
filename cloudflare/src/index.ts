@@ -24,6 +24,7 @@ import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
 import { handleEconomicRoutes } from './economic-routes.ts';
 import { handleMarketApiRoutes } from './market-api.ts';
 import { featureConfig, featureDisabledResponse, featureEnabled } from './feature-config.ts';
+import { maintenanceModeEnabled, maintenanceResponse, schedulerEnabled } from './maintenance.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -34,6 +35,9 @@ function corsOriginFor(request: Request, env: Env): string | null {
     .filter(Boolean);
   const requestOrigin = request.headers.get('Origin');
   if (!requestOrigin) return null;
+  const requestHost = new URL(request.url).hostname;
+  const localWorkerHost = requestHost === 'localhost' || requestHost === '127.0.0.1' || requestHost === '::1' || requestHost === '[::1]';
+  if (localWorkerHost) return requestOrigin;
   return configured.includes(requestOrigin) ? requestOrigin : null;
 }
 
@@ -113,29 +117,11 @@ export class MarketCoordinator extends DurableObject<Env> {
   }
 }
 
-async function productionEventsFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const url = new URL(request.url);
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 30)));
-  const result = await withRepository(env, (repository) => repository.query(
-    `SELECT j.id, j.building_id, j.city_id, j.day AS game_day,
-            j.actual_output_units, j.service_capacity_units, j.operating_expense_units,
-            j.status_after
-       FROM building_settlement_journals j
-       JOIN buildings b ON b.id = j.building_id
-      WHERE j.day = (SELECT game_day FROM world_state WHERE id = 'WORLD')
-        AND (b.owner_id = $1 OR b.city_id IN (SELECT city_id FROM memberships WHERE human_id = $1))
-      ORDER BY j.id DESC LIMIT $2`, [viewer.id, limit]));
-  if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-  return Response.json({ events: result.rows, limit, persistence: 'planetscale-postgres' });
-}
-
 async function servicesStatusFromPostgres(request: Request, env: Env): Promise<Response> {
   const viewer = await currentHuman(request, env);
   if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const result = await withRepository(env, async (repository) => {
-    const city = await repository.query<{ id: string }>('SELECT city_id AS id FROM memberships WHERE human_id = $1 AND city_id IS NOT NULL LIMIT 1', [viewer.id]);
+    const city = await repository.query<{ id: string }>('SELECT ha.city_id AS id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = \'ACTIVE\' AND ha.city_id IS NOT NULL LIMIT 1', [viewer.id]);
     const cityId = city.rows[0]?.id;
     if (!cityId) return { cityId: null, projection: null };
     const projection = await repository.query('SELECT * FROM city_service_capacity_daily WHERE city_id = $1 ORDER BY game_day DESC LIMIT 1', [cityId]);
@@ -227,12 +213,17 @@ const worker = {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/live') return livenessResponse(request);
+    if (maintenanceModeEnabled(env) && (
+      url.pathname === '/api/ready' || url.pathname === '/ready' ||
+      url.pathname === '/api/health' || url.pathname === '/health'
+    )) return maintenanceResponse();
     if (url.pathname === '/api/ready' || url.pathname === '/ready') {
       return healthResponse(request, env, { readiness: true });
     }
     if (url.pathname === '/api/health' || url.pathname === '/health') {
       return healthResponse(request, env);
     }
+    if (maintenanceModeEnabled(env)) return maintenanceResponse();
 
     // Authentication routes must be dispatched before the legacy fallback
     // handler. Without this, /api/auth/login and /api/auth/me fell through to
@@ -439,6 +430,10 @@ const worker = {
     return Response.json({ ok: false, error: 'API route not found', code: 'NOT_FOUND' }, { status: 404 });
   },
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    if (maintenanceModeEnabled(env) || !schedulerEnabled(env)) {
+      console.log(JSON.stringify({ event: 'scheduler_skipped_maintenance_mode' }));
+      return;
+    }
     const result = await withRepository(env, async (repository) => {
       // One real minute advances one game hour: a game day is 24 real minutes.
       const schedulerConfig = env as unknown as Record<string, unknown>;
@@ -465,10 +460,9 @@ const worker = {
     } catch (error) {
       console.error('Scheduler outbox delivery failed after committed economy work', error);
     }
-    await withRepository(env, (repository) => repository.query(
-      'UPDATE scheduler_runs SET outbox_events_delivered = $2 WHERE id = $1',
-      [result.schedulerRunId, outboxDelivered],
-    ), { workload: 'scheduler' }).catch(() => undefined);
+    // Baseline 001 intentionally keeps scheduler_runs minimal. Outbox delivery
+    // is observable from event_outbox itself; do not write legacy projection
+    // columns that are not part of the canonical scheduler schema.
     const completedResult = { ...result, outboxDelivered };
     await env.MARKET_COORDINATOR.getByName('events-global').broadcast({
       type: completedResult.newDay ? 'world_day_started' : 'world_tick',
@@ -534,21 +528,25 @@ export default {
     const isDataRequest = !healthPath && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname.startsWith('/internal/'));
     let response: Response;
     try {
-      if (isDataRequest) authorityMode(env);
-      if (isDataRequest) {
+      if (healthPath) {
+        // Health endpoints are Worker routes and must not depend on the
+        // optional static-assets binding used by the browser shell.
+        response = await worker.handleRequest(request, env);
+      } else if (isDataRequest) authorityMode(env);
+      if (healthPath) {
+        // Handled above.
+      } else if (isDataRequest) {
         const readModelResponse = await handleReadModelRoutes(request, env, url);
         if (readModelResponse) {
           response = readModelResponse;
         } else if (url.pathname.startsWith('/api/governance')) {
           const viewer = await currentHuman(request, env);
           if (!viewer) response = Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-          else response = await handleGovernanceRoutes(request, env, url, viewer) ?? await worker.fetch(request, env, ctx);
-        } else if (url.pathname === '/api/production/events' && request.method === 'GET') {
-          response = await productionEventsFromPostgres(request, env);
+          else response = await handleGovernanceRoutes(request, env, url, viewer) ?? await worker.handleRequest(request, env);
         } else if (url.pathname === '/api/services/status' && request.method === 'GET') {
           response = await servicesStatusFromPostgres(request, env);
         } else {
-          response = await worker.fetch(request, env, ctx);
+          response = await worker.handleRequest(request, env);
         }
       } else if (url.pathname === '/' || url.pathname === '/landing') {
         response = await env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request));

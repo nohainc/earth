@@ -7,10 +7,7 @@ class FakeRepository {
 
   async query(sql, params) {
     this.calls.push({ sql, params });
-    if (sql.includes('economic_account_migrations')) return { rows: [
-      { legacy_account_id: input.debitAccount, economic_account_id: '101' },
-      { legacy_account_id: input.creditAccount, economic_account_id: '102' },
-    ] };
+    if (sql.includes('FROM economic_accounts')) return { rows: [{ account_id: params[0] === input.debitAccount ? '101' : '102' }] };
     if (sql.includes('earth_post_transaction')) return { rows: this.row ? [{ transaction_id: input.ledgerId, created: this.row.already_processed !== true }] : [] };
     return { rows: this.row ? [this.row] : [] };
   }
@@ -44,7 +41,7 @@ test('financial adapter delegates one atomic transfer and maps PostgreSQL result
     amount: '12.34',
     alreadyProcessed: false,
   });
-  assert.match(repository.calls[1].sql, /earth_post_transaction/);
+  assert.ok(repository.calls.some(({ sql }) => /earth_post_transaction/.test(sql)));
 });
 
 test('financial adapter preserves idempotent replay result', async () => {

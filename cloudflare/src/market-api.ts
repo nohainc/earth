@@ -10,13 +10,9 @@ import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 type InstrumentRow = {
   id: string;
   symbol: string;
-  instrument_type: string;
-  base_asset_id: number;
+  asset_id: number;
   quote_asset_id: number;
-  lot_size_units: string;
-  price_tick_units: string;
   status: string;
-  rules_version: string;
   base_code?: string;
   base_decimals?: number;
   quote_code?: string;
@@ -31,29 +27,27 @@ function instrumentPayload(row: InstrumentRow): Record<string, unknown> {
   return {
     id: row.id,
     symbol: row.symbol,
-    instrumentType: row.instrument_type,
-    baseAsset: { id: row.base_asset_id, code: row.base_code ?? null, decimals: row.base_decimals ?? null },
+    instrumentType: 'SPOT',
+    baseAsset: { id: row.asset_id, code: row.base_code ?? null, decimals: row.base_decimals ?? null },
     quoteAsset: { id: row.quote_asset_id, code: row.quote_code ?? null, decimals: row.quote_decimals ?? null },
-    lotSize: numberUnits(row.lot_size_units, assetUnitScale(row.base_asset_id)),
-    priceTick: priceUnitsToDisplayPrice(row.price_tick_units),
+    lotSize: 1,
+    priceTick: priceUnitsToDisplayPrice('1'),
     status: row.status,
-    rulesVersion: row.rules_version,
+    rulesVersion: 'spot-market-v1',
   };
 }
 
 async function findInstrument(repository: PostgresRepository, key: string): Promise<InstrumentRow | null> {
   const result = await repository.query<InstrumentRow>(
-    `SELECT i.id, i.symbol, i.instrument_type, i.base_asset_id, i.quote_asset_id,
-            i.lot_size_units::TEXT, i.price_tick_units::TEXT,
-            i.status, i.rules_version,
-            ba.code AS base_code, ba.decimals AS base_decimals,
-            qa.code AS quote_code, qa.decimals AS quote_decimals
+    `SELECT i.id, i.symbol, i.asset_id, i.quote_asset_id,
+            i.status,
+            ba.code AS base_code,
+            qa.code AS quote_code
        FROM market_instruments i
-       LEFT JOIN economic_assets ba ON ba.id = i.base_asset_id
+       LEFT JOIN economic_assets ba ON ba.id = i.asset_id
        LEFT JOIN economic_assets qa ON qa.id = i.quote_asset_id
       WHERE (i.id::TEXT = $1 OR i.symbol = $1)
-        AND i.instrument_type = 'SPOT'
-        AND i.status IN ('active', 'halted', 'closed', 'expired', 'settled')
+        AND i.status IN ('ACTIVE', 'HALTED', 'CLOSED', 'EXPIRED', 'SETTLED')
       LIMIT 1`, [key]);
   return result.rows[0] ?? null;
 }
@@ -167,14 +161,12 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
   try {
     if (instrumentsPath) {
       const result = await withRepository(env, (repository) => repository.query<InstrumentRow>(
-        `SELECT i.id, i.symbol, i.instrument_type, i.base_asset_id, i.quote_asset_id,
-                i.lot_size_units::TEXT, i.price_tick_units::TEXT,
-                i.status, i.rules_version, ba.code AS base_code, ba.decimals AS base_decimals,
-                qa.code AS quote_code, qa.decimals AS quote_decimals
-           FROM market_instruments i LEFT JOIN economic_assets ba ON ba.id = i.base_asset_id
+        `SELECT i.id, i.symbol, i.asset_id, i.quote_asset_id,
+                i.status, ba.code AS base_code,
+                qa.code AS quote_code
+           FROM market_instruments i LEFT JOIN economic_assets ba ON ba.id = i.asset_id
            LEFT JOIN economic_assets qa ON qa.id = i.quote_asset_id
-          WHERE i.instrument_type = 'SPOT'
-            AND i.status IN ('active', 'halted', 'closed', 'expired', 'settled') ORDER BY i.symbol`));
+          WHERE i.status IN ('ACTIVE', 'HALTED', 'CLOSED', 'EXPIRED', 'SETTLED') ORDER BY i.symbol`));
       if (!result) return unavailable();
       return Response.json({ instruments: result.rows.map(instrumentPayload), persistence: 'planetscale-postgres' });
     }

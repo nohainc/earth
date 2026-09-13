@@ -30,7 +30,7 @@ export async function settleContinuousFinancials(
   }
   for (const [ownerId, owner] of owners) {
     const balance = (await repo.query<{ balance: string }>(
-      "SELECT balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
+      "SELECT COALESCE(a.balance_units, 0)::TEXT AS balance FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'",
       [ownerId],
     )).rows[0]?.balance ?? '0';
     if (Number(balance) < 0 || owner.condition < 10) {

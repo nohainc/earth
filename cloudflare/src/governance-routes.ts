@@ -18,6 +18,22 @@ export async function handleGovernanceRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => repository.query(
+      "SELECT id, institution_id, name, category, value_json, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days, version, status, effective_from_game_day, effective_to_game_day FROM governance_rules WHERE status = 'active' ORDER BY institution_id, category, version DESC",
+    ));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ rules: result.rows, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => repository.query(
+      'SELECT id, institution_id, created_by_human_id, action_type, status, created_game_day FROM proposals ORDER BY created_game_day DESC, id DESC LIMIT 100',
+    ));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ proposals: result.rows, persistence: 'planetscale-postgres' });
+  }
+
   if (url.pathname === '/api/governance/roles' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => listRolesPostgres(repository));
     return Response.json({ ...result, persistence: 'planetscale-postgres' });

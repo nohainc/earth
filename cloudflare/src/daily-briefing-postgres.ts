@@ -114,7 +114,9 @@ export async function getDailyBriefing(
   const activeProposals = parseInt(civicRes.rows[0]?.count ?? '3', 10);
 
   const notifRes = await client.query<{ count: string }>(
-    `select count(*) from notifications where human_id = $1 and read_at is null`,
+    `select count(*) from notifications n
+     join humans h on h.house_id = n.house_id
+     where h.id = $1 and n.read_at is null`,
     [humanId]
   );
   const unreadNotifs = parseInt(notifRes.rows[0]?.count ?? '2', 10);

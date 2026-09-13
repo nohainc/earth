@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
-import { transferCredits } from './financial-postgres.ts';
-import { centsToMoney, moneyToCents } from './money.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
+import { createNotification } from './notifications-postgres.ts';
+import { createGameEvent } from './game-events-postgres.ts';
 
 async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: string, day: number): Promise<{ units: bigint; ruleVersion: string | null; transitionDays: number }> {
   const rule = await tx.query<{ id: string; value_json: unknown }>(
@@ -69,7 +69,7 @@ export async function getLifeStatus(repository: PostgresRepository, humanId: str
   const [human, succession, events] = await Promise.all([
     repository.query('SELECT id, display_name, age_years, life_status, death_game_day, standing, legacy FROM humans WHERE id = $1', [humanId]),
     repository.query('SELECT * FROM house_succession_plans WHERE house_id = (SELECT house_id FROM humans WHERE id = $1)', [humanId]),
-    repository.query('SELECT * FROM life_events WHERE human_id = $1 ORDER BY game_day DESC LIMIT 20', [humanId]),
+    repository.query("SELECT * FROM game_events WHERE actor_human_id = $1 AND category = 'LIFECYCLE' ORDER BY game_day DESC, game_minute DESC NULLS LAST LIMIT 20", [humanId]),
   ]);
   return { ok: true, human: human.rows[0] ?? null, succession: succession.rows[0] ?? null, events: events.rows };
 }
@@ -174,14 +174,8 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     });
     if (stableMortalityRoll(worldSeed, human.id, gameYear) >= hazard && Number(human.age_years) < 105) continue;
     const deathCorrelation = `death:${human.id}:${day}`;
-    const eventId = deathCorrelation;
-    if ((await tx.query("SELECT 1 FROM life_events WHERE id IN ($1, $2) AND event_type = 'death'", [eventId, `DEATH-${human.id}-${day}`])).rows[0]) continue;
-
-    const membership = await tx.query<{ corporation_id: string | null; city_id: string | null; joined_game_day: number }>(
-      'SELECT corporation_id, city_id, joined_game_day FROM house_affiliations WHERE house_id = $1 AND status = \'ACTIVE\' FOR UPDATE', [human.house_id]);
-    const historicalLineage = await tx.query<{ title: string }>(
-      'SELECT title FROM house_lineage_records WHERE human_id = $1 ORDER BY generation DESC LIMIT 1', [human.id]);
-    const majorTitles = historicalLineage.rows.map(({ title }) => title).filter(Boolean);
+    const existingDeath = await tx.query('SELECT 1 FROM succession_events WHERE predecessor_human_id = $1 AND death_game_day = $2 LIMIT 1', [human.id, day]);
+    if (existingDeath.rows[0]) continue;
     const planName = human.planned_successor_name?.trim();
     const successorName = planName || `Emergency Successor of ${human.house_name}`;
     const emergency = !planName;
@@ -222,16 +216,6 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     await tx.query("UPDATE community_members SET role = 'member' WHERE human_id = $1 AND role IN ('founder', 'admin')", [human.id]);
     await tx.query('UPDATE house_heirlooms SET equipped_by_human_id = NULL WHERE house_id = $1 AND equipped_by_human_id = $2', [human.house_id, human.id]);
     await tx.query("UPDATE humans SET mortality_state = 'DEATH_CONFIRMED', life_status = 'deceased', death_game_day = $1, account_status = 'closed' WHERE id = $2", [day, human.id]);
-    await tx.query(`INSERT INTO deceased_profiles
-      (human_id, display_name, death_game_day, final_age_years, final_standing, final_legacy,
-       successor_name, corporation_id, city_id, major_titles, achievements, cause_of_death)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12)
-      ON CONFLICT (human_id) DO UPDATE SET
-        successor_name = EXCLUDED.successor_name,
-        death_game_day = EXCLUDED.death_game_day`,
-      [human.id, human.display_name, day, human.age_years, human.standing, human.legacy, successorName,
-        membership.rows[0]?.corporation_id ?? null, membership.rows[0]?.city_id ?? null,
-        JSON.stringify(majorTitles), JSON.stringify([]), 'Natural Biological Mortality']);
     await tx.query('UPDATE house_lineage_records SET is_incumbent = false, successor_human_id = $5, death_game_day = $1, cause_of_death = $2, legacy_score = $3 WHERE human_id = $4 AND house_id = $6', [day, 'Natural Biological Mortality', human.legacy, human.id, newHumanId, human.house_id]);
     const successionCost = await applyOptionalSuccessionCost(tx, human.house_id, day);
     await tx.query('UPDATE houses SET dynasty_legacy = dynasty_legacy + $1, generation = GREATEST(generation, $2), current_human_id = $3, succession_transition_until_game_day = $4 WHERE id = $5', [legacyContribution, nextGeneration, newHumanId, day + successionCost.transitionDays, human.house_id]);
@@ -245,9 +229,44 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     // authoritative house_affiliations row is deliberately unchanged.
     await tx.query('SELECT earth_project_house_affiliation_to_memberships($1)', [human.house_id]);
     if (planName) await tx.query("UPDATE house_succession_plans SET status = 'USED', used_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE house_id = $2 AND status = 'ACTIVE'", [day, human.house_id]);
-    await tx.query('INSERT INTO life_events (id, human_id, event_type, game_day, successor_name, estate_credits) VALUES ($1,$2,\'death\',$3,$4,0)', [eventId, human.id, day, successorName]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,\'human.succession\',$3,$4) ON CONFLICT (id) DO NOTHING', [successionCorrelation, day, emergency ? `${successorName} inherited the House` : `${successorName} succeeded ${human.display_name}`, toNanoMarkup({ successionEventId: successionCorrelation, predecessorId: human.id, successorId: newHumanId, houseId: human.house_id, emergency, predecessorFinalLegacy: Number(human.legacy), houseLegacyContribution: legacyContribution, successionCostUnits: successionCost.units.toString(), successionCostRuleVersion: successionCost.ruleVersion, successionTransitionDays: successionCost.transitionDays })]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'life\',\'Succession completed\',$3,$4) ON CONFLICT DO NOTHING', [`NOTIFICATION-${successionCorrelation}`, newHumanId, `Your House succession is complete. ${successorName} now represents the House.`, successionCorrelation]);
+    await createGameEvent(tx, {
+      id: `HUMAN-DIED-${successionCorrelation}`,
+      category: 'LIFECYCLE',
+      eventType: 'HUMAN_DIED',
+      gameDay: day,
+      actorHouseId: human.house_id,
+      actorHumanId: human.id,
+      subjectType: 'HUMAN',
+      subjectId: human.id,
+      title: `${human.display_name} died`,
+      details: { successionEventId: successionCorrelation, predecessorId: human.id, successorId: newHumanId, houseId: human.house_id, predecessorFinalLegacy: Number(human.legacy) },
+      correlationId: `human-died:${successionCorrelation}`,
+    });
+    await createGameEvent(tx, {
+      id: successionCorrelation,
+      category: 'LIFECYCLE',
+      eventType: 'HOUSE_SUCCESSION',
+      gameDay: day,
+      actorHouseId: human.house_id,
+      actorHumanId: human.id,
+      subjectType: 'HOUSE',
+      subjectId: human.house_id,
+      title: emergency ? `${successorName} inherited the House` : `${successorName} succeeded ${human.display_name}`,
+      details: { successionEventId: successionCorrelation, predecessorId: human.id, successorId: newHumanId, houseId: human.house_id, emergency, houseLegacyContribution: legacyContribution, successionCostUnits: successionCost.units.toString(), successionCostRuleVersion: successionCost.ruleVersion, successionTransitionDays: successionCost.transitionDays },
+      correlationId: `house-succession:${successionCorrelation}`,
+    });
+    await createNotification(tx, {
+      id: `NOTIFICATION-${successionCorrelation}`,
+      houseId: human.house_id,
+      humanId: newHumanId,
+      notificationType: 'life',
+      title: 'Succession completed',
+      body: `Your House succession is complete. ${successorName} now represents the House.`,
+      entityType: 'succession',
+      entityId: successionCorrelation,
+      gameDay: day,
+      correlationId: successionCorrelation,
+    });
     await tx.query('UPDATE succession_events SET status = \'COMPLETED\', completed_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = \'PREPARED\'', [successionCorrelation]);
     processed += 1;
   }
@@ -271,91 +290,4 @@ export async function activatePendingHouseSuccessors(tx: PostgresRepository, day
     await tx.query('UPDATE community_members SET human_id = $1 WHERE house_id = $2', [successor.id, successor.house_id]);
   }
   return pending.rows.length;
-}
-
-export async function processMortality(tx: PostgresRepository, day: number): Promise<number> {
-  const service = await tx.query<{ essential_services_index: string }>("SELECT essential_services_index FROM world_state WHERE id = 'WORLD'");
-  const essentialServicesIndex = Number(service.rows[0]?.essential_services_index ?? 0.68);
-  // The joined succession/account rows are nullable. Lock only the human rows;
-  // locking the whole outer-join result makes PostgreSQL reject the query.
-  const humans = await tx.query<{ id: string; account_id: string | null; display_name: string; standing: number; legacy: number; age_years: number; successor_name: string | null; successor_human_id: string | null; estate_period_days: number | null; balance: string; life_condition_score: number }>('SELECT humans.id, account_balances.account_id, humans.display_name, humans.standing, humans.legacy, humans.age_years, succession_plans.successor_name, succession_plans.successor_human_id, succession_plans.estate_period_days, COALESCE(account_balances.balance, 0) AS balance, COALESCE((SELECT score FROM human_life_conditions WHERE human_id = humans.id), 100) AS life_condition_score FROM humans LEFT JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = \'CREDIT\' WHERE humans.life_status = \'active\' AND humans.age_years >= 65 FOR UPDATE OF humans');
-  let processed = 0;
-  for (const human of humans.rows) {
-    const age = Number(human.age_years);
-    const hazard = calculateMortalityHazard({ age, lifeConditionScore: Number(human.life_condition_score), essentialServicesIndex });
-    const roll = stableMortalityRoll('EARTH-WORLD-V2', human.id, Math.floor((day - 1) / 365) + 1);
-    if (roll >= hazard && age < 105) continue;
-
-    const eventId = `DEATH-${human.id}-${day}`;
-    if ((await tx.query("SELECT 1 FROM life_events WHERE id = $1 AND event_type = 'death'", [eventId])).rows[0]) continue;
-    const successor = human.successor_human_id ? await tx.query<{ id: string; account_id: string }>("SELECT humans.id, account_balances.account_id FROM humans JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.id = $1 AND humans.life_status = 'active' FOR UPDATE", [human.successor_human_id]) : { rows: [] } as { rows: Array<{ id: string; account_id: string }> };
-    const successorRow = successor.rows[0];
-    const membership = await tx.query<{ corporation_id: string | null; city_id: string | null }>('SELECT corporation_id, city_id FROM memberships WHERE human_id = $1 FOR UPDATE', [human.id]);
-    const membershipRow = membership.rows[0];
-    const assets = successorRow ? await tx.query<{ id: string; type: string }>("SELECT id, 'BUILDING' AS type FROM buildings WHERE owner_id = $1", [human.id]) : { rows: [] } as { rows: Array<{ id: string; type: string }> };
-    const resources = successorRow ? await tx.query<{ resource: string; amount: string }>('SELECT resource, amount FROM resource_balances WHERE owner_id = $1 FOR UPDATE', [human.id]) : { rows: [] } as { rows: Array<{ resource: string; amount: string }> };
-    const grossCents = moneyToCents(human.balance);
-    const inheritedCents = successorRow ? grossCents : 0n;
-    const gross = Number(centsToMoney(grossCents));
-    const inherited = Number(centsToMoney(inheritedCents));
-
-    if (successorRow) {
-      if (!human.account_id) throw new Error('Deceased Human Credit account is required for inheritance');
-      if (inheritedCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: successorRow.account_id, amount: centsToMoney(inheritedCents), reasonType: 'inheritance', reasonId: eventId, ruleVersion: 'life-v4', correlationId: eventId });
-      await tx.query('UPDATE humans SET standing = 0, legacy = 0 WHERE id = $1', [successorRow.id]);
-      await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [human.id, eventId, 'ownership_transfer_out', day, 0]);
-      await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [successorRow.id, eventId, 'ownership_transfer_in', day, 0]);
-      for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [successorRow.id, resource.resource, resource.amount]);
-      await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [human.id]);
-      for (const asset of assets.rows) await tx.query('INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,$2,$3,$4,$5,1,\'inheritance\',$6,$7)', [crypto.randomUUID(), asset.type, asset.id, human.id, successorRow.id, eventId, day]);
-      await tx.query('INSERT INTO life_events (id,human_id,event_type,game_day,successor_name,estate_credits) VALUES ($1,$2,\'inheritance\',$3,$4,$5)', [`INHERIT-${human.id}-${day}`, human.id, day, human.successor_name, inherited]);
-      await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'life\',\'Inheritance received\',$3,$4)', [crypto.randomUUID(), successorRow.id, `You received ${inherited} Credits and the productive assets of ${human.display_name}.`, eventId]);
-    }
-    if (membershipRow?.corporation_id) {
-      await tx.query('UPDATE corporations SET member_count = GREATEST(0, member_count - 1) WHERE id = $1', [membershipRow.corporation_id]);
-      await tx.query('INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,\'CORPORATION\',$3,\'released\',$4,\'mortality\')', [crypto.randomUUID(), human.id, membershipRow.corporation_id, day]);
-    }
-    if (membershipRow?.city_id) {
-      await tx.query('UPDATE cities SET residents = GREATEST(0, residents - 1) WHERE id = $1', [membershipRow.city_id]);
-      await tx.query('INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,\'CITY\',$3,\'released\',$4,\'mortality\')', [crypto.randomUUID(), human.id, membershipRow.city_id, day]);
-    }
-    await tx.query('UPDATE memberships SET city_id = NULL, corporation_id = NULL WHERE human_id = $1', [human.id]);
-    await tx.query("UPDATE humans SET life_status = $1, death_game_day = $2 WHERE id = $3", [successorRow ? 'deceased' : 'estate', day, human.id]);
-    // Keep the modern house tree accurate during the estate window, before
-    // the next generation is selected.
-    await tx.query("UPDATE house_lineage_records SET is_incumbent = false, death_game_day = $1, cause_of_death = 'Natural Biological Mortality', epitaph = 'Inscribed into the Planetary Pantheon of Earth.', lifetime_wealth = GREATEST(lifetime_wealth, $2) WHERE human_id = $3", [day, gross, human.id]);
-    await tx.query('INSERT INTO life_events (id,human_id,event_type,game_day,successor_name,estate_credits) VALUES ($1,$2,\'death\',$3,$4,$5)', [eventId, human.id, day, human.successor_name, successorRow ? gross : gross]);
-    if (successorRow) {
-      await tx.query('INSERT INTO deceased_profiles (human_id,display_name,death_game_day,final_standing,final_legacy,successor_name,cause_of_death,epitaph) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name, death_game_day = EXCLUDED.death_game_day', [human.id, human.display_name, day, human.standing, human.legacy, human.successor_name, 'Natural Biological Mortality', 'Inscribed into the Planetary Pantheon of Earth.']);
-      await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'human.life_event\',\'A Human entered the archive\',$3) ON CONFLICT (id) DO NOTHING', [`DEATH-${human.id}-${day}`, day, toNanoMarkup({ humanId: human.id, successor: human.successor_name, successionLevy: 0 })]);
-    } else {
-      await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'human.life_event\',\'A Human entered an Estate Period\',$3) ON CONFLICT (id) DO NOTHING', [`ESTATE-${human.id}-${day}`, day, toNanoMarkup({ humanId: human.id, estatePeriodDays: human.estate_period_days ?? 30 })]);
-      await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'life\',\'Estate Period started\',$3,$2)', [crypto.randomUUID(), human.id, `Your estate remains available for ${human.estate_period_days ?? 30} game days before liquidation.`]);
-    }
-    processed += 1;
-  }
-  return processed;
-}
-
-export async function liquidateExpiredEstates(repository: PostgresRepository, day: number): Promise<number> {
-  const estates = await repository.query<{ id: string; account_id: string | null; display_name: string; standing: number; legacy: number; balance: string }>("SELECT humans.id, account_balances.account_id, humans.display_name, humans.standing, humans.legacy, COALESCE(account_balances.balance, 0) AS balance FROM humans JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.life_status = 'estate' AND humans.death_game_day + succession_plans.estate_period_days <= $1", [day]);
-  let processed = 0;
-  for (const estate of estates.rows) {
-    await repository.transaction(async (tx) => {
-      const balanceCents = moneyToCents(estate.balance);
-      const balance = Number(centsToMoney(balanceCents));
-      if (balanceCents > 0n) {
-        if (!estate.account_id) throw new Error('Estate Credit account is required for liquidation');
-        await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: estate.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(balanceCents), reasonType: 'estate_liquidation', reasonId: estate.id, ruleVersion: 'life-v3', correlationId: `ESTATE-LIQUIDATION-${estate.id}-${day}` });
-      }
-      await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_class = 'private'", [estate.id]);
-      await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [estate.id, `ESTATE-LIQUIDATION-${estate.id}-${day}`, 'estate_liquidation', day, 0]);
-      await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [estate.id]);
-      await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [estate.id]);
-      await tx.query('INSERT INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, NULL FROM humans WHERE id = $1 ON CONFLICT (human_id) DO NOTHING', [estate.id]);
-      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`ESTATE-LIQUIDATION-${estate.id}-${day}`, day, 'human.estate_liquidated', 'An unclaimed estate was liquidated', toNanoMarkup({ humanId: estate.id, credits: balance })]);
-    });
-    processed += 1;
-  }
-  return processed;
 }

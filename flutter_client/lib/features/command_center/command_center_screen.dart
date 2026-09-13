@@ -325,16 +325,14 @@ class _CommandCenterState extends State<CommandCenter> {
       final results = await Future.wait<dynamic>([
         api.events(),
         api.notifications(),
-        api.ownershipEvents(),
-        api.membershipEvents(),
         api.personalFinance().catchError((_) => personalFinanceData),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
       ]);
       final latest = results[0] as List<dynamic>;
       final notificationData = results[1] as Map<String, dynamic>;
-      final ownership = results[2] as List<dynamic>;
-      final memberships = results[3] as List<dynamic>;
-      final finData = results[4] as Map<String, dynamic>;
+      final ownership = latest.where((event) => event is Map<String, dynamic> && event['category'] == 'OWNERSHIP').toList();
+      final memberships = latest.where((event) => event is Map<String, dynamic> && event['category'] == 'AFFILIATION').toList();
+      final finData = results[2] as Map<String, dynamic>;
       final commUnread = 0;
       if (mounted) {
         setState(() {

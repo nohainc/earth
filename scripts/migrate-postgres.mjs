@@ -24,6 +24,12 @@ if (migrationTarget !== null && (!Number.isInteger(migrationTarget) || migration
 const migrationsToApply = migrationTarget === null
   ? activeMigrations
   : activeMigrations.filter(({ name }) => Number(name.slice(0, name.indexOf('_'))) <= migrationTarget);
+const activeVersions = activeMigrations.map(({ name }) => Number(name.slice(0, name.indexOf('_'))));
+for (let index = 1; index < activeVersions.length; index += 1) {
+  if (activeVersions[index] !== activeVersions[index - 1] + 1) {
+    throw new Error(`Active migration sequence is not contiguous at versions ${activeVersions[index - 1]} and ${activeVersions[index]}`);
+  }
+}
 const parsedConnection = new URL(connectionString);
 const usesSystemRoot = parsedConnection.searchParams.get('sslrootcert') === 'system';
 if (usesSystemRoot) {
@@ -51,9 +57,8 @@ try {
     )
   `);
 
-  const allowRepair = process.argv.includes('--repair');
-  if (allowRepair && process.env.NODE_ENV === 'production') {
-    throw new Error('Migration repair is unavailable in production; use a forward migration');
+  if (process.argv.includes('--repair')) {
+    throw new Error('Migration repair is permanently unavailable; applied migrations are immutable, use a forward migration');
   }
 
   for (const migration of migrationsToApply) {
@@ -63,24 +68,7 @@ try {
     const existing = await client.query('select name, checksum from earth_schema_migrations where version = $1', [version]);
     if (existing.rowCount) {
       if (existing.rows[0].name !== name || existing.rows[0].checksum !== checksum) {
-        if (allowRepair) {
-          console.warn(`Repairing migration ${name} with updated checksum...`);
-          await client.query('begin');
-          try {
-            await client.query(sql);
-            await client.query(
-              'update earth_schema_migrations set name = $1, checksum = $2, applied_at = now() where version = $3',
-              [name, checksum, version],
-            );
-            await client.query('commit');
-            console.log(`Repaired and re-applied ${name}`);
-            continue;
-          } catch (error) {
-            await client.query('rollback');
-            throw error;
-          }
-        }
-        throw new Error(`Migration ${name} differs from the applied checksum; create a new migration or run with --repair`);
+        throw new Error(`Migration ${name} differs from the applied checksum; applied migrations are immutable, create a new forward migration`);
       }
       continue;
     }
@@ -101,6 +89,18 @@ try {
   }
 
   const result = await client.query('select version, name, applied_at from earth_schema_migrations order by version');
+  const appliedVersions = result.rows.map(({ version }) => Number(version));
+  for (let index = 0; index < appliedVersions.length; index += 1) {
+    const expected = index + 1;
+    if (appliedVersions[index] !== expected) {
+      throw new Error(`Applied migration history is not contiguous: expected version ${expected}, found ${appliedVersions[index]}`);
+    }
+  }
+  const appliedNames = new Set(result.rows.map(({ name }) => name));
+  const knownNames = new Set(activeMigrations.map(({ name }) => name));
+  for (const name of appliedNames) {
+    if (!knownNames.has(name)) throw new Error(`Applied migration ${name} is not present as an active repository migration`);
+  }
   console.log(JSON.stringify({ ok: true, migrations: result.rows }, null, 2));
 } finally {
   await client.query('SELECT pg_advisory_unlock(hashtext($1))', ['earth-schema-migrations']).catch(() => undefined);

@@ -19,24 +19,15 @@ API. It is non-production and never a fallback for the Cloudflare Worker. Set
 `DATABASE_URL` when hydrating the simulator from PostgreSQL; production
 gameplay uses the PostgreSQL-backed Worker API.
 
-To provision the recommended local PostgreSQL authority:
+EARTH uses a real local PostgreSQL server for local development. Start the
+PostgreSQL service using the installation's normal service manager, then create
+the database if needed:
 
 ```bash
-docker compose up -d postgres
-```
-
-The Compose setup mounts the migration and seed files directly into PostgreSQL's initialization directory so a fresh volume is created in the correct order.
-
-On macOS without Docker, use the Homebrew PostgreSQL service:
-
-```bash
-brew install postgresql@16
-brew services start postgresql@16
+brew install postgresql@18
+brew services start postgresql@18
 createdb earth
-psql -d earth -f db/schema.sql
-psql -d earth -f db/functions.sql
-psql -d earth -f db/seed.sql
-DATABASE_URL=postgres://$USER@localhost:5432/earth npm start
+DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
 ```
 
 The clean database is defined by the baseline sections under `db/baseline/` and
@@ -44,17 +35,17 @@ applied by the immutable `db/migrations/001_baseline.sql`. For future changes,
 create active migrations starting at `002_...`; `npm run db:migrate:postgres`
 applies only migrations explicitly marked as active.
 
-For an existing local database, apply the migrations and load the canonical
-starter world explicitly:
+For the local database, apply the immutable baseline and then load development
+fixtures only when interactive testing requires them:
 
 ```bash
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
-DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:seed:postgres
+DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:seed:dev
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:verify:manifest
 ```
 
 For manual local PostgreSQL testing, use the same database for migrations and
-the local Worker API. The migration helper defaults to the Docker database:
+the local Worker API:
 
 ```bash
 ./scripts/migrate-local-db.sh --seed
@@ -112,8 +103,8 @@ The versioned REST error and authority contract is documented in
 
 Product and architecture guardrails for future AI-assisted development are in
 [`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md).
-The implementation checklist for the management-first redesign is in
-[`docs/GAMEPLAY_REDESIGN_AUDIT.md`](docs/GAMEPLAY_REDESIGN_AUDIT.md).
+The implementation checklist for the management-first redesign is maintained
+in the canonical architecture documentation.
 
 ## Repository map
 

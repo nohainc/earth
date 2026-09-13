@@ -690,7 +690,8 @@ async function command(path, body, req = null) {
   // Public inspection routes
   if (path === '/api/world' && body.method === 'GET') return snapshot();
   if (path === '/api/storage' && body.method === 'GET') return { configured: Boolean(database), mode: database ? 'postgres-reference' : 'reference-simulator', authority: 'non-production' };
-  if ((path === '/api/health' || path === '/health' || path === '/api/ready' || path === '/ready') && body.method === 'GET') {
+  if ((path === '/api/live' || path === '/live' || path === '/api/health' || path === '/health' || path === '/api/ready' || path === '/ready') && body.method === 'GET') {
+    if (path === '/api/live' || path === '/live') return { ok: true, status: 'live', persistence: database ? 'postgres-reference' : 'reference-simulator' };
     const outboxMetrics = {
       pendingCount: 0,
       retryCount: 0,
@@ -2125,7 +2126,7 @@ async function command(path, body, req = null) {
   }
 
   if ((path === '/api/businesses/kline-works/policy' || path === '/api/businesses/B-1048/policy' || path === '/api/business/policy' || path === '/api/businesses/me/policy') && body.method === 'POST') {
-    throw new ApiError('Business entities are no longer supported; use Human-owned assets', 410, 'GONE');
+      throw new ApiError('Business entities are no longer supported; use corporation-owned buildings', 404, 'NOT_FOUND');
   }
 
   if (path === '/api/ai' && body.method === 'GET') {

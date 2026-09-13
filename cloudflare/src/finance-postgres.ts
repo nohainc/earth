@@ -5,6 +5,7 @@ import { centsToMoney, moneyToCents, taxToCents } from './money.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { spendBudget } from './institution-spending.ts';
 import { canPerformInstitutionAction } from './institution-authorization.ts';
+import { createNotification } from './notifications-postgres.ts';
 
 function canonicalBudgetCategory(category: string): string {
   const normalized = category.trim().toUpperCase().replace(/[-\s]+/g, '_');
@@ -57,11 +58,11 @@ export async function publicSpending(
       correlationId: input.correlationId,
       gameDay: day,
     });
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${input.cityId}`, toNanoMarkup({ cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId, actorId: input.actorId })]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.actorId, 'finance', 'Public spending recorded', `${amount} Credits were routed from the OUC treasury to ${input.cityId} for ${input.category}.`, input.correlationId]);
-    const members = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 AND human_id <> $2', [input.cityId, input.actorId]);
+    await tx.query('INSERT INTO game_events (id, category, event_type, game_day, actor_human_id, subject_type, subject_id, title, details, correlation_id) VALUES ($1,\'ECONOMY\',$3,$2,$4,\'CITY\',$5,$6,$7,$8)', [crypto.randomUUID(), day, 'PUBLIC_SPENDING', input.actorId, input.cityId, `OUC funding reached ${input.cityId}`, toNanoMarkup({ cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId, actorId: input.actorId }), input.correlationId]);
+    await createNotification(tx, { id: crypto.randomUUID(), humanId: input.actorId, notificationType: 'finance', title: 'Public spending recorded', body: `${amount} Credits were routed from the OUC treasury to ${input.cityId} for ${input.category}.`, entityType: 'grant', entityId: input.correlationId, gameDay: day, correlationId: `${input.correlationId}:spending` });
+    const members = await tx.query<{ human_id: string }>("SELECT h.id AS human_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE ha.city_id = $1 AND ha.status = 'ACTIVE' AND h.id <> $2", [input.cityId, input.actorId]);
     for (const member of members.rows) {
-      await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), member.human_id, 'finance', 'City funding received', `${amount} Credits were routed to ${input.cityId} for ${input.category}.`, input.correlationId]);
+      await createNotification(tx, { id: crypto.randomUUID(), humanId: member.human_id, notificationType: 'finance', title: 'City funding received', body: `${amount} Credits were routed to ${input.cityId} for ${input.category}.`, entityType: 'grant', entityId: input.correlationId, gameDay: day, correlationId: `${input.correlationId}:recipient:${member.human_id}` });
     }
     return { ok: true, amount: Number(amount), cityId: input.cityId, category: input.category, gameDay: day, transactionId: posting.transactionId, correlationId: input.correlationId };
   });
@@ -96,7 +97,7 @@ export async function settleTax(repository: PostgresRepository, humanId: string,
       [taxpayer.rows[0].economic_id, beneficiary.rows[0].economic_id, moneyToCents(taxableAmount), Math.round(rateNumber * 10000), amountCents, rule.rows[0].id, gameDay, correlationId]);
     const settlement = await tx.query<{ obligations_paid: string; obligations_partial: string; obligations_arrears: string }>('SELECT * FROM earth_settle_v2_tax_obligations($1)', [gameDay]);
     const obligation = await tx.query<{ status: string }>('SELECT status FROM tax_obligations WHERE correlation_id = $1', [correlationId]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING', [`TAX-SETTLED-${correlationId}`, humanId, 'finance', 'Tax obligation recorded', `${amount} Credits were assessed at rate ${(rateNumber * 100).toFixed(2)}% (rule v${version}); status: ${obligation.rows[0]?.status ?? 'DUE'}.`, correlationId]);
+    await createNotification(tx, { id: `TAX-SETTLED-${correlationId}`, humanId, notificationType: 'finance', title: 'Tax obligation recorded', body: `${amount} Credits were assessed at rate ${(rateNumber * 100).toFixed(2)}% (rule v${version}); status: ${obligation.rows[0]?.status ?? 'DUE'}.`, entityType: 'tax_obligation', entityId: correlationId, gameDay, correlationId });
     return { ok: true, amount: Number(amount), rate: rateNumber, ruleVersion: version, correlationId, status: obligation.rows[0]?.status ?? 'DUE', settlement };
   });
 }
@@ -159,8 +160,8 @@ export async function declarePersonalInsolvency(repository: PostgresRepository, 
     await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_class = 'private'", [humanId]);
     await tx.query('UPDATE bankruptcy_proceedings SET status = \'RESOLVED\', resolved_game_day = $1, estate_value_units = $2 WHERE id = $3', [day, metrics.rows[0].realizable_assets_units, proceeding.rows[0].id]);
     await tx.query('INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1,\'bankrupt\',$2,0,$3) ON CONFLICT(human_id) DO UPDATE SET status = EXCLUDED.status, since_game_day = EXCLUDED.since_game_day, last_reason = EXCLUDED.last_reason, updated_at = CURRENT_TIMESTAMP', [humanId, day, reason]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`PERSONAL-BANKRUPTCY-${humanId}-${day}`, day, 'human.bankruptcy', 'A Human entered insolvency restructuring', toNanoMarkup({ humanId, estateValueUnits: metrics.rows[0].realizable_assets_units, cancelledOrders: orders.rows.length, reason })]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), humanId, 'finance', 'Personal insolvency recorded', 'The insolvency proceeding froze new obligations, cancelled open market orders, and recorded the V2 estate and creditor claims.', `PERSONAL-BANKRUPTCY-${humanId}-${day}`]);
+    await tx.query('INSERT INTO game_events (id, category, event_type, game_day, actor_human_id, subject_type, subject_id, title, details, correlation_id) VALUES ($1,\'ECONOMY\',\'HUMAN_BANKRUPTCY\',$2,$3,\'HUMAN\',$3,$4,$5,$1) ON CONFLICT (id) DO NOTHING', [`PERSONAL-BANKRUPTCY-${humanId}-${day}`, day, humanId, 'A Human entered insolvency restructuring', toNanoMarkup({ humanId, estateValueUnits: metrics.rows[0].realizable_assets_units, cancelledOrders: orders.rows.length, reason })]);
+    await createNotification(tx, { id: crypto.randomUUID(), humanId, notificationType: 'finance', title: 'Personal insolvency recorded', body: 'The insolvency proceeding froze new obligations, cancelled open market orders, and recorded the V2 estate and creditor claims.', entityType: 'bankruptcy', entityId: `PERSONAL-BANKRUPTCY-${humanId}-${day}`, gameDay: day, correlationId: `PERSONAL-BANKRUPTCY:${humanId}:${day}` });
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [humanId]);
     return { ok: true, state: (await tx.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [humanId])).rows[0], proceedingId: proceeding.rows[0].id, liquidated: { buildings: buildings.rows.length, estimatedValueUnits: metrics.rows[0].realizable_assets_units }, cancelledOrders: orders.rows.length };
   });
@@ -184,8 +185,8 @@ export async function recoverInstitution(repository: PostgresRepository, input: 
     );
     await tx.query("UPDATE financial_states SET status = 'active', recovery_game_day = $1, last_reason = 'Player-authorized crisis recovery', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2", [gameDay, input.institutionId]);
     await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,$4,\'active\',$5,$6)', [crypto.randomUUID(), input.institutionId, institution.rows[0].kind, state.rows[0].status, gameDay, 'Player-authorized crisis recovery']);
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'financial_recovery', `${institution.rows[0].kind} ${input.institutionId} recovered`, toNanoMarkup({ institutionId: input.institutionId, amount: input.amount, humanId: input.humanId })]);
-    await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.humanId, 'finance', 'Institution recovered', `${institution.rows[0].kind} ${input.institutionId} returned to active status after your ${amount} Credit recovery contribution.`, input.institutionId]);
+    await tx.query('INSERT INTO game_events (id, category, event_type, game_day, actor_human_id, institution_id, subject_type, subject_id, title, details, correlation_id) VALUES ($1,\'INSTITUTION\',\'FINANCIAL_RECOVERY\',$2,$3,$4,\'INSTITUTION\',$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING', [crypto.randomUUID(), gameDay, input.humanId, input.institutionId, `${institution.rows[0].kind} ${input.institutionId} recovered`, toNanoMarkup({ institutionId: input.institutionId, amount: input.amount, humanId: input.humanId }), input.correlationId]);
+    await createNotification(tx, { id: crypto.randomUUID(), humanId: input.humanId, notificationType: 'finance', title: 'Institution recovered', body: `${institution.rows[0].kind} ${input.institutionId} returned to active status after your ${amount} Credit recovery contribution.`, entityType: 'institution', entityId: input.institutionId, gameDay, correlationId: `${input.correlationId}:recovery` });
     return { ok: true, institutionId: input.institutionId, amount: Number(amount), status: 'active', bailout: bailout.rows[0] ?? null, correlationId: input.correlationId };
   });
 }

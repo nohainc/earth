@@ -1,5 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
 import { moneyToCents } from './money.ts';
+import { createNotification } from './notifications-postgres.ts';
+import { createGameEvent } from './game-events-postgres.ts';
+import { toNanoMarkup } from './nano-markup.ts';
 
 export type TechnologyCatalogRow = {
   id: string;
@@ -71,14 +74,14 @@ export async function resolveCorporationTechnologyAccess(
 }
 
 async function requireResearchJurisdiction(tx: PostgresRepository, ownerId: string): Promise<void> {
-  const membership = await tx.query<{ corporation_id: string | null }>('SELECT corporation_id FROM memberships WHERE human_id = $1', [ownerId]);
+  const membership = await tx.query<{ corporation_id: string | null }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [ownerId]);
   if (!membership.rows[0]?.corporation_id) throw new Error('Research requires active corporation membership');
 }
 
 export async function createResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string; budget: number; focus: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     await requireResearchJurisdiction(tx, input.ownerId);
-    const membership = await tx.query<{ corporation_id: string }>('SELECT corporation_id FROM memberships WHERE human_id = $1', [input.ownerId]);
+  const membership = await tx.query<{ corporation_id: string }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.ownerId]);
     const corporationId = membership.rows[0].corporation_id;
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
@@ -109,11 +112,11 @@ export async function createResearchProject(repository: PostgresRepository, inpu
       ORDER BY payer.is_default_settlement DESC, payer.account_type, payer.id
       LIMIT 1`, [corporationId]);
     if (!fundingAccounts.rows[0]) throw new Error('Corporation V2 funding account or system research account is not provisioned');
-    const funding = await tx.query<{ transaction_id: string; created: boolean }>(
-      `SELECT transaction_id, created FROM earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,$4,$5::jsonb)`,
+    const funding = await tx.query<{ transaction_id: string }>(
+      `SELECT earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,$4,$5::jsonb) AS transaction_id`,
       [input.correlationId, day, projectId, `technology-catalog-v${catalogEntry.definition_version}`, JSON.stringify([
-        { account_id: fundingAccounts.rows[0].debit_account_id, delta: (-BigInt(budgetCents)).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
-        { account_id: fundingAccounts.rows[0].research_account_id, delta: BigInt(budgetCents).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
+        { account_id: fundingAccounts.rows[0].debit_account_id, delta_units: (-BigInt(budgetCents)).toString(), asset_id: 1 },
+        { account_id: fundingAccounts.rows[0].research_account_id, delta_units: BigInt(budgetCents).toString(), asset_id: 1 },
       ])],
     );
     const fundingTransactionId = funding.rows[0]?.transaction_id;
@@ -123,8 +126,10 @@ export async function createResearchProject(repository: PostgresRepository, inpu
        required_research_points, progress_research_points, credit_cost_units,
        priority, status, started_game_day, funding_transaction_id, correlation_id, definition_snapshot)
       VALUES ($1,$2,'TECHNOLOGY',$3,$4,$5,0, $6,100,'ACTIVE',$7,$8,$9,$10::jsonb)`,
-      [projectId, corporationOwner.rows[0].economic_id, catalogEntry.id, `technology-catalog-v${catalogEntry.definition_version}`, catalogEntry.research_points_required, catalogEntry.research_credit_cost_units, day, fundingTransactionId, input.correlationId, JSON.stringify({ technologyId: catalogEntry.id, code: catalogEntry.code, name: catalogEntry.name, definitionVersion: catalogEntry.definition_version, researchCreditCostUnits: catalogEntry.research_credit_cost_units, researchPointsRequired: catalogEntry.research_points_required, effects: catalogEntry.effects, patentable: catalogEntry.patentable, patentExclusivityDays: catalogEntry.patent_exclusivity_days })]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Corporation research started', `${input.name} is now being researched by your corporation.`, projectId]);
+      [projectId, corporationOwner.rows[0].economic_id, catalogEntry.id, `technology-catalog-v${catalogEntry.definition_version}`, catalogEntry.research_points_required, catalogEntry.research_credit_cost_units, day, fundingTransactionId, input.correlationId, toNanoMarkup({ technologyId: catalogEntry.id, code: catalogEntry.code, name: catalogEntry.name, definitionVersion: catalogEntry.definition_version, researchCreditCostUnits: catalogEntry.research_credit_cost_units, researchPointsRequired: catalogEntry.research_points_required, effects: catalogEntry.effects, patentable: catalogEntry.patentable, patentExclusivityDays: catalogEntry.patent_exclusivity_days })]);
+    const senderHouse = await tx.query<{ house_id: string }>('SELECT house_id FROM humans WHERE id = $1', [input.ownerId]);
+    await createGameEvent(tx, { id: `RESEARCH-STARTED-${input.correlationId}`, category: 'RESEARCH', eventType: 'RESEARCH_STARTED', gameDay: day, actorHouseId: senderHouse.rows[0]?.house_id ?? null, actorHumanId: input.ownerId, subjectType: 'RESEARCH_PROJECT', subjectId: projectId, title: 'Corporation research started', details: { projectId, technologyId: catalogEntry.id }, correlationId: input.correlationId });
+    await createNotification(tx, { id: crypto.randomUUID(), humanId: input.ownerId, notificationType: 'technology', title: 'Corporation research started', body: `${input.name} is now being researched by your corporation.`, entityType: 'research_project', entityId: projectId, gameDay: day, correlationId: input.correlationId });
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_research_projects WHERE id = $1', [projectId])).rows[0], correlationId: input.correlationId };
   });
 }

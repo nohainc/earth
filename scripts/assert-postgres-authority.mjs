@@ -31,8 +31,6 @@ for (const route of [
   "url.pathname === '/api/institutions'",
   "url.pathname === '/api/rankings'",
   "url.pathname === '/api/history'",
-  "url.pathname === '/api/ownership/events'",
-  "url.pathname === '/api/membership/events'",
 ]) {
   if (!readModelRoutes.includes(route)) throw new Error(`${route} must bypass legacy provider branches through the PostgreSQL read-model router`);
 }

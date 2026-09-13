@@ -19,8 +19,12 @@ export async function verifyCanary(targetUrl = 'http://127.0.0.1:8787') {
 
   try {
     // Additional World State Snapshot Probe
-    const worldRes = await fetch(`${deploymentReport.target}/api/world`);
-    results.probes.worldSnapshot = worldRes.ok && (await worldRes.json()).clock !== undefined;
+    const worldRes = await fetch(`${deploymentReport.target}/api/health`);
+    const health = await worldRes.json();
+    results.probes.worldSnapshot = worldRes.ok && (
+      health.shadow?.postgres?.world === 1
+      || (health.persistence === 'reference-simulator' && health.ok === true)
+    );
   } catch (err) {
     results.probes.worldSnapshot = false;
   }

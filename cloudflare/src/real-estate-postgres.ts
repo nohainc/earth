@@ -4,6 +4,7 @@ import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { postEconomicResourceMutation } from './resource-ledger-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 import type { OperatingPolicy } from './real-estate-catalog.ts';
+import { createGameEvent } from './game-events-postgres.ts';
 
 type ConstructionTechnologySnapshot = {
   rulesVersion: string | null;
@@ -30,27 +31,19 @@ async function resolveConstructionTechnology(
   gameDay: number,
 ): Promise<ConstructionTechnologySnapshot> {
   const result = await tx.query<{
-    economic_id: string;
     rules_version: string | null;
     modifiers: Record<string, number> | null;
   }>(
-    `SELECT o.economic_id::TEXT AS economic_id,
-            c.rules_version,
-            COALESCE(c.scoped_modifiers, '{}'::JSONB) AS modifiers
-       FROM memberships m
-       JOIN owner_registry o ON o.id = m.corporation_id
-       LEFT JOIN corporation_technology_modifier_cache c
-         ON c.corporation_economic_id = o.economic_id
-        AND c.game_day = $2
-      WHERE m.human_id = $1
-        AND m.corporation_id IS NOT NULL
-      ORDER BY m.joined_game_day DESC NULLS LAST, m.corporation_id
+    `SELECT NULL::TEXT AS rules_version, '{}'::JSONB AS modifiers
+       FROM house_affiliations
+      WHERE house_id = (SELECT house_id FROM humans WHERE id = $1)
+        AND corporation_id IS NOT NULL
+        AND status = 'ACTIVE'
       LIMIT 1`,
     [ownerId, gameDay],
   );
   const row = result.rows[0];
-  if (!row) return { rulesVersion: null, modifiers: {} };
-  return { rulesVersion: row.rules_version, modifiers: row.modifiers ?? {} };
+  return { rulesVersion: row?.rules_version ?? null, modifiers: row?.modifiers ?? {} };
 }
 export interface DistrictZoningSummary {
   cityId: string;
@@ -82,27 +75,27 @@ export async function getCityDistrictZoning(
   viewerId?: string,
 ): Promise<DistrictZoningSummary> {
   const cityRes = await repository.query<{ id: string; name: string }>(
-    `SELECT cities.id, institutions.name
-       FROM cities
-       JOIN institutions ON institutions.id = cities.institution_id
-      WHERE cities.id = $1`,
+    `SELECT c.id, i.name
+       FROM cities c JOIN institutions i ON i.id = c.id
+      WHERE c.id = $1`,
     [cityId],
   );
   const city = cityRes.rows[0];
   const cityName = city?.name ?? 'Metropolitan District';
 
   const popRes = await repository.query<{ count: string }>(
-    'SELECT COUNT(*)::integer AS count FROM memberships WHERE city_id = $1',
+    "SELECT COUNT(*)::integer AS count FROM house_affiliations WHERE city_id = $1 AND status = 'ACTIVE'",
     [cityId],
   );
   const population = Number(popRes.rows[0]?.count ?? 1);
 
   const districtEffects = await repository.query<{ district_count: string; citizen_capacity: string; total_slots: string; civic_reserved_slots: string }>(
-    `SELECT
-       (SELECT COUNT(*)::text FROM buildings WHERE city_id = $1 AND building_type = 'urban-district-module' AND status NOT IN ('closed', 'foreclosed')) AS district_count,
-       COALESCE((SELECT SUM(e.effect_value) FROM buildings b JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) WHERE b.city_id = $1 AND b.status NOT IN ('closed', 'foreclosed') AND e.effect_code = 'CITY_CITIZEN_CAPACITY'), 0)::text AS citizen_capacity,
-       COALESCE((SELECT SUM(e.effect_value) FROM buildings b JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) WHERE b.city_id = $1 AND b.status NOT IN ('closed', 'foreclosed') AND e.effect_code = 'CITY_TOTAL_SLOTS'), 0)::text AS total_slots,
-       COALESCE((SELECT SUM(e.effect_value) FROM buildings b JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) WHERE b.city_id = $1 AND b.status NOT IN ('closed', 'foreclosed') AND e.effect_code = 'CITY_CIVIC_RESERVED_SLOTS'), 0)::text AS civic_reserved_slots`,
+    `SELECT COUNT(*)::text FILTER (WHERE b.catalog_id LIKE 'URBAN-DISTRICT%') AS district_count,
+            COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'CITY_CITIZEN_CAPACITY'), 0)::text AS citizen_capacity,
+            COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'CITY_TOTAL_SLOTS'), 0)::text AS total_slots,
+            COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'CITY_CIVIC_RESERVED_SLOTS'), 0)::text AS civic_reserved_slots
+       FROM buildings b LEFT JOIN building_catalog_effects e ON e.catalog_id = b.catalog_id
+      WHERE b.city_id = $1 AND b.status = 'ACTIVE'`,
     [cityId],
   );
   const districtModulesCount = Number(districtEffects.rows[0]?.district_count ?? 0);
@@ -112,23 +105,19 @@ export async function getCityDistrictZoning(
 
   const bldRes = await repository.query<{
     id: string;
-    owner_id: string;
-    building_type: string;
-    tier: number;
+    owner_economic_id: string;
+    catalog_id: string;
     slot_footprint: number;
-    ownership_class: string;
   }>(
-    "SELECT id, owner_id, building_type, tier, slot_footprint, ownership_class FROM buildings WHERE city_id = $1 AND status NOT IN ('closed', 'foreclosed')",
+    "SELECT b.id, b.owner_economic_id, b.catalog_id, c.slot_footprint FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id WHERE b.city_id = $1 AND b.status = 'ACTIVE'",
     [cityId],
   );
   const personalEstateRes = viewerId
     ? await repository.query<{ slots: string }>(
         `SELECT COALESCE(SUM(e.effect_value), 0)::text AS slots
-           FROM buildings b
-           JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
-          WHERE b.owner_id = $1 AND b.building_type = 'private-estate-plot'
-            AND b.status NOT IN ('closed', 'foreclosed')
-            AND e.effect_code = 'PRIVATE_OWNER_SLOTS'`,
+           FROM buildings b JOIN building_catalog_effects e ON e.catalog_id = b.catalog_id
+          WHERE b.owner_economic_id = (SELECT h.house_id FROM humans h WHERE h.id = $1)
+            AND b.status = 'ACTIVE' AND e.effect_code = 'PRIVATE_OWNER_SLOTS'`,
         [viewerId],
       )
     : { rows: [] as Array<{ slots: string }> };
@@ -141,15 +130,8 @@ export async function getCityDistrictZoning(
 
   for (const row of bldRes.rows) {
     const footprint = Math.max(0, Number(row.slot_footprint || 0));
-    const oClass = (row.ownership_class || 'private').toLowerCase();
-    if (oClass === 'private') {
-      usedPrivateSlots += footprint;
-      if (viewerId && row.owner_id === viewerId) {
-        personalUsedSlots += footprint;
-      }
-    } else {
-      usedCivicSlots += footprint;
-    }
+    usedPrivateSlots += footprint;
+    if (viewerId && row.owner_economic_id === `HOUSE-${viewerId.replace(/^H-/, '')}`) personalUsedSlots += footprint;
   }
 
   const maxPrivatePermitted = Math.max(0, totalSlots - civicReservedSlots);
@@ -189,9 +171,13 @@ export async function purchasePrivatePlotAndConstruct(
     correlationId: string;
   },
 ): Promise<Record<string, unknown>> {
+  return purchaseBaselineBuilding(repository, input);
+  /* Legacy implementation retained below only until its remaining callers are
+     removed; the baseline-compatible path above is the sole runtime path. */
+  /* istanbul ignore next */
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ reason_id: string }>(
-      "SELECT reason_id FROM ledger_entries WHERE reason_type = 'building_purchase' AND correlation_id = $1",
+      "SELECT source_id AS reason_id FROM economic_transactions WHERE transaction_kind = 'building_purchase' AND correlation_id = $1",
       [input.correlationId],
     );
     if (prior.rows[0]) {
@@ -239,7 +225,7 @@ export async function purchasePrivatePlotAndConstruct(
     }
 
     const membership = await tx.query<{ city_id: string | null; corporation_id: string | null }>(
-      'SELECT city_id, corporation_id FROM memberships WHERE human_id = $1',
+      'SELECT ha.city_id, ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = \'ACTIVE\' LIMIT 1',
       [input.ownerId],
     );
     const isPrivateEstate = input.buildingType === 'private-estate-plot';
@@ -284,7 +270,7 @@ export async function purchasePrivatePlotAndConstruct(
     // Check Credits
     const creditCostCents = creditCostUnits;
     const account = await tx.query<{ account_id: string; balance: string }>(
-      "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+      "SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' FOR UPDATE",
       [input.ownerId],
     );
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
@@ -422,6 +408,18 @@ export async function purchasePrivatePlotAndConstruct(
       day,
       0,
     ]);
+    await createGameEvent(tx, {
+      id: `BUILDING-CONSTRUCTION-${input.correlationId}`,
+      category: 'BUILDING',
+      eventType: 'BUILDING_CONSTRUCTION_STARTED',
+      gameDay: day,
+      actorHumanId: input.ownerId,
+      subjectType: 'BUILDING',
+      subjectId: buildingId,
+      title: `${spec.name} construction started`,
+      details: { buildingId, catalogId, cityId: citizenCityId, ownerId: input.ownerId, constructionCompleteMinute: completeMinute },
+      correlationId: input.correlationId,
+    });
 
     const created = await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId]);
     return {
@@ -429,6 +427,104 @@ export async function purchasePrivatePlotAndConstruct(
       building: created.rows[0],
       correlationId: input.correlationId,
     };
+  });
+}
+
+async function purchaseBaselineBuilding(
+  repository: PostgresRepository,
+  input: { ownerId: string; cityId: string; buildingType: string; name: string; correlationId: string },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ source_id: string }>(
+      'SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId],
+    );
+    if (prior.rows[0]?.source_id) {
+      const existing = await tx.query('SELECT * FROM buildings WHERE id = $1', [prior.rows[0].source_id]);
+      return { ok: true, alreadyProcessed: true, building: existing.rows[0], correlationId: input.correlationId };
+    }
+    const catalog = (await tx.query<{
+      id: string; code: string; construction_credit_units: string; construction_minutes: number;
+      resource_input_units: Record<string, number>;
+    }>(
+      `SELECT id, code, construction_credit_units, construction_minutes, resource_input_units
+         FROM building_catalog
+        WHERE id = $1 OR code = $1 OR lower(code) = lower($1)
+        LIMIT 1`, [input.buildingType],
+    )).rows[0];
+    if (!catalog) throw new Error('Unknown or inactive building blueprint');
+    const owner = (await tx.query<{ economic_id: string }>(
+      `SELECT o.economic_id FROM humans h JOIN owner_registry o ON o.id = h.house_id
+        WHERE h.id = $1 AND h.status = 'ACTIVE'`, [input.ownerId],
+    )).rows[0];
+    if (!owner) throw new Error('House economic owner not found');
+    const city = (await tx.query('SELECT 1 FROM cities WHERE id = $1 AND status = \'ACTIVE\'', [input.cityId])).rows[0];
+    if (!city) throw new Error('City not found or inactive');
+    const wallet = (await tx.query<{ id: string; balance_units: string }>(
+      `SELECT id::TEXT, balance_units::TEXT FROM economic_accounts
+        WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET' AND status = 'ACTIVE' FOR UPDATE`,
+      [owner.economic_id],
+    )).rows[0];
+    const cost = BigInt(catalog.construction_credit_units);
+    if (!wallet || BigInt(wallet.balance_units) < cost) throw new Error(`Insufficient Credits for construction (Requires ${catalog.construction_credit_units} units)`);
+    const treasury = (await tx.query<{ id: string }>(
+      `SELECT a.id::TEXT AS id FROM economic_accounts a
+         JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+        WHERE o.id = 'OUC' AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE' LIMIT 1`,
+    )).rows[0];
+    if (!treasury) throw new Error('OUC treasury account is not configured');
+    const world = (await tx.query<{ game_day: string; game_minute: number }>("SELECT game_day::TEXT, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
+    const day = Number(world?.game_day ?? 1);
+    const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const post = async (correlationId: string, sourceId: string, entries: Array<{ account_id: string; asset_id: number; delta_units: string }>) => {
+      await tx.query(
+        `SELECT earth_post_transaction($1,$2,$3,'BUILDING_CONSTRUCTION','HOUSE',$4,'building-v2',$5::JSONB)`,
+        [correlationId, day, Number(world?.game_minute ?? 0), sourceId, JSON.stringify(entries)],
+      );
+    };
+    await post(input.correlationId, buildingId, [
+      { account_id: wallet.id, asset_id: 1, delta_units: (-cost).toString() },
+      { account_id: treasury.id, asset_id: 1, delta_units: cost.toString() },
+    ]);
+    const inputs = catalog.resource_input_units ?? {};
+    for (const [code, rawAmount] of Object.entries(inputs)) {
+      const amount = BigInt(Math.max(0, Math.round(Number(rawAmount))));
+      if (amount === 0n) continue;
+      const asset = (await tx.query<{ id: number }>('SELECT id FROM economic_assets WHERE code = $1', [code.toUpperCase()])).rows[0];
+      if (!asset) throw new Error(`Unknown construction resource ${code}`);
+      const inventory = (await tx.query<{ id: string; balance_units: string }>(
+        `SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE' FOR UPDATE`,
+        [owner.economic_id, asset.id],
+      )).rows[0];
+      if (!inventory || BigInt(inventory.balance_units) < amount) throw new Error(`Insufficient ${code} for construction`);
+      const sink = (await tx.query<{ id: string }>(
+        `SELECT a.id::TEXT AS id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+          WHERE o.owner_type = 'SYSTEM' AND a.asset_id = $1 AND a.account_type = 'INVENTORY' AND a.status = 'ACTIVE' LIMIT 1`, [asset.id],
+      )).rows[0];
+      if (!sink) throw new Error(`Resource sink is not configured for ${code}`);
+      await post(`${input.correlationId}:resource:${code}`, buildingId, [
+        { account_id: inventory.id, asset_id: asset.id, delta_units: (-amount).toString() },
+        { account_id: sink.id, asset_id: asset.id, delta_units: amount.toString() },
+      ]);
+    }
+    await tx.query(
+      `INSERT INTO buildings (id, owner_economic_id, catalog_id, city_id, status, started_game_day)
+       VALUES ($1,$2,$3,$4,'ACTIVE',$5)`,
+      [buildingId, owner.economic_id, catalog.id, input.cityId, day],
+    );
+    await createGameEvent(tx, {
+      id: `BUILDING-ACQUIRED-${input.correlationId}`,
+      category: 'BUILDING',
+      eventType: 'BUILDING_ACQUIRED',
+      gameDay: day,
+      actorHumanId: input.ownerId,
+      subjectType: 'BUILDING',
+      subjectId: buildingId,
+      title: `${catalog.code} acquired`,
+      details: { buildingId, catalogId: catalog.id, cityId: input.cityId, ownerEconomicId: owner.economic_id },
+      correlationId: input.correlationId,
+    });
+    const created = await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId]);
+    return { ok: true, building: created.rows[0], correlationId: input.correlationId };
   });
 }
 
@@ -442,7 +538,7 @@ export async function upgradeBuilding(
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ reason_id: string }>(
-      "SELECT reason_id FROM ledger_entries WHERE reason_type = 'building_upgrade' AND correlation_id = $1",
+      "SELECT source_id AS reason_id FROM economic_transactions WHERE transaction_kind = 'building_upgrade' AND correlation_id = $1",
       [input.correlationId],
     );
     if (prior.rows[0]) {
@@ -497,7 +593,7 @@ export async function upgradeBuilding(
     }
     if (targetCatalog.rows[0]?.research_project_id) {
       const membership = await tx.query<{ corporation_id: string | null }>(
-        'SELECT corporation_id FROM memberships WHERE human_id = $1 AND corporation_id IS NOT NULL LIMIT 1',
+      'SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = \'ACTIVE\' AND ha.corporation_id IS NOT NULL LIMIT 1',
         [input.humanId],
       );
       const corporationId = membership.rows[0]?.corporation_id;
@@ -526,7 +622,7 @@ export async function upgradeBuilding(
 
     const creditCostCents = BigInt(upgradeCreditCost * 100);
     const account = await tx.query<{ account_id: string; balance: string }>(
-      "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+      "SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' FOR UPDATE",
       [input.humanId],
     );
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
@@ -787,7 +883,7 @@ export async function contributeCorporateResearch(
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ reason_id: string }>(
-      "SELECT reason_id FROM ledger_entries WHERE reason_type = 'corp_research_contribution' AND correlation_id = $1",
+      "SELECT source_id AS reason_id FROM economic_transactions WHERE transaction_kind = 'corp_research_contribution' AND correlation_id = $1",
       [input.correlationId],
     );
     if (prior.rows[0]) {
@@ -809,7 +905,7 @@ export async function contributeCorporateResearch(
     if (!pool || pool.status !== 'active') throw new Error('Active corporate research pool not found');
 
     const membership = await tx.query<{ corporation_id: string | null }>(
-      'SELECT corporation_id FROM memberships WHERE human_id = $1',
+      'SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = \'ACTIVE\' LIMIT 1',
       [input.humanId],
     );
     if (membership.rows[0]?.corporation_id !== pool.corporation_id) {
@@ -822,7 +918,7 @@ export async function contributeCorporateResearch(
     if (input.credits > 0) {
       const creditCents = BigInt(Math.round(input.credits * 100));
       const account = await tx.query<{ account_id: string; balance: string }>(
-        "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        "SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' FOR UPDATE",
         [input.humanId],
       );
       if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCents) {

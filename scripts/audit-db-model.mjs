@@ -2,13 +2,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(new URL('..', import.meta.url).pathname);
-const schema = fs.readFileSync(path.join(root, 'db/schema.sql'), 'utf8');
-const functions = fs.existsSync(path.join(root, 'db/functions.sql'))
-  ? fs.readFileSync(path.join(root, 'db/functions.sql'), 'utf8') : '';
+// The clean baseline is authoritative. The former db/schema.sql/functions.sql
+// files are compatibility/documentation artifacts and must not drive the audit.
+const schema = fs.readFileSync(path.join(root, 'db/baseline/01_schema.sql'), 'utf8');
+const functions = fs.existsSync(path.join(root, 'db/baseline/02_functions.sql'))
+  ? fs.readFileSync(path.join(root, 'db/baseline/02_functions.sql'), 'utf8') : '';
 
 const legacy = /(?:^|_)(?:account_balances|resource_balances|ledger_entries|resource_ledger_entries|global_bank_deposits|global_bank_loans|tax_rules|budgets|succession_plans|human_technology_adoptions|human_technology_subscriptions|corporation_technology_shares|businesses|business_|derivative_obligations|future_|ai_|assistant|llm)(?:$|_)/i;
 const redesign = /^(?:daily_settlement_profiles|daily_settlement_profile_runs|economic_account_migrations|economy_shadow_|memberships|financial_states)/i;
 const removedColumn = /(?:^|_)(?:condition|durability|damage|wear|repair|output_credits|monthly|annual|legacy_balance)(?:$|_)/i;
+const removedDomains = [
+  'account_balances', 'resource_balances', 'ledger_entries', 'resource_ledger_entries',
+  'global_bank_deposits', 'global_bank_loans', 'tax_rules', 'budgets', 'businesses',
+  'derivative_obligations', 'human_technology_adoptions', 'human_technology_subscriptions',
+  'corporation_technology_shares',
+];
 
 function decision(name) {
   if (legacy.test(name)) return 'DELETE';
@@ -18,7 +26,7 @@ function decision(name) {
 
 function unique(values) { return [...new Set(values)].sort(); }
 
-const tables = unique([...schema.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-zA-Z_][\w]*)/gi)].map((m) => m[1]));
+const tables = unique([...schema.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-zA-Z_][\w]*)/gi)].map((m) => m[1]));
 const views = unique([
   ...schema.matchAll(/CREATE (?:OR REPLACE )?(?:MATERIALIZED )?VIEW\s+([a-zA-Z_][\w]*)/gi),
 ].map((m) => m[1]));
@@ -29,7 +37,7 @@ const functionsFound = unique([
 ].map((m) => m[1]));
 
 const columns = [];
-for (const match of schema.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-zA-Z_][\w]*)\s*\(([^;]*?)\n\);/gis)) {
+for (const match of schema.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-zA-Z_][\w]*)\s*\(([\s\S]*?)\n?\);/gi)) {
   const [, table, body] = match;
   for (const line of body.split('\n')) {
     const column = line.trim().match(/^([a-zA-Z_][\w]*)\s+/);
@@ -46,7 +54,9 @@ for (const match of schema.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-zA-Z_][\w]
 
 const inventory = { tables, columns, views, functions: functionsFound, triggers };
 const classified = {
-  tables: Object.fromEntries(tables.map((name) => [name, decision(name)])),
+  // Include explicit deletion decisions for removed authorities even though
+  // they are intentionally absent from the clean schema inventory.
+  tables: Object.fromEntries([...tables.map((name) => [name, decision(name)]), ...removedDomains.map((name) => [name, 'DELETE'])]),
   columns: Object.fromEntries(columns.map(({ table, name, decision: value }) => [`${table}.${name}`, value])),
   views: Object.fromEntries(views.map((name) => [name, decision(name)])),
   functions: Object.fromEntries(functionsFound.map((name) => [name, decision(name)])),

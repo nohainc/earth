@@ -19,28 +19,21 @@ export async function handleFinanceRoutes(
 ): Promise<Response | null> {
   if (url.pathname === '/api/finance/me' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [accounts, summary, state, claims, deposits, entries] = await Promise.all([
-        repository.query(`SELECT a.id AS account_id, ea.code AS asset_code, a.asset_id, a.account_type, a.balance::TEXT AS balance_units,
-                                 ea.scale, ea.decimals
+      const [accounts, deposits, entries] = await Promise.all([
+        repository.query(`SELECT a.id AS account_id, ea.code AS asset_code, a.asset_id, a.account_type,
+                                 a.balance_units::TEXT AS balance_units, NULL::integer AS scale, NULL::integer AS decimals
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
                             LEFT JOIN economic_assets ea ON ea.id = a.asset_id
-                           WHERE o.id = $1 AND a.status = 'active' ORDER BY a.asset_id, a.account_type`, [viewer.house_id]),
-        repository.query(`SELECT s.* FROM owner_financial_summary s JOIN owner_registry o ON o.economic_id = s.owner_economic_id WHERE o.id = $1`, [viewer.house_id]),
-        repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
-        repository.query(`SELECT obligation_type, principal_due_units, interest_due_units, due_game_day, priority_class, status
-                            FROM financial_obligations f JOIN owner_registry o ON o.economic_id = f.debtor_economic_id
-                           WHERE o.id = $1 ORDER BY due_game_day, priority_class`, [viewer.house_id]),
-        repository.query(`SELECT id, principal_units, accrued_interest_units, rate_bps, maturity_total_game_minute, status,
-                                 deposit_protection_limit_units, deposit_protection_rule_version
-                            FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id
-                           WHERE o.id = $1 ORDER BY created_at DESC`, [viewer.house_id]),
+                           WHERE o.id = $1 AND a.status = 'ACTIVE' ORDER BY a.asset_id, a.account_type`, [viewer.house_id]),
+        repository.query(`SELECT d.* FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id
+                           WHERE o.id = $1 ORDER BY d.id DESC`, [viewer.house_id]),
         repository.query(`SELECT t.id, t.game_day, t.game_minute, t.transaction_kind, t.correlation_id,
-                                 e.asset_id, e.delta, e.reason_code
+                                 e.asset_id, e.delta_units
                             FROM economic_transactions t JOIN economic_entries e ON e.transaction_id = t.id
                            WHERE e.account_id IN (SELECT a.id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1)
                            ORDER BY t.id DESC LIMIT 100`, [viewer.house_id]),
       ]);
-      return { accounts: accounts.rows, summary: summary.rows[0] ?? null, state: state.rows[0] ?? null, obligations: claims.rows, deposits: deposits.rows, transactions: entries.rows };
+      return { accounts: accounts.rows, summary: null, state: null, obligations: [], deposits: deposits.rows, transactions: entries.rows };
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });

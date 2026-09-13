@@ -1,4 +1,5 @@
 import { Client, type QueryResult, type QueryResultRow } from 'pg';
+import { workerConnectionString } from './postgres.ts';
 
 const MAX_TRANSACTION_ATTEMPTS = 3;
 const RETRY_BACKOFF_MS = 10;
@@ -82,11 +83,13 @@ export class PostgresRepository {
 }
 
 export async function withPostgresRepository<T>(env: Env, work: (repository: PostgresRepository) => Promise<T>, options: RepositoryOptions = {}): Promise<T | undefined> {
-  if (!env.HYPERDRIVE?.connectionString) return undefined;
   const config = env as unknown as Record<string, unknown>;
+  const connectionString = env.HYPERDRIVE?.connectionString ?? (config.DATABASE_URL as string | undefined);
+  if (!connectionString) return undefined;
   const scheduler = options.workload === 'scheduler';
   const client = new Client({
-    connectionString: env.HYPERDRIVE.connectionString,
+    connectionString: workerConnectionString(connectionString),
+    ssl: { rejectUnauthorized: true },
     connectionTimeoutMillis: 3000,
     query_timeout: scheduler ? Number(config.EARTH_SCHEDULER_STATEMENT_TIMEOUT_MS ?? 30000) : Number(config.EARTH_API_STATEMENT_TIMEOUT_MS ?? 5000),
     statement_timeout: scheduler ? Number(config.EARTH_SCHEDULER_STATEMENT_TIMEOUT_MS ?? 30000) : Number(config.EARTH_API_STATEMENT_TIMEOUT_MS ?? 5000),
@@ -103,6 +106,7 @@ export async function withPostgresRepository<T>(env: Env, work: (repository: Pos
 
 export async function withRepository<T>(env: Env, work: (repository: PostgresRepository) => Promise<T>, options: RepositoryOptions = {}): Promise<T | undefined> {
   authorityMode(env);
-  if (!env.HYPERDRIVE?.connectionString) throw new Error('PostgreSQL Hyperdrive binding is required');
+  const config = env as unknown as Record<string, unknown>;
+  if (!env.HYPERDRIVE?.connectionString && !config.DATABASE_URL) throw new Error('PostgreSQL Hyperdrive binding is required');
   return withPostgresRepository(env, work, options);
 }

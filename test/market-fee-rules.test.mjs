@@ -5,8 +5,8 @@ import { marketFeeRate } from '../cloudflare/src/market-rules.ts';
 function repository({ earth = '0.02', city = null, corporation = null } = {}) {
   return {
     async query(sql) {
-      if (sql.includes("scope = 'global'") && sql.includes("category = 'market'")) {
-        return { rows: [{ rate: earth }] };
+      if (sql.includes("tax_rule_id = 'TAX-OUC-MARKET'")) {
+      return { rows: [{ rate_bps: Math.round(Number(earth) * 10000) }] };
       }
       return { rows: [{ city_rules: city, corporation_rules: corporation }] };
     },

@@ -7,7 +7,7 @@
  *  - /app/main.dart.js
  *  - /api/health
  *  - /api/auth/me
- *  - /edge/events
+ *  - /api/live
  */
 
 export async function verifyDeploymentEndpoints(targetUrl = 'http://127.0.0.1:8787', options = {}) {
@@ -166,30 +166,24 @@ export async function verifyDeploymentEndpoints(targetUrl = 'http://127.0.0.1:87
     report.errors.push(`Auth Me probe (/api/auth/me) error: ${err.message}`);
   }
 
-  // 7. Probe Edge Events Stream (/edge/events)
+  // 7. Probe canonical liveness (/api/live). The old edge event stream is
+  // intentionally no longer a public deployment dependency.
   try {
-    const res = await fetchWithTimeout(`${normalizedTarget}/edge/events`, {
-      headers: { Accept: 'text/event-stream' },
-    });
+    const res = await fetchWithTimeout(`${normalizedTarget}/api/live`);
     const cType = res.headers.get('content-type') || '';
-    const ok = res.status === 200 && (cType.includes('text/event-stream') || cType.includes('application/json'));
-    // Read the first chunk and cancel stream
-    const reader = res.body?.getReader();
-    if (reader) {
-      await reader.read();
-      reader.cancel();
-    }
+    const payload = await res.json();
+    const ok = res.status === 200 && cType.includes('application/json') && payload.ok === true && payload.status === 'live';
     report.probes.edgeEvents = ok;
     report.details.edgeEvents = {
       status: res.status,
       contentType: cType,
       ok,
     };
-    if (!ok) report.errors.push(`Edge events probe (/edge/events) failed: status=${res.status}, type=${cType}`);
+    if (!ok) report.errors.push(`Liveness probe (/api/live) failed: status=${res.status}, type=${cType}`);
   } catch (err) {
     report.probes.edgeEvents = false;
     report.details.edgeEvents = { error: err.message, ok: false };
-    report.errors.push(`Edge events probe (/edge/events) error: ${err.message}`);
+    report.errors.push(`Liveness probe (/api/live) error: ${err.message}`);
   }
 
   report.allPassed = Object.values(report.probes).every(Boolean);

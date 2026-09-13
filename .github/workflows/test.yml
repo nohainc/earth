@@ -87,7 +87,7 @@ jobs:
       - run: npm run db:verify:finance-cutover
       - run: npm run test:postgres
       - run: npm run test:certification
-      - name: Create isolated recovery database
+      - name: Create isolated restore database
         run: createdb -h localhost -U earth earth_recovery
       - name: Run populated-world backup and restore certification
         env:

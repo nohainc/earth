@@ -14,10 +14,13 @@ assembled from four dependency-ordered sections:
 `cloudflare/src/schema-contract.ts` is generated from that manifest. These are
 the inputs used by schema verification and readiness checks.
 
-Historical SQL files remain archived source material. The migration runner
-applies only files marked `-- EARTH ACTIVE MIGRATION:`. Migration `001` is
-immutable after the clean databases are accepted; future changes use `002_...`
-and later active migrations.
+The migration runner applies only files marked `-- EARTH ACTIVE MIGRATION:`.
+During the pre-production reconciliation phase, retained runtime gaps are
+introduced as temporary forward migrations (`002_...`, `003_...`, and so on)
+and applied incrementally with `npm run db:migrate:postgres`; do not reset the
+local database between these changes. After local and remote certification,
+the temporary chain is consolidated, `001_baseline.sql` is frozen, and the next
+permanent change starts at `002_...`.
 
 The baseline intentionally contains no demo players, fake Houses, test orders,
 or legacy compatibility tables. Development and test fixtures belong under

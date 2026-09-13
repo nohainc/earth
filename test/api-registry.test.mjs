@@ -11,6 +11,10 @@ test('canonical API registry is complete and internally consistent', () => {
     assert.match(route.path, /^(\/api|\/internal)\//);
     assert.match(routeKey(route), /^(GET|POST|PUT|PATCH|DELETE) \/(api|internal)\//);
   }
+  assert.ok(!API_ROUTES.some((route) => route.path === '/api/{readModel}'));
+  for (const removed of ['/api/ownership/events', '/api/membership/events', '/api/production/events']) {
+    assert.ok(!API_ROUTES.some((route) => route.path === removed), `removed route is still registered: ${removed}`);
+  }
 });
 
 test('registry rejects duplicate routes, missing metadata, and unknown owners', () => {

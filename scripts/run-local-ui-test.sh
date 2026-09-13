@@ -2,9 +2,20 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Load local-only values when present. The launcher still rejects non-local
+# live scheduler targets below.
+if [[ -f "${ROOT_DIR}/.env.local" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ROOT_DIR}/.env.local"
+  set +a
+fi
+
 API_PORT="${EARTH_LOCAL_API_PORT:-8788}"
 WEB_PORT="${EARTH_LOCAL_WEB_PORT:-50553}"
 API_ORIGIN="http://localhost:${WEB_PORT}"
+LOCAL_CORS_ORIGINS="${API_ORIGIN},http://127.0.0.1:${WEB_PORT}"
 LOCAL_MODE="${EARTH_LOCAL_MODE:-live}"
 case "${LOCAL_MODE}" in
   live|manual|ui) ;;
@@ -51,45 +62,33 @@ fi
 if [[ "${IS_LOCAL}" == "true" ]]; then
   print "Checking local PostgreSQL server status..."
 
-  if ! pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+  if ! psql "${DATABASE_URL}" -Atqc 'SELECT 1' >/dev/null 2>&1; then
     print "Local PostgreSQL is not responding. Attempting to start PostgreSQL service..."
     if command -v brew >/dev/null 2>&1 && brew services list 2>/dev/null | grep -q "postgresql"; then
       pg_service=$(brew services list 2>/dev/null | awk '/postgresql/ {print $1; exit}')
       print "Starting Homebrew PostgreSQL service (${pg_service})..."
       brew services start "${pg_service}" || true
-    elif command -v docker >/dev/null 2>&1; then
-      print "Starting local Docker PostgreSQL server..."
-      docker compose -f "${ROOT_DIR}/docker-compose.yml" up -d postgres
     fi
   fi
 
   print "Waiting for PostgreSQL to be ready..."
   retries=15
-  until pg_isready -h localhost -p 5432 >/dev/null 2>&1 || (( retries-- <= 0 )); do
+  until psql "${DATABASE_URL}" -Atqc 'SELECT 1' >/dev/null 2>&1 || (( retries-- <= 0 )); do
     sleep 1
   done
 
-  if ! pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+  if ! psql "${DATABASE_URL}" -Atqc 'SELECT 1' >/dev/null 2>&1; then
     print -u2 "Error: PostgreSQL is not reachable at localhost:5432. Please ensure PostgreSQL is running."
     exit 1
   fi
 
   print "Local PostgreSQL is reachable; preserving existing schema and data."
 
-  if [[ "${LOCAL_MODE}" == "manual" ]]; then
-    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "SELECT earth_local_set_clock_mode('manual');" >/dev/null
-  elif [[ "${LOCAL_MODE}" == "ui" ]]; then
-    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "SELECT earth_local_set_clock_mode('paused');" >/dev/null
-  else
-    psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "SELECT earth_local_set_clock_mode('realtime');" >/dev/null
-  fi
-
+  # Baseline 001 uses the canonical scheduler state directly; it intentionally
+  # does not install the former local clock/activation helper functions.
+  # Keep this launcher side-effect free and let the Worker own settlement.
   if [[ "${LOCAL_SETTLEMENT_ENABLED}" == "true" ]]; then
-    settlement_status=$(psql "${DATABASE_URL}" -Atqc "SELECT status FROM daily_settlement_control WHERE id = 'WORLD'" 2>/dev/null || true)
-    if [[ "${settlement_status}" == "awaiting_baseline" ]]; then
-      print "Activating local daily settlement from the last completed game day..."
-      psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "SELECT earth_activate_daily_settlement(GREATEST(1, (SELECT earth_game_day_from_total_minutes(total_game_minutes) - 1 FROM world_state WHERE id = 'WORLD')), 'local-ui-launcher');" >/dev/null
-    fi
+    print "Local settlement activation is delegated to the Worker scheduler."
   fi
 fi
 
@@ -107,7 +106,7 @@ if ! command -v osascript >/dev/null 2>&1; then
   exit 1
 fi
 
-api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CONNECTION_STRING=${(q)DATABASE_URL} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=${(q)DATABASE_URL} CORS_ORIGIN=${(q)API_ORIGIN} EARTH_LOCAL_MODE=${(q)LOCAL_MODE} EARTH_LOCAL_SCHEDULER=${(q)LOCAL_SCHEDULER_ENABLED} zsh -c '
+api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CONNECTION_STRING=${(q)DATABASE_URL} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=${(q)DATABASE_URL} CORS_ORIGIN=${(q)LOCAL_CORS_ORIGINS} EARTH_LOCAL_MODE=${(q)LOCAL_MODE} EARTH_LOCAL_SCHEDULER=${(q)LOCAL_SCHEDULER_ENABLED} zsh -c '
   set -u
   scheduler_pid=\"\"
   stop_scheduler() { [[ -n \"\${scheduler_pid}\" ]] && kill \"\${scheduler_pid}\" 2>/dev/null || true; }
@@ -124,7 +123,8 @@ api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CON
     scheduler_pid=\$!
     print \"Local scheduler enabled: invoking the Worker scheduled handler every 60 seconds.\"
   fi
-  npx wrangler dev --test-scheduled --config wrangler.api.jsonc --port ${API_PORT} --ip 127.0.0.1
+  npx wrangler dev --test-scheduled --config wrangler.api.jsonc --port ${API_PORT} --ip 127.0.0.1 \
+    --var "CORS_ORIGIN:\${CORS_ORIGIN}" --var "EARTH_LOCAL_MODE:\${EARTH_LOCAL_MODE}"
 '"
 web_command="cd ${(q)ROOT_DIR}/flutter_client && flutter run -d chrome --web-port ${WEB_PORT} --dart-define=EARTH_API_URL=http://localhost:${API_PORT}"
 

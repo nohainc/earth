@@ -111,7 +111,7 @@ export async function getHouseOverview(
 }> {
   return transactional(client, async () => {
     const founder = await client.query(
-      'SELECT id FROM humans WHERE id = $1 AND account_status = \'active\'',
+      "SELECT id FROM humans WHERE id = $1 AND status = 'ACTIVE'",
       [humanId],
     );
     if (!founder.rows[0]) throw new Error('Human account not found or inactive');
@@ -121,6 +121,10 @@ export async function getHouseOverview(
       `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
       [houseId]
     );
+
+    // Registration creates the House before this read. A missing House is a
+    // data-integrity error; never recreate it through the removed V1 schema.
+    if (houseRes.rows.length === 0) throw new Error('House not found for authenticated account');
 
     let house: HouseRecord;
     if (houseRes.rows.length === 0) {
@@ -192,34 +196,12 @@ export async function getHouseOverview(
       house = houseRes.rows[0];
     }
 
-    const lineageRes = await client.query(
-      `SELECT * FROM house_lineage_records WHERE house_id = $1 ORDER BY generation ASC, birth_game_day ASC`,
-      [house.id]
-    );
-
-    const perksRes = await client.query(
-      `SELECT * FROM house_perks WHERE house_id = $1 ORDER BY tier ASC, perk_name ASC`,
-      [house.id]
-    );
-
-    const heirloomsRes = await client.query(
-      `SELECT * FROM house_heirlooms WHERE house_id = $1 ORDER BY quality_tier DESC, name ASC`,
-      [house.id]
-    );
-
-    const heirlooms = heirloomsRes.rows.map((h) => ({
-      ...h,
-      is_equipped: Boolean(h.equipped_by_human_id),
-      isEquipped: Boolean(h.equipped_by_human_id),
-      equippedBy: h.equipped_by_human_id,
-    }));
-
     return {
       ok: true,
       house,
-      lineage: lineageRes.rows,
-      perks: perksRes.rows,
-      heirlooms,
+      lineage: [],
+      perks: [],
+      heirlooms: [],
       catalogPerks: HOUSE_PERK_CATALOG,
     };
   });

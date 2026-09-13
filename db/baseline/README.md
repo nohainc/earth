@@ -21,6 +21,9 @@ No normal players, test houses, demo buildings, orders, deposits, or research
 projects are created here. Development and test fixtures belong under
 `db/seed/` and are intentionally outside the production baseline.
 
-`001_baseline.sql` is the freeze point. Future changes belong in new numbered
-migrations after the baseline has been adopted; do not edit this bundle in
-place.
+While EARTH is still reconciling the clean baseline, domain changes belong in
+new numbered forward migrations under `db/migrations/` and are applied
+incrementally. Do not reset the local database between those changes. Once
+local and remote certification is complete, the temporary chain is consolidated
+and `001_baseline.sql` becomes permanently immutable; future changes then start
+at `002_...`.

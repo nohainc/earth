@@ -7,7 +7,11 @@ const report = JSON.parse(execFileSync(process.execPath, ['scripts/audit-db-mode
 test('every current database object has an explicit re-baseline decision', () => {
   const decisions = new Set(['KEEP', 'REDESIGN', 'DELETE']);
   for (const [kind, objects] of Object.entries(report.classified)) {
-    assert.ok(Object.keys(objects).length > 0, `${kind} inventory must not be empty`);
+    // Views and triggers are optional in the clean baseline; an empty
+    // inventory is still an explicit result rather than an audit failure.
+    if (kind !== 'views' && kind !== 'triggers') {
+      assert.ok(Object.keys(objects).length > 0, `${kind} inventory must not be empty`);
+    }
     for (const [name, value] of Object.entries(objects)) {
       assert.ok(decisions.has(value), `${kind} ${name} has no valid decision`);
     }

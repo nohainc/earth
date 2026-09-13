@@ -5,8 +5,15 @@ import { Client } from 'pg';
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error('DATABASE_URL is required; refusing to inspect an implicit database target');
 
+const parsedConnection = new URL(connectionString);
+const usesSystemRoot = parsedConnection.searchParams.get('sslrootcert') === 'system';
+if (usesSystemRoot) {
+  parsedConnection.searchParams.delete('sslrootcert');
+  parsedConnection.searchParams.delete('sslmode');
+}
+
 const manifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
-const client = new Client({ connectionString, application_name: 'earth-postgres-surface-verifier', connectionTimeoutMillis: 5000, query_timeout: 30000 });
+const client = new Client({ connectionString: parsedConnection.toString(), ...(usesSystemRoot ? { ssl: { rejectUnauthorized: true } } : {}), application_name: 'earth-postgres-surface-verifier', connectionTimeoutMillis: 5000, query_timeout: 30000 });
 await client.connect();
 
 try {
@@ -26,7 +33,10 @@ try {
      WHERE tc.table_schema = 'public' AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
      GROUP BY tc.table_name, tc.constraint_name
   `);
-  const presentUnique = new Set(uniqueConstraints.rows.map((row) => `${row.table_name}(${row.columns.join(',')})`));
+  const presentUnique = new Set(uniqueConstraints.rows.map((row) => {
+    const columns = Array.isArray(row.columns) ? row.columns : String(row.columns).replace(/[{}]/g, '').split(',');
+    return `${row.table_name}(${columns.join(',')})`;
+  }));
   const missingUnique = manifest.requiredUniqueConstraints
     .filter(([table, ...columns]) => !presentUnique.has(`${table}(${columns.join(',')})`))
     .map(([table, ...columns]) => `${table}(${columns.join(',')})`);

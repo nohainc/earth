@@ -27,18 +27,43 @@ export async function transferCredits(
   repository: PostgresRepository,
   input: CreditTransferInput,
 ): Promise<CreditTransferResult> {
-  const mappings = await repository.query<{ legacy_account_id: string; economic_account_id: string }>(
-    `SELECT legacy_account_id, economic_account_id::TEXT FROM economic_account_migrations WHERE legacy_account_id = ANY($1::TEXT[])`,
-    [[input.debitAccount, input.creditAccount]],
-  );
-  if (mappings.rows.length !== 2) throw new Error('Economy V2 account mapping is required for every credit transfer');
-  const accountIds = new Map(mappings.rows.map((row) => [row.legacy_account_id, row.economic_account_id]));
+  const resolveAccount = async (ownerOrAlias: string, accountType: string): Promise<string> => {
+    const result = await repository.query<{ account_id: string }>(
+      `SELECT a.id::TEXT AS account_id
+         FROM economic_accounts a
+         JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+        WHERE a.asset_id = 1
+          AND a.account_type = $2
+          AND a.status = 'ACTIVE'
+          AND (
+            o.id = $1
+            OR o.id = (SELECT h.house_id FROM humans h WHERE h.id = $1)
+            OR o.id = CASE
+              WHEN $1 = 'account-ouc-treasury' THEN 'OUC'
+              WHEN $1 = 'account-global-bank' THEN 'GLOBAL-BANK'
+              ELSE $1
+            END
+          )
+        ORDER BY a.id
+        LIMIT 1`,
+      [ownerOrAlias, accountType],
+    );
+    const accountId = result.rows[0]?.account_id;
+    if (!accountId) throw new Error(`Economy V2 ${accountType} account not found for ${ownerOrAlias}`);
+    return accountId;
+  };
+  const debitType = input.debitAccount.startsWith('account-') ? 'WALLET' : 'TREASURY';
+  const creditType = input.creditAccount.startsWith('account-') ? 'TREASURY' : 'TREASURY';
+  const [debitAccount, creditAccount] = await Promise.all([
+    resolveAccount(input.debitAccount, debitType),
+    resolveAccount(input.creditAccount, creditType),
+  ]);
   const amountUnits = BigInt(Math.round(Number(input.amount) * 100));
   const result = await repository.query<{ transaction_id: string; created: boolean }>(
     `SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,$3,'interactive',$4,$5,$6::jsonb)`,
     [input.correlationId, input.gameDay, input.reasonType, input.reasonId ?? null, input.ruleVersion, JSON.stringify([
-      { account_id: accountIds.get(input.debitAccount), delta: (-amountUnits).toString(), reason_code: input.reasonType },
-      { account_id: accountIds.get(input.creditAccount), delta: amountUnits.toString(), reason_code: input.reasonType },
+      { account_id: debitAccount, asset_id: 1, delta: (-amountUnits).toString(), reason_code: input.reasonType },
+      { account_id: creditAccount, asset_id: 1, delta: amountUnits.toString(), reason_code: input.reasonType },
     ])],
   );
   const row = result.rows[0];

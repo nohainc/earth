@@ -154,8 +154,8 @@ test('createProposal associates typed building_catalog target', async () => {
       rows: [{ game_day: 10, game_minute: 100, genesis_at: new Date(Date.now() - 10 * 86400000).toISOString(), simulated_day_offset: 0 }],
       rowCount: 1,
     },
-    'SELECT id FROM building_catalog': {
-      rows: [{ id: 'fusion-plant-t1' }],
+    'FROM building_catalog WHERE id = $1': {
+      rows: [{ id: 'fusion-plant-t1', building_type: 'fusion-plant', name: 'Fusion Plant', tier: 1, ownership_class: 'civic', slot_footprint: 1, cost_credits: 100, cost_materials: 10, cost_energy: 0, cost_food: 0, cost_components: 0, cost_compute: 0, construction_days: 1, output_energy: 10, output_food: 0, output_materials: 0, output_components: 0, output_compute: 0, upkeep_energy: 0, upkeep_food: 0, upkeep_materials: 0, upkeep_components: 0, upkeep_compute: 0, operating_credits: 0 }],
       rowCount: 1,
     },
     'SELECT id, life_status FROM humans': { rows: [{ id: 'H-01', life_status: 'active' }], rowCount: 1 },

@@ -115,16 +115,23 @@ export async function recordDailyNetWorthSnapshot(
   return repository.transaction(async (tx) => {
   // 1. Fetch liquid credits
   const accRes = await tx.query(
-    `SELECT ab.balance FROM humans h
-     JOIN account_balances ab ON h.account_id = ab.account_id
-     WHERE h.id = $1`,
+    `SELECT COALESCE(a.balance_units, 0)::TEXT AS balance FROM humans h
+     JOIN houses house ON house.id = h.house_id
+     JOIN owner_registry owner ON owner.id = house.id
+     JOIN economic_accounts a ON a.owner_economic_id = owner.economic_id
+     WHERE h.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'`,
     [humanId]
   );
   const liquid = accRes.rows.length > 0 ? Number(accRes.rows[0].balance) : 0;
 
   // 2. Fetch commodity balances & approximate valuation
   const resBalances = await tx.query(
-    `SELECT resource, amount FROM resource_balances WHERE owner_id = $1`,
+    `SELECT asset.code AS resource, a.balance_units::TEXT AS amount
+       FROM humans h JOIN houses house ON house.id = h.house_id
+       JOIN owner_registry owner ON owner.id = house.id
+       JOIN economic_accounts a ON a.owner_economic_id = owner.economic_id
+       JOIN economic_assets asset ON asset.id = a.asset_id
+      WHERE h.id = $1 AND asset.asset_kind = 'RESOURCE' AND a.account_type = 'INVENTORY'`,
     [humanId]
   );
   const priceMap: Record<string, number> = { energy: 30, material: 45, compute: 60, food: 20 };

@@ -11,9 +11,9 @@ VALUES ('DEV-HUMAN', 'DEV-ACCOUNT', 'DEV-HOUSE', 'Development Human', 1, 31)
 ON CONFLICT (id) DO NOTHING;
 UPDATE houses SET current_human_id = 'DEV-HUMAN' WHERE id = 'DEV-HOUSE';
 INSERT INTO owner_registry (id, owner_type, economic_id)
-VALUES ('OWNER-DEV-HOUSE', 'HOUSE', 'ECON-DEV-HOUSE')
+VALUES ('DEV-HOUSE', 'HOUSE', 'ECON-DEV-HOUSE')
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type)
-SELECT 'ECON-DEV-HOUSE', asset_id, CASE WHEN asset_id = 1 THEN 'WALLET' ELSE 'INVENTORY' END
+SELECT 'ECON-DEV-HOUSE', id, CASE WHEN id = 1 THEN 'WALLET' ELSE 'INVENTORY' END
 FROM economic_assets
 ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;

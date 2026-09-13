@@ -81,7 +81,7 @@ export async function currentHuman(
     const result = await withRepository(env, (repository) =>
       repository.query<AuthenticatedHuman>(
         `SELECT humans.id, humans.house_id, auth_sessions.account_id,
-                humans.display_name, humans.life_status, auth_accounts.email
+                humans.display_name, humans.status AS life_status, auth_accounts.email
          FROM auth_sessions
          JOIN auth_accounts ON auth_accounts.id = auth_sessions.account_id
          JOIN houses ON houses.id = auth_accounts.house_id
@@ -90,8 +90,7 @@ export async function currentHuman(
            AND auth_sessions.revoked_at IS NULL
            AND auth_sessions.expires_at > CURRENT_TIMESTAMP
            AND houses.status = 'ACTIVE'
-           AND humans.account_status = 'active'
-           AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status IN ('estate', 'deceased')) )`,
+           AND (humans.status = 'ACTIVE' OR ($2 = 1 AND humans.status = 'DECEASED'))`,
         [tokenHash, allowEstate ? 1 : 0],
       ),
     );
@@ -213,11 +212,10 @@ export async function issueActionToken(
     try {
       const audit = await withRepository(env, (repository) => repository.query(
         `INSERT INTO auth_email_deliveries
-          (id, correlation_id, account_id, human_id, recipient_masked, action, provider, status, provider_message_id, accepted_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP)
+          (correlation_id, account_id, recipient_masked, action, provider, status, provider_message_id, accepted_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_TIMESTAMP)
          ON CONFLICT (correlation_id) DO UPDATE SET
            account_id = EXCLUDED.account_id,
-           human_id = EXCLUDED.human_id,
            recipient_masked = EXCLUDED.recipient_masked,
            action = EXCLUDED.action,
            provider = EXCLUDED.provider,
@@ -229,7 +227,7 @@ export async function issueActionToken(
            failed_at = NULL,
            updated_at = CURRENT_TIMESTAMP
          RETURNING id`,
-        [crypto.randomUUID(), corrId, accountId, humanId, masked, action, provider, 'accepted', deliveryMessageId],
+        [corrId, accountId, masked, action, provider, 'accepted', deliveryMessageId],
       ));
       auditPersisted = Boolean(audit?.rows[0]);
     } catch (auditError) {
@@ -258,11 +256,10 @@ export async function issueActionToken(
     try {
       await withRepository(env, (repository) => repository.query(
         `INSERT INTO auth_email_deliveries
-          (id, correlation_id, account_id, human_id, recipient_masked, action, provider, status, error_code, error_message, failed_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)
+          (correlation_id, account_id, recipient_masked, action, provider, status, error_code, error_message, failed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CURRENT_TIMESTAMP)
          ON CONFLICT (correlation_id) DO UPDATE SET
            account_id = EXCLUDED.account_id,
-           human_id = EXCLUDED.human_id,
            recipient_masked = EXCLUDED.recipient_masked,
            action = EXCLUDED.action,
            provider = EXCLUDED.provider,
@@ -273,7 +270,7 @@ export async function issueActionToken(
            accepted_at = NULL,
            failed_at = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP`,
-        [crypto.randomUUID(), corrId, accountId, humanId, masked, action, 'unavailable', 'failed', errorCode, errorMessage],
+        [corrId, accountId, masked, action, 'unavailable', 'failed', errorCode, errorMessage],
       ));
     } catch (auditError) {
       console.error(JSON.stringify({ event: 'transactional_email_audit_persistence_failed', correlationId: corrId, humanId, recipientMasked: masked, action, error: auditError instanceof Error ? auditError.message : String(auditError) }));

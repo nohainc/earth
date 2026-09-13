@@ -5,8 +5,29 @@ import { isExactSchemaCompatible } from './schema-readiness.ts';
 type HyperdriveBinding = { connectionString?: string };
 type PgClient = Client;
 
+/**
+ * PlanetScale connection strings commonly contain sslrootcert=system. That
+ * is valid for native libpq clients, but makes node-postgres try to open a
+ * filesystem path named "system". Workers have no usable CA-file path; TLS
+ * is already provided by the Hyperdrive connection, so use certificate
+ * verification without the filesystem option.
+ */
+export function workerConnectionString(raw: string): string {
+  try {
+    const url = new URL(raw);
+    if (url.searchParams.get('sslrootcert') === 'system') {
+      url.searchParams.delete('sslrootcert');
+      url.searchParams.delete('sslmode');
+    }
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 const clientOptions = (binding: HyperdriveBinding) => ({
-  connectionString: binding.connectionString,
+  connectionString: binding.connectionString ? workerConnectionString(binding.connectionString) : undefined,
+  ssl: { rejectUnauthorized: true },
   connectionTimeoutMillis: 3000,
   query_timeout: 3000,
   statement_timeout: 3000,
@@ -46,7 +67,7 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
   if (!binding?.connectionString) return { configured: false, reachable: false, schemaReady: false, dataReady: false, expectedSchemaVersion: EARTH_SCHEMA_VERSION };
 
   try {
-    const probe = await withPostgres(binding, async (client) => {
+    const probeWork = withPostgres(binding, async (client) => {
       const result = await client.query<{ version: string }>(
       "SELECT current_setting('server_version') AS version",
       );
@@ -68,7 +89,12 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
           JOIN information_schema.key_column_usage kcu USING (constraint_catalog, constraint_schema, constraint_name, table_name)
          WHERE tc.table_schema = 'public' AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
          GROUP BY tc.table_name, tc.constraint_name`);
-      const uniqueKeys = new Set(uniqueRows.rows.map((row) => `${row.table_name}:${row.columns.join(',')}`));
+      const uniqueKeys = new Set(uniqueRows.rows.map((row) => {
+        const columns = Array.isArray(row.columns)
+          ? row.columns
+          : String(row.columns).replace(/^\{|\}$/g, '').split(',').filter(Boolean);
+        return `${row.table_name}:${columns.join(',')}`;
+      }));
       for (const [table, ...constraintColumns] of REQUIRED_UNIQUE_CONSTRAINTS) {
         if (!uniqueKeys.has(`${table}:${constraintColumns.join(',')}`)) missingObjects.push(`unique ${table}(${constraintColumns.join(',')})`);
       }
@@ -83,18 +109,24 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
         `select
            (select count(*) from humans)::text as humans,
            (select count(*) from world_state where id = 'WORLD')::text as world,
-           (select count(*) from ledger_entries)::text as ledger`,
+           (select count(*) from economic_entries)::text as ledger`,
         )
         : { rows: [] };
       const dataRow = data.rows[0];
       return {
         serverVersion: result.rows[0]?.version,
         featureTableCount,
-        dataReady: isExactSchemaCompatible(migrationVersion, missingObjects, EARTH_SCHEMA_VERSION) && Number(dataRow?.humans ?? 0) > 0 && Number(dataRow?.world ?? 0) === 1 && Number(dataRow?.ledger ?? 0) >= 0,
+        // The production baseline intentionally contains no demo players.
+        // World initialization, not human count, is the data-readiness gate.
+        dataReady: isExactSchemaCompatible(migrationVersion, missingObjects, EARTH_SCHEMA_VERSION) && Number(dataRow?.world ?? 0) === 1 && Number(dataRow?.ledger ?? 0) >= 0,
         migrationVersion,
         missingObjects,
       };
     });
+    const probe = await Promise.race([
+      probeWork,
+      new Promise<undefined>((resolve) => setTimeout(resolve, 7000)),
+    ]);
     const featureTableCount = probe?.featureTableCount ?? 0;
     return {
       configured: true,
@@ -107,7 +139,8 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
       migrationVersion: probe?.migrationVersion,
       missingObjects: probe?.missingObjects,
     };
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'postgres_probe_failed', error: error instanceof Error ? error.message : String(error) }));
     return { configured: true, reachable: false, schemaReady: false, dataReady: false, expectedSchemaVersion: EARTH_SCHEMA_VERSION };
   }
 }

@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { toNanoMarkup } from './nano-markup.ts';
 
 export interface CommChannel {
   id: string;
@@ -12,6 +13,7 @@ export interface CommChannel {
 export interface CommMessage {
   id: string;
   channel_id: string;
+  sender_house_id: string;
   sender_human_id: string;
   sender_display_name: string;
   sender_house_name: string | null;
@@ -35,24 +37,26 @@ export async function listAccessibleChannels(
            latest.created_at AS latest_message_at
     FROM comm_channels ch
     LEFT JOIN comm_direct_conversations direct ON direct.channel_id = ch.id
-    LEFT JOIN humans other ON other.id = CASE
-      WHEN direct.participant_low_id = $1 THEN direct.participant_high_id
-      ELSE direct.participant_low_id
+    LEFT JOIN houses other_house ON other_house.id = CASE
+      WHEN direct.participant_low_house_id = (SELECT house_id FROM humans WHERE id = $1) THEN direct.participant_high_house_id
+      ELSE direct.participant_low_house_id
     END
+    LEFT JOIN humans other ON other.id = other_house.current_human_id
     LEFT JOIN LATERAL (
       SELECT body, created_at FROM comm_messages
       WHERE channel_id = ch.id ORDER BY created_at DESC LIMIT 1
     ) latest ON TRUE
     WHERE ch.scope = 'global'
        OR (ch.scope = 'city' AND EXISTS (
-            SELECT 1 FROM memberships m WHERE m.human_id = $1 AND m.city_id = ch.scope_id))
+            SELECT 1 FROM house_affiliations ha
+             WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $1) AND ha.status = 'ACTIVE' AND ha.city_id = ch.scope_id))
        OR (ch.scope = 'corporation' AND EXISTS (
-            SELECT 1 FROM memberships m WHERE m.human_id = $1 AND m.corporation_id = ch.scope_id))
-       OR (ch.scope = 'community' AND EXISTS (
-            SELECT 1 FROM community_members cm WHERE cm.human_id = $1 AND cm.community_id = ch.scope_id))
+            SELECT 1 FROM house_affiliations ha
+             WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $1) AND ha.status = 'ACTIVE' AND ha.corporation_id = ch.scope_id))
+       OR FALSE /* Community membership awaits a House-based Communities V2 model. */
        OR (ch.scope = 'direct' AND EXISTS (
             SELECT 1 FROM comm_direct_conversations d
-            WHERE d.channel_id = ch.id AND $1 IN (d.participant_low_id, d.participant_high_id)))
+            WHERE d.channel_id = ch.id AND (SELECT house_id FROM humans WHERE id = $1) IN (d.participant_low_house_id, d.participant_high_house_id)))
     ORDER BY CASE ch.scope
       WHEN 'corporation' THEN 1 WHEN 'city' THEN 2 WHEN 'community' THEN 3
       WHEN 'direct' THEN 4 WHEN 'global' THEN 5 ELSE 6 END,
@@ -71,7 +75,7 @@ export async function listChannelMessages(
   if (!(await canAccessChannel(repository, humanId, channelId))) return [];
   const boundedLimit = Math.min(100, Math.max(1, limit));
   const sql = `
-    SELECT id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name AS sender_house_name, sender_dynasty_name,
+    SELECT id, channel_id, sender_house_id, sender_human_id, sender_display_name, sender_dynasty_name AS sender_house_name, sender_dynasty_name,
            body, game_day, game_minute, attachments, created_at
     FROM comm_messages
     WHERE channel_id = $1
@@ -99,26 +103,22 @@ export async function sendChannelMessage(
     if (!(await canAccessChannel(tx, senderHumanId, channelId))) {
       throw new Error('You do not have access to this channel');
     }
+    const sender = await tx.query<{ house_id: string }>('SELECT house_id FROM humans WHERE id = $1 AND status = \'ACTIVE\'', [senderHumanId]);
+    if (!sender.rows[0]) throw new Error('Active Human is required to send messages');
     const sql = `
-    INSERT INTO comm_messages (id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    INSERT INTO comm_messages (id, channel_id, sender_house_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     ON CONFLICT (id) DO NOTHING
-    RETURNING id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name AS sender_house_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at
+    RETURNING id, channel_id, sender_house_id, sender_human_id, sender_display_name, sender_dynasty_name AS sender_house_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at
   `;
     const res = await tx.query<CommMessage>(sql, [
-    msgId,
-    channelId,
-    senderHumanId,
-    senderDisplayName,
-    senderHouseName,
-    body,
-    gameDay,
-    gameMinute,
-    JSON.stringify(attachments),
+    msgId, channelId, sender.rows[0].house_id, senderHumanId, senderDisplayName,
+    senderHouseName, body, gameDay, gameMinute,
+    toNanoMarkup(attachments),
     ]);
     if (res.rows[0]) return res.rows[0];
     const replay = await tx.query<CommMessage>(
-      `SELECT id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name AS sender_house_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at FROM comm_messages WHERE id = $1`,
+      `SELECT id, channel_id, sender_house_id, sender_human_id, sender_display_name, sender_dynasty_name AS sender_house_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at FROM comm_messages WHERE id = $1`,
       [msgId]
     );
     return replay.rows[0];
@@ -135,10 +135,10 @@ export async function canAccessChannel(
        SELECT 1 FROM comm_channels ch
        WHERE ch.id = $1 AND (
          ch.scope = 'global'
-         OR (ch.scope = 'city' AND EXISTS (SELECT 1 FROM memberships m WHERE m.human_id = $2 AND m.city_id = ch.scope_id))
-         OR (ch.scope = 'corporation' AND EXISTS (SELECT 1 FROM memberships m WHERE m.human_id = $2 AND m.corporation_id = ch.scope_id))
-         OR (ch.scope = 'community' AND EXISTS (SELECT 1 FROM community_members cm WHERE cm.human_id = $2 AND cm.community_id = ch.scope_id))
-         OR (ch.scope = 'direct' AND EXISTS (SELECT 1 FROM comm_direct_conversations d WHERE d.channel_id = ch.id AND $2 IN (d.participant_low_id, d.participant_high_id)))
+         OR (ch.scope = 'city' AND EXISTS (SELECT 1 FROM house_affiliations ha WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $2) AND ha.status = 'ACTIVE' AND ha.city_id = ch.scope_id))
+         OR (ch.scope = 'corporation' AND EXISTS (SELECT 1 FROM house_affiliations ha WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $2) AND ha.status = 'ACTIVE' AND ha.corporation_id = ch.scope_id))
+         OR FALSE /* Community membership awaits a House-based Communities V2 model. */
+       OR (ch.scope = 'direct' AND EXISTS (SELECT 1 FROM comm_direct_conversations d WHERE d.channel_id = ch.id AND (SELECT house_id FROM humans WHERE id = $2) IN (d.participant_low_house_id, d.participant_high_house_id)))
        )
      ) AS allowed`,
     [channelId, humanId],
@@ -153,19 +153,27 @@ export async function openDirectConversation(
   correlationId = crypto.randomUUID(),
 ): Promise<CommChannel> {
   if (humanId === targetHumanId) throw new Error('You cannot message yourself');
-  const [low, high] = [humanId, targetHumanId].sort();
   return repository.transaction(async (tx) => {
-    const target = await tx.query<{ id: string }>(
-      `SELECT id FROM humans WHERE id = $1 AND account_status = 'active' AND life_status = 'active'`,
+    const target = await tx.query<{ house_id: string }>(
+      `SELECT house_id FROM humans WHERE id = $1 AND status = 'ACTIVE'`,
       [targetHumanId],
     );
     if (!target.rows[0]) throw new Error('The selected user is not available');
+    const source = await tx.query<{ house_id: string }>(
+      `SELECT house_id FROM humans WHERE id = $1 AND status = 'ACTIVE'`, [humanId],
+    );
+    if (!source.rows[0]) throw new Error('Active Human is required to open a conversation');
+    if (source.rows[0].house_id === target.rows[0].house_id) {
+      throw new Error('Both Humans belong to the same House');
+    }
+    const [low, high] = [source.rows[0].house_id, target.rows[0].house_id].sort();
     const existing = await tx.query<CommChannel>(
       `SELECT ch.id, ch.scope, ch.scope_id, other.display_name AS name, ch.description
        FROM comm_direct_conversations d
        JOIN comm_channels ch ON ch.id = d.channel_id
-       JOIN humans other ON other.id = CASE WHEN d.participant_low_id = $1 THEN d.participant_high_id ELSE d.participant_low_id END
-       WHERE d.participant_low_id = $1 AND d.participant_high_id = $2`,
+       JOIN houses other_house ON other_house.id = CASE WHEN d.participant_low_house_id = $1 THEN d.participant_high_house_id ELSE d.participant_low_house_id END
+       JOIN humans other ON other.id = other_house.current_human_id
+       WHERE d.participant_low_house_id = $1 AND d.participant_high_house_id = $2`,
       [low, high],
     );
     if (existing.rows[0]) return existing.rows[0];
@@ -177,15 +185,16 @@ export async function openDirectConversation(
       [channelId],
     );
     await tx.query(
-      `INSERT INTO comm_direct_conversations (channel_id, participant_low_id, participant_high_id)
-       VALUES ($1, $2, $3) ON CONFLICT (participant_low_id, participant_high_id) DO NOTHING`,
+      `INSERT INTO comm_direct_conversations (channel_id, participant_low_house_id, participant_high_house_id)
+       VALUES ($1, $2, $3) ON CONFLICT (participant_low_house_id, participant_high_house_id) DO NOTHING`,
       [channelId, low, high],
     );
     const created = await tx.query<CommChannel>(
       `SELECT ch.id, ch.scope, ch.scope_id, other.display_name AS name, ch.description
        FROM comm_direct_conversations d JOIN comm_channels ch ON ch.id = d.channel_id
-       JOIN humans other ON other.id = CASE WHEN d.participant_low_id = $1 THEN d.participant_high_id ELSE d.participant_low_id END
-       WHERE d.participant_low_id = $1 AND d.participant_high_id = $2`,
+       JOIN houses other_house ON other_house.id = CASE WHEN d.participant_low_house_id = $1 THEN d.participant_high_house_id ELSE d.participant_low_house_id END
+       JOIN humans other ON other.id = other_house.current_human_id
+       WHERE d.participant_low_house_id = $1 AND d.participant_high_house_id = $2`,
       [low, high],
     );
     return created.rows[0];

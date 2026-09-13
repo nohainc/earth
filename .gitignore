@@ -1,16 +1,19 @@
 node_modules/
 .env
 .env.*
+!.env.example
+# Local database credentials; never commit this file.
+.env.local
 playwright-report/
 test-results/
 .test-artifacts/
-!.env.example
 .dart_tool/
 build/
 .idea/
 .vscode/
 *.log
 backups/earth-d1-cutover-backup.sql
+backups/
 coverage/
 *.lcov
 .wrangler/

@@ -55,7 +55,7 @@ export async function computeResourceFlows(
   // Research project funding flows (credits consumption)
   const research = await repo.query<{ credit_cost_units: string }>(
     `SELECT p.credit_cost_units::TEXT FROM corporation_research_projects p
-     JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
+     JOIN house_affiliations m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id) AND m.status = 'ACTIVE'
      WHERE m.human_id = $1 AND p.target_type = 'TECHNOLOGY' AND p.status = 'ACTIVE'`, [humanId],
   ).catch(() => ({ rows: [] }));
   for (const r of research.rows) {

@@ -51,8 +51,32 @@ export const REQUIRED_SCHEMA_TABLES = {
     "age_years",
     "standing",
     "final_legacy",
-    "status",
-    "UNIQUE"
+    "status"
+  ],
+  "auth_sessions": [
+    "id",
+    "account_id",
+    "human_id",
+    "token_hash",
+    "expires_at",
+    "revoked_at",
+    "created_at"
+  ],
+  "auth_login_attempts": [
+    "email",
+    "window_started_at",
+    "attempt_count",
+    "blocked_until"
+  ],
+  "auth_action_tokens": [
+    "id",
+    "account_id",
+    "human_id",
+    "token_hash",
+    "action",
+    "expires_at",
+    "consumed_at",
+    "created_at"
   ],
   "house_succession_plans": [
     "house_id",
@@ -98,8 +122,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "city_id",
     "corporation_id",
     "joined_game_day",
-    "status",
-    "PRIMARY"
+    "status"
   ],
   "institution_governance_roles": [
     "id",
@@ -107,6 +130,44 @@ export const REQUIRED_SCHEMA_TABLES = {
     "human_id",
     "role_code",
     "status"
+  ],
+  "constitutional_rules": [
+    "id",
+    "part_number",
+    "article_number",
+    "rule_number",
+    "title",
+    "description",
+    "default_value",
+    "permitted_values",
+    "authority",
+    "active",
+    "updated_game_day",
+    "updated_at"
+  ],
+  "governance_rules": [
+    "id",
+    "institution_id",
+    "name",
+    "category",
+    "value_json",
+    "quorum_threshold",
+    "approval_threshold",
+    "voting_period_days",
+    "implementation_delay_days",
+    "version",
+    "status",
+    "created_by",
+    "effective_from_game_day",
+    "effective_to_game_day"
+  ],
+  "economic_policy_rules": [
+    "code",
+    "output_multiplier",
+    "cost_multiplier",
+    "decay_multiplier",
+    "is_selectable",
+    "description"
   ],
   "economic_assets": [
     "id",
@@ -130,8 +191,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "asset_id",
     "account_type",
     "balance_units",
-    "status",
-    "UNIQUE"
+    "status"
   ],
   "economic_transactions": [
     "id",
@@ -149,8 +209,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "transaction_id",
     "account_id",
     "delta_units",
-    "asset_id",
-    "UNIQUE"
+    "asset_id"
   ],
   "monetary_supply_snapshots": [
     "game_day",
@@ -180,14 +239,13 @@ export const REQUIRED_SCHEMA_TABLES = {
     "catalog_id",
     "city_id",
     "status",
-    "started_game_day",
-    "UNIQUE"
+    "started_game_day"
   ],
   "building_catalog_effects": [
     "catalog_id",
     "effect_code",
-    "value_units",
-    "PRIMARY"
+    "effect_value",
+    "rules_version"
   ],
   "market_instruments": [
     "id",
@@ -215,8 +273,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "limit_price_units",
     "status",
     "rules_version",
-    "created_at",
-    "CHECK"
+    "created_at"
   ],
   "market_fills": [
     "id",
@@ -232,8 +289,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "buyer_fee_units",
     "seller_fee_units",
     "economic_transaction_id",
-    "sequence_no",
-    "UNIQUE"
+    "sequence_no"
   ],
   "market_instrument_state": [
     "instrument_id",
@@ -255,8 +311,107 @@ export const REQUIRED_SCHEMA_TABLES = {
     "low_price_units",
     "close_price_units",
     "volume_units",
-    "fill_count",
-    "PRIMARY"
+    "fill_count"
+  ],
+  "notifications": [
+    "id",
+    "house_id",
+    "human_id",
+    "notification_type",
+    "title",
+    "body",
+    "entity_type",
+    "entity_id",
+    "game_day",
+    "game_minute",
+    "correlation_id",
+    "read_at",
+    "created_at"
+  ],
+  "game_events": [
+    "id",
+    "category",
+    "event_type",
+    "game_day",
+    "game_minute",
+    "actor_house_id",
+    "actor_human_id",
+    "institution_id",
+    "subject_type",
+    "subject_id",
+    "title",
+    "details",
+    "correlation_id",
+    "created_at"
+  ],
+  "comm_channels": [
+    "id",
+    "scope",
+    "scope_id",
+    "name",
+    "description",
+    "created_at"
+  ],
+  "comm_direct_conversations": [
+    "channel_id",
+    "participant_low_house_id",
+    "participant_high_house_id",
+    "created_at"
+  ],
+  "comm_messages": [
+    "id",
+    "channel_id",
+    "sender_house_id",
+    "sender_human_id",
+    "sender_display_name",
+    "sender_dynasty_name",
+    "body",
+    "game_day",
+    "game_minute",
+    "attachments",
+    "created_at"
+  ],
+  "technology_patents": [
+    "id",
+    "technology_id",
+    "owner_economic_id",
+    "granted_game_day",
+    "exclusive_through_game_day",
+    "status",
+    "granting_project_id",
+    "created_at"
+  ],
+  "technology_public_domain": [
+    "technology_id",
+    "effective_from_game_day",
+    "source_patent_id",
+    "created_at"
+  ],
+  "technology_license_contracts": [
+    "id",
+    "patent_id",
+    "licensor_economic_id",
+    "licensee_economic_id",
+    "effective_from_game_day",
+    "effective_to_game_day",
+    "upfront_fee_units",
+    "daily_fee_units",
+    "status",
+    "paid_through_game_day",
+    "rules_version",
+    "correlation_id",
+    "created_at"
+  ],
+  "technology_license_payments": [
+    "id",
+    "contract_id",
+    "payer_economic_id",
+    "recipient_economic_id",
+    "game_day",
+    "amount_units",
+    "economic_transaction_id",
+    "correlation_id",
+    "created_at"
   ],
   "bank_deposits": [
     "id",
@@ -293,17 +448,27 @@ export const REQUIRED_SCHEMA_TABLES = {
     "capital_ratio",
     "status"
   ],
+  "tax_governance_rules": [
+    "scope",
+    "category",
+    "minimum_rate_bps",
+    "maximum_rate_bps",
+    "allowed_tax_base_definitions",
+    "beneficiary_scope",
+    "rules_version"
+  ],
   "tax_rule_versions": [
     "id",
     "tax_rule_id",
+    "scope",
+    "category",
     "version",
     "effective_from_game_day",
     "effective_to_game_day",
     "rate_bps",
     "tax_base_definition",
     "beneficiary_economic_id",
-    "UNIQUE",
-    "CHECK"
+    "authorization_proposal_id"
   ],
   "tax_obligations": [
     "id",
@@ -329,8 +494,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "institution_kind",
     "category_code",
     "spending_class",
-    "priority",
-    "UNIQUE"
+    "priority"
   ],
   "institution_budget_lines": [
     "id",
@@ -341,8 +505,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "committed_units",
     "spent_units",
     "status",
-    "rule_version",
-    "CHECK"
+    "rule_version"
   ],
   "institution_budget_commitments": [
     "id",
@@ -369,17 +532,25 @@ export const REQUIRED_SCHEMA_TABLES = {
     "id",
     "code",
     "name",
+    "category",
+    "description",
     "patentable",
+    "patent_exclusivity_days",
+    "status",
     "definition_version",
     "research_points_required",
-    "credit_cost_units"
+    "credit_cost_units",
+    "effective_from_game_day",
+    "effective_to_game_day"
   ],
   "technology_effects": [
     "technology_id",
     "effect_type",
     "target_key",
     "modifier_bps",
-    "PRIMARY"
+    "id",
+    "modifier_family",
+    "target_type"
   ],
   "corporation_research_projects": [
     "id",
@@ -390,6 +561,13 @@ export const REQUIRED_SCHEMA_TABLES = {
     "required_research_points",
     "progress_research_points",
     "credit_cost_units",
+    "priority",
+    "started_game_day",
+    "completed_game_day",
+    "correlation_id",
+    "definition_snapshot",
+    "created_at",
+    "updated_at",
     "status",
     "funding_transaction_id"
   ],
@@ -399,8 +577,10 @@ export const REQUIRED_SCHEMA_TABLES = {
     "access_source",
     "effective_from_game_day",
     "effective_to_game_day",
-    "status",
-    "PRIMARY"
+    "source_id",
+    "created_at",
+    "updated_at",
+    "status"
   ],
   "proposals": [
     "id",
@@ -414,14 +594,20 @@ export const REQUIRED_SCHEMA_TABLES = {
     "proposal_id",
     "house_id",
     "cast_by_human_id",
-    "choice",
-    "PRIMARY"
+    "choice"
   ],
   "event_outbox": [
     "id",
-    "event_type",
+    "event_key",
+    "topic",
+    "aggregate_type",
     "aggregate_id",
     "payload",
+    "attempts",
+    "available_at",
+    "locked_at",
+    "processed_at",
+    "last_error",
     "status",
     "created_at"
   ],
@@ -434,15 +620,45 @@ export const REQUIRED_SCHEMA_TABLES = {
     "started_at",
     "completed_at"
   ],
-  "earth_schema_migrations": [
-    "version",
-    "name",
-    "checksum",
-    "applied_at"
+  "daily_settlement_control": [
+    "id",
+    "status",
+    "activated_at",
+    "activated_by",
+    "updated_at"
+  ],
+  "daily_settlement_runs": [
+    "game_day",
+    "status",
+    "current_phase",
+    "attempt_count",
+    "lease_owner",
+    "lease_heartbeat_at",
+    "rules_version",
+    "started_at",
+    "completed_at",
+    "error_message",
+    "created_at",
+    "updated_at"
   ]
 } as const;
 export const REQUIRED_UNIQUE_CONSTRAINTS = [] as const;
 export const REQUIRED_INDEXES = [
+  "notifications_house_created_idx",
+  "notifications_house_unread_idx",
+  "game_events_category_day_idx",
+  "game_events_subject_idx",
+  "game_events_actor_house_idx",
+  "comm_channels_scope_idx",
+  "comm_direct_house_idx",
+  "comm_messages_channel_created_idx",
+  "comm_messages_sender_house_idx",
+  "corporation_research_projects_correlation_uq",
+  "corporation_research_projects_active_target_idx",
+  "technology_patents_one_active_idx",
+  "technology_patents_owner_idx",
+  "technology_license_contracts_licensee_idx",
+  "technology_license_contracts_patent_idx",
   "economic_entries_transaction_idx",
   "auth_email_deliveries_correlation_uq",
   "auth_email_deliveries_account_idx",
@@ -452,12 +668,23 @@ export const REQUIRED_INDEXES = [
   "outbox_pending_idx"
 ] as const;
 export const REQUIRED_SCHEMA_FUNCTIONS = [
+  "earth_settlement_watermark",
   "earth_begin_economic_transaction",
   "earth_post_transaction",
+  "earth_issue_starter_package",
   "earth_assert_baseline_integrity",
   "earth_game_day_from_total_minutes",
   "earth_get_current_game_time",
+  "earth_advance_world_clock",
   "earth_post_settlement_batch",
   "earth_integrity_report",
-  "earth_market_integrity_report"
+  "earth_market_integrity_report",
+  "earth_create_tax_rule_version",
+  "earth_technology_is_patentable",
+  "earth_resolve_corporation_technology_access",
+  "earth_assert_technology_research_allowed",
+  "earth_assert_technology_prerequisites_met",
+  "earth_grant_corporation_technology_access",
+  "earth_grant_completed_technology_patents",
+  "earth_finalize_technology_public_domain"
 ] as const;

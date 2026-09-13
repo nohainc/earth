@@ -152,14 +152,14 @@ test('executeProposal blocks execution when under challenge', async () => {
 
 test('listPantheonOfAchievements returns historical deceased pantheon and living legends', async () => {
   const repo = createMockRepository((sql) => {
-    if (sql.includes('FROM deceased_profiles')) {
+    if (sql.includes("WHERE h.status = 'DECEASED'")) {
       return {
         rows: [
           { human_id: 'H-LEGEND-1', display_name: 'Dr. John Doe', final_legacy: 250, final_standing: 100 },
         ],
       };
     }
-    if (sql.includes('FROM humans WHERE life_status')) {
+    if (sql.includes("WHERE h.status = 'ACTIVE'")) {
       return {
         rows: [
           { id: 'H-LIVING-1', display_name: 'Founder Alice', age_years: 65, standing: 80, legacy: 120, composite_legacy_score: 6930 },

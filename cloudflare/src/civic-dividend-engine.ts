@@ -26,7 +26,7 @@ export async function settleCivicDividends(tx: PostgresRepository, day: number):
     if (distributableUnits <= 0n) continue;
     const residents = await tx.query<Resident>(`SELECT m.human_id, o.economic_id, a.id AS account_id,
       (1 + (SELECT COUNT(*) FROM ballots b WHERE b.human_id = m.human_id))::TEXT AS participation_score
-      FROM memberships m JOIN humans h ON h.id = m.human_id JOIN owner_registry o ON o.id = m.human_id AND o.status = 'active'
+      FROM house_affiliations m JOIN humans h ON h.house_id = m.house_id JOIN owner_registry o ON o.id = h.house_id AND o.status = 'active'
       JOIN economic_accounts a ON a.owner_economic_id = o.economic_id AND a.asset_id = 1 AND a.account_type = 1 AND a.is_default_settlement AND a.status = 'active'
       WHERE m.city_id = $1 AND h.life_status = 'active' ORDER BY m.human_id FOR UPDATE OF a`, [city.id]);
     if (residents.rows.length === 0) continue;

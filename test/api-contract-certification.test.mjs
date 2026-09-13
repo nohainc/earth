@@ -16,7 +16,7 @@ test('all registered routes have unique ownership and protected mutations', () =
   assert.deepEqual(validateApiRegistry(), []);
   for (const route of API_ROUTES) {
     const publicBootstrap = route.owner === 'AuthRoutes' &&
-      ['/api/auth/register', '/api/auth/login'].includes(route.path);
+      ['/api/auth/register', '/api/auth/login', '/api/auth/password-reset/request', '/api/auth/password-reset/complete'].includes(route.path);
     if (route.method !== 'GET' && !publicBootstrap) {
       assert.notEqual(route.auth, 'PUBLIC', `${route.method} ${route.path}`);
     }

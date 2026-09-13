@@ -87,7 +87,7 @@ test('changeCityResidency adds or removes human residency', async () => {
       rows: [{ id: 'H-01' }],
       rowCount: 1,
     },
-    'SELECT city_id, corporation_id FROM memberships': {
+    'SELECT ha.city_id, ha.corporation_id FROM humans h JOIN house_affiliations': {
       rows: [{ city_id: null, corporation_id: null }],
       rowCount: 1,
     },
@@ -122,7 +122,7 @@ test('moving cities records departure from the previous city', async () => {
     },
     'SELECT action, game_day FROM membership_events': { rows: [], rowCount: 0 },
     'SELECT id FROM humans WHERE id = $1': { rows: [{ id: 'H-01' }], rowCount: 1 },
-    'SELECT city_id, corporation_id FROM memberships': {
+    'SELECT ha.city_id, ha.corporation_id FROM humans h JOIN house_affiliations': {
       rows: [{ city_id: 'CITY-01', corporation_id: 'CORP-01' }], rowCount: 1,
     },
     'SELECT COALESCE(MAX(game_day), 1) AS game_day': { rows: [{ game_day: 100 }], rowCount: 1 },
@@ -138,7 +138,7 @@ test('moving cities records departure from the previous city', async () => {
     humanId: 'H-01', cityId: 'CITY-02', action: 'join', correlationId: 'move-city-01',
   });
   assert.equal(result.ok, true);
-  assert.ok(client.calls.some((call) => call.params.includes('CITY-01') && call.sql.includes('city_transfer')));
+  assert.ok(client.calls.some((call) => call.sql.includes('INSERT INTO game_events') && call.params.includes('CITY-01')));
 });
 
 test('corporation members cannot retain a corporation while moving outside its city network', async () => {
@@ -146,7 +146,7 @@ test('corporation members cannot retain a corporation while moving outside its c
     'SELECT id, corporation_id FROM cities': { rows: [{ id: 'CITY-03', corporation_id: null }], rowCount: 1 },
     'SELECT action, game_day FROM membership_events': { rows: [], rowCount: 0 },
     'SELECT id FROM humans': { rows: [{ id: 'H-01' }], rowCount: 1 },
-    'SELECT city_id, corporation_id FROM memberships': { rows: [{ city_id: 'CITY-01', corporation_id: 'CORP-01' }], rowCount: 1 },
+    'SELECT ha.city_id, ha.corporation_id FROM humans h JOIN house_affiliations': { rows: [{ city_id: 'CITY-01', corporation_id: 'CORP-01' }], rowCount: 1 },
   });
   await assert.rejects(
     () => changeCityResidency(new PostgresRepository(client), {
@@ -160,9 +160,9 @@ test('leaving a corporation also clears the affiliated city', async () => {
   const client = new MockDbClient({
     'SELECT c.id, i.name, c.capital_city_id': { rows: [{ id: 'CORP-01', name: 'Aether Dynamics', capital_city_id: 'CITY-01', admission_policy: 'open' }], rowCount: 1 },
     "SELECT id, display_name FROM humans": { rows: [{ id: 'H-01', display_name: 'Test Human' }], rowCount: 1 },
-    'SELECT corporation_id, city_id FROM memberships': { rows: [{ corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
-    'SELECT COALESCE(MAX(game_day), 1) AS game_day': { rows: [{ game_day: 100 }], rowCount: 1 },
-    'UPDATE memberships SET corporation_id = NULL, city_id = NULL': { rows: [], rowCount: 1 },
+    'SELECT ha.corporation_id, ha.city_id FROM humans h JOIN house_affiliations': { rows: [{ corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
+    'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
+    'UPDATE house_affiliations SET corporation_id = NULL, city_id = NULL': { rows: [], rowCount: 1 },
     'UPDATE corporations SET member_count': { rows: [], rowCount: 1 },
     'UPDATE cities SET residents': { rows: [], rowCount: 1 },
     'SELECT * FROM memberships WHERE human_id = $1': { rows: [{ human_id: 'H-01', corporation_id: null, city_id: null }], rowCount: 1 },

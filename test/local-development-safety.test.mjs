@@ -12,10 +12,9 @@ test('local launcher fails closed for remote live scheduler use', () => {
 });
 
 test('manual clock is explicit and developer commands do not expose public routes', () => {
-  const migration = fs.readFileSync(path.resolve('db/migrations/185_local_manual_clock.sql'), 'utf8');
+  const baseline = fs.readFileSync(path.resolve('db/migrations/001_baseline.sql'), 'utf8');
   const command = fs.readFileSync(path.resolve('scripts/local-game-command.mjs'), 'utf8');
-  assert.match(migration, /clock_mode[\s\S]*'manual'/);
-  assert.match(migration, /earth_local_advance_minutes/);
-  assert.match(command, /earth_local_advance_minutes/);
+  assert.match(baseline, /earth_advance_world_clock/);
+  assert.match(command, /earth_advance_world_clock/);
   assert.match(command, /Refusing local game command against a remote/);
 });

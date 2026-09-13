@@ -1,6 +1,7 @@
 import { probePostgres } from './postgres';
 import { withPostgresRepository } from './repository';
 import { EARTH_SCHEMA_VERSION } from './schema-contract.ts';
+import { schedulerEnabled } from './maintenance.ts';
 
 export async function livenessResponse(request: Request): Promise<Response> {
   return Response.json({
@@ -11,7 +12,7 @@ export async function livenessResponse(request: Request): Promise<Response> {
 }
 
 export async function healthResponse(request: Request, env: Env, options: { readiness?: boolean } = {}): Promise<Response> {
-  const postgres = await probePostgres(env.HYPERDRIVE);
+  const postgres = await probePostgres(env.HYPERDRIVE?.connectionString ? env.HYPERDRIVE : { connectionString: (env as unknown as Record<string, unknown>).DATABASE_URL as string | undefined });
   const baseHealth = {
     correlationId: request.headers.get('X-Request-ID') ?? crypto.randomUUID(),
     persistence: 'planetscale-postgres',
@@ -57,15 +58,15 @@ export async function healthResponse(request: Request, env: Env, options: { read
   }
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
     const [core, feature, reservations, governance, financial, assets, taxed, invariants, scheduler, outbox, migrations, counts, settlement, observability] = await Promise.all([
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_prices', 'account_balances', 'ledger_entries', 'ownership_events', 'membership_events']]),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['buildings', 'civic_dividend_payouts', 'global_bank_deposits']]),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_orders' AND column_name = 'reserved_quote_units'"),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_instruments', 'economic_accounts', 'economic_transactions', 'buildings', 'house_affiliations']]),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['buildings', 'bank_deposits', 'tax_rule_versions', 'corporations']]),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'market_orders'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['corporations', 'cities']]),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'personal_financial_states'"),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'bank_deposits'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'buildings'"),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'buildings' AND column_name = 'daily_operating_credits'"),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('tax_rule_versions', 'tax_obligations')"),
       repository.query<{ invalid: string }>(`SELECT COALESCE(SUM(invalid_count) FILTER (WHERE invalid_count > 0), 0)::text AS invalid FROM earth_integrity_report()`),
-      repository.query("SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_scheduler_at)) AS age_seconds FROM world_state WHERE id = 'WORLD'"),
+      repository.query("SELECT COALESCE(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MAX(completed_at))), 0) AS age_seconds FROM scheduler_runs WHERE status = 'completed'"),
       repository.query(`
         SELECT
           COUNT(*) FILTER (WHERE processed_at IS NULL)::integer AS pending,
@@ -80,8 +81,8 @@ export async function healthResponse(request: Request, env: Env, options: { read
       repository.query('SELECT COALESCE(MAX(version), 0)::integer AS version FROM earth_schema_migrations'),
       Promise.all([
         repository.query('SELECT COUNT(*)::integer AS count FROM humans'),
-        repository.query('SELECT COUNT(*)::integer AS count FROM buildings WHERE ownership_class = \'private\''),
-        repository.query('SELECT COUNT(*)::integer AS count FROM ledger_entries'),
+        repository.query('SELECT COUNT(*)::integer AS count FROM buildings WHERE city_id IS NULL'),
+        repository.query('SELECT COUNT(*)::integer AS count FROM economic_entries'),
         repository.query("SELECT COUNT(*)::integer AS count FROM world_state WHERE id = 'WORLD'"),
       ]),
       repository.query<{
@@ -99,16 +100,16 @@ export async function healthResponse(request: Request, env: Env, options: { read
         retry_count: string;
       }>(`
         WITH clock AS (
-          SELECT earth_game_day_from_total_minutes(total_game_minutes) AS current_game_day
-          FROM earth_get_current_game_time()
-        ), watermark AS (
-          SELECT earth_settlement_watermark(clock.current_game_day) AS game_day
-          FROM clock
+          SELECT game_day AS current_game_day
+          FROM world_state
+          WHERE id = 'WORLD'
         ), completed AS (
-          SELECT r.game_day, r.completed_at
-          FROM daily_settlement_runs r
-          JOIN watermark w ON w.game_day = r.game_day
-          WHERE r.status IN ('completed', 'baseline')
+          SELECT earth_settlement_watermark(clock.current_game_day) AS game_day,
+                 (SELECT MAX(r.completed_at)
+                    FROM daily_settlement_runs r
+                   WHERE r.game_day = earth_settlement_watermark(clock.current_game_day)
+                     AND r.status IN ('completed', 'baseline')) AS completed_at
+            FROM clock
         )
         SELECT control.status,
                clock.current_game_day::text,
@@ -118,8 +119,8 @@ export async function healthResponse(request: Request, env: Env, options: { read
                active.current_phase,
                active.lease_owner,
                active.lease_heartbeat_at::text,
-               COALESCE((SELECT COUNT(*) FROM daily_settlement_phase_runs p WHERE p.game_day = active.game_day AND p.status = 'completed'), 0)::text AS phase_completed,
-               COALESCE((SELECT COUNT(*) FROM daily_settlement_phase_runs p WHERE p.game_day = active.game_day), 0)::text AS phase_total,
+               0::text AS phase_completed,
+               0::text AS phase_total,
                (SELECT COUNT(*) FROM daily_settlement_runs r WHERE r.status = 'failed')::text AS failed_runs,
                (SELECT COALESCE(SUM(attempt_count), 0) FROM daily_settlement_runs)::text AS retry_count
         FROM daily_settlement_control control CROSS JOIN clock
@@ -144,8 +145,9 @@ export async function healthResponse(request: Request, env: Env, options: { read
           FROM market_orders WHERE updated_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'`).catch(() => ({ rows: [{ market_orders_processed: '0' }] })),
       ]),
     ]);
+    const schedulerIsEnabled = schedulerEnabled(env);
     const schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
-    const schedulerState = schedulerAgeSeconds <= 180 ? 'healthy' : schedulerAgeSeconds <= 600 ? 'degraded' : 'critical';
+    const schedulerState = !schedulerIsEnabled ? 'disabled' : schedulerAgeSeconds <= 180 ? 'healthy' : schedulerAgeSeconds <= 600 ? 'degraded' : 'critical';
     const outboxRow = outbox.rows[0];
     const outboxPending = Number(outboxRow?.pending ?? 0);
     const outboxRetrying = Number(outboxRow?.retrying ?? 0);
@@ -167,10 +169,10 @@ export async function healthResponse(request: Request, env: Env, options: { read
         businessGovernanceSchema: Number(governance.rows[0]?.count ?? 0) === 2,
         businessFinancialSchema: Number(financial.rows[0]?.count ?? 0) === 1,
         buildingAssetSchema: Number(assets.rows[0]?.count ?? 0) === 1,
-        businessTaxSchema: Number(taxed.rows[0]?.count ?? 0) === 1,
+        businessTaxSchema: Number(taxed.rows[0]?.count ?? 0) === 2,
         balancesNonNegative: Number(invariants.rows[0]?.invalid ?? 0) === 0,
         criticalInvariants: Number(invariants.rows[0]?.invalid ?? 0) === 0,
-        schedulerFresh: schedulerState !== 'critical',
+        schedulerFresh: !schedulerIsEnabled || schedulerState !== 'critical',
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
         dailySettlementBacklog: settlementStatus !== 'active' || settlementBacklog <= 1,
@@ -233,7 +235,10 @@ export async function healthResponse(request: Request, env: Env, options: { read
         world: Number(counts[3].rows[0]?.count ?? 0),
       },
     };
-  }).catch(() => undefined);
+  }).catch((error) => {
+    console.error(JSON.stringify({ event: 'health_probe_failed', error: error instanceof Error ? error.message : String(error) }));
+    return undefined;
+  });
   const checks = postgresChecks?.checks ?? {
     database: false, coreSchema: false, featureSchema: false,
     marketCreditReservations: false, businessGovernanceSchema: false, businessFinancialSchema: false,

@@ -6,7 +6,7 @@
   "compatibility_date": "2026-08-13",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true, "head_sampling_rate": 1 },
-  "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres", "EMAIL_FROM": "earth@nohainc.com", "SMTP_USER": "vitalii@nohainc.com" },
+  "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres", "EARTH_MAINTENANCE_MODE": "false", "EARTH_SCHEDULER_ENABLED": "true", "EMAIL_FROM": "earth@nohainc.com", "SMTP_USER": "vitalii@nohainc.com" },
   "send_email": [{ "name": "EMAIL" }],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "earth-media" }],
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],

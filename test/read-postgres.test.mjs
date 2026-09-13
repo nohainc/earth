@@ -89,22 +89,21 @@ test('auditWorld validates balances and membership invariants', async () => {
 
 test('listInstitutions and listRankings return structured models', async () => {
   const client = new MockDbClient({
-    'SELECT * FROM communities': { rows: [{ id: 'COM-01', name: 'Sol' }], rowCount: 1 },
-    'SELECT * FROM cities': { rows: [{ id: 'CITY-01', name: 'Neo' }], rowCount: 1 },
-    'SELECT * FROM corporations': { rows: [{ id: 'CORP-01', name: 'Cyber' }], rowCount: 1 },
+    'SELECT * FROM communities': { rows: [], rowCount: 0 },
+    'SELECT id, corporation_id, status FROM cities': { rows: [{ id: 'CITY-01', corporation_id: null, status: 'ACTIVE' }], rowCount: 1 },
+    'SELECT id, status FROM corporations': { rows: [{ id: 'CORP-01', status: 'ACTIVE' }], rowCount: 1 },
     'SELECT * FROM memberships': { rows: [], rowCount: 0 },
     'FROM institution_budget_lines': { rows: [], rowCount: 0 },
     'SELECT owner_id AS human_id, balance': { rows: [{ human_id: 'H-01', balance: 5000 }], rowCount: 1 },
-    'SELECT id, residents, treasury': { rows: [], rowCount: 0 },
-    'SELECT id, member_count, treasury': { rows: [], rowCount: 0 },
-    'SELECT id, name, owner_id, progress FROM technologies': { rows: [], rowCount: 0 },
+    'FROM humans h': { rows: [{ human_id: 'H-01', balance: 5000 }], rowCount: 1 },
+    'FROM owner_registry o JOIN economic_accounts': { rows: [{ human_id: 'H-01', balance: 5000 }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);
 
   const inst = await listInstitutions(repo);
-  assert.equal(inst.community.length, 1);
+  assert.equal(inst.community.length, 0);
   assert.equal(inst.city.length, 1);
 
-  const rank = await listRankings(repo);
+  const rank = await listRankings(repo, { currentHumanId: 'H-01' });
   assert.equal(rank.wealth.length, 1);
 });

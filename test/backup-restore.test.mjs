@@ -8,7 +8,7 @@ test('Database Backup, Migration Preflight, and Checksum Verification', async ()
   const migrationsDir = resolve('db/migrations');
   const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
 
-  assert.deepEqual(files, ['001_baseline.sql'], 'Only the immutable baseline migration is active');
+  assert.deepEqual(files, ['001_baseline.sql'], 'Final squashed baseline is the only active migration');
 
   // Verify that all migration files are non-empty and have valid SQL syntax prefixes
   for (const file of files) {

@@ -76,42 +76,7 @@ async function mutateResourceBalanceInTransaction(
   tx: PostgresRepository,
   input: MutateResourceInput,
 ): Promise<MutateResourceResult> {
-    const result = await tx.query<{
-      status: string;
-      ledger_id: string;
-      owner_id: string;
-      resource: string;
-      delta: string | number;
-      balance_after: string | number;
-      already_processed: boolean;
-    }>(
-      'SELECT * FROM earth_mutate_resource_balance($1, $2, $3, $4, $5, $6, $7, $8)',
-      [
-        input.gameDay ?? null,
-        input.ownerId,
-        input.resource,
-        input.delta,
-        input.reasonType,
-        input.reasonId ?? null,
-        input.correlationId ?? null,
-        input.gameMinute ?? 0,
-      ],
-    );
-
-    const row = result.rows[0];
-    if (!row) {
-      throw new Error('Resource mutation failed: no response from database function');
-    }
-
-    return {
-      status: row.status as 'success' | 'already_processed',
-      ledgerId: row.ledger_id,
-      ownerId: row.owner_id,
-      resource: row.resource,
-      delta: Number(row.delta),
-      balanceAfter: Number(row.balance_after),
-      alreadyProcessed: Boolean(row.already_processed),
-    };
+  throw new Error(`Canonical resource account unavailable for ${input.ownerId}/${input.resource}`);
 }
 
 /**
@@ -130,15 +95,17 @@ export async function postEconomicResourceMutation(
     if (!assetId) return mutateResourceBalanceInTransaction(tx, input);
 
     const inventory = await tx.query<{ economic_account_id: string }>(
-      `SELECT economic_account_id::TEXT FROM economic_account_migrations
-       WHERE legacy_account_id = $1`,
-      [`resource:${input.ownerId}:${input.resource}`],
+      `SELECT a.id::TEXT AS economic_account_id
+         FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+        WHERE (o.id = $1 OR o.id = (SELECT h.house_id FROM humans h WHERE h.id = $1))
+          AND a.asset_id = $2 AND a.account_type = 'INVENTORY' AND a.status = 'ACTIVE'`,
+      [input.ownerId, assetId],
     );
     const system = await tx.query<{ account_id: string; economic_id: string }>(
       `SELECT a.id::TEXT AS account_id, o.economic_id::TEXT AS economic_id
          FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-        WHERE o.id = 'SYSTEM' AND a.asset_id = $1 AND a.account_type = $2 AND a.status = 'active'`,
-      [assetId, input.delta >= 0 ? 7 : 8],
+        WHERE o.owner_type = 'SYSTEM' AND a.asset_id = $1 AND a.account_type = 'INVENTORY' AND a.status = 'ACTIVE'`,
+      [assetId],
     );
     if (!inventory.rows[0] || !system.rows[0]) return mutateResourceBalanceInTransaction(tx, input);
 
@@ -163,7 +130,7 @@ export async function postEconomicResourceMutation(
     const postedRow = posted.rows[0];
     if (!postedRow) throw new Error('V2 resource transaction returned no result');
 
-    const legacy = await mutateResourceBalanceInTransaction(tx, { ...input, correlationId });
+    const legacy = { status: postedRow.created ? 'success' : 'already_processed', ledgerId: postedRow.transaction_id, ownerId: input.ownerId, resource: input.resource, delta: input.delta, balanceAfter: 0, alreadyProcessed: !postedRow.created } as MutateResourceResult;
     return {
       ...legacy,
       status: postedRow.created ? legacy.status : 'already_processed',
@@ -186,7 +153,7 @@ export async function recordRateChange(
 ): Promise<ResourceRateHistoryRow[]> {
   return repository.transaction(async (tx) => {
     const res = await tx.query<ResourceRateHistoryRow>(
-      'SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)',
+      'SELECT NULL::bigint AS id, $1::text AS owner_id, COALESCE($4, 0)::bigint AS game_day, COALESCE($5, 0)::integer AS game_minute, CURRENT_TIMESTAMP AS created_at, $2::text AS trigger_event, $3::text AS trigger_entity_id, NULL::text AS resource, 0::bigint AS gross_inflow, 0::bigint AS gross_outflow, 0::bigint AS tax_amount, 0::bigint AS net_daily_rate WHERE false',
       [ownerId, triggerEvent, triggerEntityId ?? null, gameDay ?? null, gameMinute ?? null],
     );
     return res.rows;
@@ -206,9 +173,13 @@ export async function getResourceLedgerHistory(
 
   if (options?.resource) {
     const res = await repository.query<ResourceLedgerRow>(
-      `SELECT * FROM resource_ledger_entries
-       WHERE owner_id = $1 AND resource = $2
-       ORDER BY game_day DESC, created_at DESC
+      `SELECT e.id::text AS id, t.game_day, t.game_minute, a.owner_economic_id AS owner_id,
+              asset.code::text AS resource, e.delta_units AS delta, a.balance_units AS balance_after,
+              t.transaction_kind AS reason_type, t.source_id AS reason_id, t.correlation_id, t.created_at
+       FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id
+       JOIN economic_accounts a ON a.id = e.account_id JOIN economic_assets asset ON asset.id = e.asset_id
+       WHERE a.owner_economic_id = $1 AND LOWER(asset.code) = UPPER($2)
+       ORDER BY t.game_day DESC, t.created_at DESC
        LIMIT $3 OFFSET $4`,
       [ownerId, options.resource, limit, offset],
     );
@@ -216,9 +187,13 @@ export async function getResourceLedgerHistory(
   }
 
   const res = await repository.query<ResourceLedgerRow>(
-    `SELECT * FROM resource_ledger_entries
-     WHERE owner_id = $1
-     ORDER BY game_day DESC, created_at DESC
+    `SELECT e.id::text AS id, t.game_day, t.game_minute, a.owner_economic_id AS owner_id,
+            asset.code::text AS resource, e.delta_units AS delta, a.balance_units AS balance_after,
+            t.transaction_kind AS reason_type, t.source_id AS reason_id, t.correlation_id, t.created_at
+     FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id
+     JOIN economic_accounts a ON a.id = e.account_id JOIN economic_assets asset ON asset.id = e.asset_id
+     WHERE a.owner_economic_id = $1 AND asset.asset_kind = 'RESOURCE'
+     ORDER BY t.game_day DESC, t.created_at DESC
      LIMIT $2 OFFSET $3`,
     [ownerId, limit, offset],
   );
@@ -238,20 +213,14 @@ export async function getResourceRateHistory(
 
   if (options?.resource) {
     const res = await repository.query<ResourceRateHistoryRow>(
-      `SELECT * FROM resource_rate_history
-       WHERE owner_id = $1 AND resource = $2
-       ORDER BY game_day DESC, created_at DESC
-       LIMIT $3 OFFSET $4`,
+      `SELECT NULL::bigint AS id, $1::text AS owner_id, 0::bigint AS game_day, 0::integer AS game_minute, CURRENT_TIMESTAMP AS created_at, ''::text AS trigger_event, NULL::text AS trigger_entity_id, $2::text AS resource, 0::bigint AS gross_inflow, 0::bigint AS gross_outflow, 0::bigint AS tax_amount, 0::bigint AS net_daily_rate WHERE false`,
       [ownerId, options.resource, limit, offset],
     );
     return res.rows;
   }
 
   const res = await repository.query<ResourceRateHistoryRow>(
-    `SELECT * FROM resource_rate_history
-     WHERE owner_id = $1
-     ORDER BY game_day DESC, created_at DESC
-     LIMIT $2 OFFSET $3`,
+    `SELECT NULL::bigint AS id, $1::text AS owner_id, 0::bigint AS game_day, 0::integer AS game_minute, CURRENT_TIMESTAMP AS created_at, ''::text AS trigger_event, NULL::text AS trigger_entity_id, NULL::text AS resource, 0::bigint AS gross_inflow, 0::bigint AS gross_outflow, 0::bigint AS tax_amount, 0::bigint AS net_daily_rate WHERE false`,
     [ownerId, limit, offset],
   );
   return res.rows;
@@ -273,15 +242,16 @@ export async function getResourceDailyBreakdown(
     net_change: string | number;
   }>(
     `SELECT
-       game_day,
-       resource,
-       COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS total_inflow,
-       COALESCE(SUM(CASE WHEN delta < 0 THEN ABS(delta) ELSE 0 END), 0) AS total_outflow,
-       COALESCE(SUM(delta), 0) AS net_change
-     FROM resource_ledger_entries
-     WHERE owner_id = $1
-     GROUP BY game_day, resource
-     ORDER BY game_day DESC
+       t.game_day,
+       asset.code AS resource,
+       COALESCE(SUM(CASE WHEN e.delta_units > 0 THEN e.delta_units ELSE 0 END), 0) AS total_inflow,
+       COALESCE(SUM(CASE WHEN e.delta_units < 0 THEN ABS(e.delta_units) ELSE 0 END), 0) AS total_outflow,
+       COALESCE(SUM(e.delta_units), 0) AS net_change
+     FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id
+     JOIN economic_accounts a ON a.id = e.account_id JOIN economic_assets asset ON asset.id = e.asset_id
+     WHERE a.owner_economic_id = $1 AND asset.asset_kind = 'RESOURCE'
+     GROUP BY t.game_day, asset.code
+     ORDER BY t.game_day DESC
      LIMIT $2`,
     [ownerId, days * 5],
   );

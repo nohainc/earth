@@ -10,6 +10,9 @@ Deployment order is:
 4. Verify the exact schema manifest and critical invariants.
 5. Deploy the Worker and require readiness.
 
-`001_baseline.sql` is immutable after clean environments are accepted. Future
-schema changes are numbered `002_...` and later. Migration repair is not part
-of normal production deployment.
+During pre-production reconciliation, use numbered forward migrations (`002_`,
+`003_`, and later) and apply them incrementally. Do not edit an already-applied
+migration or reset a database to investigate a runtime mismatch. After clean
+local and remote certification, consolidate the temporary chain and freeze
+`001_baseline.sql`; permanent future changes then start at `002_`. Migration
+repair is not part of normal production deployment.

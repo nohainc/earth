@@ -4,6 +4,15 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd "$script_dir/.." && pwd)"
 
+# Load local-only values when present. This file is gitignored and must never be
+# used to supply a remote target to this local-only script.
+if [[ -f "$project_dir/.env.local" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$project_dir/.env.local"
+  set +a
+fi
+
 # Override this when targeting another local PostgreSQL instance.
 DATABASE_URL="${DATABASE_URL:-postgres://earth:earth_dev_only@localhost:5432/earth}"
 

@@ -12,9 +12,10 @@ test('communications domain logic handles channels and messages', async () => {
     async query(sql, params) {
       if (sql.includes('COUNT(*)')) return { rows: [{ count: channels.length }] };
       if (sql.includes('SELECT EXISTS')) return { rows: [{ allowed: params[1] === 'H-0044' && (params[0] === 'channel-global-relay' || params[0] === 'channel-city-new-tokyo') }] };
+      if (sql.includes("SELECT house_id FROM humans WHERE id = $1 AND status")) return { rows: [{ house_id: 'HOUSE-0044' }] };
       if (sql.includes('FROM comm_channels')) return { rows: channels };
       if (sql.includes('INSERT INTO comm_messages')) {
-        const message = { id: params[0], channel_id: params[1], sender_human_id: params[2], sender_display_name: params[3], body: params[5], game_day: params[6], game_minute: params[7], attachments: JSON.parse(params[8]) };
+        const message = { id: params[0], channel_id: params[1], sender_house_id: params[2], sender_human_id: params[3], sender_display_name: params[4], body: params[6], game_day: params[7], game_minute: params[8], attachments: params[9] };
         messages.push(message);
         return { rows: [message] };
       }

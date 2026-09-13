@@ -12,11 +12,13 @@ test('Building V2 has no repair or condition authority', () => {
   assert.match(source, /building_output/);
 });
 
-test('building condition and repair schema is removed by the forward migration', () => {
-  const migration = read('db/migrations/340_remove_building_condition_repair.sql');
-  for (const column of ['condition', 'auto_repair_enabled', 'repair_priority', 'wear_points', 'repair_points']) assert.match(migration, new RegExp(`DROP COLUMN IF EXISTS ${column}`));
-  assert.match(migration, /DROP TABLE IF EXISTS building_condition_efficiency_curves/);
-  assert.match(migration, /technology_effects_effect_type_check/);
+test('clean baseline contains no building condition or repair schema', () => {
+  const schema = read('db/baseline/01_schema.sql').toLowerCase();
+  const catalog = read('db/baseline/03_reference_data.sql').toLowerCase();
+  const source = `${schema}\n${catalog}`;
+  for (const removed of ['condition', 'durability', 'damage', 'wear', 'repair', 'auto_repair']) {
+    assert.doesNotMatch(source, new RegExp(removed), `baseline must not contain ${removed}`);
+  }
 });
 
 test('repair API surfaces are gone while construction remains', () => {

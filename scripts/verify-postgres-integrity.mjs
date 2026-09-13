@@ -3,7 +3,14 @@ import { Client } from 'pg';
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error('DATABASE_URL is required; refusing to verify an implicit database target');
 
-const client = new Client({ connectionString, application_name: 'earth-integrity-report', connectionTimeoutMillis: 5000, query_timeout: 30000 });
+const parsedConnection = new URL(connectionString);
+const usesSystemRoot = parsedConnection.searchParams.get('sslrootcert') === 'system';
+if (usesSystemRoot) {
+  parsedConnection.searchParams.delete('sslrootcert');
+  parsedConnection.searchParams.delete('sslmode');
+}
+
+const client = new Client({ connectionString: parsedConnection.toString(), ...(usesSystemRoot ? { ssl: { rejectUnauthorized: true } } : {}), application_name: 'earth-integrity-report', connectionTimeoutMillis: 5000, query_timeout: 30000 });
 await client.connect();
 try {
   const report = await client.query('SELECT check_name, invalid_count FROM earth_integrity_report() ORDER BY check_name');

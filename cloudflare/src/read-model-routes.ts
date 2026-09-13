@@ -1,21 +1,16 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
-import { currentHuman } from './auth-session.ts';
+import { currentHuman, currentViewer } from './auth-session.ts';
 import {
   auditWorld as auditWorldPostgres,
   listCemeteryProfiles as listCemeteryProfilesPostgres,
-  listEvents as listEventsPostgres,
-  listHistory as listHistoryPostgres,
   listInstitutions as listInstitutionsPostgres,
   listMarketPriceHistory as listMarketPriceHistoryPostgres,
-  listMembershipEvents as listMembershipEventsPostgres,
-  listNotifications as listNotificationsPostgres,
-  listOwnershipEvents as listOwnershipEventsPostgres,
   listPantheonOfAchievements as listPantheonOfAchievementsPostgres,
   listRankings as listRankingsPostgres,
-  markAllNotificationsRead as markAllNotificationsReadPostgres,
-  markNotificationRead as markNotificationReadPostgres,
 } from './read-postgres.ts';
+import { listEvents as listEventsPostgres, listHistory as listHistoryPostgres } from './read-models/events-read.ts';
+import { listNotifications as listNotificationsPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-models/notifications-read.ts';
 
 /**
  * Read-model routes: notifications, events, history, rankings, institutions,
@@ -31,16 +26,29 @@ export async function handleReadModelRoutes(
   url: URL,
 ): Promise<Response | null> {
 
+  if (url.pathname === '/api/buildings/catalog' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => repository.query(
+      `SELECT id, code, tier, construction_credit_units, construction_minutes,
+              operating_credit_units, resource_input_units, resource_output_units,
+              service_type, service_capacity_units, slot_footprint, definition_version
+         FROM building_catalog
+        ORDER BY code, tier, id`,
+    ));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ catalog: result.rows, persistence: 'planetscale-postgres' });
+  }
+
   // ── World activity ───────────────────────────────────────────────────────────
   if (url.pathname === '/api/world/activity' && request.method === 'GET') {
-    const viewer = await currentHuman(request, env);
+    const viewer = await currentViewer(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const result = await withRepository(env, async (repository) => {
       const [world, technology] = await Promise.all([
         repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
         repository.query(`SELECT ROUND(p.progress_research_points * 100.0 / NULLIF(p.required_research_points, 0), 2) AS progress
           FROM corporation_research_projects p
-          JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
+          JOIN house_affiliations m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
+             AND m.status = 'ACTIVE'
           WHERE m.human_id = $1 AND p.target_type = 'TECHNOLOGY'
           ORDER BY p.created_at DESC LIMIT 1`, [viewer.id]),
       ]);
@@ -61,7 +69,10 @@ export async function handleReadModelRoutes(
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-    const result = await withRepository(env, (repository) => listEventsPostgres(repository, viewer.id, limit));
+    const requestedCategory = url.searchParams.get('category')?.trim().toUpperCase() || undefined;
+    const allowedCategories = new Set(['ECONOMY', 'MARKET', 'BUILDING', 'AFFILIATION', 'OWNERSHIP', 'GOVERNANCE', 'RESEARCH', 'TECHNOLOGY', 'LIFECYCLE', 'BANKING', 'TAX', 'INSTITUTION', 'SYSTEM']);
+    if (requestedCategory && !allowedCategories.has(requestedCategory)) return Response.json({ ok: false, error: 'Unknown event category' }, { status: 400 });
+    const result = await withRepository(env, (repository) => listEventsPostgres(repository, limit, requestedCategory));
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
@@ -71,25 +82,25 @@ export async function handleReadModelRoutes(
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-    const result = await withRepository(env, (repository) => listNotificationsPostgres(repository, viewer.id, limit));
+    const result = await withRepository(env, (repository) => listNotificationsPostgres(repository, viewer.houseId, limit));
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
   if (url.pathname === '/api/notifications/read-all' && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
+    const viewer = await currentViewer(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const result = await withRepository(env, (repository) => markAllNotificationsReadPostgres(repository, viewer.id));
+    const result = await withRepository(env, (repository) => markAllNotificationsReadPostgres(repository, viewer.houseId));
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
   const notificationReadMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
   if (notificationReadMatch && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
+    const viewer = await currentViewer(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const result = await withRepository(env, (repository) =>
-      markNotificationReadPostgres(repository, viewer.id, notificationReadMatch[1]),
+      markNotificationReadPostgres(repository, viewer.houseId, notificationReadMatch[1]),
     );
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -99,24 +110,6 @@ export async function handleReadModelRoutes(
   if (url.pathname === '/api/history' && request.method === 'GET') {
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
     const result = await withRepository(env, (repository) => listHistoryPostgres(repository, limit));
-    if (!result) throw new Error('PostgreSQL repository is unavailable');
-    return Response.json({ ...result, persistence: 'planetscale-postgres' });
-  }
-
-  if (url.pathname === '/api/ownership/events' && request.method === 'GET') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-    const result = await withRepository(env, (repository) => listOwnershipEventsPostgres(repository, viewer.id, limit));
-    if (!result) throw new Error('PostgreSQL repository is unavailable');
-    return Response.json({ ...result, persistence: 'planetscale-postgres' });
-  }
-
-  if (url.pathname === '/api/membership/events' && request.method === 'GET') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-    const result = await withRepository(env, (repository) => listMembershipEventsPostgres(repository, viewer.id, limit));
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }

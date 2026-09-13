@@ -14,7 +14,7 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
            eligible_voter_count = (
              SELECT COUNT(*)
              FROM humans h
-             JOIN memberships m ON m.human_id = h.id
+             JOIN house_affiliations m ON m.house_id = h.house_id AND m.status = 'ACTIVE'
              JOIN institutions i ON i.id = p.institution_id
              WHERE h.life_status = 'active'
                AND m.joined_game_day <= p.voting_start_day
@@ -39,7 +39,7 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
         [building.owner_id ?? building.city_id, building.id, 'construction_completed', completedDay, 0],
       );
       await tx.query(
-        `INSERT INTO world_events (id, game_day, event_type, title, details)
+        `INSERT INTO game_events (id, game_day, event_type, title, details)
          VALUES ($1,$2,'building.constructed',$3,jsonb_build_object('buildingId',$4::text,'cityId',$5::text,'ownerId',$6::text)::text)
          ON CONFLICT (id) DO NOTHING`,
         [`BLD-CONSTRUCTED-${building.id}-${completedDay}`, completedDay, `Facility ${building.name} construction completed`, building.id, building.city_id, building.owner_id],

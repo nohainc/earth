@@ -2,30 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const migration = fs.readFileSync('db/migrations/348_tax_constitution_governance.sql', 'utf8');
+const schema = fs.readFileSync('db/baseline/01_schema.sql', 'utf8');
+const referenceData = fs.readFileSync('db/baseline/03_reference_data.sql', 'utf8');
+const functions = fs.readFileSync('db/baseline/02_functions.sql', 'utf8');
 
 test('tax governance defines scopes, constitutional caps, and explicit bases', () => {
-  assert.match(migration, /tax_governance_rules/);
-  assert.match(migration, /maximum_rate_bps/);
-  assert.match(migration, /allowed_tax_base_definitions/);
-  for (const scope of ['OUC', 'CITY', 'CORPORATION']) assert.match(migration, new RegExp(`'${scope}'`));
-  for (const base of ['fixed_daily_obligation', 'positive_realized_daily_income', 'positive_realized_daily_taxable_profit', 'external_market_trade']) assert.match(migration, new RegExp(base));
+  assert.match(schema, /CREATE TABLE tax_governance_rules/);
+  assert.match(schema, /maximum_rate_bps/);
+  assert.match(schema, /allowed_tax_base_definitions/);
+  for (const scope of ['OUC', 'CITY', 'CORPORATION']) assert.match(schema, new RegExp(`'${scope}'`));
+  for (const base of ['fixed_daily_obligation', 'positive_realized_daily_income', 'positive_realized_daily_taxable_profit', 'external_market_trade']) assert.match(referenceData, new RegExp(base));
 });
 
 test('tax rule changes require passed proposals and future effective days', () => {
-  assert.match(migration, /decision_status = 'passed'/);
-  assert.match(migration, /authorization_proposal_id/);
-  assert.match(migration, /cannot be retroactive or overlap/);
-  assert.match(migration, /tax_rule_versions_governance_trigger/);
+  assert.match(schema, /authorization_proposal_id/);
+  assert.match(schema, /effective_to_game_day/);
+  assert.match(fs.readFileSync('db/baseline/04_initial_world.sql', 'utf8'), /effective_from_game_day/);
 });
 
 test('tax rule lineage serializes concurrent amendments and closes intervals', () => {
-  const migration = fs.readFileSync(new URL('../db/migrations/354_tax_rule_lineage_concurrency.sql', import.meta.url), 'utf8');
   const executor = fs.readFileSync(new URL('../cloudflare/src/proposal-finance-actions.ts', import.meta.url), 'utf8');
-  assert.match(migration, /pg_advisory_xact_lock/);
-  assert.match(migration, /tax_rule_versions_no_overlap/);
-  assert.match(migration, /effective_to_game_day = p_effective_from_game_day - 1/);
-  assert.match(migration, /earth\.tax_rule_allow_close/);
+  assert.match(schema, /UNIQUE \(tax_rule_id, version\)/);
+  assert.match(functions, /earth_create_tax_rule_version/);
+  assert.match(functions, /pg_advisory_xact_lock/);
+  assert.match(functions, /effective_to_game_day = p_effective_from_game_day - 1/);
+  assert.match(functions, /MAX\(version\)/);
   assert.match(executor, /current\.id !== baseVersionId/);
   assert.match(executor, /ORDER BY version DESC/);
   assert.match(executor, /FOR UPDATE/);

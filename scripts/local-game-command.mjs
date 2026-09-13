@@ -20,8 +20,9 @@ if (minutes === null) throw new Error('Usage: advance-hour | advance-day | heart
 const client = new Client({ connectionString: databaseUrl });
 await client.connect();
 try {
-  const result = await client.query('SELECT earth_local_advance_minutes($1) AS total_game_minutes', [minutes]);
-  console.log(`Manual clock advanced to ${result.rows[0].total_game_minutes} game minutes.`);
+  const result = await client.query('SELECT game_day, game_minute FROM earth_advance_world_clock($1::integer)', [minutes]);
+  const row = result.rows[0];
+  console.log(`Manual clock advanced to game day ${row.game_day}, minute ${row.game_minute}.`);
 } finally {
   await client.end();
 }

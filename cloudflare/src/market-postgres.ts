@@ -8,6 +8,7 @@ import { marketBatchId } from './market-time.ts';
 import { closeEscrowAccount, marketAccount, postSettlementBatch, releaseReservation, reserveForOrder } from './market-escrow.ts';
 import { clearMarketAuction } from './market-clearing-engine.ts';
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
+import { createGameEvent } from './game-events-postgres.ts';
 
 type MarketOrderInput = {
   humanId: string;
@@ -147,6 +148,30 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
     const persistedFillRows = fillRows.map((row) => ({ ...row, economic_transaction_id: posted.transactionId }));
     await tx.query(`INSERT INTO market_fills (id, batch_id, instrument_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id, quantity_units, price_units, quote_units, gross_quote_units, fee_units, buyer_fee_units, seller_fee_units, economic_transaction_id, sequence_no, game_day, game_minute)
       SELECT id, batch_id, instrument_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id, quantity_units, price_units, quote_units, gross_quote_units, fee_units, buyer_fee_units, seller_fee_units, economic_transaction_id, sequence_no, game_day, game_minute FROM jsonb_to_recordset($1::jsonb) AS x(id UUID, batch_id BIGINT, instrument_id TEXT, buy_order_id UUID, sell_order_id UUID, buyer_economic_id BIGINT, seller_economic_id BIGINT, quantity_units BIGINT, price_units BIGINT, quote_units BIGINT, gross_quote_units BIGINT, fee_units BIGINT, buyer_fee_units BIGINT, seller_fee_units BIGINT, economic_transaction_id BIGINT, sequence_no BIGINT, game_day BIGINT, game_minute INTEGER) ON CONFLICT DO NOTHING`, [JSON.stringify(persistedFillRows)]);
+    for (const [sequence, fill] of auction.fills.entries()) {
+      const buy = buyRows.find((row) => String(row.id) === fill.buyOrderId)!;
+      const sell = sellRows.find((row) => String(row.id) === fill.sellOrderId)!;
+      await createGameEvent(tx, {
+        id: `MARKET-TRADE-${batchId}-${instrument.id}-${sequence + 1}`,
+        category: 'MARKET',
+        eventType: 'MARKET_TRADE',
+        gameDay: day,
+        subjectType: 'MARKET_INSTRUMENT',
+        subjectId: instrument.id,
+        title: `${instrument.symbol ?? product} market trade cleared`,
+        details: {
+          batchId,
+          instrumentId: instrument.id,
+          buyOrderId: buy.id,
+          sellOrderId: sell.id,
+          quantityUnits: fill.quantityUnits.toString(),
+          priceUnits: fill.priceUnits.toString(),
+          quoteUnits: calculateQuoteUnits(fill.quantityUnits, fill.priceUnits).toString(),
+          economicTransactionId: posted.transactionId,
+        },
+        correlationId: `market-trade:${batchId}:${instrument.id}:${sequence + 1}`,
+      });
+    }
     const volume = auction.fills.reduce((sum, fill) => sum + fill.quantityUnits, 0n);
     for (const accountId of closeAccounts) await closeEscrowAccount(tx, accountId, `${batchId}:${instrument.id}`);
     const rebuiltState = await rebuildMarketInstrumentState(tx, instrument.id);

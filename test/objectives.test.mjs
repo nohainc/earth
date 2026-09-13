@@ -6,10 +6,9 @@ test('Player Strategic Objectives Engine', async (t) => {
   await t.test('evaluates all long-term player objectives', () => {
     const objectives = evaluatePlayerObjectives({
       human: { credits: 12000, standing: 85, legacy: 300, voting_weight: 12.5 },
-      business: { id: 'b-1', valuation: 45000, profit: 500 },
       institutions: {
         city: { essential_services_index: 0.85, standing: 80 },
-        corporation: { treasury: 25000, member_count: 50 },
+        corporation: { treasury: 100000, member_count: 50 },
       },
       governance: { voting_weight: 12.5 },
       technology: { active_patents: 2, active_licenses: 3 },
@@ -18,12 +17,11 @@ test('Player Strategic Objectives Engine', async (t) => {
       netWorth: 28000,
     });
 
-    assert.equal(objectives.length, 9);
+    assert.equal(objectives.length, 7);
 
     const ids = objectives.map((o) => o.id);
     assert.ok(ids.includes('obj-valuable-corporation'));
     assert.ok(ids.includes('obj-food-security'));
-    assert.ok(ids.includes('obj-enterprise-portfolio'));
     assert.ok(ids.includes('obj-civic-delegate'));
     assert.ok(ids.includes('obj-house-traits'));
     assert.ok(ids.includes('obj-technology-licensor'));
@@ -50,9 +48,9 @@ test('Player Strategic Objectives Engine', async (t) => {
   await t.test('detects completed objectives when thresholds are reached', () => {
     const objectives = evaluatePlayerObjectives({
       human: { credits: 100000, standing: 98, voting_weight: 30 },
-      business: { valuation: 150000, profit: 5000 },
       institutions: {
         city: { essential_services_index: 0.95, standing: 95 },
+        corporation: { treasury: 100000 },
       },
       governance: { voting_weight: 30 },
       technology: { active_patents: 4, active_licenses: 4 },
@@ -61,7 +59,7 @@ test('Player Strategic Objectives Engine', async (t) => {
       netWorth: 80000,
     });
 
-    assert.equal(objectives.length, 9);
+    assert.equal(objectives.length, 7);
     assert.ok(objectives.some((o) => o.status === 'completed'));
 
     const corpObj = objectives.find((o) => o.id === 'obj-valuable-corporation');
