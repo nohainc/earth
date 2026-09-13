@@ -115,8 +115,9 @@ export class MarketCoordinator extends DurableObject<Env> {
     }));
   }
 
-  async webSocketClose(socket: WebSocket, code: number, reason: string): Promise<void> {
-    socket.close(code, reason);
+  async webSocketClose(_socket: WebSocket, _code: number, _reason: string): Promise<void> {
+    // The runtime has already closed (or is closing) this socket. In
+    // particular, code 1006 is diagnostic-only and must never be sent.
   }
 }
 
@@ -195,6 +196,7 @@ const worker = {
       response = Response.json({ ok: false, error: errorMessage || 'Internal Server Error', code: 'SERVICE_UNAVAILABLE' }, { status: 500 });
     }
 
+    if ((response as Response & { webSocket?: WebSocket }).webSocket) return response;
     const newHeaders = new Headers(response.headers);
     for (const [key, value] of Object.entries(corsHeaders)) {
       newHeaders.set(key, value);
@@ -545,6 +547,7 @@ export default {
         ? Response.json({ ok: false, error: 'Request body must be valid JSON object', code: 'VALIDATION_ERROR', correlationId: requestId }, { status: 400 })
         : Response.json({ ok: false, error: 'EARTH service is temporarily unavailable', code: 'SERVICE_UNAVAILABLE', correlationId: requestId }, { status: 503 });
     }
+    if ((response as Response & { webSocket?: WebSocket }).webSocket) return response;
     const headers = new Headers(response.headers);
     if (origin) {
       headers.set('Access-Control-Allow-Origin', origin);
