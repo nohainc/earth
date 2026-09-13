@@ -54,9 +54,10 @@ class EarthApiTransport {
         'accept': 'application/json',
       };
       final token = await AuthStorage.getToken();
-      if (token != null && token.isNotEmpty) {
-        headers['authorization'] = 'Bearer $token';
-      }
+      // Telemetry is authenticated. Avoid an expected unauthenticated call
+      // during startup and session expiry.
+      if (token == null || token.isEmpty) return;
+      headers['authorization'] = 'Bearer $token';
       final payload = jsonEncode({
         'message': message,
         if (stack != null) 'stack': stack,
@@ -64,11 +65,12 @@ class EarthApiTransport {
         if (errorCode != null) 'errorCode': errorCode,
         if (statusCode != null) 'statusCode': statusCode,
         if (context != null) 'context': context,
-        'source': 'client_flutter',
       });
       await client.post(uri, headers: headers, body: payload);
-    } catch (_) {
-      // Best-effort reporting
+    } catch (error) {
+      // Best-effort reporting. Never report this failure through telemetry,
+      // or a broken telemetry endpoint could recurse indefinitely.
+      debugPrint('EARTH telemetry unavailable: $error');
     }
   }
 

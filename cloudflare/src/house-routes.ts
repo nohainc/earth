@@ -9,6 +9,7 @@ import {
   forgeHouseHeirloom,
   updateHouseMotto,
 } from './house-postgres.ts';
+import { getHouseDailySummary } from './house-daily-summary-postgres.ts';
 
 /**
  * Canonical routes for the generational house system.
@@ -21,6 +22,24 @@ export async function handleHouseRoutes(
 
   const isHousePath = url.pathname.startsWith('/api/house');
   if (!isHousePath) return null;
+
+  if (url.pathname === '/api/house/daily-summary' && request.method === 'GET') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const rawDay = url.searchParams.get('day');
+    const requestedDay = rawDay == null ? undefined : Number(rawDay);
+    if (rawDay != null && (!Number.isInteger(requestedDay) || requestedDay < 0)) {
+      return Response.json({ ok: false, error: 'day must be a non-negative integer' }, { status: 400 });
+    }
+    try {
+      const result = await withRepository(env, (repository) => getHouseDailySummary(repository, viewer.house_id, requestedDay));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Daily summary could not be loaded';
+      return Response.json({ ok: false, error: message }, { status: /unavailable/i.test(message) ? 503 : 400 });
+    }
+  }
 
   // GET /api/house — overview of lineage, perks, and heirlooms
   if (url.pathname === '/api/house' && request.method === 'GET') {

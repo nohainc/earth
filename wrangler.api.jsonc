@@ -15,7 +15,6 @@
   "triggers": { "crons": ["* * * * *"] },
   "routes": [
     { "pattern": "earthuc.com/api/*", "zone_name": "earthuc.com" },
-    { "pattern": "earthuc.com/edge/*", "zone_name": "earthuc.com" },
     { "pattern": "earthuc.com/health", "zone_name": "earthuc.com" },
     { "pattern": "earthuc.com/ready", "zone_name": "earthuc.com" }
   ]

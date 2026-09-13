@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
@@ -19,6 +20,7 @@ import 'top_fixed_hud_panel.dart';
 import '../communications/comm_link_dialog.dart';
 import '../../core/models/live_connection_status.dart';
 import '../../core/auth_storage.dart';
+import '../../core/realtime_socket.dart';
 import '../../earth_http_client.dart';
 
 Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
@@ -28,7 +30,7 @@ Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
           ? pageUri.origin
           : '');
   if (!base.startsWith('http')) return null;
-  return Uri.parse('${base.replaceFirst(RegExp(r'^http'), 'ws')}/edge/events');
+  return Uri.parse('${base.replaceFirst(RegExp(r'^http'), 'ws')}/api/realtime');
 }
 
 class CommandCenter extends StatefulWidget {
@@ -72,16 +74,23 @@ class _CommandCenterState extends State<CommandCenter> {
   Timer? eventTimer;
   Timer? liveReconnectTimer;
   Timer? pollingFallbackTimer;
+  Timer? liveHeartbeatTimer;
+  Timer? liveHeartbeatTimeoutTimer;
+  Timer? refreshCoalesceTimer;
   http.Client? liveClient;
+  WebSocketChannel? liveSocket;
   StreamSubscription<String>? liveSubscription;
   bool _liveConnecting = false;
   bool _authExpiredHandled = false;
   int _wsFailCount = 0;
   final Set<String> _seenEventKeys = <String>{};
+  final Set<String> _pendingRefreshTopics = <String>{};
   int _requestGeneration = 0;
   final Set<String> _loadingPanels = <String>{};
   final Map<String, Future<dynamic>> _historyRequests =
       <String, Future<dynamic>>{};
+
+  bool get _isLiveConnected => liveClient != null || liveSocket != null;
 
   @override
   void initState() {
@@ -129,33 +138,69 @@ class _CommandCenterState extends State<CommandCenter> {
         }
         final type = decoded['type']?.toString();
         final topic = decoded['topic']?.toString();
-        if (type == 'world_day_started' ||
+        final topics = decoded['topics'] is List
+            ? (decoded['topics'] as List).map((value) => value.toString())
+            : <String>[];
+        if (type == 'refresh_required') {
+          _queueRefresh(topics.isEmpty ? [topic ?? 'world'] : topics);
+        } else if (type == 'world_day_started' ||
             type == 'world_tick' ||
             topic == 'world_activity' ||
             topic == 'market') {
-          _run(api.world);
+          _queueRefresh([topic == 'market' ? 'market' : 'world']);
         }
       }
     } catch (_) {}
-    if (mounted) _refreshEvents();
     return true;
   }
 
   Future<void> _connectLiveChannel() async {
-    if (_liveConnecting || liveClient != null) return;
+    if (_liveConnecting || liveClient != null || liveSocket != null) return;
     final uri = liveEventsUri(configuredBase: api.baseUrl, pageUri: Uri.base);
     if (uri == null) {
       _startPollingFallback();
       return;
     }
     _liveConnecting = true;
+    try {
+      final token = await AuthStorage.getToken();
+      final socket = connectRealtimeSocket(uri, token);
+      liveSocket = socket;
+      await socket.ready;
+      _markLiveConnected();
+      liveSubscription = socket.stream.map((message) => message.toString()).listen(
+        (message) {
+          _resetLiveHeartbeatTimeout();
+          if (message != 'pong') handleLiveMessage(message);
+        },
+        onError: (_) {
+          _closeLiveConnection();
+          _onWebSocketDisconnected();
+        },
+        onDone: () {
+          if (liveSocket == null) return;
+          _closeLiveConnection();
+          _onWebSocketDisconnected();
+        },
+      );
+    } catch (_) {
+      if (_authExpiredHandled) return;
+      _closeLiveConnection();
+      await _connectSseFallback(uri);
+    } finally {
+      _liveConnecting = false;
+    }
+  }
+
+  Future<void> _connectSseFallback(Uri uri) async {
     final client = createEarthHttpClient();
     liveClient = client;
     try {
       final token = await AuthStorage.getToken();
-      final sseUri =
-          uri.replace(scheme: uri.scheme == 'wss' ? 'https' : 'http');
-      final request = http.Request('GET', sseUri)
+      final request = http.Request(
+        'GET',
+        uri.replace(scheme: uri.scheme == 'wss' ? 'https' : 'http'),
+      )
         ..headers['accept'] = 'text/event-stream'
         ..headers['cache-control'] = 'no-cache';
       if (token != null && token.isNotEmpty) {
@@ -169,11 +214,7 @@ class _CommandCenterState extends State<CommandCenter> {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError('SSE connection failed (${response.statusCode})');
       }
-      _wsFailCount = 0;
-      _stopPollingFallback();
-      if (mounted && connectionStatus != LiveConnectionStatus.live) {
-        setState(() => connectionStatus = LiveConnectionStatus.live);
-      }
+      _markLiveConnected();
       liveSubscription = response.stream
           .transform(utf8.decoder)
           .transform(const LineSplitter())
@@ -183,9 +224,7 @@ class _CommandCenterState extends State<CommandCenter> {
         if (payload.isEmpty) return;
         try {
           handleLiveMessage(jsonDecode(payload));
-        } catch (_) {
-          // Ignore malformed SSE frames and keep the stream alive.
-        }
+        } catch (_) {}
       }, onError: (_) {
         _closeLiveConnection();
         _onWebSocketDisconnected();
@@ -195,17 +234,64 @@ class _CommandCenterState extends State<CommandCenter> {
         _onWebSocketDisconnected();
       });
     } catch (_) {
-      if (_authExpiredHandled) return;
       _closeLiveConnection();
       _onWebSocketDisconnected();
-    } finally {
-      _liveConnecting = false;
     }
   }
 
+  void _markLiveConnected() {
+    _wsFailCount = 0;
+    _stopPollingFallback();
+    if (mounted && connectionStatus != LiveConnectionStatus.live) {
+      setState(() => connectionStatus = LiveConnectionStatus.live);
+    }
+    liveHeartbeatTimer?.cancel();
+    liveHeartbeatTimeoutTimer?.cancel();
+    if (liveSocket != null) {
+      liveHeartbeatTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+        try {
+          liveSocket?.sink.add('ping');
+          _resetLiveHeartbeatTimeout();
+        } catch (_) {
+          _closeLiveConnection();
+          _onWebSocketDisconnected();
+        }
+      });
+      _resetLiveHeartbeatTimeout();
+    }
+  }
+
+  void _resetLiveHeartbeatTimeout() {
+    liveHeartbeatTimeoutTimer?.cancel();
+    if (liveSocket == null) return;
+    liveHeartbeatTimeoutTimer = Timer(const Duration(seconds: 45), () {
+      _closeLiveConnection();
+      _onWebSocketDisconnected();
+    });
+  }
+
+  void _queueRefresh(Iterable<String> topics) {
+    _pendingRefreshTopics.addAll(topics.where((topic) => topic.isNotEmpty));
+    refreshCoalesceTimer ??= Timer(const Duration(milliseconds: 100), () {
+      refreshCoalesceTimer = null;
+      final pending = Set<String>.from(_pendingRefreshTopics);
+      _pendingRefreshTopics.clear();
+      if (pending.any((topic) => topic != 'notifications')) {
+        unawaited(_syncWorldSilently());
+      }
+      unawaited(_refreshEvents());
+    });
+  }
+
   void _closeLiveConnection() {
+    liveHeartbeatTimer?.cancel();
+    liveHeartbeatTimer = null;
+    liveHeartbeatTimeoutTimer?.cancel();
+    liveHeartbeatTimeoutTimer = null;
     liveSubscription?.cancel();
     liveSubscription = null;
+    liveSocket?.sink.close();
+    liveSocket = null;
     liveClient?.close();
     liveClient = null;
   }
@@ -232,7 +318,7 @@ class _CommandCenterState extends State<CommandCenter> {
       if (mounted) {
         setState(() => connectionStatus = LiveConnectionStatus.reconnecting);
       }
-      _scheduleLiveReconnect(const Duration(seconds: 5));
+      _scheduleLiveReconnect(_nextReconnectDelay());
     }
   }
 
@@ -245,8 +331,8 @@ class _CommandCenterState extends State<CommandCenter> {
     pollingFallbackTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       _pollFallbackSync();
     });
-    // And try to reconnect WebSocket in the background every 30 seconds
-    _scheduleLiveReconnect(const Duration(seconds: 30));
+    // Keep retrying in the background, but cap the exponential delay.
+    _scheduleLiveReconnect(_nextReconnectDelay());
   }
 
   EarthState? _prefetchedDayState;
@@ -320,6 +406,13 @@ class _CommandCenterState extends State<CommandCenter> {
     });
   }
 
+  Duration _nextReconnectDelay() {
+    final exponent = _wsFailCount.clamp(0, 5);
+    final seconds = 1 << exponent;
+    final jitterMilliseconds = DateTime.now().millisecond % 1000;
+    return Duration(seconds: seconds, milliseconds: jitterMilliseconds);
+  }
+
   Future<void> _refreshEvents() async {
     try {
       final results = await Future.wait<dynamic>([
@@ -347,7 +440,7 @@ class _CommandCenterState extends State<CommandCenter> {
               asInt(notificationData['unreadCount']) ??
               0;
           if (connectionStatus == LiveConnectionStatus.offline) {
-            connectionStatus = liveClient != null
+            connectionStatus = _isLiveConnected
                 ? LiveConnectionStatus.live
                 : LiveConnectionStatus.polling;
           }
@@ -398,7 +491,7 @@ class _CommandCenterState extends State<CommandCenter> {
         setState(() {
           state = value;
           if (connectionStatus == LiveConnectionStatus.offline) {
-            connectionStatus = liveClient != null
+            connectionStatus = _isLiveConnected
                 ? LiveConnectionStatus.live
                 : LiveConnectionStatus.polling;
           }
@@ -454,6 +547,9 @@ class _CommandCenterState extends State<CommandCenter> {
     eventTimer?.cancel();
     liveReconnectTimer?.cancel();
     pollingFallbackTimer?.cancel();
+    liveHeartbeatTimer?.cancel();
+    liveHeartbeatTimeoutTimer?.cancel();
+    refreshCoalesceTimer?.cancel();
     _closeLiveConnection();
     super.dispose();
   }
@@ -564,7 +660,7 @@ class _CommandCenterState extends State<CommandCenter> {
                         notifications: notifications,
                         unreadNotifications: unreadNotifications,
                         unreadCommMessages: unreadCommMessages,
-                        isLiveConnected: liveClient != null,
+                        isLiveConnected: _isLiveConnected,
                         isReconnecting: liveReconnectTimer?.isActive == true,
                         connectionStatus: connectionStatus,
                         showDrawerButton: compact,
@@ -700,7 +796,7 @@ class _CommandCenterState extends State<CommandCenter> {
                                       marketHistory: marketHistory,
                                       pantheon: pantheon,
                                       personalFinanceData: personalFinanceData,
-                                      isLiveConnected: liveClient != null,
+                                      isLiveConnected: _isLiveConnected,
                                       isReconnecting:
                                           liveReconnectTimer?.isActive == true,
                                       connectionStatus: connectionStatus,

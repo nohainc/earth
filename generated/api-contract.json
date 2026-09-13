@@ -1,0 +1,867 @@
+{
+  "version": 1,
+  "owners": [
+    "AuthRoutes",
+    "SystemRoutes",
+    "HouseRoutes",
+    "BuildingRoutes",
+    "ResearchRoutes",
+    "MarketRoutes",
+    "FinanceRoutes",
+    "InstitutionRoutes",
+    "GovernanceRoutes",
+    "CommunityRoutes",
+    "ReadModelRoutes"
+  ],
+  "authClasses": [
+    "PUBLIC",
+    "AUTHENTICATED",
+    "HOUSE_SELF",
+    "HUMAN_SELF",
+    "INSTITUTION_MEMBER",
+    "INSTITUTION_ROLE",
+    "INTERNAL_ADMIN"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/live",
+      "owner": "SystemRoutes",
+      "auth": "PUBLIC",
+      "service": "liveness",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/realtime",
+      "owner": "SystemRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "realtimeInvalidationBus",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ready",
+      "owner": "SystemRoutes",
+      "auth": "PUBLIC",
+      "service": "readiness",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "owner": "SystemRoutes",
+      "auth": "PUBLIC",
+      "service": "health",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/audit",
+      "owner": "ReadModelRoutes",
+      "auth": "INTERNAL_ADMIN",
+      "service": "auditWorld",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register",
+      "owner": "AuthRoutes",
+      "auth": "PUBLIC",
+      "service": "registerAccount",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "owner": "AuthRoutes",
+      "auth": "PUBLIC",
+      "service": "login",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/verify-email",
+      "owner": "AuthRoutes",
+      "auth": "PUBLIC",
+      "service": "verifyEmail",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/verify-email/resend",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "resendVerification",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password-reset/request",
+      "owner": "AuthRoutes",
+      "auth": "PUBLIC",
+      "service": "requestPasswordReset",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/password-reset/complete",
+      "owner": "AuthRoutes",
+      "auth": "PUBLIC",
+      "service": "completePasswordReset",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "logout",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "getSessionAccount",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/auth/profile",
+      "owner": "AuthRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "updateProfile",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listSessions",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/sessions/{id}",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "revokeSession",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/sessions",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "revokeAllSessions",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/account",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "deleteAccount",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/enroll",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "enrollMfa",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/confirm",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "confirmMfa",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/disable",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "disableMfa",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/rebirth",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "rebirth",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/claim-heir",
+      "owner": "AuthRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "claimHeir",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/house",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getHouseOverview",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/house/daily-summary",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getHouseDailySummary",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/house/{action}",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "houseService",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/house/{action}",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "houseReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/house/{action}/{subaction}",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "houseService",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/buildings/catalog",
+      "owner": "ReadModelRoutes",
+      "auth": "PUBLIC",
+      "service": "buildingCatalog",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/events",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listGameEvents",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/history",
+      "owner": "ReadModelRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listHistory",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listNotifications",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/read-all",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "markAllNotificationsRead",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/{id}/read",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "markNotificationRead",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/rankings",
+      "owner": "ReadModelRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listRankings",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pantheon",
+      "owner": "ReadModelRoutes",
+      "auth": "PUBLIC",
+      "service": "listPantheon",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cemetery",
+      "owner": "ReadModelRoutes",
+      "auth": "PUBLIC",
+      "service": "listCemetery",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/institutions",
+      "owner": "ReadModelRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listInstitutions",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/services/status",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "serviceProjection",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/market/history",
+      "owner": "ReadModelRoutes",
+      "auth": "PUBLIC",
+      "service": "marketPriceHistory",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/real-estate/purchase",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "purchaseBuilding",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/real-estate/upgrade",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "upgradeBuilding",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/real-estate/{action}",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "buildingService",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/market/instruments",
+      "owner": "MarketRoutes",
+      "auth": "PUBLIC",
+      "service": "listInstruments",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/market/{instrument}/{view}",
+      "owner": "MarketRoutes",
+      "auth": "PUBLIC",
+      "service": "marketReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/market/orders/my",
+      "owner": "MarketRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listOrders",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/market/orders",
+      "owner": "MarketRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "submitOrder",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/market/orders/{id}",
+      "owner": "MarketRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "cancelOrder",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/finance/me",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getFinance",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/finance/{view}",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "financeReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/cities",
+      "owner": "InstitutionRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listCities",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cities",
+      "owner": "InstitutionRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "createCity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cities/{id}/budget",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "setCityBudget",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cities/{id}/residency",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "joinCity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cities/{id}/residency",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "leaveCity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/cities/{id}/tax-charter",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "setCityTaxCharter",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/corporations",
+      "owner": "InstitutionRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listCorporations",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations",
+      "owner": "InstitutionRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "createCorporation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations/with-capital",
+      "owner": "InstitutionRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "createCorporationWithCapital",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations/{id}/admission-policy",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "setCorporationAdmissionPolicy",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations/{id}/membership",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "joinCorporation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/corporations/{id}/membership",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "leaveCorporation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations/{id}/cities/{cityId}",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "adoptCity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations/{id}/contributions",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "contributeCorporation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations/{id}/tax-charter",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "setCorporationTaxCharter",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/corporations/{id}/treasury/spend",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "spendCorporationTreasury",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/institutions/{id}/budget/{view}",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_MEMBER",
+      "service": "budgetReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/proposals",
+      "owner": "GovernanceRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "createProposal",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/rules",
+      "owner": "GovernanceRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "amendRules",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/{view}",
+      "owner": "GovernanceRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "governanceReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/{view}",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "researchReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/{action}",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "researchService",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/research/buildings",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listBuildingResearch",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/buildings",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "startBuildingResearch",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/research/contribute",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "contributeResearch",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/communities",
+      "owner": "CommunityRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listCommunities",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/communities",
+      "owner": "CommunityRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "createCommunity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/communities/{id}",
+      "owner": "CommunityRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "communityReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/communities/{id}",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "updateCommunity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/communities/{id}",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "disbandCommunity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/communities/{id}/members",
+      "owner": "CommunityRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "listCommunityMembers",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/communities/{id}/members",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "addCommunityMember",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/communities/{id}/members",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "removeCommunityMember",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/communities/{id}/members/{humanId}/role",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "setCommunityMemberRole",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/communities/{id}/requests",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "listCommunityRequests",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/communities/{id}/requests/{requestId}",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "decideCommunityRequest",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/world",
+      "owner": "SystemRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "worldSnapshot",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/world/activity",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "worldActivity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/technology",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "technologyCatalog",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/technology/projects",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "createResearchProject",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/technology/me/fund",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "fundResearchProject",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/life/{view}",
+      "owner": "HouseRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "lifeReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/life/successor",
+      "owner": "HouseRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "registerSuccessor",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/economy/{view}",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "economyReadModel",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/telemetry/error",
+      "owner": "SystemRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "logClientError",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/comm/channels",
+      "owner": "CommunityRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listChannels",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/comm/messages",
+      "owner": "CommunityRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listMessages",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/comm/messages",
+      "owner": "CommunityRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "sendMessage",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/comm/direct",
+      "owner": "CommunityRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "openDirectConversation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/comm/metrics",
+      "owner": "CommunityRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "communicationsMetrics",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/proposals/{id}/vote",
+      "owner": "GovernanceRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "castBallot",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/finance/recover",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "recoverFinance",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/finance/bank/deposits",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listBankDeposits",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/finance/bank/deposit",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "createBankDeposit",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/finance/bank/withdraw",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "withdrawBankDeposit",
+      "status": "ACTIVE"
+    }
+  ]
+}

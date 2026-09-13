@@ -124,7 +124,7 @@ export async function recordDailyNetWorthSnapshot(
   );
   const liquid = accRes.rows.length > 0 ? Number(accRes.rows[0].balance) : 0;
 
-  // 2. Fetch commodity balances & approximate valuation
+  // 2. Fetch commodity balances and value only against completed Spot prices.
   const resBalances = await tx.query(
     `SELECT asset.code AS resource, a.balance_units::TEXT AS amount
        FROM humans h JOIN houses house ON house.id = h.house_id
@@ -134,16 +134,33 @@ export async function recordDailyNetWorthSnapshot(
       WHERE h.id = $1 AND asset.asset_kind = 'RESOURCE' AND a.account_type = 'INVENTORY'`,
     [humanId]
   );
-  const priceMap: Record<string, number> = { energy: 30, material: 45, compute: 60, food: 20 };
+  const pricesRes = await tx.query(
+    `SELECT LOWER(i.symbol) AS resource, s.last_clearing_price_units::TEXT AS price_units
+       FROM market_instruments i
+       JOIN market_instrument_state s ON s.instrument_id = i.id
+      WHERE LOWER(i.status) = 'active' AND s.last_clearing_price_units IS NOT NULL`,
+  );
+  const priceMap = new Map<string, number>(
+    pricesRes.rows.map((row) => [String(row.resource), Number(row.price_units) / 100]),
+  );
   let commodityVal = 0;
   for (const r of resBalances.rows) {
-    const p = priceMap[r.resource] || 25;
-    commodityVal += Number(r.amount) * p;
+    const price = priceMap.get(String(r.resource).toLowerCase());
+    if (price != null) commodityVal += Number(r.amount) * price;
   }
 
-  // 3. Approximate equity & real estate
-  const equityVal = 25000.0;
-  const realEstateVal = 15000.0;
+  // 3. Equity is not a supported V2 asset class yet. Value owned buildings
+  // from their authoritative catalog construction cost instead of a fixture.
+  const equityVal = 0;
+  const realEstateRes = await tx.query(
+    `SELECT COALESCE(SUM(c.construction_credit_units), 0)::TEXT AS value
+       FROM buildings b
+       JOIN building_catalog c ON c.id = b.catalog_id
+      WHERE b.owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = (SELECT house_id FROM humans WHERE id = $1))
+        AND b.status <> 'DESTROYED'`,
+    [humanId],
+  );
+  const realEstateVal = Number(realEstateRes.rows[0]?.value ?? 0);
   const total = liquid + commodityVal + equityVal + realEstateVal;
 
   const id = `NW-${humanId}-${gameDay}-${correlationId}`;

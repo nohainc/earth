@@ -208,9 +208,9 @@ export async function getCommunicationsMetrics(
   const channelsRes = await repository.query<{ count: number }>(
       `SELECT COUNT(*)::int AS count FROM comm_channels WHERE scope = 'global'`,
       []
-    ).catch(() => ({ rows: [{ count: 1 }] }));
+    );
 
   return {
-    activeChannelsCount: channelsRes.rows[0]?.count ?? 1,
+    activeChannelsCount: channelsRes.rows[0]?.count ?? 0,
   };
 }

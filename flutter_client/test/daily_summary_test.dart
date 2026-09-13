@@ -4,12 +4,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:earth_client/core/api/earth_api.dart';
 import 'package:earth_client/core/api/earth_api_transport.dart';
-import 'package:earth_client/core/models/daily_briefing.dart';
+import 'package:earth_client/core/models/daily_summary.dart';
 import 'package:earth_client/core/nano_markup_helper.dart';
-import 'package:earth_client/features/command_center/daily_briefing_dialog.dart';
+import 'package:earth_client/features/command_center/daily_summary_dialog.dart';
 
 void main() {
-  test('DailyBriefingReport parses fromJson with all nested fields', () {
+  test('DailySummaryReport parses fromJson with all nested fields', () {
     final json = {
       'gameDay': 185,
       'daysElapsed': 1,
@@ -20,7 +20,7 @@ void main() {
         'delta': 5600.0,
         'deltaPct': 3.67,
       },
-      'cashflow': {
+      'financial': {
         'totalIncome': 14250.0,
         'totalExpenses': 4820.0,
         'netProfit': 9430.0,
@@ -39,26 +39,26 @@ void main() {
           'volume24h': 14200,
         },
       ],
-      'businessSummary': {
+      'buildings': {
         'activeBusinesses': 2,
         'totalDailyOutput': 3840,
         'activeMachines': 4,
         'degradedMachinesCount': 1,
         'pendingContractsCount': 2,
       },
-      'civicSummary': {
+      'governance': {
         'activeProposals': 3,
         'passedProposals24h': 1,
         'cityResidency': 'New Geneva',
         'cityTaxRatePct': 4.5,
         'recentCivicEvents': ['Passed: Energy Infrastructure Subsidy'],
       },
-      'unreadAlerts': {
+      'alerts': {
         'unreadNotifications': 2,
         'unreadComms': 1,
         'criticalAlertsCount': 0,
       },
-      'recommendedDirectives': [
+      'highlights': [
         {
           'id': 'rec_energy',
           'title': 'Capitalize on Energy Rally',
@@ -70,19 +70,19 @@ void main() {
       ],
     };
 
-    final report = DailyBriefingReport.fromJson(json);
+    final report = DailySummaryReport.fromJson(json);
     expect(report.gameDay, 185);
     expect(report.netWealthDelta.delta, 5600.0);
-    expect(report.cashflow.netProfit, 9430.0);
+    expect(report.financial.netProfit, 9430.0);
     expect(report.marketMovements.length, 1);
-    expect(report.businessSummary.activeBusinesses, 2);
-    expect(report.civicSummary.cityResidency, 'New Geneva');
-    expect(report.unreadAlerts.unreadNotifications, 2);
-    expect(report.recommendedDirectives.length, 1);
+    expect(report.buildings.activeBusinesses, 2);
+    expect(report.governance.cityResidency, 'New Geneva');
+    expect(report.alerts.unreadNotifications, 2);
+    expect(report.highlights.length, 1);
   });
 
   testWidgets(
-      'DailyBriefingDialog renders a unified briefing and triggers action',
+      'DailySummaryDialog renders a unified briefing and triggers action',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -91,7 +91,7 @@ void main() {
     String? navigatedSection;
 
     final mockClient = MockClient((request) async {
-      if (request.url.path == '/api/player/daily-briefing') {
+      if (request.url.path == '/api/house/daily-summary') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
@@ -104,7 +104,7 @@ void main() {
               'delta': 5600.0,
               'deltaPct': 3.67,
             },
-            'cashflow': {
+            'financial': {
               'totalIncome': 14250.0,
               'totalExpenses': 4820.0,
               'netProfit': 9430.0,
@@ -131,26 +131,26 @@ void main() {
                 'volume24h': 9800,
               },
             ],
-            'businessSummary': {
+            'buildings': {
               'activeBusinesses': 2,
               'totalDailyOutput': 3840,
               'activeMachines': 4,
               'degradedMachinesCount': 1,
               'pendingContractsCount': 2,
             },
-            'civicSummary': {
+            'governance': {
               'activeProposals': 3,
               'passedProposals24h': 1,
               'cityResidency': 'New Geneva',
               'cityTaxRatePct': 4.5,
               'recentCivicEvents': ['Passed: Energy Infrastructure Subsidy'],
             },
-            'unreadAlerts': {
+            'alerts': {
               'unreadNotifications': 2,
               'unreadComms': 1,
               'criticalAlertsCount': 0,
             },
-            'recommendedDirectives': [
+            'highlights': [
               {
                 'id': 'rec_energy',
                 'title': 'Capitalize on Energy Rally',
@@ -177,7 +177,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: DailyBriefingDialog(
+          body: DailySummaryDialog(
             api: api,
             onNavigate: (section) => navigatedSection = section,
           ),

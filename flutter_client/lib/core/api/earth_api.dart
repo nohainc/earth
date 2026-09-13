@@ -14,7 +14,7 @@ part 'earth_api_personal_finance.dart';
 part 'earth_api_comm.dart';
 part 'earth_api_house.dart';
 part 'earth_api_net_worth.dart';
-part 'earth_api_briefing.dart';
+part 'earth_api_daily_summary.dart';
 part 'earth_api_real_estate.dart';
 
 String newClientCorrelationId(String prefix) =>

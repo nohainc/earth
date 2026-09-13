@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/earth_state.dart';
-import '../../core/models/daily_briefing.dart';
+import '../../core/models/daily_summary.dart';
 import '../../core/models/decision_queue_item.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
@@ -29,7 +29,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
 
   @override
   Widget build(BuildContext context) {
-    final briefing = DailyBriefingReport.synthesizeFromState(widget.state);
+    final rawClock = widget.state.json['clock'];
+    final currentDay = rawClock is Map ? int.tryParse('${rawClock['day']}') ?? 0 : 0;
+    final briefing = DailySummaryReport.empty(gameDay: currentDay);
     final decisionItems = DecisionQueueItem.synthesizeFromState(widget.state);
     final opportunities = widget.state.opportunities;
 
@@ -161,7 +163,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // ==========================================================================
   // 2. WHAT CHANGED SINCE MY LAST VISIT
   // ==========================================================================
-  Widget _buildWhatChangedCard(BuildContext context, DailyBriefingReport briefing) {
+  Widget _buildWhatChangedCard(BuildContext context, DailySummaryReport briefing) {
     final netDelta = briefing.netWealthDelta;
     final isPositiveDelta = netDelta.delta >= 0;
     final sign = isPositiveDelta ? '+' : '';
@@ -216,7 +218,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR ($sign${netDelta.deltaPct.toStringAsFixed(1)}%) · Cashflow Net: +${formatWholeNumber(briefing.cashflow.netProfit)} CR/day',
+                      'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR ($sign${netDelta.deltaPct.toStringAsFixed(1)}%) · Cashflow Net: +${formatWholeNumber(briefing.financial.netProfit)} CR/day',
                       style: context.widgetValueStyle.copyWith(
                         color: isPositiveDelta ? context.successColor : context.errorColor,
                       ),
@@ -234,18 +236,18 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (briefing.businessSummary.activeBuildings > 0)
+              if (briefing.buildings.activeBuildings > 0)
                 _headlineChip(
                   context,
                   Icons.domain_outlined,
-                  '${briefing.businessSummary.activeBuildings} building${briefing.businessSummary.activeBuildings == 1 ? '' : 's'} operating',
+                  '${briefing.buildings.activeBuildings} building${briefing.buildings.activeBuildings == 1 ? '' : 's'} operating',
                   context.successColor,
                 ),
-              if (briefing.civicSummary.recentCivicEvents.isNotEmpty)
+              if (briefing.governance.recentCivicEvents.isNotEmpty)
                 _headlineChip(
                   context,
                   Icons.gavel,
-                  briefing.civicSummary.recentCivicEvents.first,
+                  briefing.governance.recentCivicEvents.first,
                   context.warningColor,
                 ),
             ],
@@ -260,7 +262,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 child: _microStat(
                   context,
                   'OVERNIGHT REVENUE',
-                  '+${formatWholeNumber(briefing.cashflow.totalIncome)} CR',
+                  '+${formatWholeNumber(briefing.financial.totalIncome)} CR',
                   'Dividends & Market Sales',
                   context.successColor,
                 ),
@@ -270,7 +272,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 child: _microStat(
                   context,
                   'OVERNIGHT EXPENSES',
-                  '-${formatWholeNumber(briefing.cashflow.totalExpenses)} CR',
+                  '-${formatWholeNumber(briefing.financial.totalExpenses)} CR',
                   'Maintenance & Taxes',
                   context.warningColor,
                 ),
@@ -280,8 +282,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 child: _microStat(
                   context,
                   'ACTIVE CITIZEN RESIDENCY',
-                  briefing.civicSummary.cityResidency,
-                  'Tax Rate: ${briefing.civicSummary.cityTaxRatePct.toStringAsFixed(1)}%',
+                  briefing.governance.cityResidency,
+                  'Tax Rate: ${briefing.governance.cityTaxRatePct.toStringAsFixed(1)}%',
                   context.primaryColor,
                 ),
               ),

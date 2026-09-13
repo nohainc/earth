@@ -18,7 +18,7 @@ void main() {
         configuredBase: 'https://api.example.test',
         pageUri: Uri.parse('https://earthuc.com/app'),
       ).toString(),
-      'wss://api.example.test/edge/events',
+      'wss://api.example.test/api/realtime',
     );
   });
 
@@ -28,7 +28,7 @@ void main() {
         configuredBase: '',
         pageUri: Uri.parse('https://earthuc.com/app'),
       ).toString(),
-      'wss://earthuc.com/edge/events',
+      'wss://earthuc.com/api/realtime',
     );
   });
 

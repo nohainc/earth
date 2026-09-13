@@ -36,7 +36,7 @@ From the repository's GitHub Actions tab, run one of these workflows with
 - **Deploy EARTH web app** (`deploy-web.yml`) — builds and deploys only the
   Flutter app Worker for `/app`.
 - **Deploy EARTH API** — validates and deploys only the API Worker for `/api/*`,
-  `/edge/*`, `/health`, and `/ready`.
+  `/health`, and `/ready`.
 - **Deploy EARTH landing and static files** — copies and deploys only the
   landing/static Worker for the public catch-all route.
 
@@ -55,7 +55,7 @@ account before the first production run.
 
 ## Cloudflare target
 
-- Cloudflare Workers Static Assets: unified Flutter client, edge API, and static routing
+- Cloudflare Workers Static Assets: unified Flutter client and static routing
 - Hyperdrive: connection acceleration to the managed PostgreSQL database
 - Durable Objects: serialized market batches, governance coordinators, and live sessions
 - Queues: future retryable notifications, statistics, aging, and settlement side effects

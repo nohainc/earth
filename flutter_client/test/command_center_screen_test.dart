@@ -9,7 +9,7 @@ void main() {
         configuredBase: 'https://earthuc.com',
         pageUri: Uri.parse('https://earthuc.com/app'),
       ).toString(),
-      'wss://earthuc.com/edge/events',
+      'wss://earthuc.com/api/realtime',
     );
 
     expect(
@@ -17,7 +17,7 @@ void main() {
         configuredBase: '',
         pageUri: Uri.parse('http://localhost:8787/app'),
       ).toString(),
-      'ws://localhost:8787/edge/events',
+      'ws://localhost:8787/api/realtime',
     );
 
     expect(

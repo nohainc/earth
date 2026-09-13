@@ -1,28 +1,28 @@
 import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
-import '../../core/models/daily_briefing.dart';
+import '../../core/models/daily_summary.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
 
-void showDailyBriefingDialog(
+void showDailySummaryDialog(
   BuildContext context, {
   required EarthApi api,
   required void Function(String section) onNavigate,
 }) {
   showDialog(
     context: context,
-    builder: (context) => DailyBriefingDialog(api: api, onNavigate: onNavigate),
+    builder: (context) => DailySummaryDialog(api: api, onNavigate: onNavigate),
   );
 }
 
-class DailyBriefingDialog extends StatefulWidget {
+class DailySummaryDialog extends StatefulWidget {
   final EarthApi api;
   final void Function(String section) onNavigate;
   final bool isPageMode;
 
-  const DailyBriefingDialog({
+  const DailySummaryDialog({
     super.key,
     required this.api,
     required this.onNavigate,
@@ -30,13 +30,13 @@ class DailyBriefingDialog extends StatefulWidget {
   });
 
   @override
-  State<DailyBriefingDialog> createState() => _DailyBriefingDialogState();
+  State<DailySummaryDialog> createState() => _DailySummaryDialogState();
 }
 
-class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
+class _DailySummaryDialogState extends State<DailySummaryDialog> {
   bool _loading = true;
   String? _error;
-  DailyBriefingReport? _report;
+  DailySummaryReport? _report;
 
   @override
   void initState() {
@@ -51,12 +51,12 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     });
 
     try {
-      final res = await widget.api.getDailyBriefing();
+      final res = await widget.api.getDailySummary();
       final isOk = res['ok'] == true || res['ok'] == 'true';
       if (isOk) {
         if (mounted) {
           setState(() {
-            _report = DailyBriefingReport.fromJson(Map<String, dynamic>.from(res));
+            _report = DailySummaryReport.fromJson(Map<String, dynamic>.from(res));
             _loading = false;
           });
           EarthAudioEngine.instance.playChime();
@@ -135,7 +135,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
         : _buildAllBriefingContent(_report!);
   }
 
-  Widget _buildHeroDeltaBanner(DailyBriefingReport r) {
+  Widget _buildHeroDeltaBanner(DailySummaryReport r) {
     final delta = r.netWealthDelta.delta;
     final isPos = delta >= 0;
 
@@ -157,18 +157,18 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
         ),
         EarthMetricTile(
           label: 'NET CASHFLOW',
-          value: '${r.cashflow.netProfit >= 0 ? '+' : ''}${r.cashflow.netProfit.toStringAsFixed(2)} CR/day',
-          subtitle: r.cashflow.netProfit >= 0 ? 'Operating surplus' : 'Operating deficit',
+          value: '${r.financial.netProfit >= 0 ? '+' : ''}${r.financial.netProfit.toStringAsFixed(2)} CR/day',
+          subtitle: r.financial.netProfit >= 0 ? 'Operating surplus' : 'Operating deficit',
           icon: Icons.account_balance_wallet_outlined,
-          accentColor: r.cashflow.netProfit >= 0 ? context.successColor : context.warningColor,
+          accentColor: r.financial.netProfit >= 0 ? context.successColor : context.warningColor,
         ),
       ],
     );
   }
 
-  Widget _buildAllBriefingContent(DailyBriefingReport r) {
+  Widget _buildAllBriefingContent(DailySummaryReport r) {
     final netWealth = r.netWealthDelta;
-    final cashflow = r.cashflow;
+    final financial = r.financial;
     final isPosWealth = netWealth.delta >= 0;
 
     final cockpit = EarthPageCockpit(
@@ -192,15 +192,15 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
         CockpitMetric(
           label: 'Net Cashflow',
           value:
-              '${cashflow.netProfit >= 0 ? '+' : ''}${formatWholeNumber(cashflow.netProfit)}',
+              '${financial.netProfit >= 0 ? '+' : ''}${formatWholeNumber(financial.netProfit)}',
           icon: Icons.account_balance_wallet_outlined,
-          color: cashflow.netProfit >= 0 ? context.successColor : context.warningColor,
+          color: financial.netProfit >= 0 ? context.successColor : context.warningColor,
         ),
         CockpitMetric(
           label: 'Directives',
-          value: '${r.recommendedDirectives.length}',
+          value: '${r.highlights.length}',
           icon: Icons.bolt_outlined,
-          color: r.recommendedDirectives.isNotEmpty
+          color: r.highlights.isNotEmpty
               ? context.secondaryColor
               : context.mutedColor,
         ),
@@ -262,24 +262,24 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     );
   }
 
-  Widget _buildRecentChangesContent(DailyBriefingReport r) {
+  Widget _buildRecentChangesContent(DailySummaryReport r) {
     final changes = <(String, String, IconData, Color)>[
       (
         'Financial result',
-        '${r.cashflow.netProfit >= 0 ? '+' : ''}${formatWholeNumber(r.cashflow.netProfit)} CR net cashflow',
-        r.cashflow.netProfit >= 0 ? Icons.trending_up : Icons.trending_down,
-        r.cashflow.netProfit >= 0 ? context.successColor : context.errorColor,
+        '${r.financial.netProfit >= 0 ? '+' : ''}${formatWholeNumber(r.financial.netProfit)} CR net financial',
+        r.financial.netProfit >= 0 ? Icons.trending_up : Icons.trending_down,
+        r.financial.netProfit >= 0 ? context.successColor : context.errorColor,
       ),
       (
         'Operations',
-        '${r.businessSummary.activeBusinesses} businesses · ${r.businessSummary.activeBuildings} buildings',
+        '${r.buildings.activeBusinesses} businesses · ${r.buildings.activeBuildings} buildings',
         Icons.business_center_outlined,
         context.primaryColor,
       ),
-      if (r.civicSummary.recentCivicEvents.isNotEmpty)
+      if (r.governance.recentCivicEvents.isNotEmpty)
         (
           'City and civic life',
-          r.civicSummary.recentCivicEvents.first,
+          r.governance.recentCivicEvents.first,
           Icons.location_city_outlined,
           context.secondaryColor,
         ),
@@ -300,8 +300,8 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     );
   }
 
-  Widget _buildDirectivesContent(DailyBriefingReport r) {
-    if (r.recommendedDirectives.isEmpty) {
+  Widget _buildDirectivesContent(DailySummaryReport r) {
+    if (r.highlights.isEmpty) {
       return const EarthEmptyState(
         message: 'No directives require attention.',
         icon: Icons.check_circle_outline,
@@ -309,9 +309,9 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     }
 
     return EarthDataList(
-      children: r.recommendedDirectives.indexed.map((indexed) {
+      children: r.highlights.indexed.map((indexed) {
         final d = indexed.$2;
-        final isLast = indexed.$1 == r.recommendedDirectives.length - 1;
+        final isLast = indexed.$1 == r.highlights.length - 1;
 
         EarthBadgeVariant badgeVariant = EarthBadgeVariant.primary;
         if (d.urgency == 'high') {
@@ -343,24 +343,24 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     );
   }
 
-  Widget _buildIndustryContent(DailyBriefingReport r) {
+  Widget _buildIndustryContent(DailySummaryReport r) {
     return EarthMetricGrid(
       metrics: [
         EarthMetricTile(
           label: 'ACTIVE BUSINESSES',
-          value: '${r.businessSummary.activeBusinesses}',
+          value: '${r.buildings.activeBusinesses}',
           icon: Icons.storefront_outlined,
           accentColor: context.primaryColor,
         ),
         EarthMetricTile(
           label: 'DAILY OUTPUT',
-          value: '${r.businessSummary.totalDailyOutput}',
+          value: '${r.buildings.totalDailyOutput}',
           icon: Icons.precision_manufacturing_outlined,
           accentColor: context.successColor,
         ),
         EarthMetricTile(
           label: 'ACTIVE BUILDINGS',
-          value: '${r.businessSummary.activeBuildings}',
+          value: '${r.buildings.activeBuildings}',
           icon: Icons.domain_outlined,
           accentColor: context.primaryColor,
         ),
@@ -368,8 +368,8 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     );
   }
 
-  Widget _buildCivicContent(DailyBriefingReport r) {
-    final c = r.civicSummary;
+  Widget _buildCivicContent(DailySummaryReport r) {
+    final c = r.governance;
 
     return Container(
       padding: EdgeInsets.all(context.cardPadding),

@@ -6,7 +6,6 @@ import {
   publicSpending as publicSpendingPostgres,
 } from './finance-postgres.ts';
 import { getNetWorthHistory } from './net-worth-postgres.ts';
-import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 
@@ -142,7 +141,9 @@ export async function handleFinanceRoutes(
         account: account.rows[0] ?? null,
         state: stateRow,
         liquidatableAssets: { buildings: buildings.rows, businesses: [] },
-        protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100) },
+        protectedMinimum: {
+          credits: stateRow.protected_credits == null ? null : Number(stateRow.protected_credits),
+        },
         lifeMaintenance: { lastSettlement: latestMaintenance.rows[0] ?? null, unpaidTotal: Number(arrears.rows[0]?.total ?? 0), cityId: resident?.city_id ?? null },
         taxes: { rules: taxRules.rows, obligations: taxObligations.rows },
         bank: { deposits: bankDeposits.rows },
@@ -212,17 +213,6 @@ export async function handleFinanceRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch net-worth history';
-      return Response.json({ ok: false, error: message }, { status: 400 });
-    }
-  }
-
-  if (url.pathname === '/api/player/daily-briefing' && request.method === 'GET') {
-    try {
-      const result = await withRepository(env, (repository) => getDailyBriefing(repository, viewer.id));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to generate daily briefing';
       return Response.json({ ok: false, error: message }, { status: 400 });
     }
   }

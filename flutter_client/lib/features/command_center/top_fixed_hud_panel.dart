@@ -12,7 +12,7 @@ import '../../core/onboarding_controller.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../onboarding/onboarding_welcome_dialog.dart';
-import 'daily_briefing_dialog.dart';
+import 'daily_summary_dialog.dart';
 import 'theme_customizer_dialog.dart';
 
 class YearAndDay {
@@ -435,12 +435,12 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   Widget _buildGameClockPill(BuildContext context, YearAndDay clockRes,
       String timeStr, bool isMobile) {
     return Tooltip(
-      message: 'Game Clock (1s real = 1m game) · Click for Daily Briefing',
+      message: 'Game Clock (1s real = 1m game) · Click for Daily Summary',
       waitDuration: const Duration(milliseconds: 350),
       child: InkWell(
         onTap: () {
           EarthAudioEngine.instance.playClick();
-          showDailyBriefingDialog(
+          showDailySummaryDialog(
             context,
             api: const EarthApi(),
             onNavigate: widget.onNavigate ?? (_) {},
@@ -688,7 +688,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         .where((n) => !isCorpOrCityNotification(n))
         .toList();
 
-    final unreadAlerts = validAlerts.where((n) {
+    final alerts = validAlerts.where((n) {
       final readAt = n['read_at'] ?? n['readAt'];
       if (readAt != null && readAt.toString().isNotEmpty && readAt.toString() != 'null') return false;
       final read = n['read'];
@@ -699,8 +699,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     }).toList();
 
     // Show up to 5 most recent alerts (if no unread, show recent 5 general alerts)
-    final previewAlerts = unreadAlerts.isNotEmpty
-        ? unreadAlerts.take(5).toList()
+    final previewAlerts = alerts.isNotEmpty
+        ? alerts.take(5).toList()
         : validAlerts.take(5).toList();
 
     return PopupMenuButton<String>(
@@ -795,7 +795,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
             final body = (alert['body'] ?? alert['details'] ?? '').toString();
             final rawDate = alert['created_at'] ?? alert['createdAt'] ?? alert['timestamp'];
             final gameTime = rawDate != null ? formatRealToGameDateTime(rawDate) : null;
-            final isItemUnread = unreadAlerts.contains(alert);
+            final isItemUnread = alerts.contains(alert);
 
             items.add(
               PopupMenuItem<String>(

@@ -67,7 +67,6 @@ export function verifyDeploymentConfig(options = {}) {
       rootAndLanding: false,
       appShellAndAssets: false,
       apiSurface: false,
-      edgeEvents: false,
       healthChecks: false,
     },
   };
@@ -193,11 +192,6 @@ export function verifyDeploymentConfig(options = {}) {
 
   // Check /api/*
   report.coverage.apiSurface = allPatterns.some((p) => p.includes('/api/*'));
-
-  // Check /edge/* (events stream)
-  report.coverage.edgeEvents = allPatterns.some(
-    (p) => p.includes('/edge/*') || p.includes('/edge/events') || p.includes('/api/*')
-  );
 
   // Check health checks (/health, /ready, /api/health)
   report.coverage.healthChecks = allPatterns.some(

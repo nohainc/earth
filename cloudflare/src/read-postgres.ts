@@ -389,7 +389,9 @@ export async function listMarketPriceHistory(repository: PostgresRepository, pro
   );
   return {
     product,
-    currentPrice: Number(current.rows[0]?.price_units ?? 1000) / 100,
+    currentPrice: current.rows[0]?.price_units == null
+      ? null
+      : Number(current.rows[0].price_units) / 100,
     supply: Number(current.rows[0]?.supply_units ?? 0) / 1_000_000,
     demand: Number(current.rows[0]?.demand_units ?? 0) / 1_000_000,
     history: history.rows.reverse().map((row) => ({ gameDay: Number(row.game_day), price: Number(row.price_units) / 100 })),

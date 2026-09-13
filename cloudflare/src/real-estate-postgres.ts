@@ -24,7 +24,6 @@ function constructionModifier(
       ?? 0,
   );
 }
-
 async function resolveConstructionTechnology(
   tx: PostgresRepository,
   ownerId: string,
@@ -47,7 +46,7 @@ async function resolveConstructionTechnology(
 }
 export interface DistrictZoningSummary {
   cityId: string;
-  cityName: string;
+  cityName: string | null;
   population: number;
   districtModulesCount: number;
   maxCitizens: number;
@@ -81,13 +80,13 @@ export async function getCityDistrictZoning(
     [cityId],
   );
   const city = cityRes.rows[0];
-  const cityName = city?.name ?? 'Metropolitan District';
+  const cityName = city?.name ?? null;
 
   const popRes = await repository.query<{ count: string }>(
     "SELECT COUNT(*)::integer AS count FROM house_affiliations WHERE city_id = $1 AND status = 'ACTIVE'",
     [cityId],
   );
-  const population = Number(popRes.rows[0]?.count ?? 1);
+  const population = Number(popRes.rows[0]?.count ?? 0);
 
   const districtEffects = await repository.query<{ district_count: string; citizen_capacity: string; total_slots: string; civic_reserved_slots: string }>(
     `SELECT COUNT(*)::text FILTER (WHERE b.catalog_id LIKE 'URBAN-DISTRICT%') AS district_count,
@@ -125,7 +124,7 @@ export async function getCityDistrictZoning(
   let usedPrivateSlots = 0;
   let usedCivicSlots = 0;
   const personalOwnerSlots = Number(personalEstateRes.rows[0]?.slots ?? 0);
-  let personalEstateTier = Math.max(1, Math.ceil(personalOwnerSlots / 10));
+  const personalEstateTier = personalOwnerSlots > 0 ? Math.ceil(personalOwnerSlots / 10) : undefined;
   let personalUsedSlots = 0;
 
   for (const row of bldRes.rows) {
@@ -138,7 +137,7 @@ export async function getCityDistrictZoning(
   const availablePrivateSlots = Math.max(0, maxPrivatePermitted - usedPrivateSlots);
   const availableCivicSlots = Math.max(0, totalSlots - usedCivicSlots - usedPrivateSlots);
 
-  const personalMaxSlots = personalOwnerSlots || personalEstateTier * 10;
+  const personalMaxSlots = personalOwnerSlots;
   const personalAvailableSlots = Math.max(0, personalMaxSlots - personalUsedSlots);
 
   return {
@@ -172,262 +171,6 @@ export async function purchasePrivatePlotAndConstruct(
   },
 ): Promise<Record<string, unknown>> {
   return purchaseBaselineBuilding(repository, input);
-  /* Legacy implementation retained below only until its remaining callers are
-     removed; the baseline-compatible path above is the sole runtime path. */
-  /* istanbul ignore next */
-  return repository.transaction(async (tx) => {
-    const prior = await tx.query<{ reason_id: string }>(
-      "SELECT source_id AS reason_id FROM economic_transactions WHERE transaction_kind = 'building_purchase' AND correlation_id = $1",
-      [input.correlationId],
-    );
-    if (prior.rows[0]) {
-      const existing = await tx.query('SELECT * FROM buildings WHERE id = $1', [prior.rows[0].reason_id]);
-      return { ok: true, alreadyProcessed: true, building: existing.rows[0], correlationId: input.correlationId };
-    }
-
-    const catalogRow = (await tx.query<any>(
-      `SELECT id, building_type, name, tier, ownership_class, slot_footprint,
-              cost_credits, cost_materials, output_energy, output_food,
-              output_materials, output_components, output_compute, upkeep_energy,
-              upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_credits,
-              construction_days, construction_minutes
-         FROM building_catalog WHERE id = $1 AND tier = 1 AND is_active = true`,
-      [`${input.buildingType}-t1`],
-    )).rows[0];
-    if (!catalogRow) throw new Error('Unknown or inactive building blueprint');
-    const catalogNumber = (value: unknown): number => Number(value ?? 0);
-    const output = [
-      ['energy', catalogNumber(catalogRow.output_energy)],
-      ['food', catalogNumber(catalogRow.output_food)],
-      ['material', catalogNumber(catalogRow.output_materials)],
-      ['components', catalogNumber(catalogRow.output_components)],
-      ['compute', catalogNumber(catalogRow.output_compute)],
-    ].find(([, amount]) => amount > 0);
-    const spec = {
-      type: String(catalogRow.building_type),
-      name: String(catalogRow.name),
-      tier: catalogNumber(catalogRow.tier),
-      defaultOwnershipClass: String(catalogRow.ownership_class),
-      slotFootprint: catalogNumber(catalogRow.slot_footprint),
-      baseCreditCost: catalogNumber(catalogRow.cost_credits),
-      baseMaterialCost: catalogNumber(catalogRow.cost_materials),
-      dailyEnergyUpkeep: catalogNumber(catalogRow.upkeep_energy),
-      dailyFoodUpkeep: catalogNumber(catalogRow.upkeep_food),
-      dailyMaterialsUpkeep: catalogNumber(catalogRow.upkeep_materials),
-      dailyComponentsUpkeep: catalogNumber(catalogRow.upkeep_components),
-      dailyComputeUpkeep: catalogNumber(catalogRow.upkeep_compute),
-      dailyStaffingCredits: catalogNumber(catalogRow.operating_credits),
-      resourceOutputType: output?.[0] ?? null,
-      resourceOutputAmount: output?.[1] ?? 0,
-    };
-    if (spec.defaultOwnershipClass === 'civic') {
-      throw new Error('Civic utility buildings must be procured via Democratic City Referendum');
-    }
-
-    const membership = await tx.query<{ city_id: string | null; corporation_id: string | null }>(
-      'SELECT ha.city_id, ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = \'ACTIVE\' LIMIT 1',
-      [input.ownerId],
-    );
-    const isPrivateEstate = input.buildingType === 'private-estate-plot';
-    const citizenCityId = isPrivateEstate
-      ? null
-      : (membership.rows[0]?.city_id ?? input.cityId);
-
-    // Check District Zoning Capacity (both city-wide and personal estate vertical quota)
-    const zoning = citizenCityId
-      ? await getCityDistrictZoning(tx, citizenCityId, input.ownerId)
-      : null;
-    if (zoning && zoning.availablePrivateSlots < spec.slotFootprint) {
-      throw new Error(
-        `City district capacity exceeded. This building requires ${spec.slotFootprint} slots, but only ${zoning.availablePrivateSlots} private slots are available in ${zoning.cityName}.`,
-      );
-    }
-    if (zoning && spec.slotFootprint > 0 && (zoning.personalAvailableSlots ?? 10) < spec.slotFootprint) {
-      throw new Error(
-        `Personal estate capacity exceeded. This building requires ${spec.slotFootprint} slots, but you only have ${zoning.personalAvailableSlots ?? 0} slots remaining on your current Estate Deck (Tier ${zoning.personalEstateTier ?? 1}). Upgrade your Estate to unlock more vertical space.`,
-      );
-    }
-
-    const world = await tx.query<{ genesis_at: string; simulated_day_offset: number }>(
-      "SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'",
-    );
-    const authTime = getAuthoritativeGameTime({
-      genesisAt: world.rows[0]?.genesis_at,
-      simulatedDayOffset: world.rows[0]?.simulated_day_offset,
-    });
-    const day = authTime.gameDay;
-    const technology = await resolveConstructionTechnology(tx, input.ownerId, day);
-    const techModifier = (effectType: string, targetKey: string): number =>
-      constructionModifier(technology.modifiers, effectType, targetKey);
-    const constructionTimeMultiplier = Math.max(0, 10000 + techModifier('CONSTRUCTION_TIME', 'ALL')) / 10000;
-    const constructionCostMultiplier = (asset: string): number =>
-      Math.max(0, 10000 + techModifier('CONSTRUCTION_RESOURCE_COST', asset)) / 10000;
-    const creditCostUnits = BigInt(Math.max(0, Math.round(spec.baseCreditCost * 100 * constructionCostMultiplier('CREDIT'))));
-    const materialCostUnits = BigInt(Math.max(0, Math.round(spec.baseMaterialCost * 1_000_000 * constructionCostMultiplier('MATERIAL'))));
-    const componentsCostUnits = BigInt(Math.max(0, Math.round(Number(catalogRow.cost_components ?? 0) * 1_000_000 * constructionCostMultiplier('COMPONENTS'))));
-    const computeCostUnits = BigInt(Math.max(0, Math.round(Number(catalogRow.cost_compute ?? 0) * 1_000_000 * constructionCostMultiplier('COMPUTE'))));
-
-    // Check Credits
-    const creditCostCents = creditCostUnits;
-    const account = await tx.query<{ account_id: string; balance: string }>(
-      "SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' FOR UPDATE",
-      [input.ownerId],
-    );
-    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
-      throw new Error(`Insufficient Credits for plot and construction (Requires ${spec.baseCreditCost} CRD)`);
-    }
-
-    // Check Materials
-    const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-
-    // Transfer Credits (60% to City Treasury, 25% to Corp Treasury if affiliated, 15% to OUC)
-    const costMoney = centsToMoney(creditCostCents);
-    await postEconomicCreditTransfer(tx, {
-      ledgerId: crypto.randomUUID(),
-      gameDay: day,
-      debitAccount: account.rows[0].account_id,
-      creditAccount: isPrivateEstate
-        ? 'account-ouc-treasury'
-        : `account-city-${citizenCityId}`,
-      amount: costMoney,
-      reasonType: 'building_purchase',
-      reasonId: buildingId,
-      ruleVersion: 'real-estate-v2',
-      correlationId: input.correlationId,
-    });
-
-    // Deduct Materials with guaranteed ledger audit
-    if (materialCostUnits > 0n) {
-      await postEconomicResourceMutation(tx, {
-        ownerId: input.ownerId,
-        resource: 'material',
-        delta: -Number(materialCostUnits) / 1_000_000,
-        reasonType: 'building_construction',
-        reasonId: buildingId,
-        correlationId: `${input.correlationId}:material`,
-        gameDay: day,
-      });
-    }
-    if (componentsCostUnits > 0n) {
-      await postEconomicResourceMutation(tx, {
-        ownerId: input.ownerId,
-        resource: 'components',
-        delta: -Number(componentsCostUnits) / 1_000_000,
-        reasonType: 'building_construction',
-        reasonId: buildingId,
-        correlationId: `${input.correlationId}:components`,
-        gameDay: day,
-      });
-    }
-    if (computeCostUnits > 0n) {
-      await postEconomicResourceMutation(tx, {
-        ownerId: input.ownerId,
-        resource: 'compute',
-        delta: -Number(computeCostUnits) / 1_000_000,
-        reasonType: 'building_construction',
-        reasonId: buildingId,
-        correlationId: `${input.correlationId}:compute`,
-        gameDay: day,
-      });
-    }
-
-    // Private building construction starts immediately upon purchase and runs for
-    // the exact duration in continuous game minutes (1 real second = 1 game minute).
-    const constructionDays = Math.max(1, Number(catalogRow.construction_days ?? spec.slotFootprint ?? 1));
-    const baseDurationMinutes = catalogRow.construction_minutes && Number(catalogRow.construction_minutes) > 0
-      ? Number(catalogRow.construction_minutes)
-      : constructionDays * 1440;
-    const durationMinutes = Math.max(1, Math.round(baseDurationMinutes * constructionTimeMultiplier));
-    const startMinute = authTime.totalGameMinutes;
-    const completeMinute = startMinute + durationMinutes;
-    const startDay = day;
-    const completeDay = Math.floor(completeMinute / 1440) + 1;
-
-    const catalogId = `${input.buildingType}-t${spec.tier || 1}`;
-
-    // Insert Building with authoritative catalog_id and continuous minute timestamps
-    await tx.query(
-      `INSERT INTO buildings (
-        id, city_id, owner_id, ownership_class,
-        catalog_id, building_type, name, tier, slot_footprint,
-        operating_policy,
-        upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
-        daily_operating_credits,
-        resource_output_type, resource_output_amount,
-        construction_started_game_day, construction_complete_game_day,
-        construction_started_minute, construction_complete_minute,
-        construction_start_day, construction_duration_days, construction_due_end_day,
-        construction_progress,
-        construction_rules_version, construction_technology_modifiers,
-        construction_base_duration_minutes, construction_duration_minutes,
-        construction_cost_credits_units, construction_cost_material_units,
-        construction_cost_components_units, construction_cost_compute_units,
-        status, created_game_day
-      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, $8, 'balanced', $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, 0.0, $23, $24, $25, $26, $27, $28, $29, $30, 'under_construction', $31)`,
-      [
-        buildingId,
-        citizenCityId,
-        input.ownerId,
-        catalogId,
-        input.buildingType,
-        input.name.trim() || spec.name,
-        spec.tier,
-        spec.slotFootprint,
-        spec.dailyEnergyUpkeep,
-        spec.dailyFoodUpkeep,
-        spec.dailyMaterialsUpkeep,
-        spec.dailyComponentsUpkeep,
-        spec.dailyComputeUpkeep,
-        spec.dailyStaffingCredits,
-        spec.resourceOutputType,
-        spec.resourceOutputAmount,
-        startDay,
-        completeDay,
-        startMinute,
-        completeMinute,
-        startDay,
-        Math.ceil(durationMinutes / 1440),
-        completeDay,
-        technology.rulesVersion,
-        technology.modifiers,
-        baseDurationMinutes,
-        durationMinutes,
-        creditCostUnits.toString(),
-        materialCostUnits.toString(),
-        componentsCostUnits.toString(),
-        computeCostUnits.toString(),
-        day,
-      ],
-    );
-
-    // Invalidate the profile and record the V2 rate change atomically.
-    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
-      input.ownerId,
-      'building_construction',
-      buildingId,
-      day,
-      0,
-    ]);
-    await createGameEvent(tx, {
-      id: `BUILDING-CONSTRUCTION-${input.correlationId}`,
-      category: 'BUILDING',
-      eventType: 'BUILDING_CONSTRUCTION_STARTED',
-      gameDay: day,
-      actorHumanId: input.ownerId,
-      subjectType: 'BUILDING',
-      subjectId: buildingId,
-      title: `${spec.name} construction started`,
-      details: { buildingId, catalogId, cityId: citizenCityId, ownerId: input.ownerId, constructionCompleteMinute: completeMinute },
-      correlationId: input.correlationId,
-    });
-
-    const created = await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId]);
-    return {
-      ok: true,
-      building: created.rows[0],
-      correlationId: input.correlationId,
-    };
-  });
 }
 
 async function purchaseBaselineBuilding(
@@ -584,8 +327,8 @@ export async function upgradeBuilding(
       upkeep_compute: string;
       operating_credits: string;
     }>('SELECT id, building_type, name, tier, ownership_class, slot_footprint, research_project_id, cost_credits, cost_materials, cost_components, cost_compute, output_energy, output_food, output_materials, output_components, output_compute, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_credits FROM building_catalog WHERE id = $1 AND tier = $2 AND is_active = true', [`${bld.building_type}-t${nextTier}`, nextTier]);
-    // Tier upgrades are catalog-driven.  The static catalog may still contain
-    // legacy tier definitions, but a tier must not become usable until its
+    // Tier upgrades are catalog-driven. The catalog may contain future tier
+    // definitions, but a tier must not become usable until its
     // researched/seeded database blueprint exists (and the buildings.catalog_id
     // foreign key can resolve it).
     if (!targetCatalog.rows[0]) {

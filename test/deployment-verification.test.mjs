@@ -17,7 +17,6 @@ test('Deployment Configuration and Route Conflict Verification', async (t) => {
     assert.equal(report.coverage.rootAndLanding, true);
     assert.equal(report.coverage.appShellAndAssets, true);
     assert.equal(report.coverage.apiSurface, true);
-    assert.equal(report.coverage.edgeEvents, true);
     assert.equal(report.coverage.healthChecks, true);
   });
 
@@ -165,7 +164,7 @@ test('Live Automated Deployment Endpoints Verification', async () => {
     assert.equal(report.probes.appMainDartJs, true, 'App runtime JS (/app/main.dart.js) probe must pass');
     assert.equal(report.probes.apiHealth, true, 'API health (/api/health) probe must pass');
     assert.equal(report.probes.apiAuthMe, true, 'Auth session (/api/auth/me) probe must pass');
-    assert.equal(report.probes.edgeEvents, true, 'Edge events (/edge/events) probe must pass');
+    assert.equal(report.probes.apiLive, true, 'Liveness (/api/live) probe must pass');
     assert.equal(report.errors.length, 0);
 
     // 2. Verify Canary suite passes with 7 endpoints
@@ -177,7 +176,7 @@ test('Live Automated Deployment Endpoints Verification', async () => {
     assert.equal(canary.probes.appMainDartJs, true);
     assert.equal(canary.probes.apiHealth, true);
     assert.equal(canary.probes.apiAuthMe, true);
-    assert.equal(canary.probes.edgeEvents, true);
+    assert.equal(canary.probes.apiLive, true);
 
     // 3. Verify Preflight Promotion includes DeploymentConfig check
     const preflight = runPreflightChecks({ dryRun: true });

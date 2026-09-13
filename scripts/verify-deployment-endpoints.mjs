@@ -24,7 +24,7 @@ export async function verifyDeploymentEndpoints(targetUrl = 'http://127.0.0.1:87
       appMainDartJs: false,
       apiHealth: false,
       apiAuthMe: false,
-      edgeEvents: false,
+      apiLive: false,
     },
     details: {},
     allPassed: false,
@@ -166,23 +166,22 @@ export async function verifyDeploymentEndpoints(targetUrl = 'http://127.0.0.1:87
     report.errors.push(`Auth Me probe (/api/auth/me) error: ${err.message}`);
   }
 
-  // 7. Probe canonical liveness (/api/live). The old edge event stream is
-  // intentionally no longer a public deployment dependency.
+  // 7. Probe canonical liveness (/api/live).
   try {
     const res = await fetchWithTimeout(`${normalizedTarget}/api/live`);
     const cType = res.headers.get('content-type') || '';
     const payload = await res.json();
     const ok = res.status === 200 && cType.includes('application/json') && payload.ok === true && payload.status === 'live';
-    report.probes.edgeEvents = ok;
-    report.details.edgeEvents = {
+    report.probes.apiLive = ok;
+    report.details.apiLive = {
       status: res.status,
       contentType: cType,
       ok,
     };
     if (!ok) report.errors.push(`Liveness probe (/api/live) failed: status=${res.status}, type=${cType}`);
   } catch (err) {
-    report.probes.edgeEvents = false;
-    report.details.edgeEvents = { error: err.message, ok: false };
+    report.probes.apiLive = false;
+    report.details.apiLive = { error: err.message, ok: false };
     report.errors.push(`Liveness probe (/api/live) error: ${err.message}`);
   }
 

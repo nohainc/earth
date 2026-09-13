@@ -21,7 +21,7 @@ import 'executive_command_summary.dart';
 import 'objectives_panel.dart';
 import '../house/house_tree_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
-import 'daily_briefing_dialog.dart';
+import 'daily_summary_dialog.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/player_objective.dart';
 import '../communications/comm_link_dialog.dart';
@@ -396,7 +396,7 @@ class Dashboard extends StatelessWidget {
         ];
       case 'briefing':
         return [
-          DailyBriefingDialog(
+          DailySummaryDialog(
             api: const EarthApi(),
             isPageMode: true,
             onNavigate: onNavigate ?? (_) {},

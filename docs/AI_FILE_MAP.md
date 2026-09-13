@@ -86,7 +86,7 @@ matching PostgreSQL service.
 | Real estate and buildings | `real-estate-postgres.ts`, `real-estate-catalog.ts` |
 | Social gameplay and communications | `social-gameplay-postgres.ts`, `communications-postgres.ts` |
 | Technology and patents | `technology-postgres.ts` |
-| Notifications and outbox | `outbox-postgres.ts`, `daily-briefing-postgres.ts` |
+| Notifications and outbox | `outbox-postgres.ts`, `house-daily-summary-postgres.ts` |
 | Rankings and net worth | `net-worth-postgres.ts`, `read-postgres.ts` |
 
 ### Simulation and scheduled engines
@@ -126,7 +126,7 @@ subsystems. Start with the named engine before changing scheduler orchestration.
 |---|---|---|
 | Activity | `earth_api_world.dart` | `features/activity/` |
 | Authentication | `earth_api_auth.dart` | `features/auth/` |
-| Command center | `earth_api_world.dart`, `earth_api_briefing.dart` | `features/command_center/` |
+| Command center | `earth_api_world.dart`, `earth_api_daily_summary.dart` | `features/command_center/` |
 | Communities | `earth_api_comm.dart` | `features/institutions/institutions_panels.dart`, `features/institutions/institutions_dialogs.dart`, and `features/communications/` where the surface is social/communication-oriented |
 | Corporations and cities | `earth_api_institutions.dart` | `features/institutions/` |
 | Dynasty | `earth_api_dynasty.dart` | `features/dynasty/` |

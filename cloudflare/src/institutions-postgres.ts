@@ -12,7 +12,6 @@ async function day(repository: PostgresRepository): Promise<number> {
   const result = await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
   return Number(result.rows[0]?.game_day ?? 0);
 }
-
 /** Update the authoritative House affiliation for the current Human. */
 async function setHouseAffiliationFromHuman(
   tx: PostgresRepository,
@@ -177,43 +176,6 @@ export async function createCorporation(repository: PostgresRepository, input: {
 
 export async function createCorporationWithCapital(repository: PostgresRepository, input: { founderId: string; corporationName: string; cityName: string }): Promise<Record<string, unknown>> {
   return createBaselineCorporationWithCapital(repository, input);
-  /* Legacy implementation below is no longer a runtime path. */
-  /* istanbul ignore next */
-  return repository.transaction(async (tx) => {
-    const corporationName = input.corporationName.trim();
-    const cityName = input.cityName.trim();
-    if (corporationName.length < 2 || corporationName.length > 80 || cityName.length < 2 || cityName.length > 80) {
-      throw new Error('Corporation and capital city names must be 2 to 80 characters');
-    }
-    const founder = await tx.query<{ id: string }>("SELECT id FROM humans WHERE id = $1 AND life_status = 'active'", [input.founderId]);
-    const existingMembership = await tx.query<{ corporation_id: string | null }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.founderId]);
-    if (!founder.rows[0]) throw new Error('Human not found');
-    if (existingMembership.rows[0]?.corporation_id) throw new Error('Leave your current corporation before founding another one');
-    await uniqueInstitutionName(tx, corporationName);
-    await uniqueInstitutionName(tx, cityName);
-    const cityId = `CITY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    const corporationId = `CORP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    const gameDay = await day(tx);
-    // Both new institutions must be registered before inserting the city,
-    // corporation, profiles, and treasury accounts.
-    await tx.query("INSERT INTO owner_registry (id, owner_type, source_id) VALUES ($1, 'city', $1), ($2, 'corporation', $2)", [cityId, corporationId]);
-    await tx.query('SELECT earth_provision_institution_accounts($1), earth_provision_institution_accounts($2)', [cityId, corporationId]);
-    await tx.query("INSERT INTO institutions (id,kind,name,status,administrator_human_id) VALUES ($1,'CITY',$2,'active',$5),($3,'CORPORATION',$4,'active',$5)", [cityId, cityName, corporationId, corporationName, input.founderId]);
-    await tx.query("INSERT INTO institution_governance_roles (institution_id, human_id, role_code, source_type, source_id) VALUES ($1,$3,'CITY_MAYOR','CHARTER',$5),($1,$3,'INFRASTRUCTURE_PLANNER','CHARTER',$5),($2,$3,'CORPORATION_EXECUTIVE','CHARTER',$6),($2,$3,'CORPORATION_TREASURER','CHARTER',$6) ON CONFLICT DO NOTHING", [cityId, corporationId, input.founderId, gameDay, `formation:${cityId}`, `formation:${corporationId}`]);
-    // The city and corporation reference each other. Insert the city first
-    // without the corporation foreign-key, then attach it after the
-    // corporation row exists.
-    await tx.query('INSERT INTO cities (id,institution_id,residents,housing_capacity,energy_capacity,connectivity_capacity,health_capacity) VALUES ($1,$1,1,10,10,10,50)', [cityId]);
-    await tx.query("INSERT INTO corporations (id,institution_id,member_count,constitution_version,capital_city_id,admission_policy) VALUES ($1,$1,1,1,$2,'open')", [corporationId, cityId]);
-    await tx.query("INSERT INTO comm_channels (id, scope, scope_id, name, description) VALUES ($1,'city',$2,$3,$4),($5,'corporation',$6,$7,$8) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description", [`channel-city-${cityId}`, cityId, cityName, `Private conversation for current members of ${cityName}.`, `channel-corporation-${corporationId}`, corporationId, corporationName, `Private conversation for current members of ${corporationName}.`]);
-    await tx.query('UPDATE cities SET corporation_id = $1 WHERE id = $2', [corporationId, cityId]);
-    await setHouseAffiliationFromHuman(tx, input.founderId, cityId, corporationId, gameDay);
-    await tx.query("INSERT INTO governance_rules (id, institution_id, name, category, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days, version, status, created_by) VALUES ($1,$2,$3,'governance',0.25,0.50,3,1,1,'active',$4),($5,$6,$7,'governance',0.25,0.50,3,1,1,'active',$4) ON CONFLICT (id) DO NOTHING", [`GOV-${cityId}-BASELINE-v1`, cityId, `${cityName} Governance Baseline`, input.founderId, `GOV-${corporationId}-BASELINE-v1`, corporationId, `${corporationName} Governance Baseline`]);
-    await createAffiliationEvent(tx, { id: crypto.randomUUID(), humanId: input.founderId, institutionType: 'CITY', institutionId: cityId, action: 'joined', gameDay, reason: 'corporation_founding' });
-    await createAffiliationEvent(tx, { id: crypto.randomUUID(), humanId: input.founderId, institutionType: 'CORPORATION', institutionId: corporationId, action: 'joined', gameDay, reason: 'corporation_founding' });
-    await tx.query('INSERT INTO game_events (id,category,event_type,game_day,actor_human_id,subject_type,subject_id,title,details) VALUES ($1,\'INSTITUTION\',\'CORPORATION_FOUNDED\',$2,$3,\'CORPORATION\',$4,$5,$6)', [crypto.randomUUID(), gameDay, input.founderId, corporationId, `${corporationName} was founded`, toNanoMarkup({ corporationId, cityId, founderId: input.founderId })]);
-    return { ok: true, corporation: (await tx.query('SELECT * FROM corporations WHERE id = $1', [corporationId])).rows[0], capitalCity: (await tx.query('SELECT * FROM cities WHERE id = $1', [cityId])).rows[0] };
-  });
 }
 
 async function createBaselineCorporationWithCapital(

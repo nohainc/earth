@@ -88,8 +88,8 @@ export function calculateMortalityHazard(input: MortalityInputs): number {
   const age = Number(input.age);
   if (age < 65) return 0;
   if (age >= 105) return 1.0;
-  const lifeCondition = Math.max(0, Math.min(100, Number(input.lifeConditionScore ?? 100)));
-  const serviceIndex = Math.max(0, Math.min(1, Number(input.essentialServicesIndex ?? 0.68)));
+  const lifeCondition = Math.max(0, Math.min(100, Number(input.lifeConditionScore)));
+  const serviceIndex = Math.max(0, Math.min(1, Number(input.essentialServicesIndex)));
   const healthCoverage = Math.max(0, Math.min(1, Number(input.healthServiceCoverage ?? serviceIndex)));
   const healthModifier = 1 + (100 - lifeCondition) / 50;
   const serviceModifier = 1 + (1 - healthCoverage) * 0.75 + (1 - serviceIndex) * 0.35;

@@ -20,11 +20,12 @@ import { handleCommunityRoutes } from './community-routes.ts';
 import { handleInstitutionRoutes } from './institutions-routes.ts';
 import { handleGovernanceRoutes } from './governance-routes.ts';
 import { handleRealEstateRoutes } from './real-estate-routes.ts';
-import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
+import { logBackendError, logClientError, sanitizeClientContext } from './observability.ts';
 import { handleEconomicRoutes } from './economic-routes.ts';
 import { handleMarketApiRoutes } from './market-api.ts';
 import { featureConfig, featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { maintenanceModeEnabled, maintenanceResponse, schedulerEnabled } from './maintenance.ts';
+import { handleRealtimeRoute, mapToRealtimeInvalidation } from './realtime.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -68,7 +69,7 @@ export class MarketCoordinator extends DurableObject<Env> {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
-      server.send(JSON.stringify({ type: 'ready', channel: 'earth-world', coordinator: 'market' }));
+      server.send(JSON.stringify({ version: 1, type: 'ready', topics: ['world', 'market', 'house', 'finance', 'buildings', 'research', 'governance', 'notifications', 'institutions'], channel: 'earth-world', coordinator: 'market' }));
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -79,7 +80,7 @@ export class MarketCoordinator extends DurableObject<Env> {
         start: (controller) => {
           streamController = controller;
           this.sseControllers.add(controller);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'ready', channel: 'earth-world', coordinator: 'market' })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ version: 1, type: 'ready', topics: ['world', 'market', 'house', 'finance', 'buildings', 'research', 'governance', 'notifications', 'institutions'], channel: 'earth-world', coordinator: 'market' })}\n\n`));
         },
         cancel: () => {
           if (streamController) this.sseControllers.delete(streamController);
@@ -103,11 +104,13 @@ export class MarketCoordinator extends DurableObject<Env> {
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const text = typeof message === 'string' ? message : new TextDecoder().decode(message);
     if (text === 'ping') {
-      socket.send(JSON.stringify({ type: 'pong', at: new Date().toISOString() }));
+      socket.send(JSON.stringify({ version: 1, type: 'pong', at: new Date().toISOString() }));
       return;
     }
     socket.send(JSON.stringify({
+      version: 1,
       type: 'refresh_required',
+      topics: ['world'],
       reason: 'market_state_is_postgres_authoritative',
     }));
   }
@@ -168,32 +171,27 @@ const worker = {
       if (response.status >= 500) {
         const viewer = await currentHuman(request, env).catch(() => null);
         const url = new URL(request.url);
-        await withRepository(env, (repo) =>
-          logAppError(repo, {
-            humanId: viewer?.id ?? null,
-            source: 'backend_api',
-            endpoint: url.pathname,
-            statusCode: response.status,
-            errorMessage: `API responded with HTTP ${response.status}`,
-          }),
-        ).catch(() => undefined);
+        logBackendError({
+          requestId: request.headers.get('X-Request-ID'),
+          humanId: viewer?.id ?? null,
+          endpoint: url.pathname,
+          statusCode: response.status,
+          message: `API responded with HTTP ${response.status}`,
+        });
       }
     } catch (err) {
       const viewer = await currentHuman(request, env).catch(() => null);
       const url = new URL(request.url);
       const errorMessage = err instanceof Error ? err.message : String(err);
       const stackTrace = err instanceof Error ? err.stack : undefined;
-      await withRepository(env, (repo) =>
-        logAppError(repo, {
-          humanId: viewer?.id ?? null,
-          source: 'backend_api',
-          endpoint: url.pathname,
-          statusCode: 500,
-          errorMessage,
-          stackTrace,
-        }),
-      ).catch(() => undefined);
-      console.error(JSON.stringify({ event: 'unhandled_api_error', endpoint: url.pathname, message: errorMessage, stack: stackTrace }));
+      logBackendError({
+        requestId: request.headers.get('X-Request-ID'),
+        humanId: viewer?.id ?? null,
+        endpoint: url.pathname,
+        statusCode: 500,
+        message: errorMessage,
+        stack: stackTrace,
+      });
       response = Response.json({ ok: false, error: errorMessage || 'Internal Server Error', code: 'SERVICE_UNAVAILABLE' }, { status: 500 });
     }
 
@@ -225,7 +223,10 @@ const worker = {
     }
     if (maintenanceModeEnabled(env)) return maintenanceResponse();
 
-    // Authentication routes must be dispatched before the legacy fallback
+    const realtimeResponse = await handleRealtimeRoute(request, env, url);
+    if (realtimeResponse) return realtimeResponse;
+
+    // Authentication routes are dispatched before the remaining route groups
     // handler. Without this, /api/auth/login and /api/auth/me fell through to
     // the generic `edge-ready` response: login appeared successful, but no
     // session was actually created or validated for subsequent requests.
@@ -236,10 +237,8 @@ const worker = {
     const authenticatedResponse = await authenticatedAuthRoute(request, env, url);
     if (authenticatedResponse) return authenticatedResponse;
 
-    // These feature routers were split out of this legacy handler but were
-    // not wired back into the dispatch chain. The fallback response is still
-    // HTTP 200, which made the client render empty lists instead of exposing
-    // a routing error.
+    // Feature routers are composed explicitly here so an unhandled API path
+    // reaches the canonical 404 response instead of a fake success response.
     if (url.pathname.startsWith('/api/communities')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -283,7 +282,8 @@ const worker = {
     }
 
     if (url.pathname === '/api/telemetry/error' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env).catch(() => null);
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{
         message?: string;
         stack?: string;
@@ -295,43 +295,18 @@ const worker = {
       }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
-      const errorMessage = body.message?.trim() || 'Client error';
-      try {
-        const logged = await withRepository(env, (repo) =>
-          logAppError(repo, {
-            humanId: viewer?.id ?? null,
-            source: (body.source as any) || 'client_flutter',
-            endpoint: body.endpoint ?? null,
-            statusCode: body.statusCode ?? null,
-            errorCode: body.errorCode ?? null,
-            errorMessage,
-            stackTrace: body.stack ?? null,
-            contextData: body.context ?? {},
-          }),
-        );
-        return Response.json({ ok: true, id: logged?.id });
-      } catch (err) {
-        return Response.json({ ok: false, error: 'Failed to record error log' }, { status: 500 });
-      }
-    }
-    if (url.pathname === '/api/telemetry/errors' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const limit = Number(url.searchParams.get('limit') || 50);
-      const offset = Number(url.searchParams.get('offset') || 0);
-      const source = url.searchParams.get('source') || undefined;
-      // Error telemetry is a player-scoped diagnostic surface. Do not allow a
-      // query parameter to turn it into an unauthorised cross-player/admin
-      // data export.
-      const humanId = viewer.id;
-      try {
-        const errors = await withRepository(env, (repo) =>
-          listRecentAppErrors(repo, { limit, offset, source, humanId }),
-        );
-        return Response.json({ ok: true, errors: errors ?? [] });
-      } catch (err) {
-        return Response.json({ ok: false, error: 'Failed to fetch error logs' }, { status: 500 });
-      }
+      logClientError({
+        requestId: request.headers.get('X-Request-ID'),
+        humanId: viewer.id,
+        endpoint: body.endpoint,
+        statusCode: body.statusCode,
+        errorCode: body.errorCode,
+        message: body.message,
+        stack: body.stack,
+        context: sanitizeClientContext(body.context),
+        clientVersion: request.headers.get('X-Earth-Client-Version'),
+      });
+      return new Response(null, { status: 202 });
     }
     if (url.pathname === '/api/technology' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
@@ -347,7 +322,7 @@ const worker = {
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const name = body.name?.trim();
-      const budget = Math.round(Number(body.budget ?? 240) * 100) / 100;
+      const budget = Math.round(Number(body.budget) * 100) / 100;
       const focus = body.focus?.trim() ?? 'efficiency';
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!name || name.length < 3 || name.length > 120 || !Number.isFinite(budget) || budget < 240 || budget > 100000 || !['efficiency','durability','safety','cost'].includes(focus) || !correlationId) return Response.json({ ok: false, error: 'Research parameters or Idempotency-Key are invalid' }, { status: 400 });
@@ -365,7 +340,7 @@ const worker = {
       const parsed = await parseJsonBody<{ amount?: number; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
-      const amount = Number(body.amount ?? 240);
+      const amount = Number(body.amount);
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!Number.isFinite(amount) || amount <= 0 || !correlationId) return Response.json({ ok: false, error: 'Funding parameters or Idempotency-Key are invalid' }, { status: 400 });
       try {
@@ -448,14 +423,7 @@ const worker = {
     let outboxDelivered = 0;
     try {
       outboxDelivered = await withRepository(env, (repository) => deliverOutbox(repository, (outboxEvent) =>
-        env.MARKET_COORDINATOR.getByName('events-global').broadcast({
-          ...outboxEvent.payload,
-          id: outboxEvent.id,
-          eventKey: outboxEvent.event_key,
-          topic: outboxEvent.topic,
-          aggregateType: outboxEvent.aggregate_type,
-          aggregateId: outboxEvent.aggregate_id,
-        }),
+        env.MARKET_COORDINATOR.getByName('events-global').broadcast(mapToRealtimeInvalidation(outboxEvent)),
       ), { workload: 'scheduler' }) ?? 0;
     } catch (error) {
       console.error('Scheduler outbox delivery failed after committed economy work', error);
@@ -525,7 +493,7 @@ export default {
       return new Response(object.body, { headers });
     }
     const healthPath = url.pathname === '/api/live' || url.pathname === '/api/ready' || url.pathname === '/ready' || url.pathname === '/api/health' || url.pathname === '/health';
-    const isDataRequest = !healthPath && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname.startsWith('/internal/'));
+    const isDataRequest = !healthPath && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/internal/'));
     let response: Response;
     try {
       if (healthPath) {
@@ -561,14 +529,7 @@ export default {
       if ((request.method === 'POST' || request.method === 'DELETE') && response.status < 400 && url.pathname.startsWith('/api/')) {
         const deliverPromise = withRepository(env, (repository) =>
           deliverOutbox(repository, (outboxEvent) =>
-            env.MARKET_COORDINATOR.getByName('events-global').broadcast({
-              ...outboxEvent.payload,
-              id: outboxEvent.id,
-              eventKey: outboxEvent.event_key,
-              topic: outboxEvent.topic,
-              aggregateType: outboxEvent.aggregate_type,
-              aggregateId: outboxEvent.aggregate_id,
-            }),
+            env.MARKET_COORDINATOR.getByName('events-global').broadcast(mapToRealtimeInvalidation(outboxEvent)),
           ),
         ).catch((err) => {
           console.error(JSON.stringify({ event: 'outbox_dispatch_error', error: err instanceof Error ? err.message : String(err) }));

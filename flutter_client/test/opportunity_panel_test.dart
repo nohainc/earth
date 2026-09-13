@@ -9,19 +9,19 @@ void main() {
       configuredBase: 'http://api.earthuc.com',
       pageUri: Uri.parse('http://localhost:3000'),
     );
-    expect(httpUri.toString(), 'ws://api.earthuc.com/edge/events');
+    expect(httpUri.toString(), 'ws://api.earthuc.com/api/realtime');
 
     final httpsUri = liveEventsUri(
       configuredBase: 'https://earthuc.com',
       pageUri: Uri.parse('https://earthuc.com'),
     );
-    expect(httpsUri.toString(), 'wss://earthuc.com/edge/events');
+    expect(httpsUri.toString(), 'wss://earthuc.com/api/realtime');
 
     final fallbackUri = liveEventsUri(
       configuredBase: '',
       pageUri: Uri.parse('https://staging.earthuc.com'),
     );
-    expect(fallbackUri.toString(), 'wss://staging.earthuc.com/edge/events');
+    expect(fallbackUri.toString(), 'wss://staging.earthuc.com/api/realtime');
 
     final invalidUri = liveEventsUri(
       configuredBase: '',

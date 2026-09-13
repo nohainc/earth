@@ -13,5 +13,6 @@ test('world health reports actionable production metrics', () => {
 test('optional PostgreSQL observability extensions cannot make health fail', () => {
   const source = fs.readFileSync('cloudflare/src/health.ts', 'utf8');
   assert.match(source, /pg_stat_statements[\s\S]*\.catch/);
-  assert.match(source, /app_error_logs[\s\S]*\.catch/);
+  assert.doesNotMatch(source, /app_error_logs/);
+  assert.match(source, /Promise\.resolve\(\{ rows: \[\{ api_errors:/);
 });

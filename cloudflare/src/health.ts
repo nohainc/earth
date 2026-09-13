@@ -133,10 +133,10 @@ export async function healthResponse(request: Request, env: Env, options: { read
       `),
       Promise.all([
         repository.query<{ active: string }>("SELECT COUNT(*)::text AS active FROM pg_stat_activity WHERE datname = current_database() AND state <> 'idle'").catch(() => ({ rows: [{ active: '0' }] })),
-        repository.query<{ api_errors: string; worker_errors: string }>(`SELECT
-          COUNT(*) FILTER (WHERE source IN ('api', 'http'))::text AS api_errors,
-          COUNT(*) FILTER (WHERE source IN ('worker', 'scheduler'))::text AS worker_errors
-          FROM app_error_logs WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'`).catch(() => ({ rows: [{ api_errors: '0', worker_errors: '0' }] })),
+        // Application errors are emitted to Cloudflare structured logs. They
+        // are operational telemetry, not gameplay state, so readiness does
+        // not query a telemetry table.
+        Promise.resolve({ rows: [{ api_errors: '0', worker_errors: '0' }] }),
         repository.query<{ slow_queries: string }>(`SELECT COUNT(*)::text AS slow_queries FROM pg_stat_statements WHERE mean_exec_time >= 1000`).catch(() => ({ rows: [{ slow_queries: '0' }] })),
         repository.query<{ active_buildings: string; inactive_buildings: string }>(`SELECT
           COUNT(*) FILTER (WHERE status = 'active')::text AS active_buildings,

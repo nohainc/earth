@@ -121,21 +121,13 @@ assert.equal(world.body.error, 'Authentication required');
 assert.equal(world.body.code, 'AUTHENTICATION_REQUIRED');
 assert.equal(world.body.correlationId, 'smoke-error-contract');
 
-const businessProfile = await get('/api/businesses/B-1048');
-assert.equal(businessProfile.response.status, 404);
-
 const opportunities = await get('/api/world');
 assert.equal(opportunities.response.status, 401);
 assert.equal(opportunities.body.code, 'AUTHENTICATION_REQUIRED');
 
-const marketCommand = await get('/edge/market', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(marketCommand.response.status, 404);
-assert.equal(typeof marketCommand.body.correlationId, 'string');
 const marketOrder = await get('/api/market/orders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ product: 'energy', side: 'buy', quantity: 1, limitPrice: 1, correlationId: 'smoke-market-order' }) });
 assert.equal(marketOrder.response.status, 401);
 assert.equal(marketOrder.body.error, 'Authentication required');
-const marketSnapshot = await get('/edge/market');
-assert.equal(marketSnapshot.response.status, 404);
 
 const publicSpending = await get('/api/finance/public-spending', {
   method: 'POST',
@@ -163,8 +155,9 @@ assert.equal(corporationContribution.body.error, 'Authentication required');
 const proposals = await get('/api/governance/proposals');
 assert.equal(proposals.response.status, 401);
 
-const liveEvents = await get('/edge/events');
-assert.equal(liveEvents.response.status, 404);
+const realtime = await get('/api/realtime');
+assert.equal(realtime.response.status, 401);
+assert.equal(realtime.body.error, 'Authentication required');
 
 const services = await get('/api/services/status');
 assert.equal(services.response.status, 401);

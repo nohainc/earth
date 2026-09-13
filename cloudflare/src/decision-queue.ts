@@ -44,7 +44,7 @@ const num = (v: unknown): number => Number(v ?? 0);
  */
 export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueItem[] {
   const items: DecisionQueueItem[] = [];
-  const gameDay = input.gameDay ?? 184;
+  const gameDay = input.gameDay ?? 0;
 
   const city = input.city;
   if (city?.id) {
@@ -72,8 +72,8 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
   }
 
   // 1. Corporation Resource Deficit / Energy Drain
-  const energy = num(input.resources?.energy ?? 100);
-  const materials = num(input.resources?.material ?? input.resources?.materials ?? 100);
+  const energy = num(input.resources?.energy);
+  const materials = num(input.resources?.material ?? input.resources?.materials);
   const profit = num(input.business?.profit ?? input.business?.net_income ?? 0);
 
   if (energy <= 50) {
@@ -136,7 +136,7 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
   }
 
   // 4. Research & Technology Funding
-  const techProgress = num(input.technology?.progress ?? 45);
+  const techProgress = num(input.technology?.progress);
   if (techProgress < 100) {
     items.push({
       id: 'decision-tech-funding-available',
