@@ -123,14 +123,12 @@ extension EarthApiInstitutions on EarthApi {
   Future<EarthState> createCommunity({
     required String name,
     String? description,
-    String admissionPolicy = 'open',
-    String? applicationQuestion,
+    String joinPolicy = 'OPEN',
   }) async {
     await _request('/api/communities', method: 'POST', body: {
       'name': name,
       if (description != null && description.isNotEmpty) 'description': description,
-      'admissionPolicy': admissionPolicy,
-      if (applicationQuestion != null && applicationQuestion.isNotEmpty) 'applicationQuestion': applicationQuestion,
+      'joinPolicy': joinPolicy,
       'correlationId':
           newClientCorrelationId('community-formation'),
     });
@@ -140,19 +138,19 @@ extension EarthApiInstitutions on EarthApi {
   Future<EarthState> updateCommunity({
     required String communityId,
     String? description,
-    String? admissionPolicy,
-    String? applicationQuestion,
+    String? visibility,
+    String? joinPolicy,
   }) async {
     await _request('/api/communities/$communityId', method: 'PATCH', body: {
       if (description != null) 'description': description,
-      if (admissionPolicy != null) 'admissionPolicy': admissionPolicy,
-      if (applicationQuestion != null) 'applicationQuestion': applicationQuestion,
+      if (visibility != null) 'visibility': visibility,
+      if (joinPolicy != null) 'joinPolicy': joinPolicy,
     });
     return world();
   }
 
   Future<EarthState> disbandCommunity(String communityId) async {
-    await _request('/api/communities/$communityId', method: 'DELETE');
+    await _request('/api/communities/$communityId', method: 'DELETE', body: {});
     return world();
   }
 
@@ -172,33 +170,39 @@ extension EarthApiInstitutions on EarthApi {
     required String action,
     String? rejectionReason,
   }) async {
-    await _request('/api/communities/$communityId/requests/$requestId', method: 'POST', body: {
-      'action': action,
-      if (rejectionReason != null && rejectionReason.isNotEmpty) 'rejectionReason': rejectionReason,
-    });
+    if (action != 'approve' && action != 'reject') {
+      throw ArgumentError.value(action, 'action', 'must be approve or reject');
+    }
+    if (action == 'approve') {
+      await _request('/api/communities/$communityId/requests/$requestId/approve', method: 'POST', body: {});
+    } else {
+      await _request('/api/communities/$communityId/requests/$requestId/reject', method: 'POST', body: {
+        if (rejectionReason != null && rejectionReason.isNotEmpty) 'rejectionReason': rejectionReason,
+      });
+    }
     return world();
   }
 
   Future<EarthState> setCommunityMemberRole({
     required String communityId,
-    required String targetHumanId,
+    required String targetHouseId,
     required String role,
   }) async {
-    await _request('/api/communities/$communityId/members/$targetHumanId/role', method: 'POST', body: {
+    await _request('/api/communities/$communityId/members/$targetHouseId', method: 'PATCH', body: {
       'role': role,
     });
     return world();
   }
 
   Future<EarthState> joinCommunity(String communityId, {String? applicationMessage}) async {
-    await _request('/api/communities/$communityId/members', method: 'POST', body: {
+    await _request('/api/communities/$communityId/join', method: 'POST', body: {
       if (applicationMessage != null && applicationMessage.isNotEmpty) 'applicationMessage': applicationMessage,
     });
     return world();
   }
 
   Future<EarthState> leaveCommunity(String communityId) async {
-    await _request('/api/communities/$communityId/members', method: 'DELETE');
+    await _request('/api/communities/$communityId/leave', method: 'POST', body: {});
     return world();
   }
 

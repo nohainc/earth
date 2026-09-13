@@ -64,7 +64,7 @@ export async function listCorporations(repository: PostgresRepository, search = 
   };
 }
 
-export async function createCity(repository: PostgresRepository, input: { founderId: string; communityId?: string | null; name: string }): Promise<Record<string, unknown>> {
+export async function createCity(repository: PostgresRepository, input: { founderId: string; name: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const name = input.name.trim();
     if (name.length < 3 || name.length > 80) throw new Error('City name is required');
@@ -73,17 +73,10 @@ export async function createCity(repository: PostgresRepository, input: { founde
   const founderMembership = await tx.query<{ corporation_id: string | null; city_id: string | null }>("SELECT ha.corporation_id, ha.city_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.founderId]);
     const corporationId = founderMembership.rows[0]?.corporation_id ?? null;
     if (!corporationId) throw new Error('Only Corporation members can form a City');
-    const communityId = input.communityId?.trim() || null;
-    if (communityId) {
-      const communityMember = await tx.query('SELECT human_id FROM community_members WHERE community_id = $1 AND human_id = $2', [communityId, input.founderId]);
-      if (!communityMember.rows[0]) throw new Error('Founder must belong to the selected Community');
-    }
     await uniqueInstitutionName(tx, name);
     const cityId = `CITY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const gameDay = await day(tx);
-    const members = communityId
-      ? await tx.query<{ human_id: string }>("SELECT cm.human_id FROM community_members cm JOIN humans h ON h.id = cm.human_id LEFT JOIN house_affiliations m ON m.house_id = h.house_id AND m.status = 'ACTIVE' WHERE cm.community_id = $1 AND h.life_status = 'active' AND m.city_id IS NULL", [communityId])
-      : founderMembership.rows[0]?.city_id
+    const members = founderMembership.rows[0]?.city_id
           ? { rows: [] }
           : { rows: [{ human_id: input.founderId }] };
     const residents = members.rows.length;
@@ -123,7 +116,7 @@ export async function createCity(repository: PostgresRepository, input: { founde
       await createAffiliationEvent(tx, { id: crypto.randomUUID(), humanId: member.human_id, institutionType: 'CITY', institutionId: cityId, action: 'joined', gameDay, reason: 'city_formation' });
       await createNotification(tx, { id: `CITY-FORMED-${member.human_id}-${cityId}`, humanId: member.human_id, notificationType: 'institution', title: 'City founded', body: `City ${cityId} was founded and you became a resident.`, entityType: 'city', entityId: cityId, gameDay, correlationId: `CITY-FORMED:${member.human_id}:${cityId}` });
     }
-    await tx.query('INSERT INTO game_events (id,category,event_type,game_day,subject_type,subject_id,title,details) VALUES ($1,\'INSTITUTION\',\'CITY_FORMED\',$2,\'CITY\',$3,$4,$5)', [crypto.randomUUID(), gameDay, cityId, `${name} was founded`, toNanoMarkup({ cityId, communityId, corporationId, residents })]);
+    await tx.query('INSERT INTO game_events (id,category,event_type,game_day,subject_type,subject_id,title,details) VALUES ($1,\'INSTITUTION\',\'CITY_FORMED\',$2,\'CITY\',$3,$4,$5)', [crypto.randomUUID(), gameDay, cityId, `${name} was founded`, toNanoMarkup({ cityId, corporationId, residents })]);
     return { ok: true, city: (await tx.query('SELECT * FROM cities WHERE id = $1', [cityId])).rows[0] };
   });
 }

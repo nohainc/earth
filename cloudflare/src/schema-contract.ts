@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 1;
+export const EARTH_SCHEMA_VERSION = 2;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -640,9 +640,61 @@ export const REQUIRED_SCHEMA_TABLES = {
     "error_message",
     "created_at",
     "updated_at"
+  ],
+  "communities": [
+    "id",
+    "name",
+    "normalized_name",
+    "description",
+    "visibility",
+    "join_policy",
+    "status",
+    "founder_house_id",
+    "created_by_human_id",
+    "created_game_day",
+    "created_game_minute",
+    "created_at",
+    "updated_at",
+    "disbanded_at"
+  ],
+  "community_memberships": [
+    "community_id",
+    "house_id",
+    "role",
+    "status",
+    "joined_by_human_id",
+    "joined_game_day",
+    "joined_game_minute",
+    "joined_at",
+    "updated_at",
+    "left_at"
+  ],
+  "community_membership_requests": [
+    "id",
+    "community_id",
+    "house_id",
+    "status",
+    "message",
+    "requested_by_human_id",
+    "decided_by_human_id",
+    "correlation_id",
+    "requested_game_day",
+    "requested_game_minute",
+    "created_at",
+    "decided_at"
   ]
 } as const;
-export const REQUIRED_UNIQUE_CONSTRAINTS = [] as const;
+export const REQUIRED_UNIQUE_CONSTRAINTS = [
+  [
+    "communities",
+    "normalized_name"
+  ],
+  [
+    "community_memberships",
+    "community_id",
+    "house_id"
+  ]
+] as const;
 export const REQUIRED_INDEXES = [
   "notifications_house_created_idx",
   "notifications_house_unread_idx",
@@ -665,7 +717,13 @@ export const REQUIRED_INDEXES = [
   "market_orders_open_idx",
   "market_fills_orders_idx",
   "tax_obligations_taxpayer_idx",
-  "outbox_pending_idx"
+  "outbox_pending_idx",
+  "communities_status_visibility_created_idx",
+  "community_memberships_house_status_idx",
+  "community_memberships_community_status_role_idx",
+  "community_membership_requests_pending_uq",
+  "community_membership_requests_community_status_created_idx",
+  "community_membership_requests_house_status_idx"
 ] as const;
 export const REQUIRED_SCHEMA_FUNCTIONS = [
   "earth_settlement_watermark",

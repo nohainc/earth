@@ -321,8 +321,7 @@ Future<void> showCommunityComposer(
                       await action(() => const EarthApi().createCommunity(
                             name: selectedName,
                             description: selectedDesc,
-                            admissionPolicy: admissionPolicy,
-                            applicationQuestion: admissionPolicy == 'approval' ? selectedQuestion : null,
+                            joinPolicy: admissionPolicy == 'approval' ? 'REQUEST' : 'OPEN',
                           ));
                     }
                   : null,
@@ -339,12 +338,9 @@ Future<void> showCommunityApplicationDialog(
   Map<String, dynamic> community,
   Future<void> Function(Future<EarthState> Function()) action,
 ) async {
-  final id = community['id']?.toString() ?? 'COM-001';
-  final name = community['name']?.toString() ?? 'Community';
-  final rawQuestion = community['application_question']?.toString() ?? '';
-  final question = rawQuestion.trim().isNotEmpty
-      ? rawQuestion.trim()
-      : 'Why would you like to join this community and what will you contribute?';
+  final id = community['id']?.toString() ?? '';
+  final name = community['name']?.toString() ?? '';
+  const question = 'Add an optional note for the community owners.';
 
   final messageController = TextEditingController();
 
@@ -477,17 +473,17 @@ Future<void> showCommunityDetailsDialog(
   bool busy,
   Future<void> Function(Future<EarthState> Function()) action,
 ) async {
-  final id = community['id']?.toString() ?? 'COM-001';
-  final name = community['name']?.toString() ?? 'Community';
-  final founderName = community['founder_name']?.toString() ?? 'Founder';
+  final id = community['id']?.toString() ?? '';
+  final name = community['name']?.toString() ?? '';
+  final founderName = community['founder_house_name']?.toString() ?? 'Unknown House';
   final description = community['description']?.toString() ?? '';
-  final admissionPolicy = (community['admission_policy']?.toString() ?? 'open').toUpperCase();
-  final myRole = community['my_role']?.toString();
-  final isPending = community['my_request_status'] == 'pending';
-  final members = asIntOr(community['member_count'], 12);
-  final isOwner = myRole == 'founder';
-  final isAdmin = myRole == 'admin';
-  final isMember = isOwner || isAdmin || myRole == 'member';
+  final admissionPolicy = (community['join_policy']?.toString() ?? 'OPEN').toUpperCase();
+  final myRole = community['viewer_role']?.toString();
+  final isPending = community['viewer_membership_status'] == 'PENDING';
+  final members = asIntOr(community['member_count'], 0);
+  final isOwner = myRole == 'OWNER';
+  final isAdmin = myRole == 'MODERATOR';
+  final isMember = isOwner || isAdmin || myRole == 'MEMBER';
 
   await showDialog<void>(
     context: context,
@@ -626,13 +622,12 @@ Future<void> showCommunityManageDialog(
   EarthState state,
   Future<void> Function(Future<EarthState> Function()) action,
 ) async {
-  final id = community['id']?.toString() ?? 'COM-001';
-  final name = community['name']?.toString() ?? 'Community';
-  final myRole = community['my_role']?.toString();
+  final id = community['id']?.toString() ?? '';
+  final name = community['name']?.toString() ?? '';
+  final myRole = community['viewer_role']?.toString();
   final isOwner = myRole == 'founder';
   final descController = TextEditingController(text: community['description']?.toString() ?? '');
-  final questionController = TextEditingController(text: community['application_question']?.toString() ?? '');
-  String admissionPolicy = community['admission_policy']?.toString() ?? 'open';
+  String admissionPolicy = (community['join_policy']?.toString() ?? 'OPEN').toLowerCase() == 'request' ? 'approval' : 'open';
 
   List<dynamic> members = [];
   List<dynamic> requests = [];
@@ -647,7 +642,7 @@ Future<void> showCommunityManageDialog(
             try {
               final memRes = await const EarthApi().listCommunityMembers(id);
               members = memRes['members'] as List<dynamic>? ?? [];
-              if (admissionPolicy == 'approval') {
+              if (admissionPolicy == 'REQUEST') {
                 final reqRes = await const EarthApi().listCommunityRequests(id);
                 requests = reqRes['requests'] as List<dynamic>? ?? [];
               }
@@ -877,8 +872,7 @@ Future<void> showCommunityManageDialog(
                                   await action(() => const EarthApi().updateCommunity(
                                         communityId: id,
                                         description: descController.text.trim(),
-                                        admissionPolicy: admissionPolicy,
-                                        applicationQuestion: admissionPolicy == 'approval' ? questionController.text.trim() : null,
+                                        joinPolicy: admissionPolicy == 'approval' ? 'REQUEST' : 'OPEN',
                                       ));
                                 },
                               ),
@@ -921,8 +915,8 @@ Future<void> showCommunityManageDialog(
                                               onPressed: () async {
                                                 await const EarthApi().setCommunityMemberRole(
                                                   communityId: id,
-                                                  targetHumanId: hId,
-                                                  role: 'member',
+                                                  targetHouseId: hId,
+                                                  role: 'MEMBER',
                                                 );
                                                 setDialogState(() => loading = true);
                                               },
@@ -934,8 +928,8 @@ Future<void> showCommunityManageDialog(
                                               onPressed: () async {
                                                 await const EarthApi().setCommunityMemberRole(
                                                   communityId: id,
-                                                  targetHumanId: hId,
-                                                  role: 'admin',
+                                                  targetHouseId: hId,
+                                                  role: 'MODERATOR',
                                                 );
                                                 setDialogState(() => loading = true);
                                               },

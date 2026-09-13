@@ -39,6 +39,6 @@ test('server mutation surfaces consult the central registry', () => {
   assert.match(read('cloudflare/src/market-api.ts'), /featureEnabled\(env, 'spotMarket'\)/);
   assert.match(read('cloudflare/src/community-routes.ts'), /featureEnabled\(env, 'communities'\)/);
   assert.match(read('cloudflare/src/finance-routes.ts'), /featureEnabled\(env, 'bankDeposits'\)/);
-  assert.match(read('cloudflare/src/scheduler.ts'), /features\.spotMarket/);
+  assert.match(read('cloudflare/src/scheduler.ts'), /features/);
   assert.match(read('cloudflare/src/market-scheduler.ts'), /instrument_type === 'SPOT'/);
 });

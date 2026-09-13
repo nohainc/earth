@@ -1,8 +1,10 @@
 import type { Env } from './index.ts';
+import type { ViewerContext } from './auth-session.ts';
 import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   listCommunities,
+  getCommunity,
   createCommunity,
   updateCommunity,
   disbandCommunity,
@@ -11,8 +13,6 @@ import {
   setCommunityMemberRole,
   listCommunityMembers,
   changeCommunityMembership,
-  listCommunityContributions,
-  contributeToCommunity,
 } from './communities-postgres.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 
@@ -20,11 +20,13 @@ export async function handleCommunityRoutes(
   request: Request,
   env: Env,
   url: URL,
-  viewer: { id: string },
+  viewer: ViewerContext,
+  sensitiveActionAllowed?: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
   if (!featureEnabled(env, 'communities')) return featureDisabledResponse('communities');
   if (url.pathname === '/api/communities' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => listCommunities(repository));
+    const membership = url.searchParams.get('membership') === 'mine' ? 'mine' : undefined;
+    const result = await withRepository(env, (repository) => listCommunities(repository, viewer.houseId, membership));
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
@@ -32,15 +34,13 @@ export async function handleCommunityRoutes(
     const parsed = await parseJsonBody<{
       name?: string;
       description?: string;
-      admissionPolicy?: 'open' | 'approval';
-      applicationQuestion?: string;
-      founderId?: string;
+      visibility?: 'PUBLIC' | 'PRIVATE';
+      joinPolicy?: 'OPEN' | 'REQUEST';
       correlationId?: string;
     }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
     const name = body.name?.trim();
-    const founderId = viewer.id;
     if (!name || name.length < 3 || name.length > 80) {
       return Response.json({ ok: false, error: 'Community name must be 3–80 characters' }, { status: 400 });
     }
@@ -51,11 +51,12 @@ export async function handleCommunityRoutes(
     try {
       const result = await withRepository(env, (repository) =>
         createCommunity(repository, {
-          founderId,
+          houseId: viewer.houseId,
+          humanId: viewer.currentHumanId,
           name,
           description: body.description,
-          admissionPolicy: body.admissionPolicy,
-          applicationQuestion: body.applicationQuestion,
+          visibility: body.visibility,
+          joinPolicy: body.joinPolicy,
           correlationId,
         }),
       );
@@ -68,18 +69,27 @@ export async function handleCommunityRoutes(
   }
 
   const communityMatch = url.pathname.match(/^\/api\/communities\/([^/]+)$/);
+  if (communityMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => getCommunity(repository, communityMatch[1], viewer.houseId));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community could not be loaded' }, { status: 404 }); }
+  }
   if (communityMatch && request.method === 'PATCH') {
     const communityId = communityMatch[1];
-    const parsed = await parseJsonBody<{ description?: string; admissionPolicy?: 'open' | 'approval'; applicationQuestion?: string }>(request);
+    const parsed = await parseJsonBody<{ name?: string; description?: string; visibility?: 'PUBLIC' | 'PRIVATE'; joinPolicy?: 'OPEN' | 'REQUEST' }>(request);
     if (!parsed.ok) return parsed.response;
     try {
       const result = await withRepository(env, (repository) =>
         updateCommunity(repository, {
           communityId,
-          humanId: viewer.id,
+          houseId: viewer.houseId,
+          humanId: viewer.currentHumanId,
+          name: parsed.value.name,
           description: parsed.value.description,
-          admissionPolicy: parsed.value.admissionPolicy,
-          applicationQuestion: parsed.value.applicationQuestion,
+          visibility: parsed.value.visibility,
+          joinPolicy: parsed.value.joinPolicy,
         }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -92,9 +102,10 @@ export async function handleCommunityRoutes(
   if (communityMatch && request.method === 'DELETE') {
     const communityId = communityMatch[1];
     try {
-      const result = await withRepository(env, (repository) =>
-        disbandCommunity(repository, { communityId, humanId: viewer.id }),
-      );
+      let otp: string | undefined;
+      if (sensitiveActionAllowed) { const parsed = await parseJsonBody<{ otp?: string }>(request); if (!parsed.ok) return parsed.response; otp = parsed.value.otp; }
+      if (sensitiveActionAllowed && !(await sensitiveActionAllowed(env, viewer.currentHumanId, otp))) return Response.json({ ok: false, error: 'Recent authentication or MFA is required' }, { status: 403 });
+      const result = await withRepository(env, (repository) => disbandCommunity(repository, { communityId, houseId: viewer.houseId, humanId: viewer.currentHumanId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -107,7 +118,7 @@ export async function handleCommunityRoutes(
     const communityId = communityRequestsMatch[1];
     try {
       const result = await withRepository(env, (repository) =>
-        listCommunityMembershipRequests(repository, communityId, viewer.id),
+        listCommunityMembershipRequests(repository, communityId, viewer.houseId),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -116,20 +127,17 @@ export async function handleCommunityRoutes(
     }
   }
 
-  const communityRequestDecisionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/requests\/([^/]+)$/);
+  const communityRequestDecisionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/requests\/([^/]+)\/(approve|reject)$/);
   if (communityRequestDecisionMatch && request.method === 'POST') {
     const communityId = communityRequestDecisionMatch[1];
     const requestId = communityRequestDecisionMatch[2];
-    const parsed = await parseJsonBody<{ action?: 'approve' | 'reject'; rejectionReason?: string }>(request);
+    const parsed = await parseJsonBody<{ rejectionReason?: string }>(request);
     if (!parsed.ok) return parsed.response;
-    if (parsed.value.action !== 'approve' && parsed.value.action !== 'reject') {
-      return Response.json({ ok: false, error: 'Request action must be approve or reject' }, { status: 400 });
-    }
-    const action = parsed.value.action;
+    const action = communityRequestDecisionMatch[3] as 'approve' | 'reject';
     const rejectionReason = parsed.value.rejectionReason;
     try {
       const result = await withRepository(env, (repository) =>
-        decideCommunityMembershipRequest(repository, { communityId, deciderId: viewer.id, requestId, action, rejectionReason }),
+        decideCommunityMembershipRequest(repository, { communityId, actorHouseId: viewer.houseId, actorHumanId: viewer.currentHumanId, requestId, action, rejectionReason }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -138,19 +146,19 @@ export async function handleCommunityRoutes(
     }
   }
 
-  const communityMemberRoleMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members\/([^/]+)\/role$/);
-  if (communityMemberRoleMatch && request.method === 'POST') {
+  const communityMemberRoleMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members\/([^/]+)$/);
+  if (communityMemberRoleMatch && request.method === 'PATCH') {
     const communityId = communityMemberRoleMatch[1];
-    const targetHumanId = communityMemberRoleMatch[2];
-    const parsed = await parseJsonBody<{ role?: 'admin' | 'member' }>(request);
+    const targetHouseId = communityMemberRoleMatch[2];
+    const parsed = await parseJsonBody<{ role?: 'OWNER' | 'MODERATOR' | 'MEMBER' }>(request);
     if (!parsed.ok) return parsed.response;
-    if (parsed.value.role !== 'admin' && parsed.value.role !== 'member') {
-      return Response.json({ ok: false, error: 'Member role must be admin or member' }, { status: 400 });
+    if (!parsed.value.role || !['OWNER', 'MODERATOR', 'MEMBER'].includes(parsed.value.role)) {
+      return Response.json({ ok: false, error: 'Invalid community role' }, { status: 400 });
     }
     const role = parsed.value.role;
     try {
       const result = await withRepository(env, (repository) =>
-        setCommunityMemberRole(repository, { communityId, actorId: viewer.id, targetHumanId, role }),
+        setCommunityMemberRole(repository, { communityId, actorHouseId: viewer.houseId, actorHumanId: viewer.currentHumanId, targetHouseId, role }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -163,7 +171,7 @@ export async function handleCommunityRoutes(
   if (communityMembersMatch && request.method === 'GET') {
     const communityId = communityMembersMatch[1];
     try {
-      const result = await withRepository(env, (repository) => listCommunityMembers(repository, communityId));
+      const result = await withRepository(env, (repository) => listCommunityMembers(repository, communityId, viewer.houseId));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -171,72 +179,41 @@ export async function handleCommunityRoutes(
     }
   }
 
-  if (communityMembersMatch && (request.method === 'POST' || request.method === 'DELETE')) {
-    const communityId = communityMembersMatch[1];
-    const humanId = viewer.id;
-    let applicationMessage: string | undefined;
-    if (request.method === 'POST') {
-      const parsed = await parseJsonBody<{ applicationMessage?: string }>(request);
-      if (parsed.ok) {
-        applicationMessage = parsed.value.applicationMessage;
-      }
-    }
+  const memberActionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/(join|leave)$/);
+  if (memberActionMatch && request.method === 'POST') {
+    const communityId = memberActionMatch[1]; const houseId = viewer.houseId;
+    const parsed = await parseJsonBody<{ applicationMessage?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const applicationMessage = parsed.value.applicationMessage; const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId) ?? undefined;
     try {
       const result = await withRepository(env, (repository) =>
         changeCommunityMembership(repository, {
           communityId,
-          humanId,
-          action: request.method === 'POST' ? 'join' : 'leave',
+          houseId,
+          humanId: viewer.currentHumanId,
+          action: memberActionMatch[2],
           applicationMessage,
+          correlationId,
         }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: request.method === 'POST' ? 201 : 200 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: memberActionMatch[2] === 'join' ? 201 : 200 });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Community membership change failed';
       return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member|active/i.test(message) ? 409 : 400 });
     }
   }
 
-  const communityContributionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/contributions$/);
-  if (communityContributionMatch && request.method === 'GET') {
-    const communityId = communityContributionMatch[1];
+  const memberRemovalMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members\/([^/]+)$/);
+  if (memberRemovalMatch && request.method === 'DELETE') {
+    let otp: string | undefined;
+    if (sensitiveActionAllowed) { const parsed = await parseJsonBody<{ otp?: string }>(request); if (!parsed.ok) return parsed.response; otp = parsed.value.otp; }
+    if (sensitiveActionAllowed && !(await sensitiveActionAllowed(env, viewer.currentHumanId, otp))) return Response.json({ ok: false, error: 'Recent authentication or MFA is required' }, { status: 403 });
     try {
-      const result = await withRepository(env, (repository) => listCommunityContributions(repository, communityId));
+      const result = await withRepository(env, (repository) => changeCommunityMembership(repository, { communityId: memberRemovalMatch[1], houseId: viewer.houseId, humanId: viewer.currentHumanId, targetHouseId: memberRemovalMatch[2], action: 'remove' }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community contributions could not be loaded' }, { status: 404 });
-    }
-  }
-
-  if (communityContributionMatch && request.method === 'POST') {
-    const communityId = communityContributionMatch[1];
-    const parsed = await parseJsonBody<{ humanId?: string; amount?: number; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.value;
-    const humanId = viewer.id;
-    const amount = Math.round(Number(body.amount) * 100) / 100;
-    const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!correlationId) {
-      return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return Response.json({ ok: false, error: 'Contribution amount must be positive' }, { status: 400 });
-    }
-    if (amount > 100000) {
-      return Response.json({ ok: false, error: 'Contribution exceeds the per-command limit' }, { status: 400 });
-    }
-    try {
-      const result = await withRepository(env, (repository) =>
-        contributeToCommunity(repository, { communityId, humanId, amount, correlationId }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Community contribution failed';
-      return Response.json({ ok: false, error: message }, { status: /insufficient|balance/i.test(message) ? 409 : /not found/i.test(message) ? 404 : 400 });
-    }
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Member removal failed' }, { status: 400 }); }
   }
 
   return null;

@@ -87,17 +87,16 @@ export async function handleInstitutionRoutes(
   }
 
   if (url.pathname === '/api/cities' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ name?: string; communityId?: string }>(request);
+    const parsed = await parseJsonBody<{ name?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
     const name = body.name?.trim();
-    const communityId = body.communityId?.trim() || null;
     if (!name || name.length < 3 || name.length > 80) {
       return Response.json({ ok: false, error: 'A city name is required' }, { status: 400 });
     }
     try {
       const result = await withRepository(env, (repository) =>
-        createCity(repository, { founderId: viewer.id, communityId, name }),
+        createCity(repository, { founderId: viewer.id, name }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });

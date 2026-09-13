@@ -4019,12 +4019,12 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
     int openCount = 0;
 
     for (final c in activeCommunities) {
-      final myRole = c['my_role']?.toString();
-      final myRequestStatus = c['my_request_status']?.toString();
-      final isOwner = myRole == 'founder';
-      final isAdmin = myRole == 'admin';
-      final isMember = isOwner || isAdmin || myRole == 'member';
-      final isPending = myRequestStatus == 'pending';
+      final myRole = c['viewer_role']?.toString();
+      final myRequestStatus = c['viewer_membership_status']?.toString();
+      final isOwner = myRole == 'OWNER';
+      final isAdmin = myRole == 'MODERATOR';
+      final isMember = isOwner || isAdmin || myRole == 'MEMBER';
+      final isPending = myRequestStatus == 'PENDING';
 
       if (isMember || isOwner || isAdmin || isPending) {
         myCount++;
@@ -4035,12 +4035,12 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
     }
 
     final filteredList = activeCommunities.where((c) {
-      final myRole = c['my_role']?.toString();
-      final myRequestStatus = c['my_request_status']?.toString();
-      final isOwner = myRole == 'founder';
-      final isAdmin = myRole == 'admin';
-      final isMember = isOwner || isAdmin || myRole == 'member';
-      final isPending = myRequestStatus == 'pending';
+      final myRole = c['viewer_role']?.toString();
+      final myRequestStatus = c['viewer_membership_status']?.toString();
+      final isOwner = myRole == 'OWNER';
+      final isAdmin = myRole == 'MODERATOR';
+      final isMember = isOwner || isAdmin || myRole == 'MEMBER';
+      final isPending = myRequestStatus == 'PENDING';
       final name = c['name']?.toString() ?? '';
 
       if (_activeFilter == 'MY_COMMUNITIES' &&
@@ -4069,7 +4069,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       statusColor: context.primaryColor,
       infoTitle: 'CITIZEN COMMUNITIES & GUILDS ARCHITECTURE',
       infoDescription:
-          '• Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, industry cooperation, and shared services.\n\n• Membership & Contributions: Join or leave freely; voluntary treasury contributions fund shared communal initiatives and social crowdfunding campaigns.\n\n• Cross-World Belonging: Communities are independent citizen associations spanning across all corporations and cities on Earth.',
+          '• Civic Communities: Voluntary associations for social, cultural, and professional coordination.\n\n• House Membership: Your House remains affiliated across Human succession; the current Human acts and speaks for the House.\n\n• Cross-World Belonging: Communities are independent associations spanning corporations and cities on Earth, without a treasury or economic settlement.',
       title: 'COMMUNITIES & GUILDS',
       subtitle:
           'Grassroots civic associations, trade guilds, and mutual aid cooperatives across Earth',
@@ -4178,23 +4178,23 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: pageItems.map((community) {
-                    final id = community['id']?.toString() ?? 'COM-001';
-                    final name = community['name']?.toString() ?? 'Community';
+                    final id = community['id']?.toString() ?? '';
+                    final name = community['name']?.toString() ?? '';
                     final founderName =
-                        community['founder_name']?.toString() ?? 'Citizen';
+                        community['founder_house_name']?.toString() ?? 'Unknown House';
                     final description =
                         community['description']?.toString() ?? '';
                     final admissionPolicy =
-                        (community['admission_policy']?.toString() ?? 'open')
+                        (community['join_policy']?.toString() ?? 'OPEN')
                             .toUpperCase();
-                    final myRole = community['my_role']?.toString();
+                    final myRole = community['viewer_role']?.toString();
                     final myRequestStatus =
-                        community['my_request_status']?.toString();
-                    final isOwner = myRole == 'founder';
-                    final isAdmin = myRole == 'admin';
-                    final isMember = isOwner || isAdmin || myRole == 'member';
-                    final isPending = myRequestStatus == 'pending';
-                    final members = asIntOr(community['member_count'], 12);
+                        community['viewer_membership_status']?.toString();
+                    final isOwner = myRole == 'OWNER';
+                    final isAdmin = myRole == 'MODERATOR';
+                    final isMember = isOwner || isAdmin || myRole == 'MEMBER';
+                    final isPending = myRequestStatus == 'PENDING';
+                    final members = asIntOr(community['member_count'], 0);
 
                     final isExpanded = _expandedCommunityId == id;
 
@@ -4307,7 +4307,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                           ] else if (!isMember) ...[
                                             EarthButton(
                                               label:
-                                                  admissionPolicy == 'APPROVAL'
+                                                  admissionPolicy == 'REQUEST'
                                                       ? 'APPLY'
                                                       : 'JOIN',
                                               variant:
@@ -4316,7 +4316,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                                   ? null
                                                   : () {
                                                       if (admissionPolicy ==
-                                                          'APPROVAL') {
+                                                          'REQUEST') {
                                                         showCommunityApplicationDialog(
                                                             context,
                                                             community,
@@ -4552,11 +4552,11 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       final memRes = await const EarthApi().listCommunityMembers(id);
       _members = memRes['members'] as List<dynamic>? ?? [];
       final admissionPolicy =
-          (myComm['admission_policy']?.toString() ?? 'open').toLowerCase();
-      final myRole = myComm['my_role']?.toString();
-      final isElevated = myRole == 'founder' || myRole == 'admin';
+          (myComm['join_policy']?.toString() ?? 'OPEN').toUpperCase();
+      final myRole = myComm['viewer_role']?.toString();
+      final isElevated = myRole == 'OWNER' || myRole == 'MODERATOR';
 
-      if (isElevated && admissionPolicy == 'approval') {
+      if (isElevated && admissionPolicy == 'REQUEST') {
         final reqRes = await const EarthApi().listCommunityRequests(id);
         _requests = reqRes['requests'] as List<dynamic>? ?? [];
       } else {
@@ -4677,17 +4677,17 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       );
     }
 
-    final id = myComm['id']?.toString() ?? 'COM-001';
-    final name = myComm['name']?.toString() ?? 'Community';
-    final founderName = myComm['founder_name']?.toString() ?? 'Citizen';
+    final id = myComm['id']?.toString() ?? '';
+    final name = myComm['name']?.toString() ?? '';
+    final founderName = myComm['founder_house_name']?.toString() ?? 'Unknown House';
     final description = myComm['description']?.toString() ?? '';
     final admissionPolicy =
-        (myComm['admission_policy']?.toString() ?? 'open').toUpperCase();
-    final myRole = myComm['my_role']?.toString();
-    final isOwner = myRole == 'founder';
-    final isAdmin = myRole == 'admin';
+        (myComm['join_policy']?.toString() ?? 'OPEN').toUpperCase();
+    final myRole = myComm['viewer_role']?.toString();
+    final isOwner = myRole == 'OWNER';
+    final isAdmin = myRole == 'MODERATOR';
     final memberCount = asIntOr(
-        myComm['member_count'], _members.isNotEmpty ? _members.length : 1);
+        myComm['member_count'], _members.length);
 
     final statusText = isOwner
         ? 'FOUNDER'
@@ -4961,8 +4961,8 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                                           await const EarthApi()
                                               .setCommunityMemberRole(
                                             communityId: id,
-                                            targetHumanId: hId,
-                                            role: 'member',
+                                            targetHouseId: hId,
+                                            role: 'MEMBER',
                                           );
                                           _fetchDetails();
                                         },
@@ -4976,8 +4976,8 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                                           await const EarthApi()
                                               .setCommunityMemberRole(
                                             communityId: id,
-                                            targetHumanId: hId,
-                                            role: 'admin',
+                                            targetHouseId: hId,
+                                            role: 'MODERATOR',
                                           );
                                           _fetchDetails();
                                         },

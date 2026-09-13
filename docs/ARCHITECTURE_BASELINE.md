@@ -27,10 +27,11 @@ live delivery; transactional outbox delivery is post-commit.
 
 ## Database baseline
 
-- Migration head: `001_baseline.sql`.
-- Canonical fresh-install schema: `db/baseline/`, assembled by
-  `db/migrations/001_baseline.sql`.
-- Schema manifest: `db/schema-manifest.json`, `migrationVersion: 1`.
+- Immutable foundation: `db/migrations/001_baseline.sql` (schema version 1).
+- Current temporary reconciliation head: `002_communities_v2.sql` (schema version 2).
+- Canonical fresh-install sources: `db/baseline/`, assembled by
+  `db/migrations/001_baseline.sql`, followed by active reconciliation migrations.
+- Schema manifest: `db/schema-manifest.json`, currently `migrationVersion: 2`.
 - Production-compatible scheduled entry point: `cloudflare/src/index.ts`.
 - Production cron configuration: `wrangler.api.jsonc`, `* * * * *`.
 - Economy V2 is still in migration/shadow-reconciliation mode; legacy callers

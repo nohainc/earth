@@ -4,11 +4,10 @@ import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPos
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { runSchedulerHeartbeat } from './scheduler';
-import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, decideCommunityMembershipRequest as decideCommunityMembershipRequestPostgres, disbandCommunity as disbandCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres, listCommunityMembershipRequests as listCommunityMembershipRequestsPostgres, setCommunityMemberRole as setCommunityMemberRolePostgres, updateCommunity as updateCommunityPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
 import { listTechnology as listTechnologyPostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
-import { currentHuman, sensitiveActionAllowed } from './auth-session';
+import { currentHuman, currentViewer, sensitiveActionAllowed } from './auth-session';
 import { healthResponse, livenessResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
@@ -69,7 +68,7 @@ export class MarketCoordinator extends DurableObject<Env> {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
       this.ctx.acceptWebSocket(server);
-      server.send(JSON.stringify({ version: 1, type: 'ready', topics: ['world', 'market', 'house', 'finance', 'buildings', 'research', 'governance', 'notifications', 'institutions'], channel: 'earth-world', coordinator: 'market' }));
+      server.send(JSON.stringify({ version: 1, type: 'ready', topics: ['world', 'market', 'house', 'finance', 'buildings', 'research', 'governance', 'notifications', 'institutions', 'communities'], channel: 'earth-world', coordinator: 'market' }));
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -80,7 +79,7 @@ export class MarketCoordinator extends DurableObject<Env> {
         start: (controller) => {
           streamController = controller;
           this.sseControllers.add(controller);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ version: 1, type: 'ready', topics: ['world', 'market', 'house', 'finance', 'buildings', 'research', 'governance', 'notifications', 'institutions'], channel: 'earth-world', coordinator: 'market' })}\n\n`));
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ version: 1, type: 'ready', topics: ['world', 'market', 'house', 'finance', 'buildings', 'research', 'governance', 'notifications', 'institutions', 'communities'], channel: 'earth-world', coordinator: 'market' })}\n\n`));
         },
         cancel: () => {
           if (streamController) this.sseControllers.delete(streamController);
@@ -242,9 +241,9 @@ const worker = {
     // Feature routers are composed explicitly here so an unhandled API path
     // reaches the canonical 404 response instead of a fake success response.
     if (url.pathname.startsWith('/api/communities')) {
-      const viewer = await currentHuman(request, env);
+      const viewer = await currentViewer(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const response = await handleCommunityRoutes(request, env, url, viewer);
+      const response = await handleCommunityRoutes(request, env, url, viewer, sensitiveActionAllowed);
       if (response) return response;
     }
     if (url.pathname.startsWith('/api/cities') || url.pathname.startsWith('/api/corporations')) {

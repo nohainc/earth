@@ -213,7 +213,6 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
        WHERE human_id = $1 AND status = 'active'`, [human.id, day]);
     await tx.query('UPDATE institutions SET administrator_human_id = NULL WHERE administrator_human_id = $1', [human.id]);
     await tx.query("UPDATE proposal_challenge_authorities SET status = 'ENDED_BY_DEATH', revoked_effective_game_day = $2 WHERE human_id = $1 AND status = 'active'", [human.id, day + 1]);
-    await tx.query("UPDATE community_members SET role = 'member' WHERE human_id = $1 AND role IN ('founder', 'admin')", [human.id]);
     await tx.query('UPDATE house_heirlooms SET equipped_by_human_id = NULL WHERE house_id = $1 AND equipped_by_human_id = $2', [human.house_id, human.id]);
     await tx.query("UPDATE humans SET mortality_state = 'DEATH_CONFIRMED', life_status = 'deceased', death_game_day = $1, account_status = 'closed' WHERE id = $2", [day, human.id]);
     await tx.query('UPDATE house_lineage_records SET is_incumbent = false, successor_human_id = $5, death_game_day = $1, cause_of_death = $2, legacy_score = $3 WHERE human_id = $4 AND house_id = $6', [day, 'Natural Biological Mortality', human.legacy, human.id, newHumanId, human.house_id]);
@@ -287,7 +286,6 @@ export async function activatePendingHouseSuccessors(tx: PostgresRepository, day
     await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [successor.id, successor.house_id]);
     await tx.query('UPDATE house_lineage_records SET is_incumbent = true WHERE human_id = $1', [successor.id]);
     await tx.query('UPDATE buildings SET managed_by_human_id = $1 WHERE owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $2) AND ownership_class = \'private\'', [successor.id, successor.house_id]);
-    await tx.query('UPDATE community_members SET human_id = $1 WHERE house_id = $2', [successor.id, successor.house_id]);
   }
   return pending.rows.length;
 }

@@ -107,7 +107,7 @@ void main() {
     await api.decideCommunityRequest(
         communityId: 'COM-1', requestId: 'REQ-1', action: 'approve');
     await api.setCommunityMemberRole(
-        communityId: 'COM-1', targetHumanId: 'H-2', role: 'admin');
+        communityId: 'COM-1', targetHouseId: 'HOUSE-2', role: 'MEMBER');
     await api.disbandCommunity('COM-1');
     await api.createCity('New Kyoto', 'COM-1');
     await api.setCityBudget('energy');

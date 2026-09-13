@@ -10,7 +10,7 @@ export type RealtimeInvalidation = {
 
 const TOPICS = new Set([
   'world', 'market', 'house', 'finance', 'buildings', 'research',
-  'governance', 'notifications', 'institutions',
+  'governance', 'notifications', 'institutions', 'communities',
 ]);
 
 function topicFor(event: { topic?: string; aggregate_type?: string }): string {

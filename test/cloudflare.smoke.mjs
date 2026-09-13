@@ -179,9 +179,6 @@ assert.equal(residency.body.error, 'Authentication required');
 const communityCreate = await get('/api/communities', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Smoke Community', correlationId: 'smoke-community-formation' }) });
 assert.equal(communityCreate.response.status, 401);
 assert.equal(communityCreate.body.error, 'Authentication required');
-const communityContribution = await get('/api/communities/COMM-SMOKE/contributions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amount: 50, correlationId: 'smoke-community-contribution' }) });
-assert.equal(communityContribution.response.status, 401);
-assert.equal(communityContribution.body.error, 'Authentication required');
 
 const researchFunding = await get('/api/technology/me/fund', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amount: 240, correlationId: 'smoke-research-funding' }) });
 assert.equal(researchFunding.response.status, 401);

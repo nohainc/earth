@@ -11,7 +11,7 @@ test('database baseline and schema manifest are internally consistent', () => {
   const manifestPath = path.join(root, 'db/schema-manifest.json');
   const files = fs.readdirSync(migrationDir).filter((file) => /^\d+_.+\.sql$/.test(file)).sort();
 
-  assert.deepEqual(files, ['001_baseline.sql']);
+  assert.deepEqual(files, ['001_baseline.sql', '002_communities_v2.sql']);
   const baseline = fs.readFileSync(baselinePath, 'utf8');
   const migration = fs.readFileSync(migrationPath, 'utf8');
   assert.match(migration, /-- EARTH ACTIVE MIGRATION: clean baseline/);
@@ -22,7 +22,7 @@ test('database baseline and schema manifest are internally consistent', () => {
   assert.match(migration, /SECTION 4: INITIAL WORLD/);
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 1);
+  assert.equal(manifest.migrationVersion, 2);
   assert.equal(manifest.baseline, 'db/baseline/001_baseline.sql');
   for (const table of ['owner_registry', 'economic_accounts', 'building_catalog', 'market_instruments', 'tax_rule_versions', 'technology_catalog']) {
     assert.ok(manifest.requiredTables[table], `${table} must be in the manifest`);

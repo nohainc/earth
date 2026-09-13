@@ -53,7 +53,9 @@ export async function listAccessibleChannels(
        OR (ch.scope = 'corporation' AND EXISTS (
             SELECT 1 FROM house_affiliations ha
              WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $1) AND ha.status = 'ACTIVE' AND ha.corporation_id = ch.scope_id))
-       OR FALSE /* Community membership awaits a House-based Communities V2 model. */
+       OR (ch.scope = 'community' AND EXISTS (
+            SELECT 1 FROM communities c JOIN community_memberships cm ON cm.community_id = c.id
+             WHERE c.id = ch.scope_id AND c.status = 'ACTIVE' AND cm.house_id = (SELECT house_id FROM humans WHERE id = $1) AND cm.status = 'ACTIVE'))
        OR (ch.scope = 'direct' AND EXISTS (
             SELECT 1 FROM comm_direct_conversations d
             WHERE d.channel_id = ch.id AND (SELECT house_id FROM humans WHERE id = $1) IN (d.participant_low_house_id, d.participant_high_house_id)))
@@ -137,7 +139,9 @@ export async function canAccessChannel(
          ch.scope = 'global'
          OR (ch.scope = 'city' AND EXISTS (SELECT 1 FROM house_affiliations ha WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $2) AND ha.status = 'ACTIVE' AND ha.city_id = ch.scope_id))
          OR (ch.scope = 'corporation' AND EXISTS (SELECT 1 FROM house_affiliations ha WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $2) AND ha.status = 'ACTIVE' AND ha.corporation_id = ch.scope_id))
-         OR FALSE /* Community membership awaits a House-based Communities V2 model. */
+         OR (ch.scope = 'community' AND EXISTS (
+              SELECT 1 FROM communities c JOIN community_memberships cm ON cm.community_id = c.id
+               WHERE c.id = ch.scope_id AND c.status = 'ACTIVE' AND cm.house_id = (SELECT house_id FROM humans WHERE id = $2) AND cm.status = 'ACTIVE'))
        OR (ch.scope = 'direct' AND EXISTS (SELECT 1 FROM comm_direct_conversations d WHERE d.channel_id = ch.id AND (SELECT house_id FROM humans WHERE id = $2) IN (d.participant_low_house_id, d.participant_high_house_id)))
        )
      ) AS allowed`,

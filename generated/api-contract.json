@@ -635,7 +635,7 @@
       "method": "POST",
       "path": "/api/communities",
       "owner": "CommunityRoutes",
-      "auth": "HUMAN_SELF",
+      "auth": "HOUSE_SELF",
       "service": "createCommunity",
       "status": "ACTIVE"
     },
@@ -673,26 +673,34 @@
     },
     {
       "method": "POST",
-      "path": "/api/communities/{id}/members",
+      "path": "/api/communities/{id}/join",
       "owner": "CommunityRoutes",
-      "auth": "INSTITUTION_ROLE",
-      "service": "addCommunityMember",
-      "status": "ACTIVE"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/communities/{id}/members",
-      "owner": "CommunityRoutes",
-      "auth": "INSTITUTION_ROLE",
-      "service": "removeCommunityMember",
+      "auth": "HOUSE_SELF",
+      "service": "joinCommunity",
       "status": "ACTIVE"
     },
     {
       "method": "POST",
-      "path": "/api/communities/{id}/members/{humanId}/role",
+      "path": "/api/communities/{id}/leave",
+      "owner": "CommunityRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "leaveCommunity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/communities/{id}/members/{houseId}",
       "owner": "CommunityRoutes",
       "auth": "INSTITUTION_ROLE",
       "service": "setCommunityMemberRole",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/communities/{id}/members/{houseId}",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "removeCommunityMember",
       "status": "ACTIVE"
     },
     {
@@ -705,10 +713,18 @@
     },
     {
       "method": "POST",
-      "path": "/api/communities/{id}/requests/{requestId}",
+      "path": "/api/communities/{id}/requests/{requestId}/approve",
       "owner": "CommunityRoutes",
       "auth": "INSTITUTION_ROLE",
-      "service": "decideCommunityRequest",
+      "service": "approveCommunityRequest",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/communities/{id}/requests/{requestId}/reject",
+      "owner": "CommunityRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "rejectCommunityRequest",
       "status": "ACTIVE"
     },
     {
