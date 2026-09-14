@@ -1,6 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/features/institutions/institutions_dialogs.dart';
+import 'package:earth_client/core/api/earth_api.dart';
+import 'package:earth_client/core/api/earth_api_transport.dart';
+
+class _SuccessfulApiTransport extends EarthApiTransport {
+  @override
+  Future<dynamic> request(String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    return <String, dynamic>{'ok': true};
+  }
+}
 
 void main() {
   testWidgets('showCommunityComposer accepts community name and submits',
@@ -17,6 +27,7 @@ void main() {
                 (fn) async {
                   founded = true;
                 },
+                api: EarthApi(transport: _SuccessfulApiTransport()),
               ),
               child: const Text('Open Community Dialog'),
             ),
@@ -30,9 +41,11 @@ void main() {
 
     expect(find.text('Found New Community'), findsOneWidget);
     await tester.enterText(
-        find.widgetWithText(TextField, 'Community Name (Required)'), 'Pacific Syndicate');
+        find.widgetWithText(TextField, 'Community Name (Required)'),
+        'Pacific Syndicate');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Manifesto & Purpose (Required)'), 'Pacific oceanic clean energy consortium.');
+        find.widgetWithText(TextField, 'Manifesto & Purpose (Required)'),
+        'Pacific oceanic clean energy consortium.');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Found Community'));

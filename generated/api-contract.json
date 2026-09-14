@@ -425,50 +425,10 @@
     },
     {
       "method": "GET",
-      "path": "/api/cities",
-      "owner": "InstitutionRoutes",
-      "auth": "AUTHENTICATED",
-      "service": "listCities",
-      "status": "ACTIVE"
-    },
-    {
-      "method": "POST",
-      "path": "/api/cities",
-      "owner": "InstitutionRoutes",
-      "auth": "HUMAN_SELF",
-      "service": "createCity",
-      "status": "ACTIVE"
-    },
-    {
-      "method": "POST",
-      "path": "/api/cities/{id}/budget",
-      "owner": "InstitutionRoutes",
-      "auth": "INSTITUTION_ROLE",
-      "service": "setCityBudget",
-      "status": "ACTIVE"
-    },
-    {
-      "method": "POST",
-      "path": "/api/cities/{id}/residency",
-      "owner": "InstitutionRoutes",
-      "auth": "HOUSE_SELF",
-      "service": "joinCity",
-      "status": "ACTIVE"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/cities/{id}/residency",
-      "owner": "InstitutionRoutes",
-      "auth": "HOUSE_SELF",
-      "service": "leaveCity",
-      "status": "ACTIVE"
-    },
-    {
-      "method": "POST",
-      "path": "/api/cities/{id}/tax-charter",
-      "owner": "InstitutionRoutes",
-      "auth": "INSTITUTION_ROLE",
-      "service": "setCityTaxCharter",
+      "path": "/api/finance/corporations/{id}",
+      "owner": "FinanceRoutes",
+      "auth": "INSTITUTION_MEMBER",
+      "service": "getCorporationFiscalState",
       "status": "ACTIVE"
     },
     {
@@ -488,11 +448,19 @@
       "status": "ACTIVE"
     },
     {
-      "method": "POST",
-      "path": "/api/corporations/with-capital",
+      "method": "GET",
+      "path": "/api/corporations/{id}/territories",
       "owner": "InstitutionRoutes",
-      "auth": "HUMAN_SELF",
-      "service": "createCorporationWithCapital",
+      "auth": "AUTHENTICATED",
+      "service": "listCorporationTerritories",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/territories/{id}/capacity",
+      "owner": "BuildingRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "getTerritoryCapacity",
       "status": "ACTIVE"
     },
     {
@@ -517,14 +485,6 @@
       "owner": "InstitutionRoutes",
       "auth": "HOUSE_SELF",
       "service": "leaveCorporation",
-      "status": "ACTIVE"
-    },
-    {
-      "method": "POST",
-      "path": "/api/corporations/{id}/cities/{cityId}",
-      "owner": "InstitutionRoutes",
-      "auth": "INSTITUTION_ROLE",
-      "service": "adoptCity",
       "status": "ACTIVE"
     },
     {

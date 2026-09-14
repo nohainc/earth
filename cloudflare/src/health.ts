@@ -61,7 +61,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_instruments', 'economic_accounts', 'economic_transactions', 'buildings', 'house_affiliations']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['buildings', 'bank_deposits', 'tax_rule_versions', 'corporations']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'market_orders'"),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['corporations', 'cities']]),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['corporations', 'territories']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'bank_deposits'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'buildings'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('tax_rule_versions', 'tax_obligations')"),
@@ -81,7 +81,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
       repository.query('SELECT COALESCE(MAX(version), 0)::integer AS version FROM earth_schema_migrations'),
       Promise.all([
         repository.query('SELECT COUNT(*)::integer AS count FROM humans'),
-        repository.query('SELECT COUNT(*)::integer AS count FROM buildings WHERE city_id IS NULL'),
+        repository.query('SELECT COUNT(*)::integer AS count FROM buildings WHERE territory_id IS NULL'),
         repository.query('SELECT COUNT(*)::integer AS count FROM economic_entries'),
         repository.query("SELECT COUNT(*)::integer AS count FROM world_state WHERE id = 'WORLD'"),
       ]),
@@ -212,7 +212,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
         },
         worldHealth: {
           humanCount: Number(counts[0].rows[0]?.count ?? 0),
-          cityCount: Number((await repository.query('SELECT COUNT(*)::integer AS count FROM cities')).rows[0]?.count ?? 0),
+          territoryCount: Number((await repository.query('SELECT COUNT(*)::integer AS count FROM territories')).rows[0]?.count ?? 0),
           corporationCount: Number((await repository.query('SELECT COUNT(*)::integer AS count FROM corporations')).rows[0]?.count ?? 0),
           activeBuildings: Number(buildingRow.rows[0]?.active_buildings ?? 0),
           inactiveBuildings: Number(buildingRow.rows[0]?.inactive_buildings ?? 0),

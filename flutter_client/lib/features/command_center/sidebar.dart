@@ -74,7 +74,7 @@ class _SidebarState extends State<Sidebar> {
       [
         'corporation',
         'my-corporation',
-        'city',
+        'territories',
         'my-community',
         'civic',
         'public-finance'
@@ -107,13 +107,9 @@ class _SidebarState extends State<Sidebar> {
     final isCorporationMember =
         widget.state.membership?['corporation_id'] != null;
     final corporation = widget.state.institutions['corporation'];
-    final city = widget.state.institutions['city'];
     final corporationName = isCorporationMember && corporation is Map
         ? corporation['name']?.toString() ?? 'Corporations'
         : 'Corporations';
-    final cityName = isCorporationMember && city is Map
-        ? city['name']?.toString() ?? 'City & Services'
-        : 'City & Services';
 
     final myCommunities = widget.state.myCommunities;
 
@@ -201,9 +197,9 @@ class _SidebarState extends State<Sidebar> {
               null,
             ),
             (
-              'city',
-              cityName,
-              Icons.location_city_outlined,
+              'territories',
+              'Territories',
+              Icons.map_outlined,
               null,
             ),
           ],

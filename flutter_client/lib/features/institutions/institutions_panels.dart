@@ -199,7 +199,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   @override
   void didUpdateWidget(covariant CorporationDirectoryPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.state.membership?['corporation_id'] !=
+    if (!identical(oldWidget.state.json, widget.state.json) ||
+        oldWidget.state.membership?['corporation_id'] !=
         widget.state.membership?['corporation_id']) {
       _load();
     } else if (widget.selectedCorporationId != null &&
@@ -1054,7 +1055,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               onPressed: _isMember || widget.busy
                   ? null
                   : () =>
-                      showCorporationWithCapitalDialog(context, widget.action),
+                      showFormationComposer(context, widget.action),
             ),
           ],
         ),
@@ -2701,10 +2702,9 @@ class CorporationOverviewPanel extends StatelessWidget {
     final memberCount =
         asIntOr(corporation['member_count'] ?? corporation['members'], 0);
     final treasury = asDouble(corporation['treasury']);
-    final cityId = membership['city_id']?.toString();
-    final capitalCityName = corporation['capital_city_name']?.toString() ??
-        corporation['capital_city']?.toString() ??
-        'Capital City';
+    final territoryName = corporation['primary_territory_name']?.toString() ??
+        corporation['territory_name']?.toString() ??
+        'Primary Territory';
 
     final sharedPatents = corporation['shared_patents'] is List
         ? corporation['shared_patents'] as List
@@ -2724,8 +2724,6 @@ class CorporationOverviewPanel extends StatelessWidget {
         asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], 100);
     final corporateTaxBps =
         asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], 250);
-
-    final canAdoptCity = isAffiliated;
 
     final corpProposalsCount =
         ((state.governance['proposals'] as List<dynamic>?) ?? const [])
@@ -2752,9 +2750,9 @@ class CorporationOverviewPanel extends StatelessWidget {
           color: context.primaryColor,
         ),
         CockpitMetric(
-          label: 'Cities',
-          value: '${corporation['city_count'] ?? 1}',
-          icon: Icons.hub_outlined,
+          label: 'Territories',
+          value: '${corporation['territory_count'] ?? 1}',
+          icon: Icons.map_outlined,
           color: context.secondaryColor,
         ),
         CockpitMetric(
@@ -2777,15 +2775,17 @@ class CorporationOverviewPanel extends StatelessWidget {
       showSurface: false,
       showHeader: false,
       infoBulletPoints: const [
-        'Corporation membership determines which shared rules, cities, technologies, contracts, and services are available to you.',
-        'A city belongs to a corporation: moving between cities changes your local services and opportunities while preserving corporation membership.',
+        'Corporation membership determines which shared rules, Territories, technologies, contracts, and services are available to you.',
+        'A Territory belongs to a Corporation and carries its local capacity, infrastructure, and services.',
         'Independent people use Earth default rules and do not participate in corporation decisions.',
-        'Corporate Budget: The corporate treasury is separate from city and personal accounts and funds research, patents, payroll, and corporate projects.',
+        'Corporate Budget: the Corporation treasury funds public infrastructure, services, research, and corporate projects.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           cockpit,
+          const SizedBox(height: 18),
+          CorporationTerritorySection(corporationId: id),
           const SizedBox(height: 28),
           Container(
             width: double.infinity,
@@ -3074,7 +3074,7 @@ class CorporationOverviewPanel extends StatelessWidget {
               children: [
                 if (isAffiliated) ...[
                   EarthButton(
-                    label: 'FORM CITY',
+                    label: 'FORM CORPORATION',
                     icon: Icons.add_business_outlined,
                     variant: EarthButtonVariant.primary,
                     onPressed: busy
@@ -3082,7 +3082,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                         : () => showFormationComposer(
                               context,
                               action ?? ((_) async {}),
-                              city: true,
+                              territoryName: territoryName,
                             ),
                   ),
                   EarthButton(
@@ -3095,25 +3095,6 @@ class CorporationOverviewPanel extends StatelessWidget {
                             context, action ?? ((_) async {}), id,
                             corporation: true),
                   ),
-                  if (canAdoptCity)
-                    EarthButton(
-                      label: corporation['admission_policy']?.toString() ==
-                              'approval'
-                          ? 'ADMISSION: APPROVAL'
-                          : 'ADMISSION: OPEN',
-                      icon: Icons.how_to_reg_outlined,
-                      variant: EarthButtonVariant.secondary,
-                      onPressed: busy
-                          ? null
-                          : () => showAdmissionPolicyDialog(
-                                context,
-                                action ?? ((_) async {}),
-                                id,
-                                currentPolicy: corporation['admission_policy']
-                                        ?.toString() ??
-                                    'open',
-                              ),
-                    ),
                   EarthButton(
                     label: 'LEAVE CORPORATION',
                     icon: Icons.logout,
@@ -3134,59 +3115,6 @@ class CorporationOverviewPanel extends StatelessWidget {
                   ),
                 ],
               ],
-            ),
-          ],
-          if (state.rankings['cities'] is List &&
-              (state.rankings['cities'] as List).isNotEmpty) ...[
-            SizedBox(height: context.spacingTopic),
-            Text('CORPORATION CITY NETWORK', style: context.widgetTitleStyle),
-            const SizedBox(height: 4),
-            Text('Rules apply across the constituent municipal network.',
-                style: context.widgetFooterStyle),
-            SizedBox(height: context.spacingControl),
-            EarthDataList(
-              children: (state.rankings['cities'] as List)
-                  .where((raw) {
-                    if (raw is! Map) return false;
-                    return raw['corporation_id']?.toString() == id;
-                  })
-                  .take(8)
-                  .map((raw) {
-                    final row = Map<String, dynamic>.from(raw as Map);
-                    final city = row['id']?.toString() ?? 'City';
-                    final isCurrentCity = city == cityId;
-
-                    return EarthDataRow(
-                      title: '${row['name'] ?? city}',
-                      subtitle: '${row['residents'] ?? 0} residents',
-                      leading: Icon(
-                        Icons.location_city_outlined,
-                        size: context.iconSize,
-                        color: isCurrentCity
-                            ? context.primaryColor
-                            : context.mutedColor,
-                      ),
-                      trailing: isAffiliated && !isCurrentCity
-                          ? EarthButton(
-                              label: 'MOVE',
-                              variant: EarthButtonVariant.primary,
-                              onPressed: busy
-                                  ? null
-                                  : () => action?.call(() =>
-                                      const EarthApi().joinCity(cityId: city)),
-                            )
-                          : (isCurrentCity
-                              ? const EarthBadge(
-                                  label: 'RESIDENCE',
-                                  variant: EarthBadgeVariant.primary,
-                                )
-                              : const EarthBadge(
-                                  label: 'CHARTERED CITY',
-                                  variant: EarthBadgeVariant.neutral,
-                                )),
-                    );
-                  })
-                  .toList(),
             ),
           ],
         ],
@@ -3296,6 +3224,61 @@ class CorporationOverviewPanel extends StatelessWidget {
   }
 }
 
+class CorporationTerritorySection extends StatefulWidget {
+  final String corporationId;
+
+  const CorporationTerritorySection({super.key, required this.corporationId});
+
+  @override
+  State<CorporationTerritorySection> createState() => _CorporationTerritorySectionState();
+}
+
+class _CorporationTerritorySectionState extends State<CorporationTerritorySection> {
+  late Future<Map<String, dynamic>> _territories;
+
+  @override
+  void initState() {
+    super.initState();
+    _territories = const EarthApi().listCorporationTerritories(widget.corporationId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _territories,
+      builder: (context, snapshot) {
+        final rows = snapshot.data?['territories'] is List
+            ? (snapshot.data!['territories'] as List).whereType<Map>().toList()
+            : const <Map>[];
+        return EarthSection(
+          title: 'CORPORATION TERRITORIES',
+          showSurface: true,
+          infoBulletPoints: const [
+            'Territories are geographic subdivisions of the Corporation, not separate political institutions.',
+            'Buildings, private slots, public slots, and service capacity are settled here.',
+          ],
+          child: snapshot.connectionState == ConnectionState.waiting
+              ? const LinearProgressIndicator()
+              : rows.isEmpty
+                  ? Text('No active Territories are available.', style: context.bodyStyle)
+                  : Column(
+                      children: rows.map((row) {
+                        final name = row['name']?.toString() ?? row['id']?.toString() ?? 'Territory';
+                        final primary = row['is_primary'] == true ? ' · PRIMARY' : '';
+                        return ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.map_outlined),
+                          title: Text('$name$primary'),
+                          subtitle: Text('${row['territory_type'] ?? 'TERRITORY'} · ${row['status'] ?? 'ACTIVE'}'),
+                        );
+                      }).toList(),
+                    ),
+        );
+      },
+    );
+  }
+}
+
 class AffiliationRequiredPanel extends StatelessWidget {
   final String title;
   final String message;
@@ -3339,11 +3322,11 @@ class AffiliationRequiredPanel extends StatelessWidget {
   }
 }
 
-class CityFormationAccessPanel extends StatelessWidget {
+class CorporationFormationAccessPanel extends StatelessWidget {
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
 
-  const CityFormationAccessPanel({
+  const CorporationFormationAccessPanel({
     super.key,
     required this.busy,
     required this.action,
@@ -3352,21 +3335,21 @@ class CityFormationAccessPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return EarthSection(
-      title: 'CITY FORMATION',
+      title: 'CORPORATION FORMATION',
       showSurface: false,
       infoBulletPoints: const [
-        'Cities and communities are independent institutions. A community may support a city, but it is not required to found one.',
+        'Corporations are local polities. Each new Corporation receives its primary Territory.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'You are not affiliated with a city yet. You can found a new city directly as an independent pioneer; you will become its first resident and it will receive its foundational Urban District Module.',
+            'You are not affiliated with a Corporation yet. Found a Corporation to receive its primary Territory and local public budget.',
             style: context.widgetFooterStyle,
           ),
           SizedBox(height: context.spacingControl),
           EarthButton(
-            label: 'FORM CITY',
+            label: 'FORM CORPORATION',
             icon: Icons.add_business_outlined,
             variant: EarthButtonVariant.primary,
             onPressed: busy
@@ -3374,7 +3357,6 @@ class CityFormationAccessPanel extends StatelessWidget {
                 : () => showFormationComposer(
                       context,
                       action,
-                      city: true,
                     ),
           ),
         ],
@@ -3575,40 +3557,6 @@ class InstitutionsCapacityPanel extends StatelessWidget {
 
               SizedBox(height: context.spacingTitleOffset),
 
-              // City Action Buttons
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  EarthButton(
-                    label: 'CHANGE CITY',
-                    variant: isCityResident
-                        ? EarthButtonVariant.secondary
-                        : EarthButtonVariant.primary,
-                    onPressed: busy
-                        ? null
-                        : () => showCityChangeDialog(
-                            context, state, cityId, action),
-                  ),
-                  EarthButton(
-                    label: 'PROPOSE BUDGET',
-                    icon: Icons.account_balance_wallet_outlined,
-                    variant: EarthButtonVariant.secondary,
-                    onPressed: busy
-                        ? null
-                        : () => action(() => const EarthApi()
-                            .setCityBudget('maintenance', cityId: cityId)),
-                  ),
-                  EarthButton(
-                    label: 'TAX CHARTER',
-                    icon: Icons.receipt_long_outlined,
-                    variant: EarthButtonVariant.secondary,
-                    onPressed: busy
-                        ? null
-                        : () => showTaxCharterDialog(context, action, cityId),
-                  ),
-                ],
-              ),
             ],
           ),
           if (isCityResident && cityMembers.isNotEmpty) ...[
@@ -3974,12 +3922,14 @@ class CommunitiesPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
+  final EarthApi communityApi;
 
   const CommunitiesPanel({
     super.key,
     required this.state,
     required this.busy,
     required this.action,
+    this.communityApi = const EarthApi(),
   });
 
   @override
@@ -4019,8 +3969,11 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
     int openCount = 0;
 
     for (final c in activeCommunities) {
-      final myRole = c['viewer_role']?.toString();
-      final myRequestStatus = c['viewer_membership_status']?.toString();
+      final viewer = c['viewer'] is Map
+          ? Map<String, dynamic>.from(c['viewer'] as Map)
+          : const <String, dynamic>{};
+      final myRole = viewer['role']?.toString();
+      final myRequestStatus = viewer['requestStatus']?.toString();
       final isOwner = myRole == 'OWNER';
       final isAdmin = myRole == 'MODERATOR';
       final isMember = isOwner || isAdmin || myRole == 'MEMBER';
@@ -4029,14 +3982,18 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       if (isMember || isOwner || isAdmin || isPending) {
         myCount++;
       }
-      if (!isMember && !isOwner && !isAdmin && !isPending) {
+      if (viewer['canJoin'] == true ||
+          (!isMember && !isOwner && !isAdmin && !isPending)) {
         openCount++;
       }
     }
 
     final filteredList = activeCommunities.where((c) {
-      final myRole = c['viewer_role']?.toString();
-      final myRequestStatus = c['viewer_membership_status']?.toString();
+      final viewer = c['viewer'] is Map
+          ? Map<String, dynamic>.from(c['viewer'] as Map)
+          : const <String, dynamic>{};
+      final myRole = viewer['role']?.toString();
+      final myRequestStatus = viewer['requestStatus']?.toString();
       final isOwner = myRole == 'OWNER';
       final isAdmin = myRole == 'MODERATOR';
       final isMember = isOwner || isAdmin || myRole == 'MEMBER';
@@ -4048,6 +4005,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
         return false;
       }
       if (_activeFilter == 'OPEN_TO_JOIN' &&
+          viewer['canJoin'] != true &&
           (isMember || isOwner || isAdmin || isPending)) {
         return false;
       }
@@ -4127,7 +4085,8 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                     icon: Icons.add_business_outlined,
                     onPressed: widget.busy
                         ? null
-                        : () => showCommunityComposer(context, widget.action),
+                        : () => showCommunityComposer(context, widget.action,
+                            api: widget.communityApi),
                   ),
                 ],
               ),
@@ -4181,15 +4140,18 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                     final id = community['id']?.toString() ?? '';
                     final name = community['name']?.toString() ?? '';
                     final founderName =
-                        community['founder_house_name']?.toString() ?? 'Unknown House';
+                        community['founder_house_name']?.toString() ??
+                            'Unknown House';
                     final description =
                         community['description']?.toString() ?? '';
                     final admissionPolicy =
                         (community['join_policy']?.toString() ?? 'OPEN')
                             .toUpperCase();
-                    final myRole = community['viewer_role']?.toString();
-                    final myRequestStatus =
-                        community['viewer_membership_status']?.toString();
+                    final viewer = community['viewer'] is Map
+                        ? Map<String, dynamic>.from(community['viewer'] as Map)
+                        : const <String, dynamic>{};
+                    final myRole = viewer['role']?.toString();
+                    final myRequestStatus = viewer['requestStatus']?.toString();
                     final isOwner = myRole == 'OWNER';
                     final isAdmin = myRole == 'MODERATOR';
                     final isMember = isOwner || isAdmin || myRole == 'MEMBER';
@@ -4294,17 +4256,13 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                         runSpacing: 6,
                                         children: [
                                           if (isPending) ...[
-                                            EarthButton(
-                                              label: 'CANCEL REQ',
+                                            const EarthBadge(
+                                              label: 'REQUEST PENDING',
                                               variant:
-                                                  EarthButtonVariant.danger,
-                                              onPressed: widget.busy
-                                                  ? null
-                                                  : () => widget.action(() =>
-                                                      const EarthApi()
-                                                          .leaveCommunity(id)),
+                                                  EarthBadgeVariant.warning,
                                             ),
-                                          ] else if (!isMember) ...[
+                                          ] else if (viewer['canJoin'] ==
+                                              true) ...[
                                             EarthButton(
                                               label:
                                                   admissionPolicy == 'REQUEST'
@@ -4553,10 +4511,14 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       _members = memRes['members'] as List<dynamic>? ?? [];
       final admissionPolicy =
           (myComm['join_policy']?.toString() ?? 'OPEN').toUpperCase();
-      final myRole = myComm['viewer_role']?.toString();
+      final viewer = myComm['viewer'] is Map
+          ? Map<String, dynamic>.from(myComm['viewer'] as Map)
+          : const <String, dynamic>{};
+      final myRole = viewer['role']?.toString();
       final isElevated = myRole == 'OWNER' || myRole == 'MODERATOR';
 
-      if (isElevated && admissionPolicy == 'REQUEST') {
+      if (viewer['canApproveRequests'] == true &&
+          admissionPolicy == 'REQUEST') {
         final reqRes = await const EarthApi().listCommunityRequests(id);
         _requests = reqRes['requests'] as List<dynamic>? ?? [];
       } else {
@@ -4679,15 +4641,18 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
 
     final id = myComm['id']?.toString() ?? '';
     final name = myComm['name']?.toString() ?? '';
-    final founderName = myComm['founder_house_name']?.toString() ?? 'Unknown House';
+    final founderName =
+        myComm['founder_house_name']?.toString() ?? 'Unknown House';
     final description = myComm['description']?.toString() ?? '';
     final admissionPolicy =
         (myComm['join_policy']?.toString() ?? 'OPEN').toUpperCase();
-    final myRole = myComm['viewer_role']?.toString();
+    final viewer = myComm['viewer'] is Map
+        ? Map<String, dynamic>.from(myComm['viewer'] as Map)
+        : const <String, dynamic>{};
+    final myRole = viewer['role']?.toString();
     final isOwner = myRole == 'OWNER';
     final isAdmin = myRole == 'MODERATOR';
-    final memberCount = asIntOr(
-        myComm['member_count'], _members.length);
+    final memberCount = asIntOr(myComm['member_count'], _members.length);
 
     final statusText = isOwner
         ? 'FOUNDER'

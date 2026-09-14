@@ -98,7 +98,7 @@ extension EarthApiAuth on EarthApi {
           })) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> rebirth(String displayName,
-      {String? houseName, String? dynastyName, String? startingCityId}) async {
+      {String? houseName, String? dynastyName}) async {
     final finalHouseName = houseName ?? dynastyName;
     final response =
         (await _request('/api/auth/rebirth', method: 'POST', body: {
@@ -107,8 +107,6 @@ extension EarthApiAuth on EarthApi {
         'houseName': finalHouseName,
         'dynastyName': finalHouseName,
       },
-      if (startingCityId != null && startingCityId.isNotEmpty)
-        'startingCityId': startingCityId,
     })) as Map<String, dynamic>;
     final token = response['token']?.toString();
     if (token != null && token.isNotEmpty) {

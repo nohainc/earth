@@ -685,7 +685,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     final validAlerts = widget.notifications
         .whereType<Map>()
         .map((raw) => Map<String, dynamic>.from(raw))
-        .where((n) => !isCorpOrCityNotification(n))
+        .where((n) => !isCorpOrTerritoryNotification(n))
         .toList();
 
     final alerts = validAlerts.where((n) {

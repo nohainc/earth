@@ -93,13 +93,13 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     // route must authenticate those identities instead of requiring active.
     const human = await currentHuman(request, env, true);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ displayName?: string; houseName?: string; dynastyName?: string; startingCityId?: string }>(request);
+    const parsed = await parseJsonBody<{ displayName?: string; houseName?: string; dynastyName?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const displayName = parsed.value.displayName?.trim();
     if (!displayName || displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Display name must be 2–80 characters' }, { status: 400 });
     try {
       const houseName = parsed.value.houseName?.trim() ?? parsed.value.dynastyName?.trim();
-      const result = await withRepository(env, (repository) => rebornIdentity(repository, { email: human.email, displayName, dynastyName: houseName, startingCityId: parsed.value.startingCityId }));
+      const result = await withRepository(env, (repository) => rebornIdentity(repository, { email: human.email, displayName, dynastyName: houseName }));
       if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
     } catch (error) {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const migration = fs.readFileSync('db/migrations/002_communities_v2.sql', 'utf8');
+const hardeningMigration = fs.readFileSync('db/migrations/003_community_v2_hardening.sql', 'utf8');
 const service = fs.readFileSync('cloudflare/src/communities-postgres.ts', 'utf8');
 const routes = fs.readFileSync('cloudflare/src/community-routes.ts', 'utf8');
 const communications = fs.readFileSync('cloudflare/src/communications-postgres.ts', 'utf8');
@@ -17,8 +18,19 @@ test('Community V2 schema covers House membership, requests, and duplicate prote
   assert.doesNotMatch(migration, /community_(?:contributions|balances|resources|economic_accounts)/);
 });
 
+test('Community names are unique only among active communities', () => {
+  assert.match(hardeningMigration, /DROP CONSTRAINT IF EXISTS communities_normalized_name_key/);
+  assert.match(hardeningMigration, /CREATE UNIQUE INDEX communities_active_normalized_name_uq/);
+  assert.match(hardeningMigration, /ON communities \(normalized_name\)[\s\S]*WHERE status = 'ACTIVE'/);
+});
+
 test('Community mutations are House-principal, Human-actor transactions', () => {
   assert.match(service, /repo\.transaction/);
+  assert.match(service, /correlationId/);
+  assert.match(service, /alreadyProcessed: true/);
+  assert.match(service, /COMMUNITY_CREATED/);
+  assert.match(service, /INSERT INTO comm_channels/);
+  assert.match(service, /INSERT INTO community_memberships/);
   assert.match(service, /assertActor\(tx, input\.houseId, input\.humanId\)/);
   assert.match(service, /FOR UPDATE/);
   assert.match(service, /pg_advisory_xact_lock/);
@@ -60,4 +72,24 @@ test('Community API exposes no legacy membership or economic actions', () => {
   assert.doesNotMatch(routes, /applicationQuestion|admissionPolicy|targetHumanId|contribution/);
   assert.doesNotMatch(routes, /members\/\(\[\^\/\]\+\)\/role/);
   assert.match(routes, /targetHouseId/);
+});
+
+test('Community reads expose one server-computed viewer state', () => {
+  assert.match(service, /viewer_request_status/);
+  assert.match(service, /canApproveRequests/);
+  assert.match(service, /canChangeRoles/);
+  assert.match(service, /canDisband/);
+  assert.match(service, /LEFT JOIN LATERAL/);
+  assert.match(service, /membership === 'mine'/);
+});
+
+test('Community creation has explicit HTTP and transaction safety contracts', () => {
+  assert.match(routes, /request\.method === 'POST'/);
+  assert.match(routes, /errorResponse\(error, correlationId/);
+  assert.match(service, /repo\.transaction\(async \(tx\)/);
+  assert.match(service, /pg_advisory_xact_lock\(hashtext\(\$1\)\)/);
+  assert.match(service, /event_type='COMMUNITY_CREATED'/);
+  assert.match(service, /INSERT INTO comm_channels/);
+  assert.match(service, /INSERT INTO community_memberships/);
+  assert.match(service, /createGameEvent\(tx/);
 });

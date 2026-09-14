@@ -1,4 +1,4 @@
-# EARTH Architecture Freeze — V2 Baseline
+# EARTH Architecture Freeze — V3 Baseline
 
 > Baseline date: 2026-09-11  
 > Repository: `earth`  
@@ -15,8 +15,9 @@
 | Market V2 | Spot instruments, orders, batches, fills and V2 escrow | Spot trading only |
 | Finance V2 | Finance contracts and projections | Banking, tax, obligations and financial state |
 | Technology/IP V2 | Technology catalog, access, patents and licenses | Corporation research and technology rights |
-| Cities | `cities` plus V2 institutional accounts | Public institutions and service consumers |
-| Corporations | `corporations` plus V2 institutional accounts | Corporate institutions and research actors |
+| EARTH | `institutions` (`kind = EARTH`) and global economic owner | Global authority and global jurisdiction |
+| Corporations | `corporations` plus V2 institutional accounts | Local polities, treasuries, governance, and research actors |
+| Territories | `territories` | Geography and physical location; never an owner or polity |
 | Budgets V2 | `institution_budget_lines` and commitments | Spending authorization, not money |
 | Proposal/Governance V2 | Proposal state machine, ballots, roles and actions | Decisions and authority |
 | Scheduler V2 | Worker scheduled handler plus PostgreSQL settlement runs | Game-time progression and ordered phases |
@@ -27,11 +28,11 @@ live delivery; transactional outbox delivery is post-commit.
 
 ## Database baseline
 
-- Immutable foundation: `db/migrations/001_baseline.sql` (schema version 1).
-- Current temporary reconciliation head: `002_communities_v2.sql` (schema version 2).
+- Clean-break foundation: `db/migrations/001_baseline.sql` (schema head 3).
+- Current temporary reconciliation head: `003_community_v2_hardening.sql` (schema version 3).
 - Canonical fresh-install sources: `db/baseline/`, assembled by
   `db/migrations/001_baseline.sql`, followed by active reconciliation migrations.
-- Schema manifest: `db/schema-manifest.json`, currently `migrationVersion: 2`.
+- Schema manifest: `db/schema-manifest.json`, currently `migrationVersion: 3`.
 - Production-compatible scheduled entry point: `cloudflare/src/index.ts`.
 - Production cron configuration: `wrangler.api.jsonc`, `* * * * *`.
 - Economy V2 is still in migration/shadow-reconciliation mode; legacy callers
@@ -79,8 +80,8 @@ the batch scheduler and building settlement by Building V2.
 - Old budgets model: retired by migration 316; current code uses budget lines.
 - Scalar city/corporation treasury columns: removed from the canonical schema;
   migration history documents the former compatibility projection.
-- City capacity scalars: retained as compatibility/read fields while
-  `city_service_capacity_daily` is the V2 projection.
+- City institution: removed from the clean baseline. Local geography uses
+  `territories`; local authority uses Corporations.
 - Hono, Zod, Drizzle, Queues, R2 and microservice decomposition: deferred and
   require a new ADR before adoption.
 

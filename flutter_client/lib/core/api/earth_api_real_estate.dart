@@ -4,7 +4,7 @@ extension EarthApiRealEstate on EarthApi {
   Future<EarthState> purchaseBuilding({
     required String buildingType,
     required String name,
-    String? cityId,
+    required String territoryId,
   }) async {
     final res = await _request(
       '/api/real-estate/purchase',
@@ -12,7 +12,7 @@ extension EarthApiRealEstate on EarthApi {
       body: {
         'buildingType': buildingType,
         'name': name,
-        if (cityId != null) 'cityId': cityId,
+        'territoryId': territoryId,
         'correlationId': newClientCorrelationId('PURCHASE-BLD'),
       },
     );

@@ -8,7 +8,7 @@ test('Database Backup, Migration Preflight, and Checksum Verification', async ()
   const migrationsDir = resolve('db/migrations');
   const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
 
-  assert.deepEqual(files, ['001_baseline.sql', '002_communities_v2.sql'], 'Temporary reconciliation migrations must be contiguous');
+  assert.deepEqual(files, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql'], 'Temporary reconciliation migrations must be contiguous');
 
   // Verify that all migration files are non-empty and have valid SQL syntax prefixes
   for (const file of files) {

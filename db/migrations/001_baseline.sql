@@ -71,25 +71,74 @@ CREATE TABLE house_succession_plans (house_id TEXT PRIMARY KEY REFERENCES houses
 CREATE TABLE succession_events (id BIGSERIAL PRIMARY KEY, house_id TEXT NOT NULL REFERENCES houses(id), predecessor_human_id TEXT NOT NULL REFERENCES humans(id), successor_human_id TEXT REFERENCES humans(id), death_game_day BIGINT NOT NULL, effective_game_day BIGINT NOT NULL, generation INTEGER NOT NULL, status TEXT NOT NULL, correlation_id TEXT NOT NULL UNIQUE);
 
 CREATE TABLE world_state (id TEXT PRIMARY KEY, game_day BIGINT NOT NULL CHECK (game_day >= 0), game_minute INTEGER NOT NULL CHECK (game_minute BETWEEN 0 AND 1439), world_seed TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE');
-CREATE TABLE institutions (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('OUC','CITY','CORPORATION','BANK')), name TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'ACTIVE');
-CREATE TABLE cities (id TEXT PRIMARY KEY REFERENCES institutions(id), corporation_id TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE');
-CREATE TABLE corporations (id TEXT PRIMARY KEY REFERENCES institutions(id), status TEXT NOT NULL DEFAULT 'ACTIVE');
-CREATE TABLE house_affiliations (house_id TEXT NOT NULL REFERENCES houses(id), city_id TEXT REFERENCES cities(id), corporation_id TEXT REFERENCES corporations(id), joined_game_day BIGINT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE', PRIMARY KEY (house_id, corporation_id));
+CREATE TABLE institutions (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('EARTH','CORPORATION','BANK')), name TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'ACTIVE');
+CREATE TABLE corporations (
+  id TEXT PRIMARY KEY REFERENCES institutions(id),
+  charter_version TEXT NOT NULL DEFAULT 'corporation-charter-v1',
+  admission_policy TEXT NOT NULL DEFAULT 'OPEN',
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','DISSOLVING','DISSOLVED')),
+  created_game_day BIGINT NOT NULL DEFAULT 1
+);
+CREATE TABLE territories (
+  id TEXT PRIMARY KEY,
+  corporation_id TEXT NOT NULL REFERENCES corporations(id),
+  name TEXT NOT NULL,
+  territory_type TEXT NOT NULL DEFAULT 'PRIMARY',
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE','UNGOVERNED')),
+  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+  created_game_day BIGINT NOT NULL DEFAULT 1,
+  UNIQUE (id, corporation_id)
+);
+CREATE UNIQUE INDEX territories_one_active_primary_idx
+  ON territories (corporation_id)
+  WHERE is_primary = TRUE AND status = 'ACTIVE';
+CREATE TABLE house_affiliations (
+  id BIGSERIAL PRIMARY KEY,
+  house_id TEXT NOT NULL REFERENCES houses(id),
+  corporation_id TEXT NOT NULL REFERENCES corporations(id),
+  primary_territory_id TEXT,
+  joined_game_day BIGINT NOT NULL,
+  left_game_day BIGINT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','LEFT','REMOVED')),
+  FOREIGN KEY (primary_territory_id, corporation_id) REFERENCES territories(id, corporation_id),
+  CHECK (left_game_day IS NULL OR left_game_day >= joined_game_day)
+);
+CREATE UNIQUE INDEX house_affiliations_one_active_idx
+  ON house_affiliations (house_id)
+  WHERE status = 'ACTIVE';
+CREATE TABLE territory_capacity_state (
+  territory_id TEXT PRIMARY KEY REFERENCES territories(id),
+  game_day BIGINT NOT NULL,
+  active_house_count INTEGER NOT NULL DEFAULT 0 CHECK (active_house_count >= 0),
+  house_capacity BIGINT NOT NULL DEFAULT 0 CHECK (house_capacity >= 0),
+  population_capacity BIGINT NOT NULL DEFAULT 0 CHECK (population_capacity >= 0),
+  private_slot_capacity BIGINT NOT NULL DEFAULT 0 CHECK (private_slot_capacity >= 0),
+  public_slot_capacity BIGINT NOT NULL DEFAULT 0 CHECK (public_slot_capacity >= 0),
+  private_slots_used BIGINT NOT NULL DEFAULT 0 CHECK (private_slots_used >= 0),
+  public_slots_used BIGINT NOT NULL DEFAULT 0 CHECK (public_slots_used >= 0),
+  housing_capacity BIGINT NOT NULL DEFAULT 0 CHECK (housing_capacity >= 0),
+  health_capacity BIGINT NOT NULL DEFAULT 0 CHECK (health_capacity >= 0),
+  energy_capacity BIGINT NOT NULL DEFAULT 0 CHECK (energy_capacity >= 0),
+  connectivity_capacity BIGINT NOT NULL DEFAULT 0 CHECK (connectivity_capacity >= 0),
+  service_capacity JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(service_capacity) = 'object'),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX territory_capacity_state_game_day_idx ON territory_capacity_state (game_day, territory_id);
 CREATE TABLE institution_governance_roles (id BIGSERIAL PRIMARY KEY, institution_id TEXT NOT NULL REFERENCES institutions(id), human_id TEXT NOT NULL REFERENCES humans(id), role_code TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE');
 CREATE TABLE constitutional_rules (id TEXT PRIMARY KEY, part_number INTEGER NOT NULL, article_number INTEGER NOT NULL DEFAULT 1, rule_number TEXT NOT NULL UNIQUE, title TEXT NOT NULL, description TEXT NOT NULL, default_value TEXT NOT NULL, permitted_values TEXT, authority TEXT NOT NULL DEFAULT 'EARTH', active BOOLEAN NOT NULL DEFAULT TRUE, updated_game_day BIGINT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE governance_rules (id TEXT PRIMARY KEY, institution_id TEXT NOT NULL REFERENCES institutions(id), name TEXT NOT NULL, category TEXT NOT NULL, value_json JSONB NOT NULL DEFAULT '{}'::jsonb, quorum_threshold NUMERIC NOT NULL CHECK (quorum_threshold >= 0 AND quorum_threshold <= 1), approval_threshold NUMERIC NOT NULL CHECK (approval_threshold >= 0 AND approval_threshold <= 1), voting_period_days INTEGER NOT NULL CHECK (voting_period_days > 0), implementation_delay_days INTEGER NOT NULL DEFAULT 0 CHECK (implementation_delay_days >= 0), version INTEGER NOT NULL CHECK (version > 0), status TEXT NOT NULL, created_by TEXT, effective_from_game_day BIGINT NOT NULL DEFAULT 1, effective_to_game_day BIGINT, UNIQUE (institution_id, category, version));
 CREATE TABLE economic_policy_rules (code TEXT PRIMARY KEY, output_multiplier NUMERIC(8,4) NOT NULL CHECK (output_multiplier >= 0), cost_multiplier NUMERIC(8,4) NOT NULL CHECK (cost_multiplier >= 0), decay_multiplier NUMERIC(8,4) NOT NULL CHECK (decay_multiplier >= 0), is_selectable BOOLEAN NOT NULL DEFAULT TRUE, description TEXT NOT NULL);
 
 CREATE TABLE economic_assets (id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, asset_kind TEXT NOT NULL CHECK (asset_kind IN ('CREDIT','RESOURCE')));
-CREATE TABLE owner_registry (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL CHECK (owner_type IN ('HOUSE','CITY','CORPORATION','SYSTEM')), economic_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE owner_registry (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL CHECK (owner_type IN ('EARTH','CORPORATION','HOUSE','BANK','SYSTEM')), economic_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE economic_account_types (code TEXT PRIMARY KEY, asset_kind TEXT NOT NULL, is_escrow BOOLEAN NOT NULL DEFAULT FALSE);
 CREATE TABLE economic_accounts (id BIGSERIAL PRIMARY KEY, owner_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), asset_id INTEGER NOT NULL REFERENCES economic_assets(id), account_type TEXT NOT NULL REFERENCES economic_account_types(code), balance_units BIGINT NOT NULL DEFAULT 0 CHECK (balance_units >= 0), status TEXT NOT NULL DEFAULT 'ACTIVE', UNIQUE (owner_economic_id, asset_id, account_type));
 CREATE TABLE economic_transactions (id BIGSERIAL PRIMARY KEY, correlation_id TEXT NOT NULL UNIQUE, game_day BIGINT NOT NULL, game_minute INTEGER NOT NULL, transaction_kind TEXT NOT NULL, source_type TEXT NOT NULL, source_id TEXT, rules_version TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE economic_entries (id BIGSERIAL PRIMARY KEY, transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id), account_id BIGINT NOT NULL REFERENCES economic_accounts(id), delta_units BIGINT NOT NULL CHECK (delta_units <> 0), asset_id INTEGER NOT NULL REFERENCES economic_assets(id), UNIQUE (transaction_id, account_id));
 CREATE TABLE monetary_supply_snapshots (game_day BIGINT PRIMARY KEY, issued_total_units BIGINT NOT NULL, retired_total_units BIGINT NOT NULL, circulating_units BIGINT NOT NULL, escrow_units BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
-CREATE TABLE building_catalog (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, tier INTEGER NOT NULL CHECK (tier BETWEEN 1 AND 5), construction_credit_units BIGINT NOT NULL CHECK (construction_credit_units >= 0), construction_minutes INTEGER NOT NULL CHECK (construction_minutes > 0), operating_credit_units BIGINT NOT NULL CHECK (operating_credit_units >= 0), resource_input_units JSONB NOT NULL DEFAULT '{}'::jsonb, resource_output_units JSONB NOT NULL DEFAULT '{}'::jsonb, service_type TEXT, service_capacity_units BIGINT NOT NULL DEFAULT 0 CHECK (service_capacity_units >= 0), slot_footprint INTEGER NOT NULL DEFAULT 1 CHECK (slot_footprint > 0), definition_version TEXT NOT NULL);
-CREATE TABLE buildings (id TEXT PRIMARY KEY, owner_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), catalog_id TEXT NOT NULL REFERENCES building_catalog(id), city_id TEXT REFERENCES cities(id), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE','DESTROYED')), started_game_day BIGINT NOT NULL, UNIQUE (id, owner_economic_id));
+CREATE TABLE building_catalog (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, tier INTEGER NOT NULL CHECK (tier BETWEEN 1 AND 5), ownership_scope TEXT NOT NULL DEFAULT 'PRIVATE' CHECK (ownership_scope IN ('PRIVATE','PUBLIC')), construction_credit_units BIGINT NOT NULL CHECK (construction_credit_units >= 0), construction_minutes INTEGER NOT NULL CHECK (construction_minutes > 0), operating_credit_units BIGINT NOT NULL CHECK (operating_credit_units >= 0), resource_input_units JSONB NOT NULL DEFAULT '{}'::jsonb, resource_output_units JSONB NOT NULL DEFAULT '{}'::jsonb, service_type TEXT, service_capacity_units BIGINT NOT NULL DEFAULT 0 CHECK (service_capacity_units >= 0), slot_footprint INTEGER NOT NULL DEFAULT 1 CHECK (slot_footprint > 0), definition_version TEXT NOT NULL);
+CREATE TABLE buildings (id TEXT PRIMARY KEY, owner_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), territory_id TEXT NOT NULL REFERENCES territories(id), catalog_id TEXT NOT NULL REFERENCES building_catalog(id), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE','DESTROYED')), started_game_day BIGINT NOT NULL, UNIQUE (id, owner_economic_id));
 CREATE TABLE building_catalog_effects (catalog_id TEXT NOT NULL REFERENCES building_catalog(id), effect_code TEXT NOT NULL, effect_value BIGINT NOT NULL CHECK (effect_value >= 0), rules_version TEXT NOT NULL DEFAULT 'building-effects-v1', PRIMARY KEY (catalog_id, effect_code, rules_version));
 
 CREATE TABLE market_instruments (id TEXT PRIMARY KEY, symbol TEXT NOT NULL UNIQUE, asset_id INTEGER NOT NULL REFERENCES economic_assets(id), quote_asset_id INTEGER NOT NULL REFERENCES economic_assets(id), status TEXT NOT NULL DEFAULT 'ACTIVE');
@@ -142,7 +191,7 @@ CREATE INDEX game_events_actor_house_idx ON game_events (actor_house_id, created
 -- Communications V2: conversations persist by House; messages retain the speaking Human.
 CREATE TABLE comm_channels (
   id TEXT PRIMARY KEY,
-  scope TEXT NOT NULL CHECK (scope IN ('global', 'city', 'corporation', 'community', 'direct')),
+  scope TEXT NOT NULL CHECK (scope IN ('global', 'corporation', 'community', 'direct')),
   scope_id TEXT NULL,
   name TEXT NOT NULL,
   description TEXT NULL,
@@ -178,12 +227,12 @@ CREATE TABLE bank_deposits (id TEXT PRIMARY KEY, depositor_economic_id TEXT NOT 
 CREATE TABLE bank_loans (id TEXT PRIMARY KEY, borrower_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), original_principal_units BIGINT NOT NULL CHECK (original_principal_units > 0), outstanding_principal_units BIGINT NOT NULL CHECK (outstanding_principal_units >= 0), accrued_interest_units BIGINT NOT NULL DEFAULT 0 CHECK (accrued_interest_units >= 0), rate_bps INTEGER NOT NULL CHECK (rate_bps >= 0), status TEXT NOT NULL, origination_transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id), correlation_id TEXT NOT NULL UNIQUE);
 CREATE TABLE global_bank_balance_sheet (game_day BIGINT PRIMARY KEY, reserve_units BIGINT NOT NULL, performing_loans_units BIGINT NOT NULL, deposit_principal_units BIGINT NOT NULL, liabilities_units BIGINT NOT NULL, assets_units BIGINT NOT NULL, equity_units BIGINT NOT NULL, liquidity_ratio NUMERIC NOT NULL, capital_ratio NUMERIC NOT NULL, status TEXT NOT NULL);
 
-CREATE TABLE tax_governance_rules (scope TEXT NOT NULL CHECK (scope IN ('OUC','CITY','CORPORATION')), category TEXT NOT NULL, minimum_rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (minimum_rate_bps >= 0), maximum_rate_bps INTEGER NOT NULL CHECK (maximum_rate_bps >= minimum_rate_bps AND maximum_rate_bps <= 10000), allowed_tax_base_definitions JSONB NOT NULL CHECK (jsonb_typeof(allowed_tax_base_definitions) = 'array'), beneficiary_scope TEXT NOT NULL CHECK (beneficiary_scope IN ('OUC','CITY','CORPORATION')), rules_version TEXT NOT NULL, PRIMARY KEY (scope, category));
-CREATE TABLE tax_rule_versions (id TEXT PRIMARY KEY, tax_rule_id TEXT NOT NULL, scope TEXT NOT NULL, category TEXT NOT NULL, version INTEGER NOT NULL, effective_from_game_day BIGINT NOT NULL, effective_to_game_day BIGINT, rate_bps INTEGER NOT NULL CHECK (rate_bps >= 0), tax_base_definition TEXT NOT NULL, beneficiary_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), authorization_proposal_id TEXT, UNIQUE (tax_rule_id, version), CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day));
+CREATE TABLE tax_governance_rules (scope TEXT NOT NULL CHECK (scope IN ('EARTH','CORPORATION')), category TEXT NOT NULL, minimum_rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (minimum_rate_bps >= 0), maximum_rate_bps INTEGER NOT NULL CHECK (maximum_rate_bps >= minimum_rate_bps AND maximum_rate_bps <= 10000), allowed_tax_base_definitions JSONB NOT NULL CHECK (jsonb_typeof(allowed_tax_base_definitions) = 'array'), beneficiary_scope TEXT NOT NULL CHECK (beneficiary_scope IN ('EARTH','CORPORATION')), rules_version TEXT NOT NULL, PRIMARY KEY (scope, category));
+CREATE TABLE tax_rule_versions (id TEXT PRIMARY KEY, tax_rule_id TEXT NOT NULL, scope TEXT NOT NULL CHECK (scope IN ('EARTH','CORPORATION')), category TEXT NOT NULL, version INTEGER NOT NULL, effective_from_game_day BIGINT NOT NULL, effective_to_game_day BIGINT, rate_bps INTEGER NOT NULL CHECK (rate_bps >= 0), tax_base_definition TEXT NOT NULL, beneficiary_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), authorization_proposal_id TEXT, UNIQUE (tax_rule_id, version), CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day));
 CREATE TABLE tax_obligations (id TEXT PRIMARY KEY, taxpayer_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), beneficiary_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), tax_type TEXT NOT NULL, tax_base_units BIGINT NOT NULL CHECK (tax_base_units >= 0), amount_units BIGINT NOT NULL CHECK (amount_units >= 0), rule_version TEXT NOT NULL, game_day BIGINT NOT NULL, status TEXT NOT NULL, payment_transaction_id BIGINT REFERENCES economic_transactions(id));
 
 CREATE TABLE fiscal_periods (id TEXT PRIMARY KEY, period_type TEXT NOT NULL, start_game_day BIGINT NOT NULL, end_game_day BIGINT NOT NULL CHECK (end_game_day >= start_game_day), status TEXT NOT NULL);
-CREATE TABLE budget_categories (id TEXT PRIMARY KEY, institution_kind TEXT NOT NULL, category_code TEXT NOT NULL, spending_class TEXT NOT NULL CHECK (spending_class IN ('MANDATORY','DISCRETIONARY')), priority INTEGER NOT NULL, UNIQUE (institution_kind, category_code));
+CREATE TABLE budget_categories (id TEXT PRIMARY KEY, institution_kind TEXT NOT NULL CHECK (institution_kind = 'CORPORATION'), category_code TEXT NOT NULL, spending_class TEXT NOT NULL CHECK (spending_class IN ('MANDATORY','DISCRETIONARY')), priority INTEGER NOT NULL, UNIQUE (institution_kind, category_code));
 CREATE TABLE institution_budget_lines (id TEXT PRIMARY KEY, institution_id TEXT NOT NULL REFERENCES institutions(id), fiscal_period_id TEXT NOT NULL REFERENCES fiscal_periods(id), category_id TEXT NOT NULL REFERENCES budget_categories(id), authorized_units BIGINT NOT NULL CHECK (authorized_units >= 0), committed_units BIGINT NOT NULL DEFAULT 0 CHECK (committed_units >= 0), spent_units BIGINT NOT NULL DEFAULT 0 CHECK (spent_units >= 0), status TEXT NOT NULL, rule_version TEXT NOT NULL, CHECK (authorized_units >= committed_units + spent_units));
 CREATE TABLE institution_budget_commitments (id TEXT PRIMARY KEY, institution_id TEXT NOT NULL REFERENCES institutions(id), budget_line_id TEXT NOT NULL REFERENCES institution_budget_lines(id), source_type TEXT NOT NULL, source_id TEXT NOT NULL, original_units BIGINT NOT NULL CHECK (original_units > 0), remaining_units BIGINT NOT NULL CHECK (remaining_units >= 0), status TEXT NOT NULL, due_game_day BIGINT);
 CREATE TABLE institution_financial_events (id BIGSERIAL PRIMARY KEY, institution_id TEXT NOT NULL REFERENCES institutions(id), game_day BIGINT NOT NULL, event_type TEXT NOT NULL, amount_units BIGINT NOT NULL CHECK (amount_units >= 0), budget_line_id TEXT REFERENCES institution_budget_lines(id), economic_transaction_id BIGINT REFERENCES economic_transactions(id), correlation_id TEXT NOT NULL UNIQUE);
@@ -243,7 +292,7 @@ CREATE TABLE technology_license_payments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE proposals (id TEXT PRIMARY KEY, institution_id TEXT REFERENCES institutions(id), created_by_human_id TEXT NOT NULL REFERENCES humans(id), action_type TEXT NOT NULL, status TEXT NOT NULL, created_game_day BIGINT NOT NULL);
+CREATE TABLE proposals (id TEXT PRIMARY KEY, institution_id TEXT REFERENCES institutions(id), created_by_human_id TEXT NOT NULL REFERENCES humans(id), action_type TEXT NOT NULL, target_type TEXT NOT NULL DEFAULT 'INSTITUTION' CHECK (target_type IN ('INSTITUTION','TERRITORY')), target_id TEXT, target_value JSONB NOT NULL DEFAULT '{}'::jsonb, status TEXT NOT NULL, created_game_day BIGINT NOT NULL, CHECK ((target_type = 'INSTITUTION' AND target_id IS NULL) OR (target_type = 'TERRITORY' AND target_id IS NOT NULL)));
 ALTER TABLE tax_rule_versions ADD CONSTRAINT tax_rule_versions_proposal_fk FOREIGN KEY (authorization_proposal_id) REFERENCES proposals(id);
 CREATE TABLE ballots (proposal_id TEXT NOT NULL REFERENCES proposals(id), house_id TEXT NOT NULL REFERENCES houses(id), cast_by_human_id TEXT NOT NULL REFERENCES humans(id), choice TEXT NOT NULL, PRIMARY KEY (proposal_id, house_id));
 CREATE TABLE event_outbox (id TEXT PRIMARY KEY, event_key TEXT NOT NULL UNIQUE, topic TEXT NOT NULL, aggregate_type TEXT NOT NULL, aggregate_id TEXT NOT NULL, payload TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0), available_at TIMESTAMPTZ NOT NULL DEFAULT now(), locked_at TIMESTAMPTZ, processed_at TIMESTAMPTZ, last_error TEXT, status TEXT NOT NULL DEFAULT 'PENDING', created_at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -382,6 +431,101 @@ BEGIN
   RETURN QUERY SELECT v_id, TRUE;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION earth_refresh_territory_capacity(
+  p_territory_id TEXT,
+  p_game_day BIGINT
+)
+RETURNS territory_capacity_state
+LANGUAGE plpgsql
+AS $$
+DECLARE result territory_capacity_state;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM territories WHERE id = p_territory_id) THEN
+    RAISE EXCEPTION 'Territory not found';
+  END IF;
+
+  INSERT INTO territory_capacity_state (
+    territory_id, game_day, active_house_count, house_capacity, population_capacity,
+    private_slot_capacity, public_slot_capacity, private_slots_used, public_slots_used,
+    housing_capacity, health_capacity, energy_capacity, connectivity_capacity,
+    service_capacity, updated_at
+  )
+  SELECT
+    p_territory_id,
+    p_game_day,
+    (SELECT COUNT(*)::INTEGER FROM house_affiliations ha
+      WHERE ha.primary_territory_id = p_territory_id AND ha.status = 'ACTIVE'),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code IN ('POPULATION_CAPACITY', 'HOUSE_CAPACITY')), 0),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code IN ('POPULATION_CAPACITY', 'HOUSE_CAPACITY')), 0),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'PRIVATE_SLOTS'), 0),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'PUBLIC_SLOTS'), 0),
+    COALESCE((SELECT SUM(b.slot_footprint)::BIGINT FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id WHERE b.territory_id = p_territory_id AND b.status = 'ACTIVE' AND o.owner_type = 'HOUSE'), 0),
+    COALESCE((SELECT SUM(b.slot_footprint)::BIGINT FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id WHERE b.territory_id = p_territory_id AND b.status = 'ACTIVE' AND o.owner_type = 'CORPORATION'), 0),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'HOUSING_CAPACITY'), 0),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'HEALTH_CAPACITY'), 0),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'ENERGY_CAPACITY'), 0),
+    COALESCE(SUM(e.effect_value) FILTER (WHERE e.effect_code = 'CONNECTIVITY_CAPACITY'), 0),
+    COALESCE((SELECT jsonb_object_agg(service_key, service_total) FROM (
+      SELECT COALESCE(NULLIF(bc.service_type, ''), 'UNSPECIFIED') AS service_key,
+             SUM(bc.service_capacity_units)::BIGINT AS service_total
+        FROM buildings b JOIN building_catalog bc ON bc.id = b.catalog_id
+       WHERE b.territory_id = p_territory_id AND b.status = 'ACTIVE' AND bc.service_capacity_units > 0
+       GROUP BY COALESCE(NULLIF(bc.service_type, ''), 'UNSPECIFIED')
+    ) services), '{}'::jsonb),
+    now()
+  FROM buildings b
+  LEFT JOIN building_catalog_effects e ON e.catalog_id = b.catalog_id
+  WHERE b.territory_id = p_territory_id AND b.status = 'ACTIVE';
+
+  RETURNING * INTO result;
+  RETURN result;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_validate_building_ownership()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  owner_kind TEXT;
+  ownership_scope TEXT;
+  territory_corporation_id TEXT;
+BEGIN
+  SELECT owner_type INTO owner_kind FROM owner_registry WHERE economic_id = NEW.owner_economic_id;
+  SELECT bc.ownership_scope INTO ownership_scope FROM building_catalog bc WHERE bc.id = NEW.catalog_id;
+  SELECT t.corporation_id INTO territory_corporation_id FROM territories t WHERE t.id = NEW.territory_id;
+
+  IF owner_kind IS NULL OR ownership_scope IS NULL OR territory_corporation_id IS NULL THEN
+    RAISE EXCEPTION 'Building owner, blueprint, and Territory must exist';
+  END IF;
+  IF ownership_scope = 'PUBLIC' AND owner_kind <> 'CORPORATION' THEN
+    RAISE EXCEPTION 'Public infrastructure must be Corporation-owned';
+  END IF;
+  IF ownership_scope = 'PRIVATE' AND owner_kind <> 'HOUSE' THEN
+    RAISE EXCEPTION 'Private buildings must be House-owned';
+  END IF;
+  IF ownership_scope = 'PUBLIC' AND NOT EXISTS (
+    SELECT 1 FROM owner_registry o
+    WHERE o.id = territory_corporation_id AND o.economic_id = NEW.owner_economic_id AND o.owner_type = 'CORPORATION'
+  ) THEN
+    RAISE EXCEPTION 'Public infrastructure owner must be the Territory Corporation';
+  END IF;
+  IF ownership_scope = 'PRIVATE' AND NOT EXISTS (
+    SELECT 1 FROM owner_registry o
+    JOIN house_affiliations ha ON ha.house_id = o.id
+    WHERE o.economic_id = NEW.owner_economic_id AND o.owner_type = 'HOUSE'
+      AND ha.corporation_id = territory_corporation_id AND ha.status = 'ACTIVE'
+  ) THEN
+    RAISE EXCEPTION 'Private building owner must be an active House in the Territory Corporation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER buildings_ownership_integrity
+BEFORE INSERT OR UPDATE OF owner_economic_id, territory_id, catalog_id ON buildings
+FOR EACH ROW EXECUTE FUNCTION earth_validate_building_ownership();
 
 CREATE OR REPLACE FUNCTION earth_integrity_report()
 RETURNS TABLE(check_name TEXT, invalid_count BIGINT)
@@ -533,8 +677,8 @@ INSERT INTO economic_account_types(code, asset_kind, is_escrow) VALUES
   ('ESCROW', 'CREDIT', TRUE), ('INVENTORY', 'RESOURCE', FALSE);
 
 INSERT INTO budget_categories(id, institution_kind, category_code, spending_class, priority) VALUES
-  ('BUDGET-DEBT', 'CITY', 'DEBT_SERVICE', 'MANDATORY', 1),
-  ('BUDGET-ESSENTIAL', 'CITY', 'ESSENTIAL_SERVICES', 'MANDATORY', 2),
+  ('BUDGET-DEBT', 'CORPORATION', 'DEBT_SERVICE', 'MANDATORY', 1),
+  ('BUDGET-ESSENTIAL', 'CORPORATION', 'ESSENTIAL_SERVICES', 'MANDATORY', 2),
   ('BUDGET-OPS', 'CORPORATION', 'OPERATIONS', 'MANDATORY', 2),
   ('BUDGET-RESEARCH', 'CORPORATION', 'RESEARCH', 'DISCRETIONARY', 5),
   ('BUDGET-DIVIDENDS', 'CORPORATION', 'DIVIDENDS', 'DISCRETIONARY', 9);
@@ -544,7 +688,7 @@ VALUES ('FISCAL-YEAR-1', 'YEAR', 1, 365, 'ACTIVE');
 
 INSERT INTO constitutional_rules (id, part_number, rule_number, title, description, default_value, permitted_values, authority)
 VALUES
-  ('CONST-1-1', 1, '1.1', 'Rule Precedence', 'EARTH constitutional rules are authoritative unless a permitted institutional rule applies.', 'EARTH baseline', 'EARTH, CITY, CORPORATION', 'EARTH'),
+  ('CONST-1-1', 1, '1.1', 'Rule Precedence', 'EARTH constitutional rules are authoritative unless a permitted institutional rule applies.', 'EARTH baseline', 'EARTH, CORPORATION', 'EARTH'),
   ('CONST-2-1', 2, '2.1', 'Daily Economy', 'Economic settlement uses the game day as its fundamental accounting period.', 'Daily', 'Daily only', 'EARTH'),
   ('CONST-3-1', 3, '3.1', 'House Continuity', 'House economic property survives Human succession.', 'Persistent House ownership', 'House', 'EARTH')
 ON CONFLICT (id) DO NOTHING;
@@ -558,29 +702,45 @@ ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO tax_governance_rules (scope, category, maximum_rate_bps, allowed_tax_base_definitions, beneficiary_scope, rules_version)
 VALUES
-  ('OUC', 'basic_levy', 2000, '["fixed_daily_obligation"]', 'OUC', 'tax-constitution-v1'),
-  ('OUC', 'personal_income', 3000, '["positive_realized_daily_income"]', 'OUC', 'tax-constitution-v1'),
-  ('OUC', 'market_transaction', 1000, '["external_market_trade"]', 'OUC', 'tax-constitution-v1'),
-  ('CITY', 'personal_income', 3000, '["positive_realized_daily_income"]', 'CITY', 'tax-constitution-v1'),
+  ('EARTH', 'basic_levy', 2000, '["fixed_daily_obligation"]', 'EARTH', 'tax-constitution-v1'),
+  ('EARTH', 'personal_income', 3000, '["positive_realized_daily_income"]', 'EARTH', 'tax-constitution-v1'),
+  ('EARTH', 'market_transaction', 1000, '["external_market_trade"]', 'EARTH', 'tax-constitution-v1'),
+  ('CORPORATION', 'personal_income', 3000, '["positive_realized_daily_income"]', 'CORPORATION', 'tax-constitution-v1'),
   ('CORPORATION', 'corporate_income', 4000, '["positive_realized_daily_taxable_profit"]', 'CORPORATION', 'tax-constitution-v1')
 ON CONFLICT (scope, category) DO NOTHING;
 
 INSERT INTO building_catalog (
-  id, code, tier, construction_credit_units, construction_minutes,
+  id, code, tier, ownership_scope, construction_credit_units, construction_minutes,
   operating_credit_units, resource_input_units, resource_output_units,
   service_type, service_capacity_units, slot_footprint, definition_version
 ) VALUES
-  ('MATERIAL-FAB-T1', 'material_fab_t1', 1, 50000, 1440, 250,
+  ('MATERIAL-FAB-T1', 'material_fab_t1', 1, 'PRIVATE', 50000, 1440, 250,
    '{"ENERGY":10}'::jsonb, '{"MATERIAL":100}'::jsonb, NULL, 0, 1, 'building-v1'),
-  ('COMPONENT-FAB-T1', 'component_fab_t1', 1, 75000, 2160, 400,
+  ('COMPONENT-FAB-T1', 'component_fab_t1', 1, 'PRIVATE', 75000, 2160, 400,
    '{"MATERIAL":25,"ENERGY":20}'::jsonb, '{"COMPONENTS":50}'::jsonb, NULL, 0, 2, 'building-v1'),
-  ('ENERGY-PLANT-T1', 'energy_plant_t1', 1, 60000, 1440, 300,
+  ('ENERGY-PLANT-T1', 'energy_plant_t1', 1, 'PRIVATE', 60000, 1440, 300,
    '{"MATERIAL":10}'::jsonb, '{"ENERGY":120}'::jsonb, NULL, 0, 1, 'building-v1'),
-  ('FOOD-FARM-T1', 'food_farm_t1', 1, 45000, 1440, 200,
+  ('FOOD-FARM-T1', 'food_farm_t1', 1, 'PRIVATE', 45000, 1440, 200,
    '{"ENERGY":8}'::jsonb, '{"FOOD":80}'::jsonb, NULL, 0, 1, 'building-v1'),
-  ('HOUSING-T1', 'housing_t1', 1, 80000, 2880, 350,
+  ('HOUSING-T1', 'housing_t1', 1, 'PRIVATE', 80000, 2880, 350,
    '{"ENERGY":15}'::jsonb, '{}'::jsonb, 'HOUSING', 100, 2, 'building-v1')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO building_catalog (
+  id, code, tier, ownership_scope, construction_credit_units, construction_minutes,
+  operating_credit_units, resource_input_units, resource_output_units,
+  service_type, service_capacity_units, slot_footprint, definition_version
+) VALUES
+  ('DISTRICT-MODULE-T1', 'urban-district-module', 1, 'PUBLIC', 100000, 2880, 500,
+   '{"MATERIAL":50,"ENERGY":25}'::jsonb, '{}'::jsonb, 'TERRITORY_INFRASTRUCTURE', 0, 1, 'territory-capacity-v1')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO building_catalog_effects (catalog_id, effect_code, effect_value)
+VALUES
+  ('DISTRICT-MODULE-T1', 'POPULATION_CAPACITY', 10),
+  ('DISTRICT-MODULE-T1', 'PRIVATE_SLOTS', 100),
+  ('DISTRICT-MODULE-T1', 'PUBLIC_SLOTS', 20)
+ON CONFLICT (catalog_id, effect_code, rules_version) DO NOTHING;
 
 INSERT INTO building_catalog_effects (catalog_id, effect_code, effect_value)
 SELECT id, 'SERVICE_CAPACITY', service_capacity_units
@@ -615,24 +775,24 @@ INSERT INTO world_state(id, game_day, game_minute, world_seed, status)
 VALUES ('WORLD', 1, 0, 'EARTH-GENESIS', 'ACTIVE');
 
 INSERT INTO institutions(id, kind, name) VALUES
-  ('OUC', 'OUC', 'Organization of United Corporations'),
+  ('EARTH', 'EARTH', 'EARTH UC'),
   ('GLOBAL-BANK', 'BANK', 'Global Bank');
 
 INSERT INTO governance_rules (id, institution_id, name, category, value_json, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days, version, status, effective_from_game_day)
-VALUES ('GOV-OUC-BASELINE-V1', 'OUC', 'EARTH governance baseline', 'governance', '{"proposal_execution":"governed"}'::jsonb, 0.25, 0.50, 30, 1, 1, 'active', 1)
+VALUES ('GOV-EARTH-BASELINE-V1', 'EARTH', 'EARTH governance baseline', 'governance', '{"proposal_execution":"governed"}'::jsonb, 0.25, 0.50, 30, 1, 1, 'active', 1)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO owner_registry(id, owner_type, economic_id) VALUES
-  ('OUC', 'SYSTEM', 'ECON-OUC-001'),
-  ('GLOBAL-BANK', 'SYSTEM', 'ECON-GLOBAL-BANK-001'),
+  ('EARTH', 'EARTH', 'ECON-EARTH-001'),
+  ('GLOBAL-BANK', 'BANK', 'ECON-GLOBAL-BANK-001'),
   ('OWNER-MONETARY-ISSUANCE', 'SYSTEM', 'ECON-MONETARY-ISSUANCE'),
   ('OWNER-MONETARY-RETIREMENT', 'SYSTEM', 'ECON-MONETARY-RETIREMENT'),
   ('OWNER-MARKET-CLEARING', 'SYSTEM', 'ECON-MARKET-CLEARING');
 
 INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type) VALUES
-  ('ECON-OUC-001', 1, 'TREASURY'),
-  ('ECON-OUC-001', 1, 'OPERATIONS'),
-  ('ECON-OUC-001', 1, 'RESERVE'),
+  ('ECON-EARTH-001', 1, 'TREASURY'),
+  ('ECON-EARTH-001', 1, 'OPERATIONS'),
+  ('ECON-EARTH-001', 1, 'RESERVE'),
   ('ECON-GLOBAL-BANK-001', 1, 'RESERVE'),
   ('ECON-GLOBAL-BANK-001', 1, 'OPERATIONS'),
   ('ECON-MONETARY-ISSUANCE', 1, 'TREASURY'),
@@ -655,8 +815,8 @@ VALUES ('SPOT-MATERIAL', 'MATERIAL', 2, 1), ('SPOT-COMPONENTS', 'COMPONENTS', 3,
 
 INSERT INTO tax_rule_versions (id, tax_rule_id, scope, category, version, effective_from_game_day, rate_bps, tax_base_definition, beneficiary_economic_id)
 VALUES
-  ('TAX-BASIC-LEVY-V1', 'TAX-BASIC-LEVY', 'OUC', 'basic_levy', 1, 1, 0, 'fixed_daily_obligation', 'ECON-OUC-001'),
-  ('TAX-MARKET-TRANSACTION-V1', 'TAX-MARKET-TRANSACTION', 'OUC', 'market_transaction', 1, 1, 0, 'external_market_trade', 'ECON-OUC-001');
+  ('TAX-BASIC-LEVY-V1', 'TAX-BASIC-LEVY', 'EARTH', 'basic_levy', 1, 1, 0, 'fixed_daily_obligation', 'ECON-EARTH-001'),
+  ('TAX-MARKET-TRANSACTION-V1', 'TAX-MARKET-TRANSACTION', 'EARTH', 'market_transaction', 1, 1, 0, 'external_market_trade', 'ECON-EARTH-001');
 
 INSERT INTO daily_settlement_control (id, status)
 VALUES ('WORLD', 'awaiting_baseline')

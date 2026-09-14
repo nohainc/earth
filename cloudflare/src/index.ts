@@ -25,6 +25,7 @@ import { handleMarketApiRoutes } from './market-api.ts';
 import { featureConfig, featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { maintenanceModeEnabled, maintenanceResponse, schedulerEnabled } from './maintenance.ts';
 import { handleRealtimeRoute, mapToRealtimeInvalidation } from './realtime.ts';
+import { errorResponse, earthError } from './errors.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -124,11 +125,11 @@ async function servicesStatusFromPostgres(request: Request, env: Env): Promise<R
   const viewer = await currentHuman(request, env);
   if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const result = await withRepository(env, async (repository) => {
-    const city = await repository.query<{ id: string }>('SELECT ha.city_id AS id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = \'ACTIVE\' AND ha.city_id IS NOT NULL LIMIT 1', [viewer.id]);
-    const cityId = city.rows[0]?.id;
-    if (!cityId) return { cityId: null, projection: null };
-    const projection = await repository.query('SELECT * FROM city_service_capacity_daily WHERE city_id = $1 ORDER BY game_day DESC LIMIT 1', [cityId]);
-    return { cityId, projection: projection.rows[0] ?? null };
+    const territory = await repository.query<{ id: string }>('SELECT t.id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = \'ACTIVE\' JOIN territories t ON t.corporation_id = ha.corporation_id WHERE h.id = $1 ORDER BY t.id LIMIT 1', [viewer.id]);
+    const territoryId = territory.rows[0]?.id;
+    if (!territoryId) return { territoryId: null, projection: null };
+    const projection = await repository.query('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    return { territoryId, projection: projection.rows[0] ?? null };
   });
   if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
   const projection = result.projection as Record<string, number> | null;
@@ -140,7 +141,7 @@ async function servicesStatusFromPostgres(request: Request, env: Env): Promise<R
   } : { housing: 0, utilities: 0, connectivity: 0, health: 0 };
   for (const key of Object.keys(ratios)) ratios[key as keyof typeof ratios] = Math.min(1, Math.max(0, ratios[key as keyof typeof ratios]));
   const status = Object.fromEntries(Object.entries(ratios).map(([key, value]) => [key, value >= 1 ? 'normal' : value >= 0.75 ? 'basic' : 'critical']));
-  return Response.json({ cityId: result.cityId, provider: projection ? 'city-service-capacity-projection' : null, ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)), persistence: 'planetscale-postgres' });
+  return Response.json({ territoryId: result.territoryId, provider: projection ? 'territory-capacity-projection' : null, ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)), persistence: 'planetscale-postgres' });
 }
 
 const worker = {
@@ -182,17 +183,7 @@ const worker = {
     } catch (err) {
       const viewer = await currentHuman(request, env).catch(() => null);
       const url = new URL(request.url);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      const stackTrace = err instanceof Error ? err.stack : undefined;
-      logBackendError({
-        requestId: request.headers.get('X-Request-ID'),
-        humanId: viewer?.id ?? null,
-        endpoint: url.pathname,
-        statusCode: 500,
-        message: errorMessage,
-        stack: stackTrace,
-      });
-      response = Response.json({ ok: false, error: errorMessage || 'Internal Server Error', code: 'SERVICE_UNAVAILABLE' }, { status: 500 });
+      response = errorResponse(err, request.headers.get('X-Request-ID'), 'EARTH service is temporarily unavailable.', { requestId: request.headers.get('X-Request-ID'), endpoint: url.pathname });
     }
 
     if ((response as Response & { webSocket?: WebSocket }).webSocket) return response;
@@ -246,7 +237,7 @@ const worker = {
       const response = await handleCommunityRoutes(request, env, url, viewer, sensitiveActionAllowed);
       if (response) return response;
     }
-    if (url.pathname.startsWith('/api/cities') || url.pathname.startsWith('/api/corporations')) {
+    if (url.pathname.startsWith('/api/corporations')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const response = await handleInstitutionRoutes(request, env, url, viewer);
@@ -276,7 +267,7 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const result = await withRepository(env, (repository) =>
-        worldSnapshotPostgres(repository, viewer.id),
+        worldSnapshotPostgres(repository, viewer.id, viewer.house_id),
       );
       if (!result) throw new Error('PostgreSQL repository is unavailable');
       return Response.json(result);
@@ -543,8 +534,8 @@ export default {
       console.error(JSON.stringify({ event: 'worker_request_failed', requestId, path: url.pathname, method: request.method, error: error instanceof Error ? error.message : 'unknown' }));
       const malformedJson = error instanceof SyntaxError && /json|unexpected end|unexpected token/i.test(error.message);
       response = malformedJson
-        ? Response.json({ ok: false, error: 'Request body must be valid JSON object', code: 'VALIDATION_ERROR', correlationId: requestId }, { status: 400 })
-        : Response.json({ ok: false, error: 'EARTH service is temporarily unavailable', code: 'SERVICE_UNAVAILABLE', correlationId: requestId }, { status: 503 });
+        ? errorResponse(earthError('VALIDATION_ERROR', 'Request body must be valid JSON object.'), requestId)
+        : errorResponse(error, requestId, 'EARTH service is temporarily unavailable.', { requestId, endpoint: url.pathname });
     }
     if ((response as Response & { webSocket?: WebSocket }).webSocket) return response;
     const headers = new Headers(response.headers);

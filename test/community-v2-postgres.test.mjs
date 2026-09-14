@@ -8,9 +8,9 @@ test('fresh PostgreSQL certification includes the Community V2 migration', { ski
   const client = postgresClient(connectionString, 'earth-community-v2-certification');
   await client.connect();
   try {
-    const migration = await client.query("SELECT version, name FROM earth_schema_migrations WHERE version = 2");
+    const migration = await client.query("SELECT version, name FROM earth_schema_migrations WHERE version = 3");
     assert.equal(migration.rowCount, 1);
-    assert.equal(migration.rows[0].name, '002_communities_v2.sql');
+    assert.equal(migration.rows[0].name, '003_community_v2_hardening.sql');
 
     const tables = await client.query(`
       SELECT table_name
@@ -35,6 +35,24 @@ test('fresh PostgreSQL certification includes the Community V2 migration', { ski
     assert.ok(constraints.rows.some((row) => row.table_name === 'communities'));
     assert.ok(constraints.rows.some((row) => row.table_name === 'community_memberships'));
     assert.ok(constraints.rows.some((row) => row.table_name === 'community_membership_requests'));
+
+    const nameIndex = await client.query(`
+      SELECT indexname, indexdef
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname = 'communities_active_normalized_name_uq'
+    `);
+    assert.equal(nameIndex.rowCount, 1);
+    assert.match(nameIndex.rows[0].indexdef, /UNIQUE INDEX communities_active_normalized_name_uq/);
+    assert.match(nameIndex.rows[0].indexdef, /WHERE .*status.*ACTIVE/);
+
+    const oldConstraint = await client.query(`
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = 'communities'::regclass
+        AND conname = 'communities_normalized_name_key'
+    `);
+    assert.equal(oldConstraint.rowCount, 0);
 
     const economicObjects = await client.query(`
       SELECT table_name

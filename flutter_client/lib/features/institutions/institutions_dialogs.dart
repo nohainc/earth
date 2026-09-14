@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:earth_client/earth_http_client.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/decision_consequence.dart';
@@ -9,9 +10,7 @@ import '../../shared/widgets/format_helpers.dart';
 Future<void> showFormationComposer(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action, {
-  required bool city,
-  String? communityId,
-  String? cityId,
+  String? territoryName,
 }) async {
   final name = TextEditingController();
   await showDialog<void>(
@@ -23,7 +22,7 @@ Future<void> showFormationComposer(
         side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
       ),
       title: Text(
-        city ? 'Form a City' : 'Form a Corporation',
+        'Form a Corporation',
         style: context.topicTitleStyle.copyWith(color: context.primaryColor),
       ),
       content: TextField(
@@ -31,14 +30,15 @@ Future<void> showFormationComposer(
         autofocus: true,
         style: context.bodyStyle.copyWith(color: context.inkColor),
         decoration: InputDecoration(
-          labelText: city ? 'City name' : 'Corporation name',
+          labelText: 'Corporation name',
           labelStyle: context.widgetFooterStyle,
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: Text('Cancel', style: context.controlStyle.copyWith(color: context.mutedColor)),
+          child: Text('Cancel',
+              style: context.controlStyle.copyWith(color: context.mutedColor)),
         ),
         EarthButton(
           label: 'Submit',
@@ -46,9 +46,10 @@ Future<void> showFormationComposer(
             final selectedName = name.text.trim();
             if (selectedName.length < 2) return;
             Navigator.pop(dialogContext);
-            await action(() => city
-                ? const EarthApi().createCity(selectedName, communityId)
-                : const EarthApi().createCorporation(selectedName, cityId ?? 'CITY-0084'));
+            await action(() => const EarthApi().createCorporation(
+                  selectedName,
+                  territoryName: territoryName,
+                ));
           },
         ),
       ],
@@ -56,13 +57,17 @@ Future<void> showFormationComposer(
   );
 }
 
-Future<void> showCommunityComposer(
-  BuildContext context,
-  Future<void> Function(Future<EarthState> Function()) action,
-) async {
+Future<void> showCommunityComposer(BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    {EarthApi api = const EarthApi()}) async {
   final name = TextEditingController();
   final description = TextEditingController();
   String admissionPolicy = 'open';
+  String? operationId;
+  bool submitting = false;
+  String? nameError;
+  String? descriptionError;
+  String? generalError;
 
   await showDialog<void>(
     context: context,
@@ -70,23 +75,25 @@ Future<void> showCommunityComposer(
       builder: (context, setDialogState) {
         final selectedName = name.text.trim();
         final selectedDesc = description.text.trim();
-        final isValid = selectedName.length >= 3 &&
-            selectedDesc.isNotEmpty;
+        final isValid = selectedName.length >= 3 && selectedDesc.isNotEmpty;
 
         return AlertDialog(
           backgroundColor: context.panelColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(context.radiusPanel),
-            side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+            side:
+                BorderSide(color: context.primaryColor.withValues(alpha: .35)),
           ),
           title: Row(
             children: [
-              Icon(Icons.add_business_outlined, color: context.primaryColor, size: 20),
+              Icon(Icons.add_business_outlined,
+                  color: context.primaryColor, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Found New Community',
-                  style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+                  style: context.topicTitleStyle
+                      .copyWith(color: context.primaryColor),
                 ),
               ),
             ],
@@ -104,27 +111,46 @@ Future<void> showCommunityComposer(
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       labelText: 'Community Name (Required)',
+                      errorText: nameError,
                       labelStyle: context.widgetFooterStyle,
                       hintText: 'e.g. Carthage Makers Guild',
-                      hintStyle: context.bodyStyle.copyWith(color: context.mutedColor),
+                      hintStyle:
+                          context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
-                        borderSide: BorderSide(color: context.subtleBorderColor),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
+                        borderSide:
+                            BorderSide(color: context.subtleBorderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
-                        borderSide: BorderSide(color: context.subtleBorderColor),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
+                        borderSide:
+                            BorderSide(color: context.subtleBorderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
                         borderSide: BorderSide(color: context.primaryColor),
                       ),
                       filled: true,
                       fillColor: context.surfaceColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                     ),
-                    onChanged: (_) => setDialogState(() {}),
+                    onChanged: (_) => setDialogState(() {
+                      if (nameError != null) operationId = null;
+                      nameError = null;
+                      generalError = null;
+                    }),
                   ),
+                  if (nameError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(nameError!,
+                          style: context.widgetFooterStyle
+                              .copyWith(color: context.dangerColor)),
+                    ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: description,
@@ -134,31 +160,50 @@ Future<void> showCommunityComposer(
                     decoration: InputDecoration(
                       alignLabelWithHint: true,
                       labelText: 'Manifesto & Purpose (Required)',
+                      errorText: descriptionError,
                       labelStyle: context.widgetFooterStyle,
-                      hintText: 'What is the goal and purpose of this community?',
-                      hintStyle: context.bodyStyle.copyWith(color: context.mutedColor),
+                      hintText:
+                          'What is the goal and purpose of this community?',
+                      hintStyle:
+                          context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
-                        borderSide: BorderSide(color: context.subtleBorderColor),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
+                        borderSide:
+                            BorderSide(color: context.subtleBorderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
-                        borderSide: BorderSide(color: context.subtleBorderColor),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
+                        borderSide:
+                            BorderSide(color: context.subtleBorderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
                         borderSide: BorderSide(color: context.primaryColor),
                       ),
                       filled: true,
                       fillColor: context.surfaceColor,
                       contentPadding: const EdgeInsets.all(12),
                     ),
-                    onChanged: (_) => setDialogState(() {}),
+                    onChanged: (_) => setDialogState(() {
+                      descriptionError = null;
+                      generalError = null;
+                    }),
                   ),
+                  if (descriptionError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(descriptionError!,
+                          style: context.widgetFooterStyle
+                              .copyWith(color: context.dangerColor)),
+                    ),
                   const SizedBox(height: 16),
                   Text(
                     'ADMISSION POLICY',
-                    style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+                    style: context.widgetTitleStyle
+                        .copyWith(color: context.mutedColor),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -169,12 +214,16 @@ Future<void> showCommunityComposer(
                           selected: admissionPolicy == 'open',
                           label: 'OPEN ACCESS policy',
                           child: InkWell(
-                            onTap: () => setDialogState(() => admissionPolicy = 'open'),
-                            borderRadius: BorderRadius.circular(context.radiusControl),
+                            onTap: () =>
+                                setDialogState(() => admissionPolicy = 'open'),
+                            borderRadius:
+                                BorderRadius.circular(context.radiusControl),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(context.radiusControl),
+                                borderRadius: BorderRadius.circular(
+                                    context.radiusControl),
                                 border: Border.all(
                                   color: admissionPolicy == 'open'
                                       ? context.primaryColor
@@ -182,7 +231,8 @@ Future<void> showCommunityComposer(
                                   width: admissionPolicy == 'open' ? 2 : 1,
                                 ),
                                 color: admissionPolicy == 'open'
-                                    ? context.primaryColor.withValues(alpha: 0.1)
+                                    ? context.primaryColor
+                                        .withValues(alpha: 0.1)
                                     : Colors.transparent,
                               ),
                               child: Column(
@@ -200,14 +250,17 @@ Future<void> showCommunityComposer(
                                         child: Text('OPEN ACCESS',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: context.widgetTitleStyle.copyWith(
-                                                color: context.primaryColor)),
+                                            style: context.widgetTitleStyle
+                                                .copyWith(
+                                                    color:
+                                                        context.primaryColor)),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 3),
                                   Text('Instant Join',
-                                      style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                      style: context.widgetFooterStyle
+                                          .copyWith(color: context.mutedColor)),
                                 ],
                               ),
                             ),
@@ -221,12 +274,16 @@ Future<void> showCommunityComposer(
                           selected: admissionPolicy == 'approval',
                           label: 'APPROVAL REQUIRED policy',
                           child: InkWell(
-                            onTap: () => setDialogState(() => admissionPolicy = 'approval'),
-                            borderRadius: BorderRadius.circular(context.radiusControl),
+                            onTap: () => setDialogState(
+                                () => admissionPolicy = 'approval'),
+                            borderRadius:
+                                BorderRadius.circular(context.radiusControl),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(context.radiusControl),
+                                borderRadius: BorderRadius.circular(
+                                    context.radiusControl),
                                 border: Border.all(
                                   color: admissionPolicy == 'approval'
                                       ? context.primaryColor
@@ -234,7 +291,8 @@ Future<void> showCommunityComposer(
                                   width: admissionPolicy == 'approval' ? 2 : 1,
                                 ),
                                 color: admissionPolicy == 'approval'
-                                    ? context.primaryColor.withValues(alpha: 0.1)
+                                    ? context.primaryColor
+                                        .withValues(alpha: 0.1)
                                     : Colors.transparent,
                               ),
                               child: Column(
@@ -252,14 +310,17 @@ Future<void> showCommunityComposer(
                                         child: Text('APPROVAL REQUIRED',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: context.widgetTitleStyle.copyWith(
-                                                color: context.primaryColor)),
+                                            style: context.widgetTitleStyle
+                                                .copyWith(
+                                                    color:
+                                                        context.primaryColor)),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 3),
                                   Text('Review Applicants',
-                                      style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                      style: context.widgetFooterStyle
+                                          .copyWith(color: context.mutedColor)),
                                 ],
                               ),
                             ),
@@ -275,22 +336,72 @@ Future<void> showCommunityComposer(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+              child: Text('CANCEL',
+                  style:
+                      context.controlStyle.copyWith(color: context.mutedColor)),
             ),
             EarthButton(
               label: 'Found Community',
               variant: EarthButtonVariant.primary,
-              onPressed: isValid
+              isLoading: submitting,
+              onPressed: isValid && !submitting
                   ? () async {
-                      Navigator.pop(dialogContext);
-                      await action(() => const EarthApi().createCommunity(
-                            name: selectedName,
-                            description: selectedDesc,
-                            joinPolicy: admissionPolicy == 'approval' ? 'REQUEST' : 'OPEN',
-                          ));
+                      setDialogState(() {
+                        submitting = true;
+                        nameError = null;
+                        descriptionError = null;
+                        generalError = null;
+                        operationId ??=
+                            newClientCorrelationId('community-formation');
+                      });
+                      try {
+                        final created = await api.createCommunity(
+                          name: selectedName,
+                          description: selectedDesc,
+                          joinPolicy: admissionPolicy == 'approval'
+                              ? 'REQUEST'
+                              : 'OPEN',
+                          correlationId: operationId,
+                        );
+                        if (!context.mounted) return;
+                        Navigator.pop(dialogContext);
+                        await action(() async => created);
+                      } catch (error) {
+                        if (!context.mounted) return;
+                        final apiError =
+                            error is EarthApiException ? error : null;
+                        setDialogState(() {
+                          submitting = false;
+                          if (apiError?.code == 'COMMUNITY_NAME_TAKEN') {
+                            nameError =
+                                'A community with this name already exists.';
+                          } else if (apiError?.code == 'VALIDATION_ERROR') {
+                            if (apiError?.field == 'name') {
+                              nameError = apiError!.message;
+                            } else if (apiError?.field == 'description') {
+                              descriptionError = apiError!.message;
+                            } else {
+                              generalError = apiError!.message;
+                            }
+                          } else if (apiError?.code == 'FORBIDDEN') {
+                            generalError =
+                                'You do not have permission to create this community.';
+                          } else {
+                            generalError = apiError?.message ??
+                                'Community creation failed. Please try again.';
+                          }
+                        });
+                      }
                     }
                   : null,
             ),
+            if (generalError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(generalError!,
+                    style: context.widgetFooterStyle
+                        .copyWith(color: context.dangerColor)),
+              ),
           ],
         );
       },
@@ -320,16 +431,19 @@ Future<void> showCommunityApplicationDialog(
           backgroundColor: context.panelColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(context.radiusPanel),
-            side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+            side:
+                BorderSide(color: context.primaryColor.withValues(alpha: .35)),
           ),
           title: Row(
             children: [
-              Icon(Icons.assignment_outlined, color: context.primaryColor, size: 20),
+              Icon(Icons.assignment_outlined,
+                  color: context.primaryColor, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Apply to $name',
-                  style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+                  style: context.topicTitleStyle
+                      .copyWith(color: context.primaryColor),
                 ),
               ),
             ],
@@ -353,7 +467,8 @@ Future<void> showCommunityApplicationDialog(
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.help_outline_rounded, size: 14, color: context.primaryColor),
+                            Icon(Icons.help_outline_rounded,
+                                size: 14, color: context.primaryColor),
                             const SizedBox(width: 4),
                             Text(
                               'COMMUNITY QUESTION',
@@ -366,7 +481,8 @@ Future<void> showCommunityApplicationDialog(
                         const SizedBox(height: 6),
                         Text(
                           question,
-                          style: context.bodyStyle.copyWith(color: context.inkColor),
+                          style: context.bodyStyle
+                              .copyWith(color: context.inkColor),
                         ),
                       ],
                     ),
@@ -383,17 +499,23 @@ Future<void> showCommunityApplicationDialog(
                       labelText: 'Your Answer / Application Note (Required)',
                       labelStyle: context.widgetFooterStyle,
                       hintText: 'Provide your response to the community...',
-                      hintStyle: context.bodyStyle.copyWith(color: context.mutedColor),
+                      hintStyle:
+                          context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
-                        borderSide: BorderSide(color: context.subtleBorderColor),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
+                        borderSide:
+                            BorderSide(color: context.subtleBorderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
-                        borderSide: BorderSide(color: context.subtleBorderColor),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
+                        borderSide:
+                            BorderSide(color: context.subtleBorderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(context.radiusControl),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
                         borderSide: BorderSide(color: context.primaryColor),
                       ),
                       filled: true,
@@ -409,7 +531,9 @@ Future<void> showCommunityApplicationDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+              child: Text('CANCEL',
+                  style:
+                      context.controlStyle.copyWith(color: context.mutedColor)),
             ),
             EarthButton(
               label: 'SUBMIT APPLICATION',
@@ -440,11 +564,16 @@ Future<void> showCommunityDetailsDialog(
 ) async {
   final id = community['id']?.toString() ?? '';
   final name = community['name']?.toString() ?? '';
-  final founderName = community['founder_house_name']?.toString() ?? 'Unknown House';
+  final founderName =
+      community['founder_house_name']?.toString() ?? 'Unknown House';
   final description = community['description']?.toString() ?? '';
-  final admissionPolicy = (community['join_policy']?.toString() ?? 'OPEN').toUpperCase();
-  final myRole = community['viewer_role']?.toString();
-  final isPending = community['viewer_membership_status'] == 'PENDING';
+  final admissionPolicy =
+      (community['join_policy']?.toString() ?? 'OPEN').toUpperCase();
+  final viewer = community['viewer'] is Map
+      ? Map<String, dynamic>.from(community['viewer'] as Map)
+      : const <String, dynamic>{};
+  final myRole = viewer['role']?.toString();
+  final isPending = viewer['requestStatus']?.toString() == 'PENDING';
   final members = asIntOr(community['member_count'], 0);
   final isOwner = myRole == 'OWNER';
   final isAdmin = myRole == 'MODERATOR';
@@ -465,7 +594,8 @@ Future<void> showCommunityDetailsDialog(
           Expanded(
             child: Text(
               name,
-              style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+              style:
+                  context.topicTitleStyle.copyWith(color: context.primaryColor),
             ),
           ),
         ],
@@ -479,7 +609,8 @@ Future<void> showCommunityDetailsDialog(
             children: [
               Text(
                 'MANIFESTO & PURPOSE',
-                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.mutedColor),
               ),
               const SizedBox(height: 6),
               Container(
@@ -490,7 +621,9 @@ Future<void> showCommunityDetailsDialog(
                   border: Border.all(color: context.subtleBorderColor),
                 ),
                 child: Text(
-                  description.isNotEmpty ? description : 'No specific manifesto provided for this community.',
+                  description.isNotEmpty
+                      ? description
+                      : 'No specific manifesto provided for this community.',
                   style: context.bodyStyle.copyWith(color: context.inkColor),
                 ),
               ),
@@ -524,7 +657,8 @@ Future<void> showCommunityDetailsDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CLOSE', style: context.controlStyle.copyWith(color: context.mutedColor)),
+          child: Text('CLOSE',
+              style: context.controlStyle.copyWith(color: context.mutedColor)),
         ),
         if (isOwner || isAdmin) ...[
           EarthButton(
@@ -535,14 +669,15 @@ Future<void> showCommunityDetailsDialog(
                 ? null
                 : () {
                     Navigator.pop(dialogContext);
-                    showCommunityManageDialog(context, community, state, action);
+                    showCommunityManageDialog(
+                        context, community, state, action);
                   },
           ),
         ] else if (isMember) ...[
           EarthButton(
             label: 'LEAVE',
             variant: EarthButtonVariant.danger,
-            onPressed: busy
+            onPressed: busy || viewer['canLeave'] != true
                 ? null
                 : () async {
                     Navigator.pop(dialogContext);
@@ -550,26 +685,21 @@ Future<void> showCommunityDetailsDialog(
                   },
           ),
         ] else if (isPending) ...[
-          EarthButton(
-            label: 'CANCEL APPLICATION',
-            variant: EarthButtonVariant.danger,
-            onPressed: busy
-                ? null
-                : () async {
-                    Navigator.pop(dialogContext);
-                    await action(() => const EarthApi().leaveCommunity(id));
-                  },
-          ),
+          const EarthBadge(
+              label: 'REQUEST PENDING', variant: EarthBadgeVariant.warning),
         ] else ...[
           EarthButton(
-            label: admissionPolicy == 'APPROVAL' ? 'APPLY TO JOIN' : 'JOIN COMMUNITY',
+            label: admissionPolicy == 'APPROVAL'
+                ? 'APPLY TO JOIN'
+                : 'JOIN COMMUNITY',
             variant: EarthButtonVariant.primary,
-            onPressed: busy
+            onPressed: busy || viewer['canJoin'] != true
                 ? null
                 : () async {
                     Navigator.pop(dialogContext);
                     if (admissionPolicy == 'APPROVAL') {
-                      showCommunityApplicationDialog(context, community, action);
+                      showCommunityApplicationDialog(
+                          context, community, action);
                     } else {
                       await action(() => const EarthApi().joinCommunity(id));
                     }
@@ -589,10 +719,18 @@ Future<void> showCommunityManageDialog(
 ) async {
   final id = community['id']?.toString() ?? '';
   final name = community['name']?.toString() ?? '';
-  final myRole = community['viewer_role']?.toString();
+  final viewer = community['viewer'] is Map
+      ? Map<String, dynamic>.from(community['viewer'] as Map)
+      : const <String, dynamic>{};
+  final myRole = viewer['role']?.toString();
   final isOwner = myRole == 'OWNER';
-  final descController = TextEditingController(text: community['description']?.toString() ?? '');
-  String admissionPolicy = (community['join_policy']?.toString() ?? 'OPEN').toLowerCase() == 'request' ? 'approval' : 'open';
+  final descController =
+      TextEditingController(text: community['description']?.toString() ?? '');
+  String admissionPolicy =
+      (community['join_policy']?.toString() ?? 'OPEN').toLowerCase() ==
+              'request'
+          ? 'approval'
+          : 'open';
 
   List<dynamic> members = [];
   List<dynamic> requests = [];
@@ -622,19 +760,22 @@ Future<void> showCommunityManageDialog(
             backgroundColor: context.panelColor,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(context.radiusPanel),
-              side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+              side: BorderSide(
+                  color: context.primaryColor.withValues(alpha: .35)),
             ),
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.settings_outlined, color: context.primaryColor, size: 20),
+                    Icon(Icons.settings_outlined,
+                        color: context.primaryColor, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Manage $name',
-                        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+                        style: context.topicTitleStyle
+                            .copyWith(color: context.primaryColor),
                       ),
                     ),
                   ],
@@ -645,7 +786,8 @@ Future<void> showCommunityManageDialog(
                   indicatorColor: context.primaryColor,
                   labelColor: context.primaryColor,
                   unselectedLabelColor: context.mutedColor,
-                  labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  labelStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold),
                   unselectedLabelStyle: const TextStyle(fontSize: 12),
                   tabs: [
                     const Tab(text: 'SETTINGS'),
@@ -672,24 +814,33 @@ Future<void> showCommunityManageDialog(
                                 controller: descController,
                                 minLines: 3,
                                 maxLines: 4,
-                                style: context.bodyStyle.copyWith(color: context.inkColor),
+                                style: context.bodyStyle
+                                    .copyWith(color: context.inkColor),
                                 decoration: InputDecoration(
                                   alignLabelWithHint: true,
                                   labelText: 'Manifesto & Description',
                                   labelStyle: context.widgetFooterStyle,
-                                  hintText: 'Describe the core mission and goals of this community...',
-                                  hintStyle: context.bodyStyle.copyWith(color: context.mutedColor),
+                                  hintText:
+                                      'Describe the core mission and goals of this community...',
+                                  hintStyle: context.bodyStyle
+                                      .copyWith(color: context.mutedColor),
                                   border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(context.radiusControl),
-                                    borderSide: BorderSide(color: context.subtleBorderColor),
+                                    borderRadius: BorderRadius.circular(
+                                        context.radiusControl),
+                                    borderSide: BorderSide(
+                                        color: context.subtleBorderColor),
                                   ),
                                   enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(context.radiusControl),
-                                    borderSide: BorderSide(color: context.subtleBorderColor),
+                                    borderRadius: BorderRadius.circular(
+                                        context.radiusControl),
+                                    borderSide: BorderSide(
+                                        color: context.subtleBorderColor),
                                   ),
                                   focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(context.radiusControl),
-                                    borderSide: BorderSide(color: context.primaryColor),
+                                    borderRadius: BorderRadius.circular(
+                                        context.radiusControl),
+                                    borderSide:
+                                        BorderSide(color: context.primaryColor),
                                   ),
                                   filled: true,
                                   fillColor: context.surfaceColor,
@@ -698,51 +849,68 @@ Future<void> showCommunityManageDialog(
                               ),
                               const SizedBox(height: 16),
                               Text('ADMISSION POLICY',
-                                  style: context.widgetTitleStyle.copyWith(color: context.mutedColor)),
+                                  style: context.widgetTitleStyle
+                                      .copyWith(color: context.mutedColor)),
                               const SizedBox(height: 8),
                               Row(
                                 children: [
                                   Expanded(
                                     child: InkWell(
-                                      onTap: () => setDialogState(() => admissionPolicy = 'open'),
-                                      borderRadius: BorderRadius.circular(context.radiusControl),
+                                      onTap: () => setDialogState(
+                                          () => admissionPolicy = 'open'),
+                                      borderRadius: BorderRadius.circular(
+                                          context.radiusControl),
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
                                         decoration: BoxDecoration(
                                           border: Border.all(
                                             color: admissionPolicy == 'open'
                                                 ? context.primaryColor
                                                 : context.subtleBorderColor,
-                                            width: admissionPolicy == 'open' ? 2 : 1,
+                                            width: admissionPolicy == 'open'
+                                                ? 2
+                                                : 1,
                                           ),
-                                          borderRadius: BorderRadius.circular(context.radiusControl),
+                                          borderRadius: BorderRadius.circular(
+                                              context.radiusControl),
                                           color: admissionPolicy == 'open'
-                                              ? context.primaryColor.withValues(alpha: 0.1)
+                                              ? context.primaryColor
+                                                  .withValues(alpha: 0.1)
                                               : Colors.transparent,
                                         ),
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
                                                 Icon(Icons.lock_open_rounded,
                                                     size: 14,
-                                                    color: admissionPolicy == 'open'
+                                                    color: admissionPolicy ==
+                                                            'open'
                                                         ? context.primaryColor
                                                         : context.mutedColor),
                                                 const SizedBox(width: 4),
                                                 Flexible(
                                                   child: Text('OPEN ACCESS',
                                                       maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: context.widgetTitleStyle.copyWith(
-                                                          color: context.primaryColor)),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: context
+                                                          .widgetTitleStyle
+                                                          .copyWith(
+                                                              color: context
+                                                                  .primaryColor)),
                                                 ),
                                               ],
                                             ),
                                             const SizedBox(height: 3),
                                             Text('Instant Join',
-                                                style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                                style: context.widgetFooterStyle
+                                                    .copyWith(
+                                                        color: context
+                                                            .mutedColor)),
                                           ],
                                         ),
                                       ),
@@ -751,45 +919,64 @@ Future<void> showCommunityManageDialog(
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: InkWell(
-                                      onTap: () => setDialogState(() => admissionPolicy = 'approval'),
-                                      borderRadius: BorderRadius.circular(context.radiusControl),
+                                      onTap: () => setDialogState(
+                                          () => admissionPolicy = 'approval'),
+                                      borderRadius: BorderRadius.circular(
+                                          context.radiusControl),
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
                                         decoration: BoxDecoration(
                                           border: Border.all(
                                             color: admissionPolicy == 'approval'
                                                 ? context.primaryColor
                                                 : context.subtleBorderColor,
-                                            width: admissionPolicy == 'approval' ? 2 : 1,
+                                            width: admissionPolicy == 'approval'
+                                                ? 2
+                                                : 1,
                                           ),
-                                          borderRadius: BorderRadius.circular(context.radiusControl),
+                                          borderRadius: BorderRadius.circular(
+                                              context.radiusControl),
                                           color: admissionPolicy == 'approval'
-                                              ? context.primaryColor.withValues(alpha: 0.1)
+                                              ? context.primaryColor
+                                                  .withValues(alpha: 0.1)
                                               : Colors.transparent,
                                         ),
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
-                                                Icon(Icons.verified_user_outlined,
+                                                Icon(
+                                                    Icons
+                                                        .verified_user_outlined,
                                                     size: 14,
-                                                    color: admissionPolicy == 'approval'
+                                                    color: admissionPolicy ==
+                                                            'approval'
                                                         ? context.primaryColor
                                                         : context.mutedColor),
                                                 const SizedBox(width: 4),
                                                 Flexible(
-                                                  child: Text('APPROVAL REQUIRED',
+                                                  child: Text(
+                                                      'APPROVAL REQUIRED',
                                                       maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: context.widgetTitleStyle.copyWith(
-                                                          color: context.primaryColor)),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: context
+                                                          .widgetTitleStyle
+                                                          .copyWith(
+                                                              color: context
+                                                                  .primaryColor)),
                                                 ),
                                               ],
                                             ),
                                             const SizedBox(height: 3),
                                             Text('Review Applicants',
-                                                style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                                style: context.widgetFooterStyle
+                                                    .copyWith(
+                                                        color: context
+                                                            .mutedColor)),
                                           ],
                                         ),
                                       ),
@@ -803,10 +990,14 @@ Future<void> showCommunityManageDialog(
                                 variant: EarthButtonVariant.primary,
                                 onPressed: () async {
                                   Navigator.pop(dialogContext);
-                                  await action(() => const EarthApi().updateCommunity(
+                                  await action(() =>
+                                      const EarthApi().updateCommunity(
                                         communityId: id,
                                         description: descController.text.trim(),
-                                        joinPolicy: admissionPolicy == 'approval' ? 'REQUEST' : 'OPEN',
+                                        joinPolicy:
+                                            admissionPolicy == 'approval'
+                                                ? 'REQUEST'
+                                                : 'OPEN',
                                       ));
                                 },
                               ),
@@ -819,19 +1010,30 @@ Future<void> showCommunityManageDialog(
                             : ListView.builder(
                                 itemCount: members.length,
                                 itemBuilder: (context, idx) {
-                                  final m = members[idx] as Map<String, dynamic>;
+                                  final m =
+                                      members[idx] as Map<String, dynamic>;
                                   final hId = m['house_id']?.toString() ?? '';
-                                  final hName = m['house_name']?.toString() ?? hId;
-                                  final role = (m['role']?.toString() ?? 'member').toUpperCase();
+                                  final hName =
+                                      m['house_name']?.toString() ?? hId;
+                                  final role =
+                                      (m['role']?.toString() ?? 'member')
+                                          .toUpperCase();
                                   final isMFounder = role == 'OWNER';
 
                                   return ListTile(
-                                    title: Text(hName, style: context.bodyStyle.copyWith(fontSize: 13)),
-                                    subtitle: Text('$hId · Joined Day ${m['joined_game_day']}',
-                                        style: context.widgetFooterStyle.copyWith(fontSize: 11, color: context.mutedColor)),
+                                    title: Text(hName,
+                                        style: context.bodyStyle
+                                            .copyWith(fontSize: 13)),
+                                    subtitle: Text(
+                                        '$hId · Joined Day ${m['joined_game_day']}',
+                                        style: context.widgetFooterStyle
+                                            .copyWith(
+                                                fontSize: 11,
+                                                color: context.mutedColor)),
                                     trailing: Wrap(
                                       spacing: 6,
-                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
                                         EarthBadge(
                                           label: role,
@@ -847,25 +1049,30 @@ Future<void> showCommunityManageDialog(
                                               label: 'DEMOTE',
                                               variant: EarthButtonVariant.ghost,
                                               onPressed: () async {
-                                                await const EarthApi().setCommunityMemberRole(
+                                                await const EarthApi()
+                                                    .setCommunityMemberRole(
                                                   communityId: id,
                                                   targetHouseId: hId,
                                                   role: 'MEMBER',
                                                 );
-                                                setDialogState(() => loading = true);
+                                                setDialogState(
+                                                    () => loading = true);
                                               },
                                             )
                                           else
                                             EarthButton(
                                               label: 'MAKE ADMIN',
-                                              variant: EarthButtonVariant.secondary,
+                                              variant:
+                                                  EarthButtonVariant.secondary,
                                               onPressed: () async {
-                                                await const EarthApi().setCommunityMemberRole(
+                                                await const EarthApi()
+                                                    .setCommunityMemberRole(
                                                   communityId: id,
                                                   targetHouseId: hId,
                                                   role: 'MODERATOR',
                                                 );
-                                                setDialogState(() => loading = true);
+                                                setDialogState(
+                                                    () => loading = true);
                                               },
                                             ),
                                         ],
@@ -876,32 +1083,52 @@ Future<void> showCommunityManageDialog(
                               ),
                         // Tab 3: Requests
                         requests.isEmpty
-                            ? const Center(child: Text('No pending membership requests.'))
+                            ? const Center(
+                                child: Text('No pending membership requests.'))
                             : ListView.builder(
                                 itemCount: requests.length,
                                 itemBuilder: (context, idx) {
-                                  final req = requests[idx] as Map<String, dynamic>;
+                                  final req =
+                                      requests[idx] as Map<String, dynamic>;
                                   final reqId = req['id']?.toString() ?? '';
-                                  final applicant = req['human_name']?.toString() ?? req['human_id']?.toString() ?? '';
-                                  final appMsg = req['application_message']?.toString() ?? '';
+                                  final applicant =
+                                      req['human_name']?.toString() ??
+                                          req['human_id']?.toString() ??
+                                          '';
+                                  final appMsg =
+                                      req['application_message']?.toString() ??
+                                          '';
 
                                   return Container(
-                                    margin: const EdgeInsets.symmetric(vertical: 4),
+                                    margin:
+                                        const EdgeInsets.symmetric(vertical: 4),
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
                                       color: context.surfaceColor,
-                                      borderRadius: BorderRadius.circular(context.radiusCard),
-                                      border: Border.all(color: context.subtleBorderColor),
+                                      borderRadius: BorderRadius.circular(
+                                          context.radiusCard),
+                                      border: Border.all(
+                                          color: context.subtleBorderColor),
                                     ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
                                       children: [
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(applicant, style: context.bodyStyle.copyWith(fontSize: 13, fontWeight: FontWeight.bold)),
-                                            Text('Day ${req['requested_game_day']}',
-                                                style: TextStyle(fontSize: 11, color: context.mutedColor)),
+                                            Text(applicant,
+                                                style: context.bodyStyle
+                                                    .copyWith(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.bold)),
+                                            Text(
+                                                'Day ${req['requested_game_day']}',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: context.mutedColor)),
                                           ],
                                         ),
                                         if (appMsg.isNotEmpty) ...[
@@ -910,17 +1137,27 @@ Future<void> showCommunityManageDialog(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: context.panelColor,
-                                              borderRadius: BorderRadius.circular(context.radiusControl),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      context.radiusControl),
                                             ),
                                             child: Row(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                Icon(Icons.format_quote_rounded, size: 14, color: context.primaryColor),
+                                                Icon(Icons.format_quote_rounded,
+                                                    size: 14,
+                                                    color:
+                                                        context.primaryColor),
                                                 const SizedBox(width: 4),
                                                 Expanded(
                                                   child: Text(
                                                     appMsg,
-                                                    style: TextStyle(fontSize: 12, color: context.inkColor, fontStyle: FontStyle.italic),
+                                                    style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: context.inkColor,
+                                                        fontStyle:
+                                                            FontStyle.italic),
                                                   ),
                                                 ),
                                               ],
@@ -929,46 +1166,90 @@ Future<void> showCommunityManageDialog(
                                         ],
                                         const SizedBox(height: 8),
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
                                           children: [
                                             EarthButton(
                                               label: 'REJECT',
-                                              variant: EarthButtonVariant.danger,
+                                              variant:
+                                                  EarthButtonVariant.danger,
                                               onPressed: () async {
-                                                final reasonController = TextEditingController();
-                                                final confirmed = await showDialog<bool>(
+                                                final reasonController =
+                                                    TextEditingController();
+                                                final confirmed =
+                                                    await showDialog<bool>(
                                                   context: context,
-                                                  builder: (rejectCtx) => AlertDialog(
-                                                    backgroundColor: context.panelColor,
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(context.radiusPanel),
-                                                      side: BorderSide(color: context.dangerColor.withValues(alpha: .35)),
+                                                  builder: (rejectCtx) =>
+                                                      AlertDialog(
+                                                    backgroundColor:
+                                                        context.panelColor,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              context
+                                                                  .radiusPanel),
+                                                      side: BorderSide(
+                                                          color: context
+                                                              .dangerColor
+                                                              .withValues(
+                                                                  alpha: .35)),
                                                     ),
                                                     title: Text(
                                                       'Decline Membership Request',
-                                                      style: context.topicTitleStyle.copyWith(color: context.dangerColor),
+                                                      style: context
+                                                          .topicTitleStyle
+                                                          .copyWith(
+                                                              color: context
+                                                                  .dangerColor),
                                                     ),
                                                     content: SizedBox(
                                                       width: 400,
                                                       child: Column(
-                                                        mainAxisSize: MainAxisSize.min,
-                                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .stretch,
                                                         children: [
                                                           Text(
                                                             'Please provide a reason for declining $applicant\'s application:',
-                                                            style: context.bodyStyle.copyWith(fontSize: 13),
+                                                            style: context
+                                                                .bodyStyle
+                                                                .copyWith(
+                                                                    fontSize:
+                                                                        13),
                                                           ),
-                                                          const SizedBox(height: 12),
+                                                          const SizedBox(
+                                                              height: 12),
                                                           TextField(
-                                                            controller: reasonController,
+                                                            controller:
+                                                                reasonController,
                                                             autofocus: true,
                                                             maxLines: 3,
-                                                            style: context.bodyStyle.copyWith(fontSize: 13),
-                                                            decoration: InputDecoration(
-                                                              labelText: 'Reason for Rejection (Required)',
-                                                              labelStyle: context.widgetFooterStyle.copyWith(fontSize: 12),
-                                                              hintText: 'e.g. Guild capacity full, requirements not met...',
-                                                              hintStyle: context.bodyStyle.copyWith(fontSize: 12, color: context.mutedColor),
+                                                            style: context
+                                                                .bodyStyle
+                                                                .copyWith(
+                                                                    fontSize:
+                                                                        13),
+                                                            decoration:
+                                                                InputDecoration(
+                                                              labelText:
+                                                                  'Reason for Rejection (Required)',
+                                                              labelStyle: context
+                                                                  .widgetFooterStyle
+                                                                  .copyWith(
+                                                                      fontSize:
+                                                                          12),
+                                                              hintText:
+                                                                  'e.g. Guild capacity full, requirements not met...',
+                                                              hintStyle: context
+                                                                  .bodyStyle
+                                                                  .copyWith(
+                                                                      fontSize:
+                                                                          12,
+                                                                      color: context
+                                                                          .mutedColor),
                                                             ),
                                                           ),
                                                         ],
@@ -976,15 +1257,29 @@ Future<void> showCommunityManageDialog(
                                                     ),
                                                     actions: [
                                                       TextButton(
-                                                        onPressed: () => Navigator.pop(rejectCtx, false),
-                                                        child: Text('CANCEL', style: TextStyle(color: context.mutedColor)),
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                                rejectCtx,
+                                                                false),
+                                                        child: Text('CANCEL',
+                                                            style: TextStyle(
+                                                                color: context
+                                                                    .mutedColor)),
                                                       ),
                                                       EarthButton(
-                                                        label: 'CONFIRM DECLINE',
-                                                        variant: EarthButtonVariant.danger,
+                                                        label:
+                                                            'CONFIRM DECLINE',
+                                                        variant:
+                                                            EarthButtonVariant
+                                                                .danger,
                                                         onPressed: () {
-                                                          if (reasonController.text.trim().isNotEmpty) {
-                                                            Navigator.pop(rejectCtx, true);
+                                                          if (reasonController
+                                                              .text
+                                                              .trim()
+                                                              .isNotEmpty) {
+                                                            Navigator.pop(
+                                                                rejectCtx,
+                                                                true);
                                                           }
                                                         },
                                                       ),
@@ -993,27 +1288,34 @@ Future<void> showCommunityManageDialog(
                                                 );
 
                                                 if (confirmed == true) {
-                                                  await const EarthApi().decideCommunityRequest(
+                                                  await const EarthApi()
+                                                      .decideCommunityRequest(
                                                     communityId: id,
                                                     requestId: reqId,
                                                     action: 'reject',
-                                                    rejectionReason: reasonController.text.trim(),
+                                                    rejectionReason:
+                                                        reasonController.text
+                                                            .trim(),
                                                   );
-                                                  setDialogState(() => loading = true);
+                                                  setDialogState(
+                                                      () => loading = true);
                                                 }
                                               },
                                             ),
                                             const SizedBox(width: 8),
                                             EarthButton(
                                               label: 'APPROVE',
-                                              variant: EarthButtonVariant.primary,
+                                              variant:
+                                                  EarthButtonVariant.primary,
                                               onPressed: () async {
-                                                await const EarthApi().decideCommunityRequest(
+                                                await const EarthApi()
+                                                    .decideCommunityRequest(
                                                   communityId: id,
                                                   requestId: reqId,
                                                   action: 'approve',
                                                 );
-                                                setDialogState(() => loading = true);
+                                                setDialogState(
+                                                    () => loading = true);
                                               },
                                             ),
                                           ],
@@ -1031,18 +1333,21 @@ Future<void> showCommunityManageDialog(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.warning_amber_rounded, size: 48, color: context.dangerColor),
+                                Icon(Icons.warning_amber_rounded,
+                                    size: 48, color: context.dangerColor),
                                 const SizedBox(height: 12),
                                 Text(
                                   'Disband Community',
                                   textAlign: TextAlign.center,
-                                  style: context.topicTitleStyle.copyWith(color: context.dangerColor),
+                                  style: context.topicTitleStyle
+                                      .copyWith(color: context.dangerColor),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   'Disbanding is irreversible. All community records and memberships will be dissolved permanently.',
                                   textAlign: TextAlign.center,
-                                  style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
+                                  style: context.widgetFooterStyle
+                                      .copyWith(color: context.mutedColor),
                                 ),
                                 const SizedBox(height: 24),
                                 EarthButton(
@@ -1050,7 +1355,8 @@ Future<void> showCommunityManageDialog(
                                   variant: EarthButtonVariant.danger,
                                   onPressed: () async {
                                     Navigator.pop(dialogContext);
-                                    await action(() => const EarthApi().disbandCommunity(id));
+                                    await action(() =>
+                                        const EarthApi().disbandCommunity(id));
                                   },
                                 ),
                               ],
@@ -1062,7 +1368,9 @@ Future<void> showCommunityManageDialog(
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: Text('CLOSE', style: context.controlStyle.copyWith(color: context.mutedColor)),
+                child: Text('CLOSE',
+                    style: context.controlStyle
+                        .copyWith(color: context.mutedColor)),
               ),
             ],
           ),
@@ -1093,11 +1401,13 @@ Future<void> showTaxCharterDialog(
           backgroundColor: context.panelColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(context.radiusPanel),
-            side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+            side:
+                BorderSide(color: context.primaryColor.withValues(alpha: .35)),
           ),
           title: Text(
-            corporation ? 'Set corporation tax charter' : 'Set city tax charter',
-            style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+            'Set corporation tax charter',
+            style:
+                context.topicTitleStyle.copyWith(color: context.primaryColor),
           ),
           content: SizedBox(
             width: 520,
@@ -1113,7 +1423,8 @@ Future<void> showTaxCharterDialog(
                   const SizedBox(height: 12),
                   TextField(
                     controller: income,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       labelText: 'Income tax (%)',
@@ -1124,7 +1435,8 @@ Future<void> showTaxCharterDialog(
                   const SizedBox(height: 8),
                   TextField(
                     controller: sales,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       labelText: 'Sales tax (%)',
@@ -1135,7 +1447,8 @@ Future<void> showTaxCharterDialog(
                   const SizedBox(height: 8),
                   TextField(
                     controller: corporate,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       labelText: 'Corporate tax (%)',
@@ -1146,7 +1459,8 @@ Future<void> showTaxCharterDialog(
                   const SizedBox(height: 8),
                   TextField(
                     controller: property,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       labelText: 'Property tax (%)',
@@ -1169,7 +1483,9 @@ Future<void> showTaxCharterDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+              child: Text('CANCEL',
+                  style:
+                      context.controlStyle.copyWith(color: context.mutedColor)),
             ),
             EarthButton(
               label: 'SAVE CHARTER',
@@ -1180,25 +1496,18 @@ Future<void> showTaxCharterDialog(
                   double.tryParse(corporate.text.trim()),
                   double.tryParse(property.text.trim()),
                 ];
-                if (rates.any((value) => value == null || value < 0 || value > 30)) {
+                if (rates
+                    .any((value) => value == null || value < 0 || value > 30)) {
                   return;
                 }
                 Navigator.pop(dialogContext);
-                await action(() => corporation
-                    ? const EarthApi().setCorporationTaxCharter(
-                        corporationId: institutionId,
-                        incomeTaxBps: (rates[0]! * 100).round(),
-                        salesTaxBps: (rates[1]! * 100).round(),
-                        corporateTaxBps: (rates[2]! * 100).round(),
-                        propertyTaxBps: (rates[3]! * 100).round(),
-                      )
-                    : const EarthApi().setCityTaxCharter(
-                        cityId: institutionId,
-                        incomeTaxBps: (rates[0]! * 100).round(),
-                        salesTaxBps: (rates[1]! * 100).round(),
-                        corporateTaxBps: (rates[2]! * 100).round(),
-                        propertyTaxBps: (rates[3]! * 100).round(),
-                      ));
+                await action(() => const EarthApi().setCorporationTaxCharter(
+                      corporationId: institutionId,
+                      incomeTaxBps: (rates[0]! * 100).round(),
+                      salesTaxBps: (rates[1]! * 100).round(),
+                      corporateTaxBps: (rates[2]! * 100).round(),
+                      propertyTaxBps: (rates[3]! * 100).round(),
+                    ));
               },
             ),
           ],
@@ -1237,7 +1546,8 @@ Future<void> showAdmissionPolicyDialog(
               activeColor: context.primaryColor,
               onChanged: (value) => setState(() => policy = value!),
               title: Text('Open membership', style: context.widgetValueStyle),
-              subtitle: Text('New members join the capital city immediately.', style: context.widgetFooterStyle),
+              subtitle: Text('New members join the capital city immediately.',
+                  style: context.widgetFooterStyle),
             ),
             RadioListTile<String>(
               value: 'approval',
@@ -1245,14 +1555,17 @@ Future<void> showAdmissionPolicyDialog(
               activeColor: context.primaryColor,
               onChanged: (value) => setState(() => policy = value!),
               title: Text('Admin approval', style: context.widgetValueStyle),
-              subtitle: Text('Administrators review membership requests.', style: context.widgetFooterStyle),
+              subtitle: Text('Administrators review membership requests.',
+                  style: context.widgetFooterStyle),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+            child: Text('CANCEL',
+                style:
+                    context.controlStyle.copyWith(color: context.mutedColor)),
           ),
           EarthButton(
             label: 'SAVE POLICY',
@@ -1270,156 +1583,6 @@ Future<void> showAdmissionPolicyDialog(
   );
 }
 
-Future<void> showCorporationWithCapitalDialog(
-  BuildContext context,
-  Future<void> Function(Future<EarthState> Function()) action,
-) async {
-  final corporation = TextEditingController();
-  final capital = TextEditingController();
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: context.panelColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusPanel),
-        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-      ),
-      title: Text(
-        'Found a Corporation',
-        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
-      ),
-      content: SizedBox(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Your corporation and its capital city are founded together. You become the first member and city resident.',
-              style: context.widgetFooterStyle,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: corporation,
-              style: context.bodyStyle.copyWith(color: context.inkColor),
-              decoration: InputDecoration(
-                labelText: 'Corporation name',
-                labelStyle: context.widgetFooterStyle,
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: capital,
-              style: context.bodyStyle.copyWith(color: context.inkColor),
-              decoration: InputDecoration(
-                labelText: 'Capital city name',
-                labelStyle: context.widgetFooterStyle,
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
-        ),
-        EarthButton(
-          label: 'FOUND CORPORATION',
-          onPressed: () async {
-            final corporationName = corporation.text.trim();
-            final cityName = capital.text.trim();
-            if (corporationName.length < 2 || cityName.length < 2) return;
-            Navigator.pop(dialogContext);
-            await action(() => const EarthApi().createCorporationWithCapital(
-                  corporationName: corporationName,
-                  cityName: cityName,
-                ));
-          },
-        ),
-      ],
-    ),
-  );
-}
-
-Future<void> showCityChangeDialog(
-  BuildContext context,
-  EarthState state,
-  String currentCityId,
-  Future<void> Function(Future<EarthState> Function()) action,
-) async {
-  final corporationId = state.membership?['corporation_id']?.toString();
-  final cities = (state.rankings['cities'] is List
-          ? state.rankings['cities'] as List
-          : const <dynamic>[])
-      .whereType<Map>()
-      .map((row) => Map<String, dynamic>.from(row))
-      .where((row) => corporationId == null || row['corporation_id']?.toString() == corporationId)
-      .toList();
-
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: context.panelColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusPanel),
-        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-      ),
-      title: Text(
-        'Change City Jurisdiction',
-        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
-      ),
-      content: SizedBox(
-        width: 520,
-        child: cities.isEmpty
-            ? const EarthEmptyState(
-                message: 'No cities in your current corporation network are available.',
-                icon: Icons.location_city_outlined,
-              )
-            : EarthDataList(
-                children: cities.map((city) {
-                  final id = city['id']?.toString() ?? '';
-                  final rules = city['rules'] is Map
-                      ? Map<String, dynamic>.from(city['rules'] as Map)
-                      : const <String, dynamic>{};
-                  final income = asDouble(rules['incomeTaxBps']);
-                  final tax = income == null
-                      ? 'Taxes: Default'
-                      : 'Income tax: ${(income / 100).toStringAsFixed(2)}%';
-                  final isCurrent = id == currentCityId;
-
-                  return EarthDataRow(
-                    title: city['name']?.toString() ?? id,
-                    subtitle: '${city['residents'] ?? 0} residents · $tax',
-                    leading: Icon(
-                      Icons.location_city_outlined,
-                      size: context.iconSize,
-                      color: isCurrent ? context.primaryColor : context.mutedColor,
-                    ),
-                    trailing: isCurrent
-                        ? const EarthBadge(label: 'CURRENT JURISDICTION')
-                        : EarthButton(
-                            label: 'MOVE',
-                            variant: EarthButtonVariant.primary,
-                            onPressed: () async {
-                              Navigator.pop(dialogContext);
-                              await action(() => const EarthApi().joinCity(cityId: id));
-                            },
-                          ),
-                  );
-                }).toList(),
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CLOSE', style: context.controlStyle.copyWith(color: context.mutedColor)),
-        ),
-      ],
-    ),
-  );
-}
-
 /// Displays comprehensive constitutional rules, tax rates, and perks of a corporation.
 Future<void> showCorporationCharterDialog(
   BuildContext context,
@@ -1430,11 +1593,13 @@ Future<void> showCorporationCharterDialog(
 }) async {
   final id = corporation['id']?.toString() ?? '';
   final name = corporation['name']?.toString() ?? id;
-  final capitalCity = corporation['capital_city_name']?.toString() ?? 'Capital City';
+  final capitalCity =
+      corporation['capital_city_name']?.toString() ?? 'Capital City';
   final members = asIntOr(corporation['member_count'], 0);
   final cityCount = asIntOr(corporation['city_count'], 1);
   final treasury = asDouble(corporation['treasury']) ?? 0.0;
-  final admissionPolicy = (corporation['admission_policy']?.toString() ?? 'open').toUpperCase();
+  final admissionPolicy =
+      (corporation['admission_policy']?.toString() ?? 'open').toUpperCase();
 
   final rules = corporation['rules'] is Map
       ? Map<String, dynamic>.from(corporation['rules'] as Map)
@@ -1460,7 +1625,8 @@ Future<void> showCorporationCharterDialog(
           Expanded(
             child: Text(
               '$name Charter & Constitution',
-              style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+              style:
+                  context.topicTitleStyle.copyWith(color: context.primaryColor),
             ),
           ),
         ],
@@ -1473,7 +1639,8 @@ Future<void> showCorporationCharterDialog(
             children: [
               Text(
                 'CONSTITUTIONAL TAX SCHEDULE',
-                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.mutedColor),
               ),
               const SizedBox(height: 8),
               EarthMetricGrid(
@@ -1507,7 +1674,8 @@ Future<void> showCorporationCharterDialog(
               const SizedBox(height: 20),
               Text(
                 'GOVERNANCE & ECONOMIC STANDING',
-                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.mutedColor),
               ),
               const SizedBox(height: 8),
               EarthMetricGrid(
@@ -1547,7 +1715,8 @@ Future<void> showCorporationCharterDialog(
               const SizedBox(height: 20),
               Text(
                 'AFFILIATION BENEFITS & CONSTITUTION',
-                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.mutedColor),
               ),
               const SizedBox(height: 8),
               Container(
@@ -1590,7 +1759,8 @@ Future<void> showCorporationCharterDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CLOSE', style: context.controlStyle.copyWith(color: context.mutedColor)),
+          child: Text('CLOSE',
+              style: context.controlStyle.copyWith(color: context.mutedColor)),
         ),
         if (!isMember && onJoin != null)
           EarthButton(
@@ -1606,7 +1776,8 @@ Future<void> showCorporationCharterDialog(
   );
 }
 
-Widget _buildBenefitRow(BuildContext context, IconData icon, String title, String description) {
+Widget _buildBenefitRow(
+    BuildContext context, IconData icon, String title, String description) {
   return Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1616,9 +1787,13 @@ Widget _buildBenefitRow(BuildContext context, IconData icon, String title, Strin
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: context.widgetTitleStyle.copyWith(color: context.primaryColor)),
+            Text(title,
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.primaryColor)),
             const SizedBox(height: 2),
-            Text(description, style: context.bodyStyle.copyWith(color: context.inkColor.withValues(alpha: .85))),
+            Text(description,
+                style: context.bodyStyle
+                    .copyWith(color: context.inkColor.withValues(alpha: .85))),
           ],
         ),
       ),

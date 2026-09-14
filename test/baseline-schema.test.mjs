@@ -19,7 +19,7 @@ test('migration directory exposes the immutable baseline followed by contiguous 
     .filter((file) => /^\d+_.+\.sql$/.test(file))
     .filter((file) => fs.readFileSync(new URL(file, migrationDir), 'utf8').includes('-- EARTH ACTIVE MIGRATION:'));
   assert.equal(active[0], '001_baseline.sql');
-  assert.deepEqual(active, ['001_baseline.sql', '002_communities_v2.sql']);
+  assert.deepEqual(active, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql']);
   const migrator = fs.readFileSync(path.resolve(new URL('../scripts/migrate-postgres.mjs', import.meta.url).pathname), 'utf8');
   assert.match(migrator, /activeMigrations/);
   assert.doesNotMatch(migrator, /ALLOW_MIGRATION_REPAIR/);
@@ -48,4 +48,25 @@ test('baseline defines the final economic and Spot Market authorities', () => {
   for (const symbol of ['MATERIAL', 'COMPONENTS', 'ENERGY', 'COMPUTE', 'FOOD']) {
     assert.match(sources['04_initial_world.sql'], new RegExp(symbol));
   }
+});
+
+test('schema V3 structurally prevents rebuilding the City hierarchy', () => {
+  const schema = sources['01_schema.sql'];
+  const referenceData = sources['03_reference_data.sql'];
+  const initialWorld = sources['04_initial_world.sql'];
+
+  assert.match(schema, /CREATE TABLE territories/);
+  assert.match(schema, /territory_id TEXT NOT NULL REFERENCES territories\(id\)/);
+  assert.match(schema, /CREATE UNIQUE INDEX house_affiliations_one_active_idx/);
+  assert.match(schema, /CREATE UNIQUE INDEX territories_one_active_primary_idx/);
+  assert.match(schema, /CHECK \(kind IN \('EARTH','CORPORATION','BANK'\)\)/);
+  assert.match(schema, /CHECK \(owner_type IN \('EARTH','CORPORATION','HOUSE','BANK','SYSTEM'\)\)/);
+  assert.match(schema, /CHECK \(scope IN \('EARTH','CORPORATION'\)\)/);
+  assert.match(schema, /CHECK \(scope IN \('global', 'corporation', 'community', 'direct'\)\)/);
+
+  for (const source of [schema, referenceData, initialWorld]) {
+    assert.doesNotMatch(source, /CREATE TABLE cities|\bcity_id\b|\bCITY\b|\bOUC\b/i);
+  }
+  assert.doesNotMatch(schema, /owner_type IN \([^)]*CITY/i);
+  assert.doesNotMatch(schema, /scope IN \([^)]*CITY/i);
 });

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 @immutable
 class BuildingModel {
   final String id;
-  final String cityId;
+  final String territoryId;
   final String ownerId;
   final String ownershipClass;
   final String buildingType;
@@ -23,7 +23,7 @@ class BuildingModel {
 
   const BuildingModel({
     required this.id,
-    required this.cityId,
+    required this.territoryId,
     required this.ownerId,
     required this.ownershipClass,
     required this.buildingType,
@@ -45,14 +45,14 @@ class BuildingModel {
   bool get isUnderConstruction => status == 'under_construction';
   bool get isActive => status == 'active';
   bool get isClosed => status == 'closed' || status == 'foreclosed';
-  bool get isCivic => ownershipClass == 'civic';
+  bool get isPublic => ownershipClass == 'public' || ownershipClass == 'civic';
   bool get isPublicInvestment => false;
   bool get isPrivate => ownershipClass == 'private';
 
   factory BuildingModel.fromJson(Map<String, dynamic> json) {
     return BuildingModel(
       id: json['id']?.toString() ?? '',
-      cityId: json['city_id']?.toString() ?? '',
+      territoryId: json['territory_id']?.toString() ?? '',
       ownerId: json['owner_id']?.toString() ?? '',
       ownershipClass: json['ownership_class']?.toString() ?? 'private',
       buildingType: json['building_type']?.toString() ?? '',
@@ -82,7 +82,7 @@ class PatentLicenseModel {
   final String licenseeId;
   final String licensorCorporationId;
   final String? buildingId;
-  final String? cityId;
+  final String? territoryId;
   final bool isPermanent;
   final int grantedGameDay;
   final int expiryGameDay;
@@ -97,7 +97,7 @@ class PatentLicenseModel {
     required this.licenseeId,
     required this.licensorCorporationId,
     this.buildingId,
-    this.cityId,
+    this.territoryId,
     required this.isPermanent,
     required this.grantedGameDay,
     required this.expiryGameDay,
@@ -118,7 +118,7 @@ class PatentLicenseModel {
       licenseeId: json['licensee_id']?.toString() ?? '',
       licensorCorporationId: json['licensor_corporation_id']?.toString() ?? '',
       buildingId: json['building_id']?.toString(),
-      cityId: json['city_id']?.toString(),
+      territoryId: json['territory_id']?.toString(),
       isPermanent: json['is_permanent'] == true || json['is_permanent']?.toString() == 'true',
       grantedGameDay: (json['granted_game_day'] is num) ? (json['granted_game_day'] as num).toInt() : int.tryParse(json['granted_game_day']?.toString() ?? '') ?? 1,
       expiryGameDay: (json['expiry_game_day'] is num) ? (json['expiry_game_day'] as num).toInt() : int.tryParse(json['expiry_game_day']?.toString() ?? '') ?? 30,
@@ -130,32 +130,32 @@ class PatentLicenseModel {
 
 @immutable
 class DistrictZoningModel {
-  final String cityId;
+  final String territoryId;
   final int totalSlots;
   final int occupiedSlots;
   final int availableSlots;
-  final int civicSlotsReserved;
-  final int civicSlotsUsed;
+  final int publicSlotsReserved;
+  final int publicSlotsUsed;
   final double occupancyRate;
 
   const DistrictZoningModel({
-    required this.cityId,
+    required this.territoryId,
     required this.totalSlots,
     required this.occupiedSlots,
     required this.availableSlots,
-    required this.civicSlotsReserved,
-    required this.civicSlotsUsed,
+    required this.publicSlotsReserved,
+    required this.publicSlotsUsed,
     required this.occupancyRate,
   });
 
   factory DistrictZoningModel.fromJson(Map<String, dynamic> json) {
     return DistrictZoningModel(
-      cityId: json['cityId']?.toString() ?? '',
+      territoryId: json['territoryId']?.toString() ?? json['territory_id']?.toString() ?? '',
       totalSlots: (json['totalSlots'] is num) ? (json['totalSlots'] as num).toInt() : 0,
       occupiedSlots: (json['occupiedSlots'] is num) ? (json['occupiedSlots'] as num).toInt() : 0,
       availableSlots: (json['availableSlots'] is num) ? (json['availableSlots'] as num).toInt() : 0,
-      civicSlotsReserved: (json['civicSlotsReserved'] is num) ? (json['civicSlotsReserved'] as num).toInt() : 0,
-      civicSlotsUsed: (json['civicSlotsUsed'] is num) ? (json['civicSlotsUsed'] as num).toInt() : 0,
+      publicSlotsReserved: (json['publicSlotsReserved'] is num) ? (json['publicSlotsReserved'] as num).toInt() : 0,
+      publicSlotsUsed: (json['publicSlotsUsed'] is num) ? (json['publicSlotsUsed'] as num).toInt() : 0,
       occupancyRate: (json['occupancyRate'] is num) ? (json['occupancyRate'] as num).toDouble() : 0.0,
     );
   }

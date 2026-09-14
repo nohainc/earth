@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 
 export async function listRolesPostgres(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const roles = await repository.query(`SELECT id, institution_id, human_id, role_code, status FROM institution_governance_roles WHERE status = 'ACTIVE' ORDER BY institution_id, role_code, id`);
+  const roles = await repository.query(`SELECT r.id, r.institution_id, r.human_id, r.role_code, r.status FROM institution_governance_roles r JOIN institutions i ON i.id = r.institution_id WHERE r.status = 'ACTIVE' AND i.kind IN ('EARTH', 'CORPORATION') ORDER BY r.institution_id, r.role_code, r.id`);
   return { ok: true, roles: roles.rows };
 }
 

@@ -483,41 +483,9 @@ class Dashboard extends StatelessWidget {
             showSelection: false,
           ),
         ];
-      case 'city':
-        if (state.membership?['city_id']?.toString().isNotEmpty != true) {
-          return [
-            const AffiliationRequiredPanel(
-              title: 'CITY ACCESS',
-              icon: Icons.location_city_outlined,
-              message:
-                  'Independent users cannot form cities directly. Join a corporation to access city formation and create an additional city in its network.',
-            ),
-          ];
-        }
+      case 'territories':
         return [
-          LayoutBuilder(
-            builder: (context, _) {
-              final institutions = InstitutionsCapacityPanel(
-                state: state,
-                busy: busy,
-                action: action,
-              );
-              final cityId = state.membership?['city_id']?.toString();
-              final cityImpact = CityImpactPanel(state: state);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  institutions,
-                  const SizedBox(height: 34),
-                  if (cityId != null && cityId.isNotEmpty)
-                    ActiveGovernanceRulePanel(
-                        state: state, institutionId: cityId),
-                  const SizedBox(height: 34),
-                  cityImpact,
-                ],
-              );
-            },
-          ),
+          CorporationOverviewPanel(state: state, busy: busy, action: action),
         ];
       case 'buildings':
       case 'real_estate':

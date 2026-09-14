@@ -2,24 +2,24 @@ INSERT INTO world_state(id, game_day, game_minute, world_seed, status)
 VALUES ('WORLD', 1, 0, 'EARTH-GENESIS', 'ACTIVE');
 
 INSERT INTO institutions(id, kind, name) VALUES
-  ('OUC', 'OUC', 'Organization of United Corporations'),
+  ('EARTH', 'EARTH', 'EARTH UC'),
   ('GLOBAL-BANK', 'BANK', 'Global Bank');
 
 INSERT INTO governance_rules (id, institution_id, name, category, value_json, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days, version, status, effective_from_game_day)
-VALUES ('GOV-OUC-BASELINE-V1', 'OUC', 'EARTH governance baseline', 'governance', '{"proposal_execution":"governed"}'::jsonb, 0.25, 0.50, 30, 1, 1, 'active', 1)
+VALUES ('GOV-EARTH-BASELINE-V1', 'EARTH', 'EARTH governance baseline', 'governance', '{"proposal_execution":"governed"}'::jsonb, 0.25, 0.50, 30, 1, 1, 'active', 1)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO owner_registry(id, owner_type, economic_id) VALUES
-  ('OUC', 'SYSTEM', 'ECON-OUC-001'),
-  ('GLOBAL-BANK', 'SYSTEM', 'ECON-GLOBAL-BANK-001'),
+  ('EARTH', 'EARTH', 'ECON-EARTH-001'),
+  ('GLOBAL-BANK', 'BANK', 'ECON-GLOBAL-BANK-001'),
   ('OWNER-MONETARY-ISSUANCE', 'SYSTEM', 'ECON-MONETARY-ISSUANCE'),
   ('OWNER-MONETARY-RETIREMENT', 'SYSTEM', 'ECON-MONETARY-RETIREMENT'),
   ('OWNER-MARKET-CLEARING', 'SYSTEM', 'ECON-MARKET-CLEARING');
 
 INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type) VALUES
-  ('ECON-OUC-001', 1, 'TREASURY'),
-  ('ECON-OUC-001', 1, 'OPERATIONS'),
-  ('ECON-OUC-001', 1, 'RESERVE'),
+  ('ECON-EARTH-001', 1, 'TREASURY'),
+  ('ECON-EARTH-001', 1, 'OPERATIONS'),
+  ('ECON-EARTH-001', 1, 'RESERVE'),
   ('ECON-GLOBAL-BANK-001', 1, 'RESERVE'),
   ('ECON-GLOBAL-BANK-001', 1, 'OPERATIONS'),
   ('ECON-MONETARY-ISSUANCE', 1, 'TREASURY'),
@@ -42,8 +42,8 @@ VALUES ('SPOT-MATERIAL', 'MATERIAL', 2, 1), ('SPOT-COMPONENTS', 'COMPONENTS', 3,
 
 INSERT INTO tax_rule_versions (id, tax_rule_id, scope, category, version, effective_from_game_day, rate_bps, tax_base_definition, beneficiary_economic_id)
 VALUES
-  ('TAX-BASIC-LEVY-V1', 'TAX-BASIC-LEVY', 'OUC', 'basic_levy', 1, 1, 0, 'fixed_daily_obligation', 'ECON-OUC-001'),
-  ('TAX-MARKET-TRANSACTION-V1', 'TAX-MARKET-TRANSACTION', 'OUC', 'market_transaction', 1, 1, 0, 'external_market_trade', 'ECON-OUC-001');
+  ('TAX-BASIC-LEVY-V1', 'TAX-BASIC-LEVY', 'EARTH', 'basic_levy', 1, 1, 0, 'fixed_daily_obligation', 'ECON-EARTH-001'),
+  ('TAX-MARKET-TRANSACTION-V1', 'TAX-MARKET-TRANSACTION', 'EARTH', 'market_transaction', 1, 1, 0, 'external_market_trade', 'ECON-EARTH-001');
 
 INSERT INTO daily_settlement_control (id, status)
 VALUES ('WORLD', 'awaiting_baseline')

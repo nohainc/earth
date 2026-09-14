@@ -15,6 +15,7 @@ import {
   changeCommunityMembership,
 } from './communities-postgres.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
+import { errorResponse } from './errors.ts';
 
 export async function handleCommunityRoutes(
   request: Request,
@@ -63,8 +64,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Community formation failed';
-      return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /founder/i.test(message) ? 404 : 400 });
+      return errorResponse(error, correlationId, 'Community formation failed.');
     }
   }
 
@@ -74,7 +74,7 @@ export async function handleCommunityRoutes(
       const result = await withRepository(env, (repository) => getCommunity(repository, communityMatch[1], viewer.houseId));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community could not be loaded' }, { status: 404 }); }
+    } catch (error) { return errorResponse(error, undefined, 'Community could not be loaded.'); }
   }
   if (communityMatch && request.method === 'PATCH') {
     const communityId = communityMatch[1];
@@ -95,7 +95,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community update failed' }, { status: 400 });
+      return errorResponse(error, undefined, 'Community update failed.');
     }
   }
 
@@ -109,7 +109,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community disband failed' }, { status: 400 });
+      return errorResponse(error, undefined, 'Community disband failed.');
     }
   }
 
@@ -123,7 +123,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community requests could not be loaded' }, { status: 403 });
+      return errorResponse(error, undefined, 'Community requests could not be loaded.');
     }
   }
 
@@ -142,7 +142,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Request decision failed' }, { status: 400 });
+      return errorResponse(error, undefined, 'Request decision failed.');
     }
   }
 
@@ -163,7 +163,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Role change failed' }, { status: 400 });
+      return errorResponse(error, undefined, 'Role change failed.');
     }
   }
 
@@ -175,7 +175,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community members could not be loaded' }, { status: 404 });
+      return errorResponse(error, undefined, 'Community members could not be loaded.');
     }
   }
 
@@ -199,8 +199,7 @@ export async function handleCommunityRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: memberActionMatch[2] === 'join' ? 201 : 200 });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Community membership change failed';
-      return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member|active/i.test(message) ? 409 : 400 });
+      return errorResponse(error, correlationId, 'Community membership change failed.');
     }
   }
 
@@ -213,7 +212,7 @@ export async function handleCommunityRoutes(
       const result = await withRepository(env, (repository) => changeCommunityMembership(repository, { communityId: memberRemovalMatch[1], houseId: viewer.houseId, humanId: viewer.currentHumanId, targetHouseId: memberRemovalMatch[2], action: 'remove' }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Member removal failed' }, { status: 400 }); }
+    } catch (error) { return errorResponse(error, undefined, 'Member removal failed.'); }
   }
 
   return null;

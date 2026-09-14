@@ -135,6 +135,7 @@ class EarthApiTransport {
         errorMsg,
         code: errorCode,
         correlationId: '${payload['correlationId'] ?? requestId ?? ''}',
+        field: payload['field']?.toString(),
         statusCode: response.statusCode,
       );
     }

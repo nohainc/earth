@@ -16,35 +16,13 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
              FROM humans h
              JOIN house_affiliations m ON m.house_id = h.house_id AND m.status = 'ACTIVE'
              JOIN institutions i ON i.id = p.institution_id
-             WHERE h.life_status = 'active'
-               AND m.joined_game_day <= p.voting_start_day
-               AND ((i.kind = 'CITY' AND m.city_id = p.institution_id)
-                 OR (i.kind = 'CORPORATION' AND m.corporation_id = p.institution_id))
-           ),
-           eligibility_cutoff_game_day = p.voting_start_day
-       WHERE p.status = 'scheduled' AND p.voting_start_day <= $1`,
+             WHERE h.status = 'ACTIVE'
+               AND i.kind IN ('EARTH', 'CORPORATION')
+               AND (i.kind = 'EARTH' OR m.corporation_id = p.institution_id)
+           )
+       WHERE p.status = 'OPEN'`,
       [completedDay + 1],
     );
-
-    const buildings = await tx.query<{ id: string; name: string; city_id: string | null; owner_id: string | null }>(
-      `UPDATE buildings
-       SET status = 'active', construction_progress = 100, construction_completed_day = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE status = 'under_construction' AND construction_due_end_day <= $1
-       RETURNING id, name, city_id, owner_id`,
-      [completedDay],
-    );
-    for (const building of buildings.rows) {
-      await tx.query(
-        'SELECT earth_economic_state_changed($1, $2, $3, $4, $5)',
-        [building.owner_id ?? building.city_id, building.id, 'construction_completed', completedDay, 0],
-      );
-      await tx.query(
-        `INSERT INTO game_events (id, game_day, event_type, title, details)
-         VALUES ($1,$2,'building.constructed',$3,jsonb_build_object('buildingId',$4::text,'cityId',$5::text,'ownerId',$6::text)::text)
-         ON CONFLICT (id) DO NOTHING`,
-        [`BLD-CONSTRUCTED-${building.id}-${completedDay}`, completedDay, `Facility ${building.name} construction completed`, building.id, building.city_id, building.owner_id],
-      );
-    }
 
     await resolveProposalsInTransaction(tx, completedDay);
   });

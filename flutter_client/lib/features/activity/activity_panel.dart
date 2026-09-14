@@ -53,7 +53,7 @@ class _ActivityPanelState extends State<ActivityPanel> {
     final validNotifications = widget.notifications
         .whereType<Map>()
         .map((raw) => Map<String, dynamic>.from(raw))
-        .where((n) => !isCorpOrCityNotification(n))
+        .where((n) => !isCorpOrTerritoryNotification(n))
         .toList();
 
     bool hasUnread = false;
@@ -103,7 +103,7 @@ class _ActivityPanelState extends State<ActivityPanel> {
     final validNotifications = widget.notifications
         .whereType<Map>()
         .map((raw) => Map<String, dynamic>.from(raw))
-        .where((n) => !isCorpOrCityNotification(n))
+        .where((n) => !isCorpOrTerritoryNotification(n))
         .toList();
 
     final totalPages = (validNotifications.length / _pageSize).ceil().clamp(1, 9999);

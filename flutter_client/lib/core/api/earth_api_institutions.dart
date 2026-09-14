@@ -1,14 +1,6 @@
 part of 'earth_api.dart';
 
 extension EarthApiInstitutions on EarthApi {
-  Future<List<Map<String, dynamic>>> listCities() async {
-    final response = (await _request('/api/cities')) as Map<String, dynamic>;
-    return (response['cities'] as List<dynamic>? ?? const [])
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList();
-  }
-
   Future<List<Map<String, dynamic>>> listCorporations({String? search}) async {
     final query = search == null || search.trim().isEmpty
         ? ''
@@ -21,14 +13,14 @@ extension EarthApiInstitutions on EarthApi {
         .toList();
   }
 
-  Future<EarthState> setCityBudget(String category,
-      {String cityId = 'CITY-0084'}) async {
-    await _request('/api/cities/$cityId/budget', method: 'POST', body: {
-      'category': category,
-      'amount': 100,
-      'correlationId': newClientCorrelationId('city-budget-$cityId'),
-    });
-    return world();
+  Future<Map<String, dynamic>> listCorporationTerritories(String corporationId) async {
+    final response = await _request('/api/corporations/$corporationId/territories');
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> getCorporationFiscalState(String corporationId) async {
+    final response = await _request('/api/finance/corporations/$corporationId');
+    return Map<String, dynamic>.from(response as Map);
   }
 
   Future<EarthState> joinCorporation(
@@ -54,43 +46,9 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
-  Future<EarthState> joinCity({String cityId = 'CITY-0084'}) async {
-    await _request('/api/cities/$cityId/residency', method: 'POST');
-    return world();
-  }
-
-  Future<EarthState> leaveCity({String cityId = 'CITY-0084'}) async {
-    await _request('/api/cities/$cityId/residency', method: 'DELETE');
-    return world();
-  }
-
-  Future<EarthState> createCity(String name, [String? communityId]) async {
-    final body = <String, dynamic>{
-      'name': name,
-      'correlationId': newClientCorrelationId('city-formation'),
-    };
-    if (communityId != null && communityId.trim().isNotEmpty) {
-      body['communityId'] = communityId;
-    }
-    await _request('/api/cities',
-        method: 'POST', body: body);
-    return world();
-  }
-
-  Future<EarthState> createCorporation(String name, String cityId) async {
+  Future<EarthState> createCorporation(String name, {String? territoryName}) async {
     await _request('/api/corporations',
-        method: 'POST', body: {'name': name, 'cityId': cityId});
-    return world();
-  }
-
-  Future<EarthState> createCorporationWithCapital({
-    required String corporationName,
-    required String cityName,
-  }) async {
-    await _request('/api/corporations/with-capital', method: 'POST', body: {
-      'corporationName': corporationName,
-      'cityName': cityName,
-    });
+        method: 'POST', body: {'name': name, if (territoryName != null) 'territoryName': territoryName});
     return world();
   }
 
@@ -101,9 +59,7 @@ extension EarthApiInstitutions on EarthApi {
         body: {
           'category': 'public-services',
           'amount': amount,
-          'cityId': 'CITY-0084',
-          'correlationId':
-              newClientCorrelationId('corporation-spending'),
+          'correlationId': newClientCorrelationId('corporation-spending'),
         });
     return world();
   }
@@ -114,8 +70,7 @@ extension EarthApiInstitutions on EarthApi {
         method: 'POST',
         body: {
           'amount': amount,
-          'correlationId':
-              newClientCorrelationId('corporation-contribution'),
+          'correlationId': newClientCorrelationId('corporation-contribution'),
         });
     return world();
   }
@@ -124,13 +79,15 @@ extension EarthApiInstitutions on EarthApi {
     required String name,
     String? description,
     String joinPolicy = 'OPEN',
+    String? correlationId,
   }) async {
     await _request('/api/communities', method: 'POST', body: {
       'name': name,
-      if (description != null && description.isNotEmpty) 'description': description,
+      if (description != null && description.isNotEmpty)
+        'description': description,
       'joinPolicy': joinPolicy,
       'correlationId':
-          newClientCorrelationId('community-formation'),
+          correlationId ?? newClientCorrelationId('community-formation'),
     });
     return world();
   }
@@ -155,12 +112,14 @@ extension EarthApiInstitutions on EarthApi {
   }
 
   Future<Map<String, dynamic>> listCommunityMembers(String communityId) async {
-    final res = await _request('/api/communities/$communityId/members', method: 'GET');
+    final res =
+        await _request('/api/communities/$communityId/members', method: 'GET');
     return res as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> listCommunityRequests(String communityId) async {
-    final res = await _request('/api/communities/$communityId/requests', method: 'GET');
+    final res =
+        await _request('/api/communities/$communityId/requests', method: 'GET');
     return res as Map<String, dynamic>;
   }
 
@@ -174,11 +133,17 @@ extension EarthApiInstitutions on EarthApi {
       throw ArgumentError.value(action, 'action', 'must be approve or reject');
     }
     if (action == 'approve') {
-      await _request('/api/communities/$communityId/requests/$requestId/approve', method: 'POST', body: {});
+      await _request(
+          '/api/communities/$communityId/requests/$requestId/approve',
+          method: 'POST',
+          body: {});
     } else {
-      await _request('/api/communities/$communityId/requests/$requestId/reject', method: 'POST', body: {
-        if (rejectionReason != null && rejectionReason.isNotEmpty) 'rejectionReason': rejectionReason,
-      });
+      await _request('/api/communities/$communityId/requests/$requestId/reject',
+          method: 'POST',
+          body: {
+            if (rejectionReason != null && rejectionReason.isNotEmpty)
+              'rejectionReason': rejectionReason,
+          });
     }
     return world();
   }
@@ -188,39 +153,26 @@ extension EarthApiInstitutions on EarthApi {
     required String targetHouseId,
     required String role,
   }) async {
-    await _request('/api/communities/$communityId/members/$targetHouseId', method: 'PATCH', body: {
-      'role': role,
-    });
+    await _request('/api/communities/$communityId/members/$targetHouseId',
+        method: 'PATCH',
+        body: {
+          'role': role,
+        });
     return world();
   }
 
-  Future<EarthState> joinCommunity(String communityId, {String? applicationMessage}) async {
+  Future<EarthState> joinCommunity(String communityId,
+      {String? applicationMessage}) async {
     await _request('/api/communities/$communityId/join', method: 'POST', body: {
-      if (applicationMessage != null && applicationMessage.isNotEmpty) 'applicationMessage': applicationMessage,
+      if (applicationMessage != null && applicationMessage.isNotEmpty)
+        'applicationMessage': applicationMessage,
     });
     return world();
   }
 
   Future<EarthState> leaveCommunity(String communityId) async {
-    await _request('/api/communities/$communityId/leave', method: 'POST', body: {});
-    return world();
-  }
-
-  Future<EarthState> setCityTaxCharter({
-    String cityId = 'CITY-0084',
-    int incomeTaxBps = 0,
-    int salesTaxBps = 0,
-    int corporateTaxBps = 0,
-    int propertyTaxBps = 0,
-  }) async {
-    await _request('/api/cities/$cityId/tax-charter', method: 'POST', body: {
-      'incomeTaxBps': incomeTaxBps,
-      'salesTaxBps': salesTaxBps,
-      'corporateTaxBps': corporateTaxBps,
-      'propertyTaxBps': propertyTaxBps,
-      'correlationId':
-          newClientCorrelationId('tax-charter-$cityId'),
-    });
+    await _request('/api/communities/$communityId/leave',
+        method: 'POST', body: {});
     return world();
   }
 
@@ -239,17 +191,9 @@ extension EarthApiInstitutions on EarthApi {
           'corporateTaxBps': corporateTaxBps,
           'propertyTaxBps': propertyTaxBps,
           'correlationId':
-          newClientCorrelationId('corp-tax-charter-$corporationId'),
+              newClientCorrelationId('corp-tax-charter-$corporationId'),
         });
     return world();
   }
 
-  Future<EarthState> adoptCityForCorporation({
-    required String corporationId,
-    required String cityId,
-  }) async {
-    await _request('/api/corporations/$corporationId/cities/$cityId',
-        method: 'POST');
-    return world();
-  }
 }

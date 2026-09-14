@@ -26,26 +26,27 @@ test('Corporate API list returns active corporations and safely parameterizes se
 
 test('Corporate API membership joins an open corporation and records the canonical membership', async () => {
   const db = new Db({
-    'FROM corporations WHERE id': { rows: [{ id: 'CORP-01', capital_city_id: 'CITY-01', admission_policy: 'open' }], rowCount: 1 },
-    'FROM humans WHERE id': { rows: [{ id: 'H-01' }], rowCount: 1 },
-    'FROM memberships WHERE human_id': (sql) => sql.includes('FOR UPDATE')
+    'FROM corporations c JOIN institutions i': { rows: [{ id: 'CORP-01', name: 'Aether Dynamics', capital_city_id: 'CITY-01', admission_policy: 'open' }], rowCount: 1 },
+    'SELECT id, display_name FROM humans': { rows: [{ id: 'H-01', display_name: 'H-01' }], rowCount: 1 },
+    'SELECT ha.corporation_id, ha.city_id FROM humans h JOIN house_affiliations ha': (sql) => sql.includes('FOR UPDATE')
       ? { rows: [{ corporation_id: null, city_id: null }], rowCount: 1 }
       : { rows: [{ human_id: 'H-01', corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
+    'SELECT ha.city_id, ha.corporation_id FROM humans h JOIN house_affiliations ha': { rows: [{ corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
+    'SELECT house_id FROM humans WHERE id = $1 FOR UPDATE': { rows: [{ house_id: 'HOUSE-01' }], rowCount: 1 },
     "SELECT game_day FROM world_state": { rows: [{ game_day: 42 }], rowCount: 1 },
-    'SELECT * FROM memberships': { rows: [{ human_id: 'H-01', corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
   });
   const result = await changeCorporationMembership(new PostgresRepository(db), { humanId: 'H-01', corporationId: 'CORP-01', action: 'join' });
   assert.equal(result.ok, true);
-  assert.equal(result.membership.corporation_id, 'CORP-01');
-  assert.ok(db.calls.some((call) => call.sql.includes('INSERT INTO membership_events')));
+  assert.equal(result.affiliation.corporation_id, 'CORP-01');
+  assert.ok(db.calls.some((call) => call.sql.includes('CORPORATION_MEMBER_JOINED')));
 });
 
 test('Corporate API qualification requires membership, city, treasury, constitution, and governance', async () => {
   const db = new Db({
     'FROM corporations WHERE id': { rows: [{ id: 'CORP-01', institution_id: 'CORP-01', member_count: 30, treasury: 1000, constitution_version: 1 }], rowCount: 1 },
-    'FROM memberships WHERE corporation_id': { rows: [{ city_id: 'CITY-01' }], rowCount: 1 },
+    'FROM owner_registry': { rows: [{ treasury: '1000' }], rowCount: 1 },
+    'FROM cities WHERE id = (SELECT city_id FROM house_affiliations': { rows: [{ id: 'CITY-01' }], rowCount: 1 },
     'FROM governance_rules': { rows: [{ id: 'RULE-01' }], rowCount: 1 },
-    'FROM cities WHERE id': { rows: [{ id: 'CITY-01' }], rowCount: 1 },
   });
   const result = await corporationQualification(new PostgresRepository(db), 'CORP-01');
   assert.equal(result.qualified, true);

@@ -1,17 +1,17 @@
-/// Shared utility to classify notifications into news (corporate/city)
+/// Shared utility to classify notifications into news (corporation/Territory)
 /// vs personal (activity panel) buckets — ensuring zero duplication.
 library;
 
 /// Returns `true` if the notification is a corporate or city type
 /// that should appear on the News page instead of the Notifications page.
-bool isCorpOrCityNotification(Map<String, dynamic> n) {
+bool isCorpOrTerritoryNotification(Map<String, dynamic> n) {
   final type =
       (n['notification_type'] ?? n['type'] ?? '').toString().toLowerCase();
   final id = (n['id'] ?? '').toString().toLowerCase();
 
   // Explicit notification_type matches
   if (type == 'corporation' ||
-      type == 'city' ||
+      type == 'territory' ||
       type == 'civic' ||
       type == 'technology' ||
       type == 'research') {
@@ -20,14 +20,14 @@ bool isCorpOrCityNotification(Map<String, dynamic> n) {
 
   // Substring matches on type
   if (type.contains('corp') ||
-      type.contains('city') ||
+      type.contains('territory') ||
       type.contains('civic')) {
     return true;
   }
 
   // ID prefix matches
   if (id.startsWith('corp-') ||
-      id.startsWith('city-') ||
+      id.startsWith('territory-') ||
       id.startsWith('brownout-') ||
       id.startsWith('health-')) {
     return true;
@@ -36,7 +36,7 @@ bool isCorpOrCityNotification(Map<String, dynamic> n) {
   return false;
 }
 
-/// Returns the news category for a notification: 'corporation', 'city', or 'world'.
+/// Returns the news category for a notification: 'corporation', 'territory', or 'world'.
 String notificationNewsCategory(Map<String, dynamic> n) {
   final type =
       (n['notification_type'] ?? n['type'] ?? '').toString().toLowerCase();
@@ -49,14 +49,14 @@ String notificationNewsCategory(Map<String, dynamic> n) {
       id.startsWith('corp-')) {
     return 'corporation';
   }
-  if (type == 'city' ||
+  if (type == 'territory' ||
       type == 'civic' ||
-      type.contains('city') ||
+      type.contains('territory') ||
       type.contains('civic') ||
-      id.startsWith('city-') ||
+      id.startsWith('territory-') ||
       id.startsWith('brownout-') ||
       id.startsWith('health-')) {
-    return 'city';
+    return 'territory';
   }
   return 'world';
 }

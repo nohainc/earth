@@ -66,8 +66,12 @@ class EarthState {
   List<Map<String, dynamic>> get myCommunities {
     final list = <Map<String, dynamic>>[];
     for (final c in communities) {
-      if (c is Map && c['my_role'] != null) {
-        list.add(Map<String, dynamic>.from(c));
+      if (c is Map) {
+        final row = Map<String, dynamic>.from(c);
+        final viewer = row['viewer'] is Map
+            ? Map<String, dynamic>.from(row['viewer'] as Map)
+            : const <String, dynamic>{};
+        if (viewer['membershipStatus'] == 'ACTIVE') list.add(row);
       }
     }
     return list;

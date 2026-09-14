@@ -3,8 +3,8 @@ import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   recoverInstitution as recoverInstitutionPostgres,
-  publicSpending as publicSpendingPostgres,
 } from './finance-postgres.ts';
+import { getCorporationFiscalState, spendCorporationBudget } from './corporation-fiscal-postgres.ts';
 import { getNetWorthHistory } from './net-worth-postgres.ts';
 import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
@@ -114,7 +114,7 @@ export async function handleFinanceRoutes(
                            ORDER BY a.is_default_settlement DESC, a.account_type`, [viewer.house_id]),
         repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
         repository.query("SELECT b.id, b.name, b.building_type, b.status FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id WHERE o.id = $1 AND b.ownership_class = 'private'", [viewer.house_id]),
-        repository.query<{ age_years: number; city_id: string | null; living_cost_index: string }>("SELECT h.age_years, ha.city_id, w.living_cost_index FROM humans h LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE' CROSS JOIN world_state w WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
+        repository.query<{ age_years: number; corporation_id: string | null; living_cost_index: string }>("SELECT h.age_years, ha.corporation_id, w.living_cost_index FROM humans h LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE' CROSS JOIN world_state w WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
         repository.query('SELECT game_day, food_used, energy_used, compute_used, credits_for_resources, life_condition_after, shortfall_notes, paid, unpaid, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
         repository.query<{ total: string }>('SELECT COALESCE(SUM(unpaid), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
         repository.query(`SELECT DISTINCT ON (tax_rule_id) id, tax_rule_id, scope, category, rate_bps, version,
@@ -144,7 +144,7 @@ export async function handleFinanceRoutes(
         protectedMinimum: {
           credits: stateRow.protected_credits == null ? null : Number(stateRow.protected_credits),
         },
-        lifeMaintenance: { lastSettlement: latestMaintenance.rows[0] ?? null, unpaidTotal: Number(arrears.rows[0]?.total ?? 0), cityId: resident?.city_id ?? null },
+        lifeMaintenance: { lastSettlement: latestMaintenance.rows[0] ?? null, unpaidTotal: Number(arrears.rows[0]?.total ?? 0), corporationId: resident?.corporation_id ?? null },
         taxes: { rules: taxRules.rows, obligations: taxObligations.rows },
         bank: { deposits: bankDeposits.rows },
         transactions: transactions.rows,
@@ -242,20 +242,27 @@ export async function handleFinanceRoutes(
     }
   }
 
+  const corporationFiscalMatch = url.pathname.match(/^\/api\/finance\/corporations\/([^/]+)$/);
+  if (corporationFiscalMatch && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => getCorporationFiscalState(repository, corporationFiscalMatch[1]));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
   if (url.pathname === '/api/finance/public-spending' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ cityId?: string; category?: string; amount?: number; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ corporationId?: string; category?: string; amount?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
-    const cityId = body.cityId?.trim();
+    const corporationId = body.corporationId?.trim();
     const category = body.category?.trim() || 'public-services';
     const amount = Number(body.amount);
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!cityId || !Number.isFinite(amount) || amount <= 0 || !correlationId) {
-      return Response.json({ ok: false, error: 'City ID, public spending amount, and Idempotency-Key are required' }, { status: 400 });
+    if (!corporationId || !Number.isFinite(amount) || amount <= 0 || !correlationId) {
+      return Response.json({ ok: false, error: 'Corporation ID, public spending amount, and Idempotency-Key are required' }, { status: 400 });
     }
     try {
       const result = await withRepository(env, (repository) =>
-        publicSpendingPostgres(repository, { actorId: viewer.id, cityId, category, amount, correlationId }),
+        spendCorporationBudget(repository, { actorId: viewer.id, corporationId, category, amount, correlationId }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });

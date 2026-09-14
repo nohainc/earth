@@ -2,13 +2,13 @@ import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
-  purchasePrivatePlotAndConstruct,
   upgradeBuilding,
   completeBuildingConstruction,
   setBuildingOperatingPolicy,
   demolishBuilding,
   contributeCorporateResearch,
 } from './real-estate-postgres.ts';
+import { getTerritoryCapacity, purchaseBuildingInTerritory } from './territory-capacity-postgres.ts';
 import {
   startCorporationBuildingResearch,
   listCorporationBuildingResearch,
@@ -20,20 +20,31 @@ export async function handleRealEstateRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  const territoryCapacityMatch = url.pathname.match(/^\/api\/territories\/([^/]+)\/capacity$/);
+  if (territoryCapacityMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => getTerritoryCapacity(repository, territoryCapacityMatch[1]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Territory capacity unavailable' }, { status: 404 });
+    }
+  }
+
   if (url.pathname === '/api/real-estate/purchase' && request.method === 'POST') {
     const parsed = await parseJsonBody<{
       buildingType?: string;
       name?: string;
-      cityId?: string;
+      territoryId?: string;
       correlationId?: string;
     }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
     const buildingType = body.buildingType?.trim();
     const name = body.name?.trim() || '';
-    const cityId = body.cityId?.trim();
-    if (!buildingType || !cityId) {
-      return Response.json({ ok: false, error: 'Building type and city ID are required' }, { status: 400 });
+    const territoryId = body.territoryId?.trim();
+    if (!buildingType || !territoryId) {
+      return Response.json({ ok: false, error: 'Building type and Territory ID are required' }, { status: 400 });
     }
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
     if (!correlationId) {
@@ -41,9 +52,9 @@ export async function handleRealEstateRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        purchasePrivatePlotAndConstruct(repository, {
+        purchaseBuildingInTerritory(repository, {
           ownerId: viewer.id,
-          cityId,
+          territoryId,
           buildingType,
           name,
           correlationId,

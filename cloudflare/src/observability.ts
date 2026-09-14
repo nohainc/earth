@@ -65,6 +65,24 @@ export function logBackendError(input: Omit<ClientErrorInput, 'context'> & { sou
   }));
 }
 
+export function logBackendDiagnostic(error: unknown, input: { requestId?: string | null; endpoint?: string | null; correlationId?: string | null } = {}): void {
+  const value = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+  const message = error instanceof Error ? error.message : typeof error === 'object' ? JSON.stringify(error) : String(error);
+  console.error(JSON.stringify({
+    event: 'postgres_error',
+    severity: 'error',
+    requestId: input.requestId ?? null,
+    correlationId: input.correlationId ?? null,
+    endpoint: input.endpoint ?? null,
+    code: value.code ?? null,
+    constraint: value.constraint ?? null,
+    detail: value.detail ?? null,
+    diagnostic: message.slice(0, MAX_MESSAGE),
+    stack: error instanceof Error ? error.stack?.slice(0, MAX_STACK) : null,
+    at: new Date().toISOString(),
+  }));
+}
+
 export function sanitizeClientContext(context: unknown): Record<string, unknown> {
   const value = safeValue(context);
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};

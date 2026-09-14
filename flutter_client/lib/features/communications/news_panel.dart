@@ -54,7 +54,7 @@ class _NewsPanelState extends State<NewsPanel> {
     // 2. Add corporate/city notifications (avoid duplicates by id)
     for (final raw in widget.notifications.whereType<Map>()) {
       final n = Map<String, dynamic>.from(raw);
-      if (!isCorpOrCityNotification(n)) continue;
+      if (!isCorpOrTerritoryNotification(n)) continue;
       final id = (n['id'] ?? '').toString();
       if (id.isNotEmpty && seenIds.contains(id)) continue;
       if (id.isNotEmpty) seenIds.add(id);

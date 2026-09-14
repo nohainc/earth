@@ -2268,7 +2268,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       await widget.action(() => const EarthApi().purchaseBuilding(
             buildingType: buildingType,
             name: buildingName,
-            cityId: cityId,
+            territoryId: cityId,
           ));
       if (mounted) {
         ScaffoldMessenger.of(this.context).showSnackBar(

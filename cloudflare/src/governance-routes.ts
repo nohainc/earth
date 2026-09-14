@@ -11,6 +11,7 @@ import {
   castVotePostgres,
   updateRulePostgres,
 } from './governance-postgres.ts';
+import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
 
 export async function handleGovernanceRoutes(
   request: Request,
@@ -99,12 +100,12 @@ export async function handleGovernanceRoutes(
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
     if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
     const targetCategory = body.target?.category?.trim() || null;
-    if (targetCategory && !['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(targetCategory)) {
+    if (targetCategory && !['market', 'finance', 'services', 'technology', 'territory'].includes(targetCategory)) {
       return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
     }
     try {
       const result = await withRepository(env, (repository) =>
-        createProposalPostgres(repository, {
+        createProposalV3(repository, {
           humanId: viewer.id,
           institutionId,
           title,
@@ -132,7 +133,7 @@ export async function handleGovernanceRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        castVotePostgres(repository, { proposalId: voteMatch[1], humanId: viewer.id, choice: body.vote! }),
+        castVoteV3(repository, { proposalId: voteMatch[1], humanId: viewer.id, choice: body.vote! }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });

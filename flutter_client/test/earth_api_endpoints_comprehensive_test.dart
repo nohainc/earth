@@ -79,8 +79,6 @@ void main() {
     await api.rankings();
     await api.pantheon();
     await api.publicActivity();
-    await api.ownershipEvents();
-    await api.membershipEvents();
     await api.notifications();
     await api.markNotificationRead('notif-1');
     await api.markAllNotificationsRead();

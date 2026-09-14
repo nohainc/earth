@@ -24,13 +24,13 @@ export type DailySettlementPhaseHandlers = {
   basicLevy: (context: DailySettlementPhaseContext) => Promise<unknown>;
   ipLicenseBilling: (context: DailySettlementPhaseContext) => Promise<unknown>;
   buildingSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
-  cityCorporateIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  corporationIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
   globalBank: (context: DailySettlementPhaseContext) => Promise<unknown>;
   bankHealth: (context: DailySettlementPhaseContext) => Promise<unknown>;
   mandatoryBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
   scheduledBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
-  cityServiceProjections: (context: DailySettlementPhaseContext) => Promise<unknown>;
-  cityDynamics: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  territoryCapacityProjections: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  corporationDynamics: (context: DailySettlementPhaseContext) => Promise<unknown>;
   budgetDividendEligibility: (context: DailySettlementPhaseContext) => Promise<unknown>;
   patentExpirations: (context: DailySettlementPhaseContext) => Promise<unknown>;
   researchAndProgress: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -56,14 +56,14 @@ export function createDailySettlementPhaseRegistry(
     { id: 'ip_license_billing', order: 65, shardMode: 'all', execute: handlers.ipLicenseBilling },
     { id: 'building_settlement', order: 70, shardMode: 'all', execute: handlers.buildingSettlement },
     { id: 'basic_levy', order: 75, shardMode: 'all', execute: handlers.basicLevy },
-    { id: 'city_corporate_income_tax', order: 90, shardMode: 'all', execute: handlers.cityCorporateIncomeTax },
+    { id: 'corporation_income_tax', order: 90, shardMode: 'all', execute: handlers.corporationIncomeTax },
     { id: 'global_bank', order: 100, shardMode: 'all', execute: handlers.globalBank },
     { id: 'bank_health', order: 110, shardMode: 'all', execute: handlers.bankHealth },
     { id: 'mandatory_budget_payments', order: 115, shardMode: 'all', execute: handlers.mandatoryBudgetPayments },
     { id: 'scheduled_budget_payments', order: 116, shardMode: 'all', execute: handlers.scheduledBudgetPayments },
     { id: 'life_maintenance', order: 118, shardMode: 'all', execute: handlers.lifeMaintenance },
-    { id: 'city_service_projections', order: 120, shardMode: 'all', execute: handlers.cityServiceProjections },
-    { id: 'city_dynamics', order: 125, shardMode: 'all', execute: handlers.cityDynamics },
+    { id: 'territory_capacity_projections', order: 120, shardMode: 'all', execute: handlers.territoryCapacityProjections },
+    { id: 'corporation_dynamics', order: 125, shardMode: 'all', execute: handlers.corporationDynamics },
     { id: 'research_and_progress', order: 126, shardMode: 'all', execute: handlers.researchAndProgress },
     { id: 'budget_dividend_eligibility', order: 130, shardMode: 'all', execute: handlers.budgetDividendEligibility },
     { id: 'financial_states', order: 140, shardMode: 'all', execute: handlers.financialStates },

@@ -38,8 +38,6 @@ class ReincarnationDialog extends StatefulWidget {
 class _ReincarnationDialogState extends State<ReincarnationDialog> {
   final _nameController = TextEditingController();
   late final TextEditingController _houseController;
-  String _selectedCity = 'CITY-0084';
-  List<Map<String, dynamic>> _cities = const [];
   bool _submitting = false;
   String? _error;
 
@@ -59,23 +57,6 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
           ? 'Founding House'
           : existingHouse,
     );
-    _loadCities();
-  }
-
-  Future<void> _loadCities() async {
-    try {
-      final cities = await widget.api.listCities();
-      if (!mounted || cities.isEmpty) return;
-      final selected = cities.any((city) => city['id']?.toString() == _selectedCity)
-          ? _selectedCity
-          : cities.first['id']?.toString() ?? _selectedCity;
-      setState(() {
-        _cities = cities;
-        _selectedCity = selected;
-      });
-    } catch (_) {
-      // Keep the known starter-city fallback when the catalog is unavailable.
-    }
   }
 
   Future<void> _submitRebirth() async {
@@ -93,7 +74,6 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
         name,
         houseName: _houseController.text.trim(),
         dynastyName: _houseController.text.trim(),
-        startingCityId: _selectedCity,
       );
       if (mounted) {
         if (Navigator.of(context).canPop()) {
@@ -350,7 +330,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Begin a new generation at legal adulthood (Age 20) with an indexed starter package. The new character carries house legacy forward but does not directly claim the predecessor’s estate. Your selected city determines initial civic affiliation: if it belongs to a corporation, the new character joins that corporation. A 500 Credit naturalization fee is allocated between the central and city treasuries.',
+                      'Begin a new generation at legal adulthood (Age 20) with an indexed starter package. The new character carries house legacy forward but does not directly claim the predecessor’s estate. Corporation affiliation and public services are governed by the canonical world rules. A 500 Credit naturalization fee is allocated between EARTH and the Corporation.',
                       style:
                           TextStyle(color: EarthColors.textMuted, fontSize: 11),
                     ),
@@ -375,34 +355,6 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                         filled: true,
                         fillColor: EarthColors.panelSurface,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedCity,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Arrival Jurisdiction & City',
-                        isDense: true,
-                        filled: true,
-                        fillColor: EarthColors.panelSurface,
-                      ),
-                      dropdownColor: EarthColors.cardSurface,
-                      items: (_cities.isEmpty
-                              ? const [
-                                  {'id': 'CITY-0084', 'name': 'New Carthage (Founding City)'},
-                                  {'id': 'city-singapore', 'name': 'Singapore (Maritime & Logistics)'},
-                                ]
-                              : _cities)
-                          .map((city) => DropdownMenuItem<String>(
-                                value: city['id']?.toString(),
-                                child: Text(
-                                  '${city['name']?.toString() ?? city['id']?.toString() ?? 'City'}${city['corporation_name'] == null ? '' : ' · ${city['corporation_name']} network'}',
-                                ),
-                              ))
-                          .toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedCity = val);
-                      },
                     ),
                     const SizedBox(height: 16),
                     SizedBox(

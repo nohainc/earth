@@ -9,7 +9,7 @@ Future<void> showBuildingAcquisitionDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
   List<dynamic> buildingCatalog,
-  String cityId,
+  String territoryId,
   int availablePrivateSlots,
 ) async {
   final catalog = buildingCatalog.isNotEmpty
@@ -293,7 +293,7 @@ Future<void> showBuildingAcquisitionDialog(
                       await action(() => const EarthApi().purchaseBuilding(
                             buildingType: selectedType,
                             name: nameCtrl.text.trim().isEmpty ? 'Facility' : nameCtrl.text.trim(),
-                            cityId: cityId,
+                            territoryId: territoryId,
                           ));
                     },
             ),

@@ -6,6 +6,16 @@ authority.
 | Document | Status | Use |
 |---|---|---|
 | `CONSTITUTION.md` | CANONICAL | Permanent rules of the world |
+| `ADR-002-canonical-world-vocabulary.md` | CANONICAL | Frozen meanings and boundaries for Corporation, Territory, House, Human, and EARTH |
+| `SCHEMA_V3.md` | CANONICAL | Clean-break database hierarchy and schema constraints |
+| `CORPORATION_LIFECYCLE_V3.md` | CANONICAL | Corporation genesis, House membership, leaving, and primary Territory provisioning |
+| `TERRITORY_CAPACITY_V3.md` | CANONICAL | Territory-owned district, slot, House, population, and service capacity projection |
+| `BUILDING_OWNERSHIP_V3.md` | CANONICAL | Building ownership/location separation and private/public slot rules |
+| `CORPORATION_PUBLIC_INFRASTRUCTURE_V3.md` | CANONICAL | Corporation-funded public infrastructure and Territory slot rules |
+| `CORPORATION_FISCAL_V3.md` | CANONICAL | EARTH and Corporation fiscal layers with Corporation-only local budgets |
+| `GOVERNANCE_V3.md` | CANONICAL | Two political arenas, shared proposals, and Territory-targeted actions |
+| `SETTLEMENT_V3.md` | CANONICAL | EARTH/Corporation/Territory-aligned daily settlement phases |
+| `CLIENT_V3.md` | CANONICAL | Corporation/Territory client hierarchy and API vocabulary |
 | `GAME_ECONOMY_SPEC.md` | CANONICAL | Shared formulas, units, timing, and economic semantics |
 | `CONSTITUTION_COMPLIANCE.md` | CANONICAL | Implementation and test mapping for constitutional clauses |
 | `BUILDING_ECONOMY_V2.md` | CANONICAL | Current Building V2 model |
@@ -31,4 +41,3 @@ Documents marked HISTORICAL must not be used to implement gameplay. When a
 historical document contradicts a CANONICAL document, the canonical document
 wins. New mechanics require an update to the relevant canonical document and
 its compliance mapping before code changes are treated as complete.
-

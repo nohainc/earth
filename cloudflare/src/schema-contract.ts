@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 2;
+export const EARTH_SCHEMA_VERSION = 3;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -108,21 +108,47 @@ export const REQUIRED_SCHEMA_TABLES = {
     "name",
     "status"
   ],
-  "cities": [
-    "id",
-    "corporation_id",
-    "status"
-  ],
   "corporations": [
     "id",
-    "status"
+    "charter_version",
+    "admission_policy",
+    "status",
+    "created_game_day"
+  ],
+  "territories": [
+    "id",
+    "corporation_id",
+    "name",
+    "territory_type",
+    "status",
+    "is_primary",
+    "created_game_day"
   ],
   "house_affiliations": [
+    "id",
     "house_id",
-    "city_id",
     "corporation_id",
+    "primary_territory_id",
     "joined_game_day",
+    "left_game_day",
     "status"
+  ],
+  "territory_capacity_state": [
+    "territory_id",
+    "game_day",
+    "active_house_count",
+    "house_capacity",
+    "population_capacity",
+    "private_slot_capacity",
+    "public_slot_capacity",
+    "private_slots_used",
+    "public_slots_used",
+    "housing_capacity",
+    "health_capacity",
+    "energy_capacity",
+    "connectivity_capacity",
+    "service_capacity",
+    "updated_at"
   ],
   "institution_governance_roles": [
     "id",
@@ -223,6 +249,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "id",
     "code",
     "tier",
+    "ownership_scope",
     "construction_credit_units",
     "construction_minutes",
     "operating_credit_units",
@@ -236,8 +263,8 @@ export const REQUIRED_SCHEMA_TABLES = {
   "buildings": [
     "id",
     "owner_economic_id",
+    "territory_id",
     "catalog_id",
-    "city_id",
     "status",
     "started_game_day"
   ],
@@ -369,48 +396,6 @@ export const REQUIRED_SCHEMA_TABLES = {
     "game_day",
     "game_minute",
     "attachments",
-    "created_at"
-  ],
-  "technology_patents": [
-    "id",
-    "technology_id",
-    "owner_economic_id",
-    "granted_game_day",
-    "exclusive_through_game_day",
-    "status",
-    "granting_project_id",
-    "created_at"
-  ],
-  "technology_public_domain": [
-    "technology_id",
-    "effective_from_game_day",
-    "source_patent_id",
-    "created_at"
-  ],
-  "technology_license_contracts": [
-    "id",
-    "patent_id",
-    "licensor_economic_id",
-    "licensee_economic_id",
-    "effective_from_game_day",
-    "effective_to_game_day",
-    "upfront_fee_units",
-    "daily_fee_units",
-    "status",
-    "paid_through_game_day",
-    "rules_version",
-    "correlation_id",
-    "created_at"
-  ],
-  "technology_license_payments": [
-    "id",
-    "contract_id",
-    "payer_economic_id",
-    "recipient_economic_id",
-    "game_day",
-    "amount_units",
-    "economic_transaction_id",
-    "correlation_id",
     "created_at"
   ],
   "bank_deposits": [
@@ -582,11 +567,56 @@ export const REQUIRED_SCHEMA_TABLES = {
     "updated_at",
     "status"
   ],
+  "technology_patents": [
+    "id",
+    "technology_id",
+    "owner_economic_id",
+    "granted_game_day",
+    "exclusive_through_game_day",
+    "status",
+    "granting_project_id",
+    "created_at"
+  ],
+  "technology_public_domain": [
+    "technology_id",
+    "effective_from_game_day",
+    "source_patent_id",
+    "created_at"
+  ],
+  "technology_license_contracts": [
+    "id",
+    "patent_id",
+    "licensor_economic_id",
+    "licensee_economic_id",
+    "effective_from_game_day",
+    "effective_to_game_day",
+    "upfront_fee_units",
+    "daily_fee_units",
+    "status",
+    "paid_through_game_day",
+    "rules_version",
+    "correlation_id",
+    "created_at"
+  ],
+  "technology_license_payments": [
+    "id",
+    "contract_id",
+    "payer_economic_id",
+    "recipient_economic_id",
+    "game_day",
+    "amount_units",
+    "economic_transaction_id",
+    "correlation_id",
+    "created_at"
+  ],
   "proposals": [
     "id",
     "institution_id",
     "created_by_human_id",
     "action_type",
+    "target_type",
+    "target_id",
+    "target_value",
     "status",
     "created_game_day"
   ],
@@ -640,62 +670,13 @@ export const REQUIRED_SCHEMA_TABLES = {
     "error_message",
     "created_at",
     "updated_at"
-  ],
-  "communities": [
-    "id",
-    "name",
-    "normalized_name",
-    "description",
-    "visibility",
-    "join_policy",
-    "status",
-    "founder_house_id",
-    "created_by_human_id",
-    "created_game_day",
-    "created_game_minute",
-    "created_at",
-    "updated_at",
-    "disbanded_at"
-  ],
-  "community_memberships": [
-    "community_id",
-    "house_id",
-    "role",
-    "status",
-    "joined_by_human_id",
-    "joined_game_day",
-    "joined_game_minute",
-    "joined_at",
-    "updated_at",
-    "left_at"
-  ],
-  "community_membership_requests": [
-    "id",
-    "community_id",
-    "house_id",
-    "status",
-    "message",
-    "requested_by_human_id",
-    "decided_by_human_id",
-    "correlation_id",
-    "requested_game_day",
-    "requested_game_minute",
-    "created_at",
-    "decided_at"
   ]
 } as const;
-export const REQUIRED_UNIQUE_CONSTRAINTS = [
-  [
-    "communities",
-    "normalized_name"
-  ],
-  [
-    "community_memberships",
-    "community_id",
-    "house_id"
-  ]
-] as const;
+export const REQUIRED_UNIQUE_CONSTRAINTS = [] as const;
 export const REQUIRED_INDEXES = [
+  "territories_one_active_primary_idx",
+  "house_affiliations_one_active_idx",
+  "territory_capacity_state_game_day_idx",
   "notifications_house_created_idx",
   "notifications_house_unread_idx",
   "game_events_category_day_idx",
@@ -717,13 +698,7 @@ export const REQUIRED_INDEXES = [
   "market_orders_open_idx",
   "market_fills_orders_idx",
   "tax_obligations_taxpayer_idx",
-  "outbox_pending_idx",
-  "communities_status_visibility_created_idx",
-  "community_memberships_house_status_idx",
-  "community_memberships_community_status_role_idx",
-  "community_membership_requests_pending_uq",
-  "community_membership_requests_community_status_created_idx",
-  "community_membership_requests_house_status_idx"
+  "outbox_pending_idx"
 ] as const;
 export const REQUIRED_SCHEMA_FUNCTIONS = [
   "earth_settlement_watermark",
@@ -735,6 +710,8 @@ export const REQUIRED_SCHEMA_FUNCTIONS = [
   "earth_get_current_game_time",
   "earth_advance_world_clock",
   "earth_post_settlement_batch",
+  "earth_refresh_territory_capacity",
+  "earth_validate_building_ownership",
   "earth_integrity_report",
   "earth_market_integrity_report",
   "earth_create_tax_rule_version",
