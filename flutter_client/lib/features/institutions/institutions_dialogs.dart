@@ -62,7 +62,6 @@ Future<void> showCommunityComposer(
 ) async {
   final name = TextEditingController();
   final description = TextEditingController();
-  final question = TextEditingController();
   String admissionPolicy = 'open';
 
   await showDialog<void>(
@@ -71,10 +70,8 @@ Future<void> showCommunityComposer(
       builder: (context, setDialogState) {
         final selectedName = name.text.trim();
         final selectedDesc = description.text.trim();
-        final selectedQuestion = question.text.trim();
         final isValid = selectedName.length >= 3 &&
-            selectedDesc.isNotEmpty &&
-            (admissionPolicy != 'approval' || selectedQuestion.isNotEmpty);
+            selectedDesc.isNotEmpty;
 
         return AlertDialog(
           backgroundColor: context.panelColor,
@@ -271,38 +268,6 @@ Future<void> showCommunityComposer(
                       ),
                     ],
                   ),
-                  if (admissionPolicy == 'approval') ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: question,
-                      minLines: 2,
-                      maxLines: 3,
-                      style: context.bodyStyle.copyWith(color: context.inkColor),
-                      decoration: InputDecoration(
-                        alignLabelWithHint: true,
-                        labelText: 'Application Question / Requirement (Required)',
-                        labelStyle: context.widgetFooterStyle,
-                        hintText: 'What question should applicants answer when applying?',
-                        hintStyle: context.bodyStyle.copyWith(color: context.mutedColor),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(context.radiusControl),
-                          borderSide: BorderSide(color: context.subtleBorderColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(context.radiusControl),
-                          borderSide: BorderSide(color: context.subtleBorderColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(context.radiusControl),
-                          borderSide: BorderSide(color: context.primaryColor),
-                        ),
-                        filled: true,
-                        fillColor: context.surfaceColor,
-                        contentPadding: const EdgeInsets.all(12),
-                      ),
-                      onChanged: (_) => setDialogState(() {}),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -625,7 +590,7 @@ Future<void> showCommunityManageDialog(
   final id = community['id']?.toString() ?? '';
   final name = community['name']?.toString() ?? '';
   final myRole = community['viewer_role']?.toString();
-  final isOwner = myRole == 'founder';
+  final isOwner = myRole == 'OWNER';
   final descController = TextEditingController(text: community['description']?.toString() ?? '');
   String admissionPolicy = (community['join_policy']?.toString() ?? 'OPEN').toLowerCase() == 'request' ? 'approval' : 'open';
 
@@ -642,7 +607,7 @@ Future<void> showCommunityManageDialog(
             try {
               final memRes = await const EarthApi().listCommunityMembers(id);
               members = memRes['members'] as List<dynamic>? ?? [];
-              if (admissionPolicy == 'REQUEST') {
+              if (admissionPolicy == 'approval') {
                 final reqRes = await const EarthApi().listCommunityRequests(id);
                 requests = reqRes['requests'] as List<dynamic>? ?? [];
               }
@@ -832,37 +797,6 @@ Future<void> showCommunityManageDialog(
                                   ),
                                 ],
                               ),
-                              if (admissionPolicy == 'approval') ...[
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: questionController,
-                                  minLines: 2,
-                                  maxLines: 3,
-                                  style: context.bodyStyle.copyWith(color: context.inkColor),
-                                  decoration: InputDecoration(
-                                    alignLabelWithHint: true,
-                                    labelText: 'Application Question / Requirement',
-                                    labelStyle: context.widgetFooterStyle,
-                                    hintText: 'What question should applicants answer when applying?',
-                                    hintStyle: context.bodyStyle.copyWith(color: context.mutedColor),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(context.radiusControl),
-                                      borderSide: BorderSide(color: context.subtleBorderColor),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(context.radiusControl),
-                                      borderSide: BorderSide(color: context.subtleBorderColor),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(context.radiusControl),
-                                      borderSide: BorderSide(color: context.primaryColor),
-                                    ),
-                                    filled: true,
-                                    fillColor: context.surfaceColor,
-                                    contentPadding: const EdgeInsets.all(12),
-                                  ),
-                                ),
-                              ],
                               const SizedBox(height: 20),
                               EarthButton(
                                 label: 'SAVE SETTINGS',
@@ -886,10 +820,10 @@ Future<void> showCommunityManageDialog(
                                 itemCount: members.length,
                                 itemBuilder: (context, idx) {
                                   final m = members[idx] as Map<String, dynamic>;
-                                  final hId = m['human_id']?.toString() ?? '';
-                                  final hName = m['human_name']?.toString() ?? hId;
+                                  final hId = m['house_id']?.toString() ?? '';
+                                  final hName = m['house_name']?.toString() ?? hId;
                                   final role = (m['role']?.toString() ?? 'member').toUpperCase();
-                                  final isMFounder = role == 'FOUNDER';
+                                  final isMFounder = role == 'OWNER';
 
                                   return ListTile(
                                     title: Text(hName, style: context.bodyStyle.copyWith(fontSize: 13)),
@@ -903,12 +837,12 @@ Future<void> showCommunityManageDialog(
                                           label: role,
                                           variant: isMFounder
                                               ? EarthBadgeVariant.primary
-                                              : role == 'ADMIN'
+                                              : role == 'MODERATOR'
                                                   ? EarthBadgeVariant.secondary
                                                   : EarthBadgeVariant.neutral,
                                         ),
                                         if (isOwner && !isMFounder) ...[
-                                          if (role == 'ADMIN')
+                                          if (role == 'MODERATOR')
                                             EarthButton(
                                               label: 'DEMOTE',
                                               variant: EarthButtonVariant.ghost,
