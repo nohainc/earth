@@ -1,0 +1,14 @@
+# Copy this record for every new mechanic introduced from Point 3 onward.
+# Each field must name a domain object, identifier, or explicit "none".
+Mechanic:
+Policy authority:
+Decision authority:
+Actor:
+Economic principal:
+Payer:
+Economic owner:
+Location:
+State holder:
+Beneficiaries:
+Authorization source:
+Settlement phase:
