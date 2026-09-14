@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 12,
+  "migrationVersion": 14,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -315,6 +315,9 @@
     ],
     "house_resource_daily_flow": [
       "house_economic_id", "game_day", "asset_id", "opening_balance_units", "production_units", "consumption_units", "transfer_in_units", "transfer_out_units", "closing_balance_units", "net_flow_units", "shortage_units", "is_limiting_resource", "created_at"
+    ],
+    "financial_obligations": [
+      "id", "debtor_economic_id", "creditor_economic_id", "obligation_type", "source_id", "principal_due_units", "interest_due_units", "paid_units", "debtor_account_purpose", "creditor_account_purpose", "due_game_day", "priority_class", "rule_version", "status", "created_game_day", "payment_transaction_id", "correlation_id", "cancelled_game_day", "created_at", "updated_at"
     ],
     "buildings": [
       "id",
@@ -774,6 +777,8 @@
     "market_fills_orders_idx",
     "tax_obligations_taxpayer_idx",
     "outbox_pending_idx"
+    ,"financial_obligations_debtor_status_idx"
+    ,"financial_obligations_creditor_idx"
   ],
   "requiredFunctions": [
     "earth_validate_economic_account_capability",

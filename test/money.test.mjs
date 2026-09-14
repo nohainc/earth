@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { centsToMoney, compoundRateAmountToCents, marketValueToCents, moneyToCents, quantityToCents, rateAmountToCents, rateToMicros, taxToCents } from '../cloudflare/src/money.ts';
+import { centsToMoney, compoundRateAmountToCents, formatCreditUnits, marketValueToCents, moneyToCents, parseCreditAmount, quantityToCents, rateAmountToCents, rateToMicros, taxToCents } from '../cloudflare/src/money.ts';
+
+test('CREDIT units parse and format exactly', () => {
+  assert.equal(parseCreditAmount('100.10'), 10010n);
+  assert.equal(formatCreditUnits(10010n), '100.10');
+  assert.equal(parseCreditAmount('1000000000000000000.01'), 100000000000000000001n);
+  assert.throws(() => parseCreditAmount('1.234'), /Invalid decimal/);
+});
 
 test('parses and formats money without floating-point drift', () => {
   assert.equal(moneyToCents('0.10'), 10n);

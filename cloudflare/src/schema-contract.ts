@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 12;
+export const EARTH_SCHEMA_VERSION = 14;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -336,6 +336,28 @@ export const REQUIRED_SCHEMA_TABLES = {
     "shortage_units",
     "is_limiting_resource",
     "created_at"
+  ],
+  "financial_obligations": [
+    "id",
+    "debtor_economic_id",
+    "creditor_economic_id",
+    "obligation_type",
+    "source_id",
+    "principal_due_units",
+    "interest_due_units",
+    "paid_units",
+    "debtor_account_purpose",
+    "creditor_account_purpose",
+    "due_game_day",
+    "priority_class",
+    "rule_version",
+    "status",
+    "created_game_day",
+    "payment_transaction_id",
+    "correlation_id",
+    "cancelled_game_day",
+    "created_at",
+    "updated_at"
   ],
   "buildings": [
     "id",
@@ -794,7 +816,9 @@ export const REQUIRED_INDEXES = [
   "market_orders_open_idx",
   "market_fills_orders_idx",
   "tax_obligations_taxpayer_idx",
-  "outbox_pending_idx"
+  "outbox_pending_idx",
+  "financial_obligations_debtor_status_idx",
+  "financial_obligations_creditor_idx"
 ] as const;
 export const REQUIRED_SCHEMA_FUNCTIONS = [
   "earth_validate_economic_account_capability",

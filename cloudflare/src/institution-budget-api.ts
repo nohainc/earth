@@ -18,7 +18,9 @@ export async function getInstitutionBudget(repository: PostgresRepository, insti
       p.distributable_surplus_units, p.research_commitments_units,
       p.city_support_commitments_units, p.dividend_capacity_units,
       COALESCE(p.cash_treasury_units + p.cash_operations_units + p.cash_reserve_units, 0) AS cash_total_units,
-      COALESCE(p.budget_authorized_units - p.budget_committed_units - p.budget_spent_units, 0) AS budget_authority_available_units
+      COALESCE(p.budget_authorized_units - p.budget_committed_units - p.budget_spent_units, 0) AS available_authority,
+      COALESCE(p.cash_treasury_units + p.cash_operations_units + p.cash_reserve_units, 0) AS available_cash,
+      p.budget_committed_units AS committed, p.budget_spent_units AS spent
     FROM institution_financial_projections p
     WHERE p.institution_id = $1`, [institutionId, gameDay ?? null]);
   return result.rows[0] ?? null;
@@ -27,7 +29,9 @@ export async function getInstitutionBudget(repository: PostgresRepository, insti
 export async function listInstitutionBudgetLines(repository: PostgresRepository, institutionId: string, fiscalPeriodId?: string) {
   const result = await repository.query(`
     SELECT l.*, c.category_code, c.mandatory, c.spending_class, c.priority,
-      (l.authorized_units - l.committed_units - l.spent_units) AS authority_available_units
+      (l.authorized_units - l.committed_units - l.spent_units) AS available_authority,
+      (l.committed_units) AS committed, (l.spent_units) AS spent,
+      COALESCE((SELECT p.cash_treasury_units + p.cash_operations_units + p.cash_reserve_units FROM institution_financial_projections p WHERE p.institution_id=l.institution_id ORDER BY p.game_day DESC LIMIT 1), 0) AS available_cash
     FROM institution_budget_lines l JOIN budget_categories c ON c.id = l.category_id
     WHERE l.institution_id = $1 AND ($2::BIGINT IS NULL OR l.fiscal_period_id = $2)
     ORDER BY l.fiscal_period_id DESC, c.priority, c.category_code`, [institutionId, fiscalPeriodId ?? null]);

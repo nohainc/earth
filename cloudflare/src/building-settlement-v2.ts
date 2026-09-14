@@ -125,10 +125,10 @@ async function settlePrivateHouse(tx: PostgresRepository, day: number, houseEcon
   const credit = journals.reduce((sum, row) => sum + row.credit, 0n);
   if (credit > 0n) {
     const wallet = await account(tx, houseEconomicId, ASSET_IDS.CREDIT, 'WALLET');
-    const earthOperations = await account(tx, 'ECON-EARTH-001', ASSET_IDS.CREDIT, 'OPERATIONS');
-    await post(tx, day, `building-house:${houseEconomicId}:${day}:credit`, 'ASSET_TRANSFER', 'SETTLEMENT', houseEconomicId, [
+    const constructionSettlement = await account(tx, 'ECON-CONSTRUCTION-SETTLEMENT', ASSET_IDS.CREDIT, 'SYSTEM_ACCOUNT');
+    await post(tx, day, `building-house:${houseEconomicId}:${day}:credit`, 'ASSET_TRANSFER', 'PRIVATE_BUILDING_OPERATION', houseEconomicId, [
       { accountId: wallet.id, assetId: ASSET_IDS.CREDIT, delta: -credit, reason: 'private_building_operating_expense' },
-      { accountId: earthOperations.id, assetId: ASSET_IDS.CREDIT, delta: credit, reason: 'private_building_operating_expense' },
+      { accountId: constructionSettlement.id, assetId: ASSET_IDS.CREDIT, delta: credit, reason: 'private_building_operating_expense' },
     ]);
   }
   for (const row of journals) {

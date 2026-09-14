@@ -610,7 +610,9 @@ export async function executeProposal(repository: PostgresRepository, input: { p
         return { ok: true, executionStatus: expired ? 'expired_unfunded' : 'awaiting_funding', reason, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
       }
       if (!v2FundingPosted) {
-        await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: Number(world.rows[0]?.game_day ?? 0), debitAccount: cityAccount.rows[0].account_id, creditAccount: 'account-market-clearing', amount: centsToMoney(moneyToCents(requiredCredits)), reasonType: 'civic_building_procurement', reasonId: current.id, ruleVersion: 'real-estate-v2', correlationId: `CIVIC-PROCURE-${current.id}` });
+        const clearingAccount = (await tx.query<{ id: string }>("SELECT a.id::TEXT AS id FROM economic_accounts a JOIN owner_registry o ON o.economic_id=a.owner_economic_id WHERE o.owner_type='SYSTEM' AND a.asset_id=1 AND a.account_type='SYSTEM_ACCOUNT' AND a.status='ACTIVE' ORDER BY a.id LIMIT 1")).rows[0];
+        if (!clearingAccount) throw new Error('CREDIT clearing account is unavailable');
+        await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: Number(world.rows[0]?.game_day ?? 0), debitAccountId: cityAccount.rows[0].account_id, creditAccountId: clearingAccount.id, amount: centsToMoney(moneyToCents(requiredCredits)), reasonType: 'civic_building_procurement', reasonId: current.id, ruleVersion: 'real-estate-v2', correlationId: `CIVIC-PROCURE-${current.id}` });
         if (requiredMaterials > 0) await tx.query("UPDATE economic_accounts SET balance_units = balance_units - $1 WHERE owner_economic_id = $2 AND asset_id = 2 AND account_type = 'INVENTORY'", [requiredMaterials, `ECON-${cityId}`]);
       }
       const buildingId = `BLD-MUNI-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;

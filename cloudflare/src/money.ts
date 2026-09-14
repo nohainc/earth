@@ -2,6 +2,9 @@ const MONEY_PATTERN = /^(-?)(\d+)(?:\.(\d{1,2}))?$/;
 const RATE_PATTERN = /^(-?)(\d+)(?:\.(\d{1,6}))?$/;
 const RATE_SCALE = 1_000_000n;
 
+/** Smallest authoritative CREDIT denomination. Never convert this to Number. */
+export type CreditUnits = bigint;
+
 function decimalParts(value: unknown, pattern: RegExp): { negative: boolean; whole: bigint; fraction: string } {
   const text = typeof value === 'number' ? (Number.isFinite(value) ? String(value) : '') : String(value ?? '').trim();
   const match = text.match(pattern);
@@ -13,6 +16,16 @@ export function moneyToCents(value: unknown): bigint {
   const parts = decimalParts(value, MONEY_PATTERN);
   const cents = parts.whole * 100n + BigInt((parts.fraction + '00').slice(0, 2));
   return parts.negative ? -cents : cents;
+}
+
+/** Parses a user/API CREDIT amount exactly into ledger units. */
+export function parseCreditAmount(value: unknown): CreditUnits {
+  return moneyToCents(value);
+}
+
+/** Formats exact ledger CREDIT units for display without floating-point conversion. */
+export function formatCreditUnits(units: CreditUnits): string {
+  return centsToMoney(units);
 }
 
 export function quantityToCents(value: unknown): bigint {

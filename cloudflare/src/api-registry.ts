@@ -80,6 +80,8 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'POST', path: '/api/market/orders', owner: 'MarketRoutes', auth: 'HOUSE_SELF', service: 'submitOrder', status: 'ACTIVE' },
   { method: 'DELETE', path: '/api/market/orders/{id}', owner: 'MarketRoutes', auth: 'HOUSE_SELF', service: 'cancelOrder', status: 'ACTIVE' },
   { method: 'GET', path: '/api/finance/me', owner: 'FinanceRoutes', auth: 'HOUSE_SELF', service: 'getFinance', status: 'ACTIVE' },
+  { method: 'GET', path: '/api/finance/quote', owner: 'FinanceRoutes', auth: 'HOUSE_SELF', service: 'authoritativeFinancialQuote', status: 'ACTIVE' },
+  { method: 'GET', path: '/api/finance/projection', owner: 'FinanceRoutes', auth: 'HOUSE_SELF', service: 'ledgerFinancialProjection', status: 'ACTIVE' },
   { method: 'GET', path: '/api/finance/{view}', owner: 'FinanceRoutes', auth: 'HOUSE_SELF', service: 'financeReadModel', status: 'ACTIVE' },
   { method: 'GET', path: '/api/finance/corporations/{id}', owner: 'FinanceRoutes', auth: 'INSTITUTION_MEMBER', service: 'getCorporationFiscalState', status: 'ACTIVE' },
   { method: 'GET', path: '/api/corporations', owner: 'InstitutionRoutes', auth: 'AUTHENTICATED', service: 'listCorporations', status: 'ACTIVE' },

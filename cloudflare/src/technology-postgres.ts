@@ -112,6 +112,16 @@ export async function createResearchProject(repository: PostgresRepository, inpu
       ORDER BY payer.id
       LIMIT 1`, [corporationId]);
     if (!fundingAccounts.rows[0]) throw new Error('Corporation V2 funding account or system research account is not provisioned');
+    const budgetLine = (await tx.query<{ id: string }>(`SELECT l.id FROM institution_budget_lines l JOIN budget_categories c ON c.id=l.category_id
+      WHERE l.institution_id=$1 AND c.institution_kind='CORPORATION' AND c.category_code='RESEARCH'
+        AND l.fiscal_period_id=(SELECT id FROM fiscal_periods WHERE start_game_day <= $2 AND end_game_day >= $2 AND status='ACTIVE' LIMIT 1)
+        AND l.authorized_units-l.committed_units-l.spent_units >= $3 FOR UPDATE`, [corporationId, day, budgetCents.toString()])).rows[0];
+    if (!budgetLine) throw new Error('Corporation research budget authority is unavailable');
+    const commitmentId = `COMMIT-RESEARCH-${projectId}`;
+    await tx.query(`INSERT INTO institution_budget_commitments
+      (id,institution_id,budget_line_id,source_type,source_id,original_units,remaining_units,status,due_game_day)
+      VALUES ($1,$2,$3,'CORPORATION_RESEARCH',$4,$5,$5,'OPEN',$6)`, [commitmentId, corporationId, budgetLine.id, projectId, budgetCents.toString(), day + 30]);
+    await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units+$1 WHERE id=$2', [budgetCents.toString(), budgetLine.id]);
     const funding = await tx.query<{ transaction_id: string }>(
       `SELECT earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,$4,$5::jsonb) AS transaction_id`,
       [input.correlationId, day, projectId, `technology-catalog-v${catalogEntry.definition_version}`, JSON.stringify([
@@ -121,6 +131,8 @@ export async function createResearchProject(repository: PostgresRepository, inpu
     );
     const fundingTransactionId = funding.rows[0]?.transaction_id;
     if (!fundingTransactionId) throw new Error('Research funding transaction was not created');
+    await tx.query(`UPDATE institution_budget_commitments SET remaining_units=0,status='PAID' WHERE id=$1`, [commitmentId]);
+    await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units-$1, spent_units=spent_units+$1 WHERE id=$2', [budgetCents.toString(), budgetLine.id]);
     await tx.query(`INSERT INTO corporation_research_projects
       (id, corporation_economic_id, target_type, target_id, definition_version,
        required_research_points, progress_research_points, credit_cost_units,

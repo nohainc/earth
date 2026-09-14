@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { moneyToCents } from './money.ts';
+import { moneyToCents, formatCreditUnits, type CreditUnits } from './money.ts';
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
 
@@ -30,10 +30,13 @@ function getBaseDurationDays(constructionDays: number, ownershipClass?: string):
   return Math.max(5, Math.round(3 + days * 1.8));
 }
 
-function researchCost(baseCost: number, tier: number, ownershipClass?: string): number {
-  const scopeMul = getScopeMultiplier(ownershipClass);
-  const tierMul = Math.pow(2.0, Math.max(0, tier - 2));
-  return Math.max(1000, Math.round(Math.max(1000, baseCost) * scopeMul * tierMul));
+function researchCost(baseCost: unknown, tier: number, ownershipClass?: string): CreditUnits {
+  const base = moneyToCents(baseCost);
+  const minimum = moneyToCents('1000');
+  const scope = ownershipClass === 'public_investment' ? [7n, 2n] : ownershipClass === 'civic' ? [5n, 2n] : [2n, 1n];
+  let result = (base > minimum ? base : minimum) * scope[0] / scope[1];
+  for (let i = 2; i < tier; i += 1) result *= 2n;
+  return result > minimum ? result : minimum;
 }
 
 function researchDurationDays(slotFootprint: number, tier: number, _ownershipClass?: string): number {
@@ -85,7 +88,7 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     if (existingProject.rows[0]) {
       throw new Error(`Your corporation has already researched or is researching Tier ${targetTier} for this building`);
     }
-    const cost = researchCost(Number(previous.rows[0].cost_credits), targetTier, previous.rows[0].ownership_class);
+    const costUnits = researchCost(previous.rows[0].cost_credits, targetTier, previous.rows[0].ownership_class);
     const durationDays = researchDurationDays(Number(previous.rows[0].slot_footprint ?? 1), targetTier, previous.rows[0].ownership_class);
     // The database clock is the sole source of time. Do not derive or submit
     // a client/server timestamp for research start or completion.
@@ -96,38 +99,49 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     if (!time) throw new Error('Authoritative game clock is unavailable');
     const projectId = `CBR-${crypto.randomUUID().slice(0, 10).toUpperCase()}`;
 
-    const isPrivate = previous.rows[0].ownership_class === 'private';
-    const payerOwnerId = isPrivate ? input.humanId : corporationId;
     const fundingAccounts = await tx.query<{ debit_account_id: string; research_account_id: string }>(`SELECT payer.id::TEXT AS debit_account_id, service.id::TEXT AS research_account_id
       FROM economic_accounts payer
-      JOIN owner_registry payer_owner ON payer_owner.economic_id = payer.owner_economic_id AND payer_owner.id = $1
+      JOIN owner_registry payer_owner ON payer_owner.economic_id = payer.owner_economic_id AND payer_owner.id = $1 AND payer_owner.owner_type = 'CORPORATION'
       JOIN owner_registry system_owner ON system_owner.id = 'SYSTEM'
       JOIN economic_accounts service ON service.owner_economic_id = system_owner.economic_id
         AND service.asset_id = 1 AND service.account_type = 'SYSTEM_ACCOUNT' AND service.status = 'ACTIVE'
       WHERE payer.asset_id = 1
-        AND payer.account_type = CASE WHEN payer_owner.owner_type = 'HOUSE' THEN 'WALLET' ELSE 'OPERATIONS' END
+        AND payer.account_type = 'OPERATIONS'
         AND payer.status = 'ACTIVE'
       ORDER BY payer.id
-      LIMIT 1`, [payerOwnerId]);
-    if (!fundingAccounts.rows[0]) throw new Error(`V2 funding account requires ${cost} Credits for this research`);
+      LIMIT 1`, [corporationId]);
+    if (!fundingAccounts.rows[0]) throw new Error(`CREDIT funding account requires ${formatCreditUnits(costUnits)} Credits for this research`);
+
+    const budget = (await tx.query<{ id: string }>(`SELECT l.id FROM institution_budget_lines l JOIN budget_categories c ON c.id=l.category_id
+      WHERE l.institution_id=$1 AND c.institution_kind='CORPORATION' AND c.category_code='RESEARCH'
+        AND l.fiscal_period_id=(SELECT id FROM fiscal_periods WHERE start_game_day <= $2 AND end_game_day >= $2 AND status='ACTIVE' LIMIT 1)
+        AND l.authorized_units-l.committed_units-l.spent_units >= $3 FOR UPDATE`, [corporationId, time.game_day, costUnits.toString()])).rows[0];
+    if (!budget) throw new Error('Corporation research budget authority is unavailable');
+    const commitmentId = `COMMIT-RESEARCH-${projectId}`;
+    await tx.query(`INSERT INTO institution_budget_commitments
+      (id,institution_id,budget_line_id,source_type,source_id,original_units,remaining_units,status,due_game_day)
+      VALUES ($1,$2,$3,'CORPORATION_RESEARCH',$4,$5,$5,'OPEN',$6)`, [commitmentId, corporationId, budget.id, projectId, costUnits.toString(), time.game_day + durationDays]);
+    await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units+$1 WHERE id=$2', [costUnits.toString(), budget.id]);
 
     const corporationOwner = await tx.query<{ economic_id: string }>('SELECT economic_id::TEXT FROM owner_registry WHERE id = $1', [corporationId]);
     if (!corporationOwner.rows[0]) throw new Error('Corporation economic owner is not provisioned');
     const funding = await tx.query<{ transaction_id: string }>(
       `SELECT transaction_id FROM earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,'building-catalog-v1',$4::jsonb)`,
       [input.correlationId, time.game_day, projectId, JSON.stringify([
-        { account_id: fundingAccounts.rows[0].debit_account_id, delta_units: (-BigInt(Math.round(cost * 100))).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
-        { account_id: fundingAccounts.rows[0].research_account_id, delta_units: BigInt(Math.round(cost * 100)).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
+        { account_id: fundingAccounts.rows[0].debit_account_id, delta_units: (-costUnits).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
+        { account_id: fundingAccounts.rows[0].research_account_id, delta_units: costUnits.toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
       ])],
     );
     if (!funding.rows[0]?.transaction_id) throw new Error('Research funding transaction was not created');
+    await tx.query(`UPDATE institution_budget_commitments SET remaining_units=0,status='PAID' WHERE id=$1`, [commitmentId]);
+    await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units-$1, spent_units=spent_units+$1 WHERE id=$2', [costUnits.toString(), budget.id]);
     await tx.query(`INSERT INTO corporation_research_projects
       (id, corporation_economic_id, target_type, target_id, definition_version,
        required_research_points, progress_research_points, credit_cost_units,
        priority, status, started_game_day, funding_transaction_id, correlation_id)
       VALUES ($1,$2,'BUILDING_BLUEPRINT',$3,'building-catalog-v1',$4,0,$5,100,'ACTIVE',$6,$7,$8)
       ON CONFLICT (id) DO NOTHING`,
-      [projectId, corporationOwner.rows[0].economic_id, targetCatalogId, durationDays * 100, Math.round(cost * 100), time.game_day, funding.rows[0].transaction_id, input.correlationId]);
+      [projectId, corporationOwner.rows[0].economic_id, targetCatalogId, durationDays * 100, costUnits.toString(), time.game_day, funding.rows[0].transaction_id, input.correlationId]);
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_research_projects WHERE id = $1', [projectId])).rows[0], catalogId: targetCatalogId, correlationId: input.correlationId };
 }
 

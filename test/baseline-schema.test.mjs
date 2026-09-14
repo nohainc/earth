@@ -19,7 +19,7 @@ test('migration directory exposes the immutable baseline followed by contiguous 
     .filter((file) => /^\d+_.+\.sql$/.test(file))
     .filter((file) => fs.readFileSync(new URL(file, migrationDir), 'utf8').includes('-- EARTH ACTIVE MIGRATION:'));
   assert.equal(active[0], '001_baseline.sql');
-  assert.deepEqual(active, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql', '004_public_infrastructure_credit.sql', '005_architecture_integrity_report.sql', '006_resource_flow_schema.sql', '007_core_resource_graph_t1.sql', '008_house_food_maintenance.sql', '009_private_building_settlement_journals.sql', '010_market_state_completion.sql', '011_resource_analytics_read_models.sql', '012_resource_economic_integrity.sql']);
+  assert.deepEqual(active, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql', '004_public_infrastructure_credit.sql', '005_architecture_integrity_report.sql', '006_resource_flow_schema.sql', '007_core_resource_graph_t1.sql', '008_house_food_maintenance.sql', '009_private_building_settlement_journals.sql', '010_market_state_completion.sql', '011_resource_analytics_read_models.sql', '012_resource_economic_integrity.sql', '013_financial_obligations.sql', '014_construction_settlement_destination.sql']);
   const migrator = fs.readFileSync(path.resolve(new URL('../scripts/migrate-postgres.mjs', import.meta.url).pathname), 'utf8');
   assert.match(migrator, /activeMigrations/);
   assert.doesNotMatch(migrator, /ALLOW_MIGRATION_REPAIR/);

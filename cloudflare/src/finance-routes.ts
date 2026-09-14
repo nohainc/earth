@@ -5,6 +5,8 @@ import { getCorporationFiscalState, spendCorporationBudget } from './corporation
 import { getNetWorthHistory } from './net-worth-postgres.ts';
 import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
+import { getFinancialQuote } from './financial-quotes.ts';
+import { getHouseFinancialProjection, getInstitutionFinancialProjection } from './financial-projections.ts';
 
 export async function handleFinanceRoutes(
   request: Request,
@@ -13,6 +15,39 @@ export async function handleFinanceRoutes(
   viewer: { id: string; house_id: string },
   sensitiveActionAllowed: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
+  if (url.pathname === '/api/finance/projection' && request.method === 'GET') {
+    const scope = url.searchParams.get('scope')?.trim().toUpperCase() ?? 'HOUSE';
+    try {
+      const result = await withRepository(env, async (repository) => {
+        if (scope === 'HOUSE') return getHouseFinancialProjection(repository, viewer.house_id);
+        if (scope === 'EARTH') return getInstitutionFinancialProjection(repository, 'EARTH');
+        if (scope === 'CORPORATION') {
+          const corporation = (await repository.query<{ corporation_id: string }>("SELECT corporation_id FROM house_affiliations WHERE house_id = $1 AND status = 'ACTIVE' LIMIT 1", [viewer.house_id])).rows[0];
+          if (!corporation) throw new Error('Active Corporation affiliation not found');
+          return getInstitutionFinancialProjection(repository, corporation.corporation_id);
+        }
+        throw new Error('Unknown financial projection scope');
+      });
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ projection: result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Financial projection unavailable' }, { status: 400 }); }
+  }
+  if (url.pathname === '/api/finance/quote' && request.method === 'GET') {
+    const quoteType = url.searchParams.get('quoteType')?.trim().toUpperCase() as Parameters<typeof getFinancialQuote>[1]['quoteType'];
+    if (!quoteType) return Response.json({ ok: false, error: 'Quote type is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => getFinancialQuote(repository, {
+        quoteType,
+        ownerId: viewer.id,
+        territoryId: url.searchParams.get('territoryId')?.trim() || undefined,
+        buildingType: url.searchParams.get('buildingType')?.trim() || undefined,
+        technologyId: url.searchParams.get('technologyId')?.trim() || undefined,
+        licenseId: url.searchParams.get('licenseId')?.trim() || undefined,
+      }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ quote: result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Financial quote unavailable' }, { status: 400 }); }
+  }
   if (url.pathname === '/api/finance/me' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
       const [accounts, deposits, entries] = await Promise.all([
@@ -220,29 +255,6 @@ export async function handleFinanceRoutes(
     const result = await withRepository(env, (repository) => getCorporationFiscalState(repository, corporationFiscalMatch[1]));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
-  }
-
-  if (url.pathname === '/api/finance/public-spending' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ corporationId?: string; category?: string; amount?: number; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.value;
-    const corporationId = body.corporationId?.trim();
-    const category = body.category?.trim() || 'public-services';
-    const amount = Number(body.amount);
-    const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!corporationId || !Number.isFinite(amount) || amount <= 0 || !correlationId) {
-      return Response.json({ ok: false, error: 'Corporation ID, public spending amount, and Idempotency-Key are required' }, { status: 400 });
-    }
-    try {
-      const result = await withRepository(env, (repository) =>
-        spendCorporationBudget(repository, { actorId: viewer.id, corporationId, category, amount, correlationId }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Public spending failed';
-      return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : 409 });
-    }
   }
 
   return null;

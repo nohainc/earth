@@ -133,13 +133,14 @@ export async function purchaseBuildingInTerritory(
       `SELECT a.id::TEXT, a.balance_units::TEXT FROM economic_accounts a
         WHERE a.owner_economic_id = $1 AND a.asset_id = 1 AND a.account_type = $2 AND a.status = 'ACTIVE' FOR UPDATE`, [ownerEconomicId, isPublic ? 'TREASURY' : 'WALLET'],
     )).rows[0];
-    const earthTreasury = (await tx.query<{ id: string }>(
+    const constructionDestination = (await tx.query<{ id: string }>(
       `SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-        WHERE o.id = 'EARTH' AND o.owner_type = 'EARTH' AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE' LIMIT 1`,
+        WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND o.owner_type = 'SYSTEM'
+          AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`,
     )).rows[0];
     const cost = BigInt(catalog.construction_credit_units);
     if (!wallet || BigInt(wallet.balance_units) < cost) throw new Error('Insufficient Credits for construction');
-    if (!earthTreasury) throw new Error('EARTH treasury account is not configured');
+    if (!constructionDestination) throw new Error('Construction settlement destination is not configured');
     const constructionRequirements = await loadConstructionRequirements(tx, catalog.id, ownerEconomicId, isPublic);
     const missing = constructionRequirements.find((item) => BigInt(item.missing_units) > 0n);
     if (missing) throw new Error(`Insufficient ${missing.code} for construction; missing ${missing.missing_units}`);
@@ -154,10 +155,10 @@ export async function purchaseBuildingInTerritory(
     if (resourceAccounts.some((item) => !item.account || !item.sink)) throw new Error('Construction resource settlement accounts are not provisioned');
     const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     await tx.query(
-      `SELECT earth_post_transaction($1, $2, $3, 'BUILDING_CONSTRUCTION', $4, $5, 'building-territory-v2', $6::JSONB)`,
-      [input.correlationId, gameDay, Number(world?.game_minute ?? 0), isPublic ? 'CORPORATION' : 'HOUSE', buildingId, JSON.stringify([
+      `SELECT earth_post_transaction($1, $2, $3, 'ASSET_TRANSFER', $4, $5, 'construction-credit-v1', $6::JSONB)`,
+      [input.correlationId, gameDay, Number(world?.game_minute ?? 0), isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION', buildingId, JSON.stringify([
         { account_id: wallet.id, delta_units: (-cost).toString(), asset_id: 1 },
-        { account_id: earthTreasury.id, delta_units: cost.toString(), asset_id: 1 },
+        { account_id: constructionDestination.id, delta_units: cost.toString(), asset_id: 1 },
       ])],
     );
     if (resourceAccounts.length) {

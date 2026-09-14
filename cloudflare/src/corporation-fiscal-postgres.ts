@@ -61,17 +61,15 @@ export async function spendCorporationBudget(
     if (!treasury || !operations) throw new Error('Corporation treasury or operations account is unavailable');
     if (BigInt(treasury.balance_units) < amountUnits) throw new Error('Corporation treasury cannot fund this spending');
     const transaction = (await tx.query<{ id: string }>(
-      `SELECT earth_post_transaction($1, $2, $3, 'CORPORATION_PUBLIC_SPENDING', 'CORPORATION', $4, 'corporation-fiscal-v1', $5::JSONB) AS id`,
+      `SELECT earth_post_transaction($1, $2, $3, 'ASSET_TRANSFER', 'CORPORATION_INTERNAL', $4, 'corporation-fiscal-v2', $5::JSONB) AS id`,
       [input.correlationId, gameDay, Number(world?.game_minute ?? 0), input.corporationId, JSON.stringify([
         { account_id: treasury.account_id, delta_units: (-amountUnits).toString(), asset_id: 1 },
         { account_id: operations.account_id, delta_units: amountUnits.toString(), asset_id: 1 },
       ])],
     )).rows[0];
-    await tx.query('UPDATE institution_budget_lines SET spent_units = spent_units + $1 WHERE id = $2', [amountUnits.toString(), budget.id]);
-    await tx.query(`INSERT INTO institution_financial_events
-      (institution_id, game_day, event_type, amount_units, budget_line_id, economic_transaction_id, correlation_id)
-      VALUES ($1, $2, 'CORPORATION_PUBLIC_SPENDING', $3, $4, $5, $6)`, [input.corporationId, gameDay, amountUnits.toString(), budget.id, transaction.id, input.correlationId]);
-    await createNotification(tx, { id: crypto.randomUUID(), humanId: input.actorId, notificationType: 'finance', title: 'Corporation public spending recorded', body: `${Number(centsToMoney(amountUnits))} Credits were allocated to Corporation public operations.`, entityType: 'corporation', entityId: input.corporationId, gameDay, correlationId: `${input.correlationId}:notification` });
-    return { ok: true, amount: Number(centsToMoney(amountUnits)), corporationId: input.corporationId, category: input.category, gameDay, transactionId: transaction.id, correlationId: input.correlationId };
+    // Treasury -> Operations is an internal allocation. It reserves no budget
+    // authority and is not external spending; external settlement uses the
+    // institution-spending service and is the only path that increments spent_units.
+    return { ok: true, amount: Number(centsToMoney(amountUnits)), corporationId: input.corporationId, category: input.category, gameDay, transactionId: transaction.id, internalAllocation: true, committed: budget.committed_units, spent: budget.spent_units, correlationId: input.correlationId };
   });
 }
