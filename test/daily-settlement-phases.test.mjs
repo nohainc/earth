@@ -14,8 +14,8 @@ test('daily settlement has one ordered canonical phase registry', () => {
 
   const requiredOrder = [
     'succession_activation', 'prepare_partitions', 'profile_rebuild', 'profile_settlement',
-    'ip_license_billing', 'building_settlement', 'basic_levy',
-    'corporation_income_tax', 'global_bank', 'bank_health', 'life_maintenance',
+    'ip_license_billing', 'life_maintenance', 'building_settlement', 'basic_levy',
+    'corporation_income_tax', 'global_bank', 'bank_health',
     'territory_capacity_projections', 'corporation_dynamics',
     'budget_dividend_eligibility', 'financial_states', 'lifecycle', 'post_succession_access_refresh',
     'financial_projections', 'rankings_snapshot', 'end_of_day_snapshots',
@@ -29,8 +29,8 @@ test('daily settlement has one ordered canonical phase registry', () => {
   assert.ok(phases.findIndex((phase) => phase.id === 'bank_health') < phases.findIndex((phase) => phase.id === 'budget_dividend_eligibility'));
   assert.ok(phases.findIndex((phase) => phase.id === 'budget_dividend_eligibility') < phases.findIndex((phase) => phase.id === 'financial_states'));
   assert.ok(phases.findIndex((phase) => phase.id === 'financial_states') < phases.findIndex((phase) => phase.id === 'lifecycle'));
-  assert.ok(phases.findIndex((phase) => phase.id === 'building_settlement') < phases.findIndex((phase) => phase.id === 'life_maintenance'));
-  assert.ok(phases.findIndex((phase) => phase.id === 'bank_health') < phases.findIndex((phase) => phase.id === 'life_maintenance'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'life_maintenance') < phases.findIndex((phase) => phase.id === 'building_settlement'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'life_maintenance') < phases.findIndex((phase) => phase.id === 'building_settlement'));
   assert.ok(phases.findIndex((phase) => phase.id === 'lifecycle') < phases.findIndex((phase) => phase.id === 'end_of_day_snapshots'));
   assert.ok(phases.findIndex((phase) => phase.id === 'lifecycle') < phases.findIndex((phase) => phase.id === 'post_succession_access_refresh'));
 });

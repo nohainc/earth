@@ -1,7 +1,7 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
-import { getTerritoryCapacity, purchaseBuildingInTerritory } from './territory-capacity-postgres.ts';
+import { getConstructionQuote, getTerritoryCapacity, purchaseBuildingInTerritory } from './territory-capacity-postgres.ts';
 import {
   startCorporationBuildingResearch,
   listCorporationBuildingResearch,
@@ -21,6 +21,20 @@ export async function handleRealEstateRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Territory capacity unavailable' }, { status: 404 });
+    }
+  }
+
+  if (url.pathname === '/api/real-estate/quote' && request.method === 'GET') {
+    const territoryId = url.searchParams.get('territoryId')?.trim();
+    const buildingType = url.searchParams.get('buildingType')?.trim();
+    const viewerId = viewer.id;
+    if (!territoryId || !buildingType) return Response.json({ ok: false, error: 'Territory ID and building type are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => getConstructionQuote(repository, { ownerId: viewerId, territoryId, buildingType }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Construction quote unavailable' }, { status: 400 });
     }
   }
 

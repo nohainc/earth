@@ -4,19 +4,23 @@ import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { createDailySettlementPhaseRegistry, type DailySettlementPhaseContext } from './daily-settlement-phases.ts';
 import { settleCorporationDynamics, settleTerritoryCapacityProjections } from './territory-settlement-postgres.ts';
 import { settleBuildingUpkeepAndRevenueV2 } from './building-settlement-v2.ts';
+import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
+import { processHouseMortality } from './lifecycle-postgres.ts';
+import { refreshResourceAnalyticsInTransaction } from './resource-analytics-postgres.ts';
 
 export type SettlementResult = { status: 'completed' | 'already_processed' | 'busy' | 'failed'; gameDay: number; phasesCompleted: number };
 
 const noOpPhase = async (_context: DailySettlementPhaseContext): Promise<unknown> => ({ ok: true });
+const OWNER_SHARD_COUNT = 16;
 const settlementPhases = createDailySettlementPhaseRegistry({
   activateSuccessors: noOpPhase,
   preparePartitions: noOpPhase,
   rebuildProfiles: noOpPhase,
   profileSettlement: noOpPhase,
-  lifeMaintenance: noOpPhase,
+  lifeMaintenance: async ({ tx, day }) => settleLifeMaintenanceInTransaction(tx, day),
   basicLevy: noOpPhase,
   ipLicenseBilling: noOpPhase,
-  buildingSettlement: async ({ tx, day }) => settleBuildingUpkeepAndRevenueV2(tx, day),
+  buildingSettlement: async ({ tx, day, shard, shardCount }) => settleBuildingUpkeepAndRevenueV2(tx, day, { shard, shardCount }),
   corporationIncomeTax: noOpPhase,
   globalBank: noOpPhase,
   bankHealth: noOpPhase,
@@ -27,13 +31,13 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   budgetDividendEligibility: noOpPhase,
   patentExpirations: noOpPhase,
   researchAndProgress: noOpPhase,
-  lifecycle: noOpPhase,
+  lifecycle: async ({ tx, day }) => processHouseMortality(tx, day),
   postSuccessionAccessRefresh: noOpPhase,
   financialStates: noOpPhase,
   institutionDissolution: noOpPhase,
   financialProjections: noOpPhase,
   rankingsSnapshot: noOpPhase,
-  endOfDaySnapshots: noOpPhase,
+  endOfDaySnapshots: async ({ tx, day }) => refreshResourceAnalyticsInTransaction(tx, day),
 });
 
 export async function runResumableSettlementDay(repository: PostgresRepository, gameDay: number, _options: Record<string, unknown> = {}): Promise<SettlementResult> {
@@ -43,7 +47,13 @@ export async function runResumableSettlementDay(repository: PostgresRepository, 
   await repository.query(`INSERT INTO daily_settlement_runs (game_day, status, current_phase, started_at) VALUES ($1, 'running', $2, CURRENT_TIMESTAMP) ON CONFLICT (game_day) DO UPDATE SET status = 'running', current_phase = $2, attempt_count = daily_settlement_runs.attempt_count + 1, updated_at = CURRENT_TIMESTAMP`, [gameDay, settlementPhases[0]?.id ?? 'settlement']);
   for (const phase of settlementPhases) {
     await repository.query('UPDATE daily_settlement_runs SET current_phase = $2, updated_at = CURRENT_TIMESTAMP WHERE game_day = $1', [gameDay, phase.id]);
-    await phase.execute({ tx: repository, day: gameDay });
+    if (phase.shardMode === 'owner-shards') {
+      for (let shard = 0; shard < OWNER_SHARD_COUNT; shard += 1) {
+        await phase.execute({ tx: repository, day: gameDay, shard, shardCount: OWNER_SHARD_COUNT });
+      }
+    } else {
+      await phase.execute({ tx: repository, day: gameDay });
+    }
     await repository.query('INSERT INTO scheduler_runs (game_day, phase, status, correlation_id, completed_at) VALUES ($1, $2, \'completed\', $3, CURRENT_TIMESTAMP) ON CONFLICT (correlation_id) DO NOTHING', [gameDay, phase.id, `${correlationId}:${phase.id}`]);
   }
   await repository.query("UPDATE daily_settlement_runs SET status = 'completed', completed_at = CURRENT_TIMESTAMP, current_phase = NULL, updated_at = CURRENT_TIMESTAMP WHERE game_day = $1", [gameDay]);

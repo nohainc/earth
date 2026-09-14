@@ -28,10 +28,20 @@ export async function handleReadModelRoutes(
 
   if (url.pathname === '/api/buildings/catalog' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => repository.query(
-      `SELECT id, code, tier, construction_credit_units, construction_minutes,
-              operating_credit_units, resource_input_units, resource_output_units,
-              service_type, service_capacity_units, slot_footprint, definition_version
-         FROM building_catalog
+      `SELECT c.id, c.code, c.tier, c.construction_credit_units, c.construction_minutes,
+              c.operating_credit_units, c.service_type, c.service_capacity_units,
+              c.slot_footprint, c.definition_version,
+              COALESCE(jsonb_agg(jsonb_build_object(
+                'assetId', f.asset_id,
+                'constructionUnits', f.construction_units,
+                'operatingInputUnits', f.operating_input_units,
+                'operatingOutputUnits', f.operating_output_units
+              ) ORDER BY f.asset_id) FILTER (WHERE f.asset_id IS NOT NULL), '[]'::jsonb) AS resource_flows
+         FROM building_catalog c
+         LEFT JOIN building_catalog_resource_flows f ON f.catalog_id = c.id
+        GROUP BY c.id, c.code, c.tier, c.construction_credit_units, c.construction_minutes,
+                 c.operating_credit_units, c.service_type, c.service_capacity_units,
+                 c.slot_footprint, c.definition_version
         ORDER BY code, tier, id`,
     ));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

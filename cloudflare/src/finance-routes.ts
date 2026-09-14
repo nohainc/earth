@@ -113,8 +113,8 @@ export async function handleFinanceRoutes(
         repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
         repository.query("SELECT b.id, b.catalog_id, b.status FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id JOIN building_catalog c ON c.id = b.catalog_id WHERE o.id = $1 AND c.ownership_scope = 'PRIVATE'", [viewer.house_id]),
         repository.query<{ age_years: number; corporation_id: string | null; living_cost_index: string }>("SELECT h.age_years, ha.corporation_id, w.living_cost_index FROM humans h LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE' CROSS JOIN world_state w WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
-        repository.query('SELECT game_day, food_used, energy_used, compute_used, credits_for_resources, life_condition_after, shortfall_notes, paid, unpaid, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
-        repository.query<{ total: string }>('SELECT COALESCE(SUM(unpaid), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
+        repository.query('SELECT game_day, food_required_units, food_consumed_units, food_shortfall_units, shortfall_notes, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
+        repository.query<{ total: string }>('SELECT COALESCE(SUM(food_shortfall_units), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
         repository.query(`SELECT DISTINCT ON (tax_rule_id) id, tax_rule_id, scope, category, rate_bps, version,
                                  tax_base_definition, beneficiary_economic_id, effective_from_game_day, effective_to_game_day
                             FROM tax_rule_versions

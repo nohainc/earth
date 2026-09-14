@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 5;
+export const EARTH_SCHEMA_VERSION = 12;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -198,7 +198,9 @@ export const REQUIRED_SCHEMA_TABLES = {
   "economic_assets": [
     "id",
     "code",
-    "asset_kind"
+    "asset_kind",
+    "unit_scale",
+    "display_decimals"
   ],
   "owner_registry": [
     "id",
@@ -268,12 +270,72 @@ export const REQUIRED_SCHEMA_TABLES = {
     "construction_credit_units",
     "construction_minutes",
     "operating_credit_units",
-    "resource_input_units",
-    "resource_output_units",
     "service_type",
     "service_capacity_units",
     "slot_footprint",
     "definition_version"
+  ],
+  "building_catalog_resource_flows": [
+    "catalog_id",
+    "asset_id",
+    "construction_units",
+    "operating_input_units",
+    "operating_output_units"
+  ],
+  "personal_life_maintenance": [
+    "id",
+    "human_id",
+    "house_id",
+    "game_day",
+    "food_required_units",
+    "food_consumed_units",
+    "food_shortfall_units",
+    "status",
+    "shortfall_notes",
+    "created_at"
+  ],
+  "building_settlement_journals": [
+    "id",
+    "building_id",
+    "house_economic_id",
+    "game_day",
+    "utilization_bps",
+    "input_units",
+    "output_units",
+    "operating_credit_units",
+    "status",
+    "limiting_resources",
+    "shortage_units",
+    "created_at"
+  ],
+  "global_resource_daily_state": [
+    "game_day",
+    "asset_id",
+    "opening_balance_units",
+    "production_units",
+    "consumption_units",
+    "transfer_in_units",
+    "transfer_out_units",
+    "closing_balance_units",
+    "market_volume_units",
+    "average_price_units",
+    "shortage_units",
+    "created_at"
+  ],
+  "house_resource_daily_flow": [
+    "house_economic_id",
+    "game_day",
+    "asset_id",
+    "opening_balance_units",
+    "production_units",
+    "consumption_units",
+    "transfer_in_units",
+    "transfer_out_units",
+    "closing_balance_units",
+    "net_flow_units",
+    "shortage_units",
+    "is_limiting_resource",
+    "created_at"
   ],
   "buildings": [
     "id",
@@ -297,6 +359,7 @@ export const REQUIRED_SCHEMA_TABLES = {
     "quote_asset_id",
     "lot_size_units",
     "price_tick_units",
+    "genesis_reference_price_units",
     "rules_version",
     "status"
   ],
@@ -753,6 +816,7 @@ export const REQUIRED_SCHEMA_FUNCTIONS = [
   "earth_refresh_territory_capacity",
   "earth_validate_building_ownership",
   "earth_integrity_report",
+  "earth_resource_economic_integrity_report",
   "earth_market_integrity_report",
   "earth_create_tax_rule_version",
   "earth_technology_is_patentable",

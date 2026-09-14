@@ -7,7 +7,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
   return repository.transaction(async (tx) => {
     if ((await tx.query('SELECT 1 FROM auth_accounts WHERE email = $1', [input.email])).rows[0]) throw new Error('Email is already registered');
     const worldDay = Number((await tx.query("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
-    const starter = calculateStarterPackage(1, 1);
+    const starter = calculateStarterPackage();
     const humanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const accountId = `account-${humanId.toLowerCase()}`;
     const houseId = `HOUSE-${humanId.slice(2)}`;
@@ -21,14 +21,18 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
     await tx.query("INSERT INTO owner_registry (id,owner_type,economic_id) VALUES ($1,'HOUSE',$2)", [houseId, economicId]);
     await tx.query('SELECT earth_provision_house_economy($1)', [economicId]);
-    const starterAssets = [
-      [1, starter.credits * 100],
-      [2, starter.resources.material * 1_000_000],
-      [3, starter.resources.components * 1_000_000],
-      [4, starter.resources.energy * 1_000_000],
-      [5, starter.resources.compute * 1_000_000],
-      [6, starter.resources.food * 1_000_000],
-    ] as const;
+    const assets = await tx.query<{ id: number; code: string; unit_scale: string }>('SELECT id, code, unit_scale::TEXT FROM economic_assets WHERE id BETWEEN 1 AND 6');
+    const displayAmounts: Record<string, number> = {
+      CREDIT: starter.credits,
+      MATERIAL: starter.resources.material,
+      COMPONENTS: starter.resources.components,
+      ENERGY: starter.resources.energy,
+      COMPUTE: starter.resources.compute,
+      FOOD: starter.resources.food,
+    };
+    const starterAssets = assets.rows
+      .map((asset) => [asset.id, BigInt(displayAmounts[asset.code] ?? 0) * BigInt(asset.unit_scale)] as const)
+      .filter(([, amount]) => amount > 0n);
     for (const [assetId, amount] of starterAssets) {
       await tx.query('SELECT earth_issue_starter_package($1,$2,$3,$4,$5)', [`starter:${houseId}:${assetId}`, worldDay, economicId, assetId, amount]);
     }

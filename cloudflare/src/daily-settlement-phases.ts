@@ -6,6 +6,7 @@ export type DailySettlementPhaseContext = {
   tx: PostgresRepository;
   day: number;
   shard?: number;
+  shardCount?: number;
 };
 
 export type DailySettlementPhase = {
@@ -54,14 +55,14 @@ export function createDailySettlementPhaseRegistry(
     { id: 'profile_settlement', order: 30, shardMode: 'all', execute: handlers.profileSettlement },
     { id: 'patent_expirations', order: 45, shardMode: 'all', execute: handlers.patentExpirations },
     { id: 'ip_license_billing', order: 65, shardMode: 'all', execute: handlers.ipLicenseBilling },
-    { id: 'building_settlement', order: 70, shardMode: 'all', execute: handlers.buildingSettlement },
+    { id: 'life_maintenance', order: 70, shardMode: 'all', execute: handlers.lifeMaintenance },
+    { id: 'building_settlement', order: 75, shardMode: 'owner-shards', execute: handlers.buildingSettlement },
     { id: 'basic_levy', order: 75, shardMode: 'all', execute: handlers.basicLevy },
     { id: 'corporation_income_tax', order: 90, shardMode: 'all', execute: handlers.corporationIncomeTax },
     { id: 'global_bank', order: 100, shardMode: 'all', execute: handlers.globalBank },
     { id: 'bank_health', order: 110, shardMode: 'all', execute: handlers.bankHealth },
     { id: 'mandatory_budget_payments', order: 115, shardMode: 'all', execute: handlers.mandatoryBudgetPayments },
     { id: 'scheduled_budget_payments', order: 116, shardMode: 'all', execute: handlers.scheduledBudgetPayments },
-    { id: 'life_maintenance', order: 118, shardMode: 'all', execute: handlers.lifeMaintenance },
     { id: 'territory_capacity_projections', order: 120, shardMode: 'all', execute: handlers.territoryCapacityProjections },
     { id: 'corporation_dynamics', order: 125, shardMode: 'all', execute: handlers.corporationDynamics },
     { id: 'research_and_progress', order: 126, shardMode: 'all', execute: handlers.researchAndProgress },

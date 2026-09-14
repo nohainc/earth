@@ -25,6 +25,66 @@ export async function getTerritoryCapacity(repository: PostgresRepository, terri
   return { territory: territory.rows[0], capacity: state.rows[0] ?? null };
 }
 
+type ConstructionRequirement = { code: string; asset_id: number; required_units: string; available_units: string; missing_units: string };
+
+async function loadConstructionRequirements(
+  tx: PostgresRepository,
+  catalogId: string,
+  ownerEconomicId: string,
+  isPublic: boolean,
+): Promise<ConstructionRequirement[]> {
+  const rows = await tx.query<{ code: string; asset_id: number; required_units: string; available_units: string }>(
+    `SELECT asset.code, asset.id AS asset_id, flow.construction_units::TEXT AS required_units,
+            COALESCE(account.balance_units, 0)::TEXT AS available_units
+       FROM building_catalog_resource_flows flow
+       JOIN economic_assets asset ON asset.id = flow.asset_id AND asset.asset_kind = 'RESOURCE'
+       LEFT JOIN economic_accounts account
+         ON account.owner_economic_id = $2 AND account.asset_id = flow.asset_id
+        AND account.account_type = 'INVENTORY' AND account.status = 'ACTIVE'
+      WHERE flow.catalog_id = $1 AND flow.construction_units > 0
+      ORDER BY asset.id`, [catalogId, ownerEconomicId],
+  );
+  if (isPublic) return [];
+  return rows.rows.map((row) => {
+    const required = BigInt(row.required_units);
+    const available = BigInt(row.available_units);
+    return { ...row, missing_units: (required > available ? required - available : 0n).toString() };
+  });
+}
+
+export async function getConstructionQuote(
+  repository: PostgresRepository,
+  input: { ownerId: string; territoryId: string; buildingType: string },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const territory = (await tx.query<{ corporation_id: string }>("SELECT corporation_id FROM territories WHERE id = $1 AND status = 'ACTIVE'", [input.territoryId])).rows[0];
+    if (!territory) throw new Error('Territory not found or inactive');
+    const owner = (await tx.query<{ house_id: string; economic_id: string }>(
+      `SELECT h.house_id, o.economic_id FROM humans h JOIN owner_registry o ON o.id = h.house_id AND o.owner_type = 'HOUSE'
+        WHERE h.id = $1 AND h.status = 'ACTIVE'`, [input.ownerId])).rows[0];
+    if (!owner) throw new Error('House economic owner not found');
+    const membership = (await tx.query("SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id])).rows[0];
+    if (!membership) throw new Error('House must belong to the Territory Corporation');
+    const catalog = (await tx.query<{ id: string; code: string; ownership_scope: 'PRIVATE' | 'PUBLIC'; construction_credit_units: string }>(
+      `SELECT id, code, ownership_scope, construction_credit_units FROM building_catalog
+        WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) LIMIT 1`, [input.buildingType])).rows[0];
+    if (!catalog) throw new Error('Unknown building blueprint');
+    const isPublic = catalog.ownership_scope === 'PUBLIC';
+    const economicOwner = isPublic ? (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [territory.corporation_id])).rows[0]?.economic_id : owner.economic_id;
+    if (!economicOwner) throw new Error(`${isPublic ? 'Corporation' : 'House'} economic owner not found`);
+    const credit = (await tx.query<{ balance_units: string }>(
+      `SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = $2 AND status = 'ACTIVE'`, [economicOwner, isPublic ? 'TREASURY' : 'WALLET'])).rows[0]?.balance_units ?? '0';
+    const requirements = await loadConstructionRequirements(tx, catalog.id, economicOwner, isPublic);
+    return {
+      catalog: { id: catalog.id, code: catalog.code, ownershipScope: catalog.ownership_scope },
+      requirements: {
+        CREDIT: { required_units: catalog.construction_credit_units, available_units: credit, missing_units: (BigInt(catalog.construction_credit_units) > BigInt(credit) ? BigInt(catalog.construction_credit_units) - BigInt(credit) : 0n).toString() },
+        ...Object.fromEntries(requirements.map((item) => [item.code, { required_units: item.required_units, available_units: item.available_units, missing_units: item.missing_units }])),
+      },
+    };
+  });
+}
+
 export async function purchaseBuildingInTerritory(
   repository: PostgresRepository,
   input: { ownerId: string; territoryId: string; buildingType: string; name: string; correlationId: string },
@@ -80,6 +140,18 @@ export async function purchaseBuildingInTerritory(
     const cost = BigInt(catalog.construction_credit_units);
     if (!wallet || BigInt(wallet.balance_units) < cost) throw new Error('Insufficient Credits for construction');
     if (!earthTreasury) throw new Error('EARTH treasury account is not configured');
+    const constructionRequirements = await loadConstructionRequirements(tx, catalog.id, ownerEconomicId, isPublic);
+    const missing = constructionRequirements.find((item) => BigInt(item.missing_units) > 0n);
+    if (missing) throw new Error(`Insufficient ${missing.code} for construction; missing ${missing.missing_units}`);
+    const resourceAccounts = await Promise.all(constructionRequirements.map(async (item) => ({
+      ...item,
+      account: (await tx.query<{ id: string }>(
+        `SELECT id::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE' FOR UPDATE`, [ownerEconomicId, item.asset_id])).rows[0],
+      sink: (await tx.query<{ id: string }>(
+        `SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+          WHERE o.economic_id = 'ECON-RESOURCE-CONSUMPTION' AND a.asset_id = $1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'`, [item.asset_id])).rows[0],
+    })));
+    if (resourceAccounts.some((item) => !item.account || !item.sink)) throw new Error('Construction resource settlement accounts are not provisioned');
     const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     await tx.query(
       `SELECT earth_post_transaction($1, $2, $3, 'BUILDING_CONSTRUCTION', $4, $5, 'building-territory-v2', $6::JSONB)`,
@@ -88,6 +160,15 @@ export async function purchaseBuildingInTerritory(
         { account_id: earthTreasury.id, delta_units: cost.toString(), asset_id: 1 },
       ])],
     );
+    if (resourceAccounts.length) {
+      await tx.query(
+        `SELECT earth_post_transaction($1, $2, $3, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', $4, 'building-territory-v3', $5::JSONB)`,
+        [`construction:${input.correlationId}:resources`, gameDay, Number(world?.game_minute ?? 0), buildingId, JSON.stringify(resourceAccounts.flatMap((item) => [
+          { account_id: item.account!.id, asset_id: item.asset_id, delta_units: (-BigInt(item.required_units)).toString(), reason_code: 'private_construction_resource_input' },
+          { account_id: item.sink!.id, asset_id: item.asset_id, delta_units: BigInt(item.required_units).toString(), reason_code: 'private_construction_resource_input' },
+        ]))],
+      );
+    }
     await tx.query(
       `INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day)
        VALUES ($1, $2, $3, $4, 'ACTIVE', $5)`, [buildingId, ownerEconomicId, input.territoryId, catalog.id, gameDay],

@@ -17,6 +17,7 @@ type InstrumentRow = {
   base_decimals?: number;
   quote_code?: string;
   quote_decimals?: number;
+  genesis_reference_price_units?: string;
 };
 
 function numberUnits(value: unknown, scale: number): number {
@@ -34,13 +35,14 @@ function instrumentPayload(row: InstrumentRow): Record<string, unknown> {
     priceTick: priceUnitsToDisplayPrice('1'),
     status: row.status,
     rulesVersion: 'spot-market-v1',
+    genesisReferencePrice: row.genesis_reference_price_units ? priceUnitsToDisplayPrice(row.genesis_reference_price_units) : null,
   };
 }
 
 async function findInstrument(repository: PostgresRepository, key: string): Promise<InstrumentRow | null> {
   const result = await repository.query<InstrumentRow>(
     `SELECT i.id, i.symbol, i.asset_id, i.quote_asset_id,
-            i.status,
+            i.status, i.genesis_reference_price_units::TEXT,
             ba.code AS base_code,
             qa.code AS quote_code
        FROM market_instruments i
@@ -81,17 +83,21 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
   const baseScale = assetUnitScale(instrument.base_asset_id);
 
   if (resource === 'book') {
-    const result = await repository.query<Record<string, unknown>>(
+    const [result, state] = await Promise.all([repository.query<Record<string, unknown>>(
       `SELECT o.id, o.instrument_id, i.symbol, o.side, o.status, o.quantity_units::TEXT, o.remaining_units::TEXT,
               o.limit_price_units::TEXT, o.rules_version, o.created_at
          FROM market_orders o JOIN market_instruments i ON i.id = o.instrument_id
         WHERE o.instrument_id = $1 AND o.status IN ('OPEN', 'PARTIAL')
         ORDER BY o.side, o.limit_price_units DESC, o.created_at ASC
-        LIMIT 2000`, [instrument.id]);
+        LIMIT 2000`, [instrument.id]), repository.query<Record<string, unknown>>(
+      `SELECT last_clearing_price_units::TEXT, best_bid_units::TEXT, best_ask_units::TEXT,
+              open_buy_units::TEXT, open_sell_units::TEXT, rolling_volume_units::TEXT
+         FROM market_instrument_state WHERE instrument_id = $1`, [instrument.id])]);
     return {
       instrument: instrumentPayload(instrument),
       bids: result.rows.filter((row) => row.side === 'buy').map((row) => serializeOrder(row, baseScale === 100 ? instrument.base_asset_id : instrument.base_asset_id)),
       asks: result.rows.filter((row) => row.side === 'sell').map((row) => serializeOrder(row, instrument.base_asset_id)),
+      state: state.rows[0] ?? { last_clearing_price_units: null, best_bid_units: null, best_ask_units: null, open_buy_units: '0', open_sell_units: '0', rolling_volume_units: '0' },
     };
   }
 
@@ -155,7 +161,7 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
     if (instrumentsPath) {
       const result = await withRepository(env, (repository) => repository.query<InstrumentRow>(
         `SELECT i.id, i.symbol, i.asset_id, i.quote_asset_id,
-                i.status, ba.code AS base_code,
+                i.status, i.genesis_reference_price_units::TEXT, ba.code AS base_code,
                 qa.code AS quote_code
            FROM market_instruments i LEFT JOIN economic_assets ba ON ba.id = i.asset_id
            LEFT JOIN economic_assets qa ON qa.id = i.quote_asset_id

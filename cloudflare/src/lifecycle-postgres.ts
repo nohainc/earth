@@ -144,8 +144,8 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
         LEFT JOIN human_life_conditions condition ON condition.human_id = human.id
         LEFT JOIN (
           SELECT human_id,
-                 COUNT(*) FILTER (WHERE food_used < food_cost OR unpaid > 0) AS recent_food_shortfall_days,
-                 COUNT(*) FILTER (WHERE status IN ('unpaid', 'partial') OR unpaid > 0) AS recent_missed_maintenance_days
+                 COUNT(*) FILTER (WHERE food_consumed_units < food_required_units) AS recent_food_shortfall_days,
+                 COUNT(*) FILTER (WHERE food_shortfall_units > 0) AS recent_missed_maintenance_days
             FROM personal_life_maintenance
            WHERE game_day BETWEEN $1 - 7 AND $1 - 1
            GROUP BY human_id

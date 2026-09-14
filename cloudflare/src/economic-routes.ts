@@ -1,7 +1,22 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
+import { getGlobalResourceAnalytics, getHouseResourceAnalytics } from './resource-analytics-postgres.ts';
 
 export async function handleEconomicRoutes(request: Request, env: Env, url: URL, viewer: { id: string }): Promise<Response | null> {
+  if (url.pathname === '/api/economy/resources' && request.method === 'GET') {
+    const days = Math.min(90, Math.max(1, Number(url.searchParams.get('days') ?? 14) || 14));
+    const result = await withRepository(env, async (repository) => ({ ownerId: viewer.id, days, resources: await getHouseResourceAnalytics(repository, viewer.id, days) }));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/api/economy/resources/global' && request.method === 'GET') {
+    const days = Math.min(90, Math.max(1, Number(url.searchParams.get('days') ?? 14) || 14));
+    const result = await withRepository(env, async (repository) => ({ days, resources: await getGlobalResourceAnalytics(repository, days) }));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
   if ((url.pathname === '/api/economy' || url.pathname === '/api/economy/balances') && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
       const accounts = await repository.query<{ account_id: string; asset_code: string; account_type: string; balance_units: string }>(`
