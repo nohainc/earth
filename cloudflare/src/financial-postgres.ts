@@ -60,10 +60,10 @@ export async function transferCredits(
   ]);
   const amountUnits = BigInt(Math.round(Number(input.amount) * 100));
   const result = await repository.query<{ transaction_id: string; created: boolean }>(
-    `SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,$3,'interactive',$4,$5,$6::jsonb)`,
+    `SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,$3,'INTERACTIVE',$4,$5,$6::jsonb)`,
     [input.correlationId, input.gameDay, input.reasonType, input.reasonId ?? null, input.ruleVersion, JSON.stringify([
-      { account_id: debitAccount, asset_id: 1, delta: (-amountUnits).toString(), reason_code: input.reasonType },
-      { account_id: creditAccount, asset_id: 1, delta: amountUnits.toString(), reason_code: input.reasonType },
+      { account_id: debitAccount, asset_id: 1, delta_units: (-amountUnits).toString(), reason_code: input.reasonType },
+      { account_id: creditAccount, asset_id: 1, delta_units: amountUnits.toString(), reason_code: input.reasonType },
     ])],
   );
   const row = result.rows[0];

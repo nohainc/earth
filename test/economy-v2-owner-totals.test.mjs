@@ -53,8 +53,8 @@ test('Economy V2 owner totals classify internal transfers by owner net', { skip:
       'plan23',
       'v2-test',
       JSON.stringify([
-        { account_id: walletId, delta: -100, reason_code: 'test_internal_transfer' },
-        { account_id: reserveId, delta: 100, reason_code: 'test_internal_transfer' },
+        { account_id: walletId, asset_id: 1, delta_units: -100, reason_code: 'test_internal_transfer' },
+        { account_id: reserveId, asset_id: 1, delta_units: 100, reason_code: 'test_internal_transfer' },
       ]),
     ],
   );

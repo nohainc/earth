@@ -103,10 +103,11 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
       JOIN owner_registry payer_owner ON payer_owner.economic_id = payer.owner_economic_id AND payer_owner.id = $1
       JOIN owner_registry system_owner ON system_owner.id = 'SYSTEM'
       JOIN economic_accounts service ON service.owner_economic_id = system_owner.economic_id
-        AND service.asset_id = 1 AND service.account_type = 4 AND service.status = 'active'
-      WHERE payer.asset_id = 1 AND payer.account_type IN (1, 3, 4)
-        AND payer.status = 'active'
-      ORDER BY payer.is_default_settlement DESC, payer.account_type, payer.id
+        AND service.asset_id = 1 AND service.account_type = 'SYSTEM_ACCOUNT' AND service.status = 'ACTIVE'
+      WHERE payer.asset_id = 1
+        AND payer.account_type = CASE WHEN payer_owner.owner_type = 'HOUSE' THEN 'WALLET' ELSE 'OPERATIONS' END
+        AND payer.status = 'ACTIVE'
+      ORDER BY payer.id
       LIMIT 1`, [payerOwnerId]);
     if (!fundingAccounts.rows[0]) throw new Error(`V2 funding account requires ${cost} Credits for this research`);
 
@@ -115,8 +116,8 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     const funding = await tx.query<{ transaction_id: string }>(
       `SELECT transaction_id FROM earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,'building-catalog-v1',$4::jsonb)`,
       [input.correlationId, time.game_day, projectId, JSON.stringify([
-        { account_id: fundingAccounts.rows[0].debit_account_id, delta: (-BigInt(Math.round(cost * 100))).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
-        { account_id: fundingAccounts.rows[0].research_account_id, delta: BigInt(Math.round(cost * 100)).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
+        { account_id: fundingAccounts.rows[0].debit_account_id, delta_units: (-BigInt(Math.round(cost * 100))).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
+        { account_id: fundingAccounts.rows[0].research_account_id, delta_units: BigInt(Math.round(cost * 100)).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
       ])],
     );
     if (!funding.rows[0]?.transaction_id) throw new Error('Research funding transaction was not created');

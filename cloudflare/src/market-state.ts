@@ -18,31 +18,29 @@ export async function rebuildMarketInstrumentState(
   instrumentId: string,
 ): Promise<MarketInstrumentState> {
   const result = await repository.query<MarketInstrumentState>(
-    'SELECT * FROM earth_rebuild_market_instrument_state($1)',
+    `WITH open_orders AS (
+       SELECT COALESCE(SUM(CASE WHEN side = 'BUY' THEN remaining_units ELSE 0 END), 0)::TEXT AS open_buy_units,
+              COALESCE(SUM(CASE WHEN side = 'SELL' THEN remaining_units ELSE 0 END), 0)::TEXT AS open_sell_units
+         FROM market_orders WHERE instrument_id = $1 AND status IN ('OPEN','PARTIAL')
+     )
+     SELECT $1::TEXT AS instrument_id, MAX(f.batch_id)::TEXT AS last_completed_batch_id,
+            NULL::TEXT AS last_clearing_price_units, NULL::TEXT AS best_bid_units, NULL::TEXT AS best_ask_units,
+            open_orders.open_buy_units, open_orders.open_sell_units, COALESCE(SUM(f.quantity_units), 0)::TEXT AS rolling_volume_units,
+            CURRENT_TIMESTAMP AS updated_at
+       FROM open_orders LEFT JOIN market_fills f ON f.instrument_id = $1 GROUP BY open_orders.open_buy_units, open_orders.open_sell_units`,
     [instrumentId],
   );
   if (!result.rows[0]) throw new Error(`Unable to rebuild market state for ${instrumentId}`);
   return result.rows[0];
 }
 
-/** Keep the legacy market_prices row usable for transitional readers only. */
+/** The clean market schema keeps state in market_instrument_state. */
 export async function refreshMarketPriceProjection(
   repository: PostgresRepository,
-  instrument: { id: string; product: string },
-  state: MarketInstrumentState,
-  gameDay: number,
+  _instrument: { id: string },
+  _state: MarketInstrumentState,
+  _gameDay: number,
 ): Promise<void> {
-  await repository.query(
-    `UPDATE market_prices
-        SET price_units = COALESCE($1, price_units),
-            price = COALESCE($1, price_units) / 100.0,
-            supply_units = $2,
-            demand_units = $3,
-            supply = $2 / 1000000.0,
-            demand = $3 / 1000000.0,
-            game_day = $4,
-            last_market_batch_id = $5
-      WHERE product = $6`,
-    [state.last_clearing_price_units, state.open_sell_units, state.open_buy_units, gameDay, state.last_completed_batch_id, instrument.product],
-  );
+  // market_instrument_state is the authoritative clean projection. The
+  // caller rebuilds it directly from market_orders and market_fills.
 }

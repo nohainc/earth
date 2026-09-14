@@ -14,10 +14,10 @@ export type MarketCandle = {
 
 /** Refresh hourly and daily candles after the batch/instrument is completed. */
 export async function refreshMarketCandles(
-  repository: PostgresRepository,
-  instrumentId: string,
-  batchId: number,
+  _repository: PostgresRepository,
+  _instrumentId: string,
+  _batchId: number,
 ): Promise<void> {
-  await repository.query('SELECT earth_refresh_market_candles($1, $2)', [instrumentId, batchId]);
+  // Candle materialization is a later projection concern; the clean market
+  // source of truth is market_fills and market_instrument_state.
 }
-

@@ -53,7 +53,7 @@ export async function getActiveSpotInstrument(repo: PostgresRepository, product:
     `SELECT id, symbol, instrument_type, base_asset_id, quote_asset_id,
             lot_size_units, price_tick_units, status, rules_version
        FROM market_instruments
-      WHERE symbol = $1 AND instrument_type = 'SPOT' AND status = 'active'`,
+      WHERE symbol = $1 AND instrument_type = 'SPOT' AND status = 'ACTIVE'`,
     [spotInstrumentSymbol(product)],
   );
   return result.rows[0] ?? null;
@@ -63,7 +63,7 @@ export async function getActiveMarketInstrument(repo: PostgresRepository, instru
   const result = await repo.query<MarketInstrument>(
     `SELECT id, symbol, instrument_type, base_asset_id, quote_asset_id,
             lot_size_units, price_tick_units, status, rules_version
-       FROM market_instruments WHERE id = $1 AND instrument_type = 'SPOT' AND status = 'active'`,
+       FROM market_instruments WHERE id = $1 AND instrument_type = 'SPOT' AND status = 'ACTIVE'`,
     [instrumentId],
   );
   return result.rows[0] ?? null;
@@ -77,7 +77,7 @@ export async function listActiveSpotInstruments(repo: PostgresRepository): Promi
   const result = await repo.query<{ id: string; product: string }>(
     `SELECT id, lower(regexp_replace(symbol, '^SPOT-', '')) AS product
        FROM market_instruments
-      WHERE instrument_type = 'SPOT' AND status = 'active'
+      WHERE instrument_type = 'SPOT' AND status = 'ACTIVE'
       ORDER BY id`,
   );
   return result.rows;
@@ -87,7 +87,7 @@ export async function listActiveMarketInstruments(repo: PostgresRepository): Pro
   const result = await repo.query<{ id: string; product: string; instrument_type: MarketInstrument['instrument_type']; rules_version: string }>(
     `SELECT id, lower(regexp_replace(symbol, '^SPOT-', '')) AS product, instrument_type, rules_version
        FROM market_instruments
-      WHERE instrument_type = 'SPOT' AND status = 'active'
+      WHERE instrument_type = 'SPOT' AND status = 'ACTIVE'
       ORDER BY id`,
   );
   return result.rows;

@@ -104,8 +104,8 @@ export async function postEconomicResourceMutation(
     const system = await tx.query<{ account_id: string; economic_id: string }>(
       `SELECT a.id::TEXT AS account_id, o.economic_id::TEXT AS economic_id
          FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-        WHERE o.owner_type = 'SYSTEM' AND a.asset_id = $1 AND a.account_type = 'INVENTORY' AND a.status = 'ACTIVE'`,
-      [assetId],
+        WHERE o.economic_id = $2 AND a.asset_id = $1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'`,
+      [assetId, input.delta >= 0 ? 'ECON-RESOURCE-PRODUCTION' : 'ECON-RESOURCE-CONSUMPTION'],
     );
     if (!inventory.rows[0] || !system.rows[0]) return mutateResourceBalanceInTransaction(tx, input);
 
@@ -115,17 +115,17 @@ export async function postEconomicResourceMutation(
     const systemId = system.rows[0].account_id;
     const entries = input.delta >= 0
       ? [
-          { account_id: systemId, delta: (-amountUnits).toString(), reason_code: input.reasonType },
-          { account_id: inventoryId, delta: amountUnits.toString(), reason_code: input.reasonType },
+          { account_id: systemId, asset_id: assetId, delta_units: (-amountUnits).toString(), reason_code: input.reasonType },
+          { account_id: inventoryId, asset_id: assetId, delta_units: amountUnits.toString(), reason_code: input.reasonType },
         ]
       : [
-          { account_id: inventoryId, delta: (-amountUnits).toString(), reason_code: input.reasonType },
-          { account_id: systemId, delta: amountUnits.toString(), reason_code: input.reasonType },
+          { account_id: inventoryId, asset_id: assetId, delta_units: (-amountUnits).toString(), reason_code: input.reasonType },
+          { account_id: systemId, asset_id: assetId, delta_units: amountUnits.toString(), reason_code: input.reasonType },
         ];
     const correlationId = input.correlationId ?? `resource:${input.ownerId}:${input.resource}:${input.reasonType}:${input.reasonId ?? 'none'}:${input.gameDay ?? 0}`;
     const posted = await tx.query<{ transaction_id: string; created: boolean }>(
       'SELECT transaction_id, created FROM earth_post_transaction($1,$2,$3,$4,$5,$6,$7,$8::jsonb)',
-      [correlationId, input.gameDay ?? 0, input.gameMinute ?? 0, input.reasonType, 'interactive', input.reasonId ?? null, 'resource-v2', JSON.stringify(entries)],
+      [correlationId, input.gameDay ?? 0, input.gameMinute ?? 0, input.delta >= 0 ? 'RESOURCE_PRODUCTION' : 'RESOURCE_CONSUMPTION', input.delta >= 0 ? 'SYSTEM_PRODUCTION' : 'SYSTEM_CONSUMPTION', input.reasonId ?? null, 'resource-v3', JSON.stringify(entries)],
     );
     const postedRow = posted.rows[0];
     if (!postedRow) throw new Error('V2 resource transaction returned no result');

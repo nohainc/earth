@@ -14,23 +14,31 @@ INSERT INTO owner_registry(id, owner_type, economic_id) VALUES
   ('GLOBAL-BANK', 'BANK', 'ECON-GLOBAL-BANK-001'),
   ('OWNER-MONETARY-ISSUANCE', 'SYSTEM', 'ECON-MONETARY-ISSUANCE'),
   ('OWNER-MONETARY-RETIREMENT', 'SYSTEM', 'ECON-MONETARY-RETIREMENT'),
-  ('OWNER-MARKET-CLEARING', 'SYSTEM', 'ECON-MARKET-CLEARING');
+  ('OWNER-MARKET-CLEARING', 'SYSTEM', 'ECON-MARKET-CLEARING'),
+  ('OWNER-RESOURCE-PRODUCTION', 'SYSTEM', 'ECON-RESOURCE-PRODUCTION'),
+  ('OWNER-RESOURCE-CONSUMPTION', 'SYSTEM', 'ECON-RESOURCE-CONSUMPTION');
+
+SELECT earth_provision_earth_economy('ECON-EARTH-001');
+SELECT earth_provision_bank_economy('ECON-GLOBAL-BANK-001');
 
 INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type) VALUES
-  ('ECON-EARTH-001', 1, 'TREASURY'),
-  ('ECON-EARTH-001', 1, 'OPERATIONS'),
-  ('ECON-EARTH-001', 1, 'RESERVE'),
-  ('ECON-GLOBAL-BANK-001', 1, 'RESERVE'),
-  ('ECON-GLOBAL-BANK-001', 1, 'OPERATIONS'),
-  ('ECON-MONETARY-ISSUANCE', 1, 'TREASURY'),
-  ('ECON-MONETARY-RETIREMENT', 1, 'TREASURY'),
-  ('ECON-MARKET-CLEARING', 1, 'TREASURY');
+  ('ECON-MONETARY-ISSUANCE', 1, 'SYSTEM_ACCOUNT'),
+  ('ECON-MONETARY-RETIREMENT', 1, 'SYSTEM_ACCOUNT'),
+  ('ECON-MARKET-CLEARING', 1, 'SYSTEM_ACCOUNT'),
+  ('ECON-RESOURCE-PRODUCTION', 2, 'SYSTEM_ACCOUNT'),
+  ('ECON-RESOURCE-CONSUMPTION', 2, 'SYSTEM_ACCOUNT');
 
 -- Resource consumption and production are recorded against a canonical system
 -- inventory owner; these accounts are not player wallets and never represent
 -- a second resource authority.
 INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
-SELECT 'ECON-MONETARY-RETIREMENT', id, 'INVENTORY'
+SELECT 'ECON-RESOURCE-PRODUCTION', id, 'SYSTEM_ACCOUNT'
+FROM economic_assets
+WHERE asset_kind = 'RESOURCE'
+ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;
+
+INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
+SELECT 'ECON-RESOURCE-CONSUMPTION', id, 'SYSTEM_ACCOUNT'
 FROM economic_assets
 WHERE asset_kind = 'RESOURCE'
 ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;

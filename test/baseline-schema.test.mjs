@@ -19,7 +19,7 @@ test('migration directory exposes the immutable baseline followed by contiguous 
     .filter((file) => /^\d+_.+\.sql$/.test(file))
     .filter((file) => fs.readFileSync(new URL(file, migrationDir), 'utf8').includes('-- EARTH ACTIVE MIGRATION:'));
   assert.equal(active[0], '001_baseline.sql');
-  assert.deepEqual(active, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql']);
+  assert.deepEqual(active, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql', '004_public_infrastructure_credit.sql', '005_architecture_integrity_report.sql']);
   const migrator = fs.readFileSync(path.resolve(new URL('../scripts/migrate-postgres.mjs', import.meta.url).pathname), 'utf8');
   assert.match(migrator, /activeMigrations/);
   assert.doesNotMatch(migrator, /ALLOW_MIGRATION_REPAIR/);

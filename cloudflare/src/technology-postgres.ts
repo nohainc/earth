@@ -106,10 +106,10 @@ export async function createResearchProject(repository: PostgresRepository, inpu
       JOIN owner_registry payer_owner ON payer_owner.economic_id = payer.owner_economic_id AND payer_owner.id = $1
       JOIN owner_registry system_owner ON system_owner.id = 'SYSTEM'
       JOIN economic_accounts service ON service.owner_economic_id = system_owner.economic_id
-        AND service.asset_id = 1 AND service.account_type = 4 AND service.status = 'active'
-      WHERE payer.asset_id = 1 AND payer.account_type IN (3, 4)
-        AND payer.status = 'active'
-      ORDER BY payer.is_default_settlement DESC, payer.account_type, payer.id
+        AND service.asset_id = 1 AND service.account_type = 'SYSTEM_ACCOUNT' AND service.status = 'ACTIVE'
+      WHERE payer.asset_id = 1 AND payer.account_type = 'OPERATIONS'
+        AND payer.status = 'ACTIVE'
+      ORDER BY payer.id
       LIMIT 1`, [corporationId]);
     if (!fundingAccounts.rows[0]) throw new Error('Corporation V2 funding account or system research account is not provisioned');
     const funding = await tx.query<{ transaction_id: string }>(

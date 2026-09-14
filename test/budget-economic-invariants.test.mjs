@@ -18,10 +18,10 @@ test('only payment paths post balanced Economy V2 transfers', () => {
   const grants = read('cloudflare/src/institution-grants.ts');
   assert.match(spending, /earth_post_transaction/);
   assert.match(grants, /spendBudget\(tx/);
-  assert.match(spending, /delta: \(-input\.amountUnits\)/);
-  assert.match(spending, /delta: input\.amountUnits/);
-  const entries = [{ delta: -12500n }, { delta: 12500n }];
-  assert.equal(entries.reduce((total, entry) => total + entry.delta, 0n), 0n, 'a CREDIT transfer must balance');
+  assert.match(spending, /delta_units: \(-input\.amountUnits\)/);
+  assert.match(spending, /delta_units: input\.amountUnits/);
+  const entries = [{ delta_units: -12500n }, { delta_units: 12500n }];
+  assert.equal(entries.reduce((total, entry) => total + entry.delta_units, 0n), 0n, 'a CREDIT transfer must balance');
 });
 
 test('budget amendments are explicitly non-monetary while reserve transfers are auditable', () => {

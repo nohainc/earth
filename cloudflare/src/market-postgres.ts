@@ -1,24 +1,15 @@
 import type { PostgresRepository } from './repository.ts';
-import { enqueueOutbox } from './outbox-postgres.ts';
 import { marketFeeRate } from './market-rules.ts';
 import { getActiveMarketInstrument, getActiveSpotInstrument, MARKET_ASSET_IDS } from './market-model.ts';
 import { MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { calculateFeeUnits, calculateFeeUnitsBps, calculateQuoteUnits, displayPriceToUnits, displayQuantityToUnits, displayRateToBps, priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { marketBatchId } from './market-time.ts';
-import { closeEscrowAccount, marketAccount, postSettlementBatch, releaseReservation, reserveForOrder } from './market-escrow.ts';
+import { getMarketReservation, marketAccount, marketEconomicAccount, postSettlementBatch, releaseReservation, reserveForOrder, updateReservationRemaining } from './market-escrow.ts';
 import { clearMarketAuction } from './market-clearing-engine.ts';
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 
-type MarketOrderInput = {
-  humanId: string;
-  product: string;
-  side: 'buy' | 'sell';
-  quantity: number;
-  limitPrice: number;
-  correlationId: string;
-  instrumentId?: string;
-};
+type MarketOrderInput = { humanId: string; product: string; side: 'buy' | 'sell'; quantity: number; limitPrice: number; correlationId: string; instrumentId?: string };
 
 const assetIds: Record<string, number> = {
   food: MARKET_ASSET_IDS.FOOD,
@@ -28,192 +19,176 @@ const assetIds: Record<string, number> = {
   compute: MARKET_ASSET_IDS.COMPUTE,
 };
 
+async function ensureMarketBatch(tx: PostgresRepository, gameDay: number, gameMinute: number): Promise<number> {
+  const correlationId = `market-batch:${marketBatchId(gameDay, gameMinute, MARKET_BATCH_GAME_MINUTES)}`;
+  const result = await tx.query<{ id: string }>(
+    `INSERT INTO market_batches (game_day, game_minute, status, correlation_id)
+     VALUES ($1, $2, 'OPEN', $3) ON CONFLICT (correlation_id) DO UPDATE SET correlation_id = EXCLUDED.correlation_id RETURNING id`,
+    [gameDay, gameMinute, correlationId],
+  );
+  return Number(result.rows[0].id);
+}
+
+async function earthTreasury(tx: PostgresRepository): Promise<string | null> {
+  const result = await tx.query<{ account_id: string }>(
+    `SELECT a.id::TEXT AS account_id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+      WHERE o.owner_type = 'EARTH' AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE' LIMIT 1`,
+  );
+  return result.rows[0]?.account_id ?? null;
+}
+
 export async function submitMarketOrder(repository: PostgresRepository, input: MarketOrderInput): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const prior = await tx.query('SELECT * FROM market_orders WHERE owner_economic_id = (SELECT owner.economic_id FROM humans JOIN owner_registry owner ON owner.id = humans.house_id WHERE humans.id = $1) AND correlation_id = $2', [input.humanId, input.correlationId]);
+    const prior = await tx.query('SELECT * FROM market_orders WHERE correlation_id = $1', [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, order: prior.rows[0], correlationId: input.correlationId };
-    const human = await tx.query('SELECT id FROM humans WHERE id = $1', [input.humanId]);
-    if (!human.rows[0]) throw new Error('Human not found');
-    const instrument = input.instrumentId
-      ? await getActiveMarketInstrument(tx, input.instrumentId)
-      : await getActiveSpotInstrument(tx, input.product);
+    const human = await tx.query<{ id: string }>("SELECT id FROM humans WHERE id = $1 AND status = 'ACTIVE'", [input.humanId]);
+    if (!human.rows[0]) throw new Error('Human not found or inactive');
+    const instrument = input.instrumentId ? await getActiveMarketInstrument(tx, input.instrumentId) : await getActiveSpotInstrument(tx, input.product);
     if (!instrument) throw new Error('Unknown or inactive market instrument');
-    const buyerFeeRate = input.side === 'buy' ? await marketFeeRate(tx, input.humanId) : '0';
-    const sellerFeeRate = input.side === 'sell' ? await marketFeeRate(tx, input.humanId) : '0';
     const quantityUnits = displayQuantityToUnits(input.quantity);
     const limitPriceUnits = displayPriceToUnits(input.limitPrice);
-    const quoteUnits = calculateQuoteUnits(quantityUnits, limitPriceUnits);
-    const reservedCents = input.side === 'buy' ? quoteUnits + calculateFeeUnits(quoteUnits, buyerFeeRate) : 0n;
-    const reserved = input.side === 'buy' ? centsToMoney(reservedCents) : '0.00';
+    const buyerFeeRate = input.side === 'buy' ? await marketFeeRate(tx, input.humanId) : '0';
+    const reservedCents = input.side === 'buy' ? calculateQuoteUnits(quantityUnits, limitPriceUnits) + calculateFeeUnits(calculateQuoteUnits(quantityUnits, limitPriceUnits), buyerFeeRate) : 0n;
     const buyerFeeBps = input.side === 'buy' ? displayRateToBps(buyerFeeRate) : 0;
-    const sellerFeeBps = input.side === 'sell' ? displayRateToBps(sellerFeeRate) : 0;
-    const orderRulesSnapshot = JSON.stringify({
-      rulesVersion: instrument.rules_version,
-      buyerFeeBps,
-      sellerFeeBps,
-      lotSizeUnits: instrument.lot_size_units,
-      priceTickUnits: instrument.price_tick_units,
-    });
-    const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'");
-    const gameDay = Number(world.rows[0]?.game_day ?? 0);
-    const gameMinute = Number(world.rows[0]?.game_minute ?? 0);
-    const eligibleBatchId = marketBatchId(gameDay, gameMinute, MARKET_BATCH_GAME_MINUTES) + 1;
-    const orderId = crypto.randomUUID();
-    const marketAssetId = instrument.base_asset_id;
-    let v2Escrow: string;
-    if (input.side === 'sell') {
-      const inventoryAccount = await marketAccount(tx, input.humanId, marketAssetId);
-      if (!inventoryAccount) throw new Error(`Market ${input.product} inventory account is missing`);
-      v2Escrow = await reserveForOrder(tx, { ownerId: input.humanId, assetId: marketAssetId, sourceAccountId: inventoryAccount, amountUnits: quantityUnits, orderId, gameDay, reason: 'market_sell_escrow' });
-    } else {
-      const buyerAccount = await marketAccount(tx, input.humanId, 1);
-      if (!buyerAccount) throw new Error('Market CREDIT account is missing');
-      const buyerBalance = await tx.query<{ balance: string }>('SELECT balance::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [buyerAccount]);
-      if (!buyerBalance.rows[0] || BigInt(buyerBalance.rows[0].balance) < reservedCents) throw new Error('Insufficient Credits to reserve this order');
-      v2Escrow = await reserveForOrder(tx, { ownerId: input.humanId, assetId: 1, sourceAccountId: buyerAccount, amountUnits: reservedCents, orderId, gameDay, reason: 'market_order_reservation' });
+    const batchId = await ensureMarketBatch(tx, Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), Number((await tx.query<{ game_minute: number }>("SELECT game_minute FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_minute ?? 0));
+    const owner = await tx.query<{ economic_id: string }>(
+      "SELECT o.economic_id::TEXT AS economic_id FROM humans h JOIN owner_registry o ON o.id = h.house_id AND o.owner_type = 'HOUSE' WHERE h.id = $1",
+      [input.humanId],
+    );
+    if (!owner.rows[0]) throw new Error('House economic owner is not provisioned');
+    const sourceAccount = await marketAccount(tx, input.humanId, input.side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.base_asset_id);
+    if (!sourceAccount) throw new Error('House market source account is missing');
+    if (input.side === 'buy') {
+      const balance = await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [sourceAccount]);
+      if (!balance.rows[0] || BigInt(balance.rows[0].balance_units) < reservedCents) throw new Error('Insufficient Credits to reserve this order');
     }
-    await tx.query('INSERT INTO market_orders (id, human_id, product, side, quantity, limit_price, quantity_units, limit_price_units, filled_quantity_units, reserved_quote_units, owner_economic_id, instrument_id, filled_units, eligible_batch_id, escrow_account_id, reserved_base_units, buyer_fee_bps, seller_fee_bps, rules_version, rules_snapshot, submitted_game_day, submitted_game_minute, correlation_id) SELECT $1,$2,$3,$4,$5,$6,$7,$8,0,$9,o.economic_id,$10,0,$11,$12,$13,$14,$15,$16,$17::JSONB,$18,$19,$20 FROM owner_registry o WHERE o.id = COALESCE((SELECT house_id FROM humans WHERE id = $2), $2)', [orderId, input.humanId, input.product, input.side, unitsToDisplayQuantity(quantityUnits), priceUnitsToDisplayPrice(limitPriceUnits), quantityUnits.toString(), limitPriceUnits.toString(), reservedCents.toString(), instrument.id, eligibleBatchId, v2Escrow, input.side === 'sell' ? quantityUnits.toString() : '0', buyerFeeBps, sellerFeeBps, instrument.rules_version, orderRulesSnapshot, gameDay, gameMinute, input.correlationId]);
-    const state = await rebuildMarketInstrumentState(tx, instrument.id);
-    await refreshMarketPriceProjection(tx, instrument, state, gameDay);
+    const orderId = crypto.randomUUID();
+    await tx.query(
+      `INSERT INTO market_orders (id, batch_id, instrument_id, owner_economic_id, side, quantity_units, remaining_units, limit_price_units, buyer_fee_bps, status, rules_version, correlation_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'OPEN', $9, $10)`,
+      [orderId, batchId, instrument.id, owner.rows[0].economic_id, input.side.toUpperCase(), quantityUnits.toString(), limitPriceUnits.toString(), buyerFeeBps, instrument.rules_version, input.correlationId],
+    );
+    await reserveForOrder(tx, { ownerId: input.humanId, assetId: input.side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.base_asset_id, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' });
+    await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0));
     const order = await tx.query('SELECT * FROM market_orders WHERE id = $1', [orderId]);
     return { ok: true, order: order.rows[0], correlationId: input.correlationId };
   });
 }
 
-/** Clear and post every fill for one instrument batch in a single transaction. */
 export async function settleMarketBatch(repository: PostgresRepository, product: string, batchId: number, settlementGameDay?: number, instrumentId?: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const instrument = instrumentId
-      ? await getActiveMarketInstrument(tx, instrumentId)
-      : await getActiveSpotInstrument(tx, product);
+    const instrument = instrumentId ? await getActiveMarketInstrument(tx, instrumentId) : await getActiveSpotInstrument(tx, product);
     if (!instrument) throw new Error('Unknown or inactive market instrument');
-    const state = await rebuildMarketInstrumentState(tx, instrument.id);
-    const game = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'");
-    const orders = await tx.query<Record<string, unknown>>("SELECT * FROM market_orders WHERE instrument_id = $1 AND status IN ('open','partial') AND eligible_batch_id <= $2 AND ((side = 'buy' AND reserved_quote_units > 0) OR (side = 'sell' AND reserved_base_units > 0)) ORDER BY side, limit_price_units, sequence_no FOR UPDATE", [instrument.id, batchId]);
-    const buyRows = orders.rows.filter((row) => row.side === 'buy');
-    const sellRows = orders.rows.filter((row) => row.side === 'sell');
+    const orders = await tx.query<Record<string, unknown>>(
+      `SELECT * FROM market_orders WHERE batch_id = $1 AND status IN ('OPEN','PARTIAL') AND remaining_units > 0 ORDER BY created_at, id FOR UPDATE`,
+      [batchId],
+    );
+    const buys = orders.rows.filter((row) => row.side === 'BUY');
+    const sells = orders.rows.filter((row) => row.side === 'SELL');
     const auction = clearMarketAuction({
-      previousClearingPriceUnits: BigInt(state.last_clearing_price_units ?? 0),
-      buyOrders: buyRows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'BUY' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
-      sellOrders: sellRows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
+      previousClearingPriceUnits: 0n,
+      buyOrders: buys.map((row, sequenceNo) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'BUY' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.quantity_units)) - BigInt(String(row.remaining_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(sequenceNo) })),
+      sellOrders: sells.map((row, sequenceNo) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.quantity_units)) - BigInt(String(row.remaining_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(sequenceNo) })),
     });
-    if (!auction.fills.length) return { ok: true, filled: false, fillCount: 0, selfTradePreventedUnits: auction.statistics.selfTradePreventedUnits.toString() };
-    const day = settlementGameDay ?? Number(game.rows[0]?.game_day ?? 0);
-    const effects = new Map<string, { accountId: string; assetId: number; delta: bigint; reason: string }>();
-    const addEffect = (accountId: string, assetId: number, delta: bigint, reason: string) => {
+    if (!auction.fills.length) return { ok: true, filled: false, fillCount: 0 };
+    const day = settlementGameDay ?? Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
+    const effects = new Map<string, EscrowEffect>();
+    const add = (accountId: string, assetId: number, delta: bigint, reason: string) => {
       const key = `${accountId}:${assetId}`;
-      const existing = effects.get(key);
-      if (existing) existing.delta += delta;
+      const prior = effects.get(key);
+      if (prior) prior.delta += delta;
       else effects.set(key, { accountId, assetId, delta, reason });
     };
-    const orderUpdates = new Map<string, { filled: bigint; quote: bigint; base: bigint; status: string }>();
-    const fillRows: Array<Record<string, string>> = [];
-    const closeAccounts = new Set<string>();
-    const ouc = (await tx.query<{ economic_account_id: string }>('SELECT economic_account_id::TEXT FROM economic_account_migrations WHERE legacy_account_id = $1', ['account-ouc-treasury'])).rows[0]?.economic_account_id;
+    const updates = new Map<string, bigint>();
+    const reservationMoves = new Map<string, { orderId: string; assetId: number; amount: bigint; finalStatus?: 'CONSUMED' | 'RELEASED' }>();
+    const addReservationMove = (orderId: string, assetId: number, amount: bigint) => {
+      const key = `${orderId}:${assetId}`;
+      const prior = reservationMoves.get(key);
+      if (prior) prior.amount += amount;
+      else reservationMoves.set(key, { orderId, assetId, amount });
+    };
+    const earth = await earthTreasury(tx);
+    if (!earth) throw new Error('EARTH treasury is not provisioned');
     for (const fill of auction.fills) {
-      const buy = buyRows.find((row) => String(row.id) === fill.buyOrderId)!;
-      const sell = sellRows.find((row) => String(row.id) === fill.sellOrderId)!;
-      const total = calculateQuoteUnits(fill.quantityUnits, fill.priceUnits);
-      const fee = calculateFeeUnitsBps(total, String(buy.buyer_fee_bps ?? 0));
-      const limitQuote = calculateQuoteUnits(fill.quantityUnits, BigInt(String(buy.limit_price_units)));
-      const used = limitQuote + calculateFeeUnitsBps(limitQuote, String(buy.buyer_fee_bps ?? 0));
-      const refund = used - (total + fee);
-      const buyEscrow = String(buy.escrow_account_id); const sellEscrow = String(sell.escrow_account_id);
-      const sellerAccount = await marketAccount(tx, String(sell.human_id), 1);
-      const buyerAccount = await marketAccount(tx, String(buy.human_id), 1);
-      const buyerInventory = await marketAccount(tx, String(buy.human_id), instrument.base_asset_id);
-      if (!sellerAccount || !buyerAccount || !buyerInventory || !ouc || !buy.escrow_account_id || !sell.escrow_account_id) throw new Error('Market batch settlement accounts are missing');
-      addEffect(buyEscrow, 1, -used, 'market_batch_trade');
-      addEffect(sellerAccount, 1, total, 'market_batch_trade');
-      if (fee > 0n) addEffect(ouc, 1, fee, 'market_batch_fee');
-      if (refund > 0n) addEffect(buyerAccount, 1, refund, 'market_batch_refund');
-      addEffect(sellEscrow, instrument.base_asset_id, -fill.quantityUnits, 'market_batch_trade');
-      addEffect(buyerInventory, instrument.base_asset_id, fill.quantityUnits, 'market_batch_trade');
-      const buyUpdate = orderUpdates.get(String(buy.id)) ?? { filled: BigInt(String(buy.filled_quantity_units)), quote: BigInt(String(buy.reserved_quote_units)), base: 0n, status: 'partial' };
-      buyUpdate.filled += fill.quantityUnits; buyUpdate.quote = buyUpdate.quote >= used ? buyUpdate.quote - used : 0n;
-      if (buyUpdate.filled >= BigInt(String(buy.quantity_units))) { buyUpdate.status = 'filled'; closeAccounts.add(buyEscrow); }
-      orderUpdates.set(String(buy.id), buyUpdate);
-      const sellUpdate = orderUpdates.get(String(sell.id)) ?? { filled: BigInt(String(sell.filled_quantity_units)), quote: 0n, base: BigInt(String(sell.reserved_base_units)), status: 'partial' };
-      sellUpdate.filled += fill.quantityUnits; sellUpdate.base = sellUpdate.base >= fill.quantityUnits ? sellUpdate.base - fill.quantityUnits : 0n;
-      if (sellUpdate.filled >= BigInt(String(sell.quantity_units))) { sellUpdate.status = 'filled'; closeAccounts.add(sellEscrow); }
-      orderUpdates.set(String(sell.id), sellUpdate);
-      fillRows.push({ id: crypto.randomUUID(), batch_id: String(batchId), instrument_id: instrument.id, buy_order_id: String(buy.id), sell_order_id: String(sell.id), buyer_economic_id: String(buy.owner_economic_id), seller_economic_id: String(sell.owner_economic_id), quantity_units: fill.quantityUnits.toString(), price_units: fill.priceUnits.toString(), quote_units: total.toString(), gross_quote_units: total.toString(), fee_units: fee.toString(), buyer_fee_units: fee.toString(), seller_fee_units: '0', sequence_no: String(fillRows.length + 1), game_day: String(day), game_minute: String(game.rows[0]?.game_minute ?? 0) });
+      const buy = buys.find((row) => String(row.id) === fill.buyOrderId)!;
+      const sell = sells.find((row) => String(row.id) === fill.sellOrderId)!;
+      const quote = calculateQuoteUnits(fill.quantityUnits, fill.priceUnits);
+      const buyerFee = calculateFeeUnitsBps(quote, String(buy.buyer_fee_bps ?? 0));
+      const buyerReservation = await getMarketReservation(tx, String(buy.id), MARKET_ASSET_IDS.CREDIT);
+      const sellerReservation = await getMarketReservation(tx, String(sell.id), instrument.base_asset_id);
+      const sellerWallet = await marketEconomicAccount(tx, String(sell.owner_economic_id), MARKET_ASSET_IDS.CREDIT);
+      const buyerInventory = await marketEconomicAccount(tx, String(buy.owner_economic_id), instrument.base_asset_id);
+      if (!buyerReservation || !sellerReservation || !sellerWallet || !buyerInventory) throw new Error('Market reservation or destination account is missing');
+      const used = quote + buyerFee;
+      add(buyerReservation.escrow_account_id, MARKET_ASSET_IDS.CREDIT, -used, 'market_batch_trade');
+      add(sellerWallet, MARKET_ASSET_IDS.CREDIT, quote, 'market_batch_trade');
+      add(earth, MARKET_ASSET_IDS.CREDIT, buyerFee, 'market_batch_fee');
+      add(sellerReservation.escrow_account_id, instrument.base_asset_id, -fill.quantityUnits, 'market_batch_trade');
+      add(buyerInventory, instrument.base_asset_id, fill.quantityUnits, 'market_batch_trade');
+      updates.set(String(buy.id), (updates.get(String(buy.id)) ?? 0n) + fill.quantityUnits);
+      updates.set(String(sell.id), (updates.get(String(sell.id)) ?? 0n) + fill.quantityUnits);
+      addReservationMove(String(buy.id), MARKET_ASSET_IDS.CREDIT, used);
+      addReservationMove(String(sell.id), instrument.base_asset_id, fill.quantityUnits);
     }
-    const entries = [...effects.values()].filter((entry) => entry.delta !== 0n);
-    const posted = await postSettlementBatch(tx, day, `market-batch:${batchId}:${instrument.id}`, `${batchId}:${instrument.id}`, entries);
-    if (!posted.created) return { ok: true, filled: false, alreadyProcessed: true, fillCount: fillRows.length };
-    const updateRows = [...orderUpdates.entries()].map(([orderId, update]) => ({ order_id: orderId, filled: update.filled.toString(), quote: update.quote.toString(), base: update.base.toString(), status: update.status }));
-    await tx.query(`WITH updates AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(order_id UUID, filled BIGINT, quote BIGINT, base BIGINT, status TEXT))
-      UPDATE market_orders o SET filled_quantity_units = u.filled, filled_units = u.filled, reserved_quote_units = u.quote, reserved_base_units = u.base, filled_quantity = u.filled / 1000000.0, status = u.status WHERE o.id = u.order_id`, [JSON.stringify(updateRows)]);
-    const persistedFillRows = fillRows.map((row) => ({ ...row, economic_transaction_id: posted.transactionId }));
-    await tx.query(`INSERT INTO market_fills (id, batch_id, instrument_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id, quantity_units, price_units, quote_units, gross_quote_units, fee_units, buyer_fee_units, seller_fee_units, economic_transaction_id, sequence_no, game_day, game_minute)
-      SELECT id, batch_id, instrument_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id, quantity_units, price_units, quote_units, gross_quote_units, fee_units, buyer_fee_units, seller_fee_units, economic_transaction_id, sequence_no, game_day, game_minute FROM jsonb_to_recordset($1::jsonb) AS x(id UUID, batch_id BIGINT, instrument_id TEXT, buy_order_id UUID, sell_order_id UUID, buyer_economic_id BIGINT, seller_economic_id BIGINT, quantity_units BIGINT, price_units BIGINT, quote_units BIGINT, gross_quote_units BIGINT, fee_units BIGINT, buyer_fee_units BIGINT, seller_fee_units BIGINT, economic_transaction_id BIGINT, sequence_no BIGINT, game_day BIGINT, game_minute INTEGER) ON CONFLICT DO NOTHING`, [JSON.stringify(persistedFillRows)]);
-    for (const [sequence, fill] of auction.fills.entries()) {
-      const buy = buyRows.find((row) => String(row.id) === fill.buyOrderId)!;
-      const sell = sellRows.find((row) => String(row.id) === fill.sellOrderId)!;
-      await createGameEvent(tx, {
-        id: `MARKET-TRADE-${batchId}-${instrument.id}-${sequence + 1}`,
-        category: 'MARKET',
-        eventType: 'MARKET_TRADE',
-        gameDay: day,
-        subjectType: 'MARKET_INSTRUMENT',
-        subjectId: instrument.id,
-        title: `${instrument.symbol ?? product} market trade cleared`,
-        details: {
-          batchId,
-          instrumentId: instrument.id,
-          buyOrderId: buy.id,
-          sellOrderId: sell.id,
-          quantityUnits: fill.quantityUnits.toString(),
-          priceUnits: fill.priceUnits.toString(),
-          quoteUnits: calculateQuoteUnits(fill.quantityUnits, fill.priceUnits).toString(),
-          economicTransactionId: posted.transactionId,
-        },
-        correlationId: `market-trade:${batchId}:${instrument.id}:${sequence + 1}`,
-      });
+    for (const [orderId, filled] of updates) {
+      const order = orders.rows.find((row) => String(row.id) === orderId)!;
+      const remainingAfterFill = BigInt(String(order.remaining_units)) - filled;
+      if (remainingAfterFill !== 0n || order.side !== 'BUY') continue;
+      const move = reservationMoves.get(`${orderId}:${MARKET_ASSET_IDS.CREDIT}`)!;
+      const reservation = await getMarketReservation(tx, orderId, MARKET_ASSET_IDS.CREDIT);
+      const buyerWallet = await marketEconomicAccount(tx, String(order.owner_economic_id), MARKET_ASSET_IDS.CREDIT);
+      if (!reservation || !buyerWallet) throw new Error('Buyer reservation or wallet is missing');
+      const refund = BigInt(String(reservation.remaining_units)) - move.amount;
+      if (refund > 0n) {
+        add(reservation.escrow_account_id, MARKET_ASSET_IDS.CREDIT, refund, 'market_order_reservation_release');
+        add(buyerWallet, MARKET_ASSET_IDS.CREDIT, refund, 'market_order_reservation_release');
+        move.amount += refund;
+      }
+      move.finalStatus = 'RELEASED';
     }
-    const volume = auction.fills.reduce((sum, fill) => sum + fill.quantityUnits, 0n);
-    for (const accountId of closeAccounts) await closeEscrowAccount(tx, accountId, `${batchId}:${instrument.id}`);
-    const rebuiltState = await rebuildMarketInstrumentState(tx, instrument.id);
-    await refreshMarketPriceProjection(tx, instrument, rebuiltState, day);
-    return { ok: true, filled: true, fillCount: fillRows.length, quantityUnits: volume.toString(), clearingPriceUnits: auction.clearingPriceUnits?.toString() ?? null, economicTransactionId: posted.transactionId, selfTradePreventedUnits: auction.statistics.selfTradePreventedUnits.toString() };
+    const posted = await postSettlementBatch(tx, day, `market-batch:${batchId}:${instrument.id}`, `${batchId}:${instrument.id}`, [...effects.values()].filter((entry) => entry.delta !== 0n));
+    if (!posted.created) return { ok: true, filled: false, alreadyProcessed: true, fillCount: auction.fills.length };
+    for (const move of reservationMoves.values()) await updateReservationRemaining(tx, move.orderId, move.assetId, move.amount, move.finalStatus);
+    for (const [orderId, filled] of updates) await tx.query(`UPDATE market_orders SET remaining_units = remaining_units - $1, status = CASE WHEN remaining_units - $1 = 0 THEN 'FILLED' ELSE 'PARTIAL' END WHERE id = $2`, [filled.toString(), orderId]);
+    for (const [sequenceNo, fill] of auction.fills.entries()) {
+      const buy = buys.find((row) => String(row.id) === fill.buyOrderId)!;
+      const sell = sells.find((row) => String(row.id) === fill.sellOrderId)!;
+      await tx.query(
+        `INSERT INTO market_fills (batch_id, instrument_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id, quantity_units, price_units, gross_quote_units, buyer_fee_units, seller_fee_units, economic_transaction_id, sequence_no)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12) ON CONFLICT (batch_id, sequence_no) DO NOTHING`,
+        [batchId, instrument.id, buy.id, sell.id, buy.owner_economic_id, sell.owner_economic_id, fill.quantityUnits.toString(), fill.priceUnits.toString(), calculateQuoteUnits(fill.quantityUnits, fill.priceUnits).toString(), '0', posted.transactionId, sequenceNo + 1],
+      );
+      await createGameEvent(tx, { id: `MARKET-TRADE-${batchId}-${instrument.id}-${sequenceNo + 1}`, category: 'MARKET', eventType: 'MARKET_TRADE', gameDay: day, subjectType: 'MARKET_INSTRUMENT', subjectId: instrument.id, title: `${instrument.symbol} market trade cleared`, details: { batchId, instrumentId: instrument.id, buyOrderId: buy.id, sellOrderId: sell.id, quantityUnits: fill.quantityUnits.toString(), priceUnits: fill.priceUnits.toString(), economicTransactionId: posted.transactionId }, correlationId: `market-trade:${batchId}:${instrument.id}:${sequenceNo + 1}` });
+    }
+    await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), day);
+    return { ok: true, filled: true, fillCount: auction.fills.length, quantityUnits: auction.fills.reduce((sum, fill) => sum + fill.quantityUnits, 0n).toString(), economicTransactionId: posted.transactionId };
   });
 }
 
+type EscrowEffect = { accountId: string; assetId: number; delta: bigint; reason: string };
+
 export async function listMarketOrders(repository: PostgresRepository, product: string | null): Promise<Record<string, unknown>> {
   const result = product
-    ? await repository.query('SELECT * FROM market_orders WHERE product = $1 ORDER BY created_at DESC LIMIT 100', [product])
+    ? await repository.query(`SELECT o.* FROM market_orders o JOIN market_instruments i ON i.id = o.instrument_id WHERE i.symbol = $1 ORDER BY o.created_at DESC LIMIT 100`, [`SPOT-${product.trim().toUpperCase()}`])
     : await repository.query('SELECT * FROM market_orders ORDER BY created_at DESC LIMIT 100');
   return { orders: result.rows };
 }
 
 export async function cancelMarketOrder(repository: PostgresRepository, input: { orderId: string; humanId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-      const order = await tx.query<Record<string, unknown>>("SELECT * FROM market_orders WHERE id = $1 AND owner_economic_id = (SELECT owner.economic_id FROM humans JOIN owner_registry owner ON owner.id = humans.house_id WHERE humans.id = $2) AND status IN ('open','partial') FOR UPDATE", [input.orderId, input.humanId]);
+    const order = await tx.query<Record<string, unknown>>(
+      `SELECT o.* FROM market_orders o JOIN humans h ON h.house_id = (SELECT id FROM owner_registry WHERE economic_id = o.owner_economic_id) WHERE o.id = $1 AND h.id = $2 AND o.status IN ('OPEN','PARTIAL') FOR UPDATE`,
+      [input.orderId, input.humanId],
+    );
     if (!order.rows[0]) throw new Error('Open order not found for this Human');
     const current = order.rows[0];
-    const remainingUnits = BigInt(String(current.quantity_units)) - BigInt(String(current.filled_quantity_units));
-    const remaining = Number(unitsToDisplayQuantity(remainingUnits));
-    const day = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
+    const reservation = await getMarketReservation(tx, input.orderId);
     const instrument = await getActiveMarketInstrument(tx, String(current.instrument_id));
-    if (String(current.side) === 'sell') {
-      const inventory = await marketAccount(tx, input.humanId, assetIds[String(current.product)]);
-      if (!inventory || !current.escrow_account_id) throw new Error('Market V2 sell escrow is missing');
-      await releaseReservation(tx, { escrowAccountId: String(current.escrow_account_id), destinationAccountId: inventory, assetId: assetIds[String(current.product)], amountUnits: remainingUnits, orderId: input.orderId, gameDay: day, reason: 'market_order_cancel_refund' });
-      await closeEscrowAccount(tx, String(current.escrow_account_id), input.orderId);
-    } else {
-      const v2Buyer = await marketAccount(tx, input.humanId, 1);
-      if (!v2Buyer || !current.escrow_account_id) throw new Error('Market V2 buy escrow is missing');
-      const refundUnits = BigInt(String(current.reserved_quote_units));
-      if (refundUnits > 0n) await releaseReservation(tx, { escrowAccountId: String(current.escrow_account_id), destinationAccountId: v2Buyer, assetId: 1, amountUnits: refundUnits, orderId: input.orderId, gameDay: day, reason: 'market_order_cancellation' });
-      await closeEscrowAccount(tx, String(current.escrow_account_id), input.orderId);
-    }
-    await tx.query("UPDATE market_orders SET status = 'cancelled', reserved_quote_units = 0, reserved_base_units = 0 WHERE id = $1 AND owner_economic_id = (SELECT owner.economic_id FROM humans JOIN owner_registry owner ON owner.id = humans.house_id WHERE humans.id = $2)", [input.orderId, input.humanId]);
-    const spotInstrument = await getActiveSpotInstrument(tx, String(current.product));
-    if (spotInstrument) {
-      const state = await rebuildMarketInstrumentState(tx, spotInstrument.id);
-      await refreshMarketPriceProjection(tx, spotInstrument, state, day);
-    }
-    return { ok: true, orderId: input.orderId, released: remaining, side: current.side };
+    if (!reservation || !instrument) throw new Error('Market reservation is missing');
+    const destination = await marketAccount(tx, input.humanId, reservation.asset_id);
+    if (!destination) throw new Error('House refund account is missing');
+    await releaseReservation(tx, { escrowAccountId: reservation.escrow_account_id, destinationAccountId: destination, assetId: reservation.asset_id, amountUnits: BigInt(reservation.remaining_units), orderId: input.orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: 'market_order_cancellation' });
+    await tx.query("UPDATE market_orders SET status = 'CANCELLED', remaining_units = 0 WHERE id = $1", [input.orderId]);
+    return { ok: true, orderId: input.orderId, released: reservation.remaining_units, side: current.side };
   });
 }

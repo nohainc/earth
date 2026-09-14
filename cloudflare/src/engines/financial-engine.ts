@@ -29,10 +29,10 @@ export async function settleContinuousFinancials(
     owners.set(building.owner_id, { condition: 100 });
   }
   for (const [ownerId, owner] of owners) {
-    const balance = (await repo.query<{ balance: string }>(
-      "SELECT COALESCE(a.balance_units, 0)::TEXT AS balance FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'",
+    const balance = (await repo.query<{ balance_units: string }>(
+      "SELECT COALESCE(a.balance_units, 0)::TEXT AS balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'",
       [ownerId],
-    )).rows[0]?.balance ?? '0';
+    )).rows[0]?.balance_units ?? '0';
     if (Number(balance) < 0 || owner.condition < 10) {
       await repo.query("UPDATE buildings SET status = 'inactive' WHERE owner_id = $1 AND ownership_class = 'private' AND status = 'active'", [ownerId]);
     }

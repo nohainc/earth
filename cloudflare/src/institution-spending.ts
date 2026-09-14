@@ -37,9 +37,9 @@ export async function spendInstitutionBudget(
     throw new Error('Discretionary spending is frozen during financial stress');
   }
 
-  const source = await tx.query<{ balance: string }>('SELECT balance::TEXT AS balance FROM economic_accounts WHERE id = $1 AND status = \'active\' FOR UPDATE', [input.sourceAccountId]);
+  const source = await tx.query<{ balance_units: string; asset_id: number }>('SELECT balance_units::TEXT AS balance_units, asset_id FROM economic_accounts WHERE id = $1 AND status = \'ACTIVE\' FOR UPDATE', [input.sourceAccountId]);
   if (!source.rows[0]) throw new Error('Institution source account is unavailable');
-  if (BigInt(source.rows[0].balance) < input.amountUnits) throw new Error('Institution source account cannot fund this spending');
+  if (BigInt(source.rows[0].balance_units) < input.amountUnits) throw new Error('Institution source account cannot fund this spending');
 
   if (input.commitmentId) {
     const commitment = await tx.query<{ remaining_units: string; budget_line_id: string; status: string }>(
@@ -77,8 +77,8 @@ export async function spendInstitutionBudget(
   const posting = await tx.query<{ transaction_id: string; created: boolean }>(
     `SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,$3,$4,$5,$6,$7::jsonb)`,
     [input.correlationId, input.gameDay, input.purpose, input.sourceType, input.sourceId, 'institution-budget-v2', JSON.stringify([
-      { account_id: input.sourceAccountId, delta: (-input.amountUnits).toString(), reason_code: input.purpose },
-      { account_id: input.recipientAccountId, delta: input.amountUnits.toString(), reason_code: input.purpose },
+      { account_id: input.sourceAccountId, asset_id: source.rows[0].asset_id, delta_units: (-input.amountUnits).toString(), reason_code: input.purpose },
+      { account_id: input.recipientAccountId, asset_id: source.rows[0].asset_id, delta_units: input.amountUnits.toString(), reason_code: input.purpose },
     ])],
   );
   const postingRow = posting.rows[0];

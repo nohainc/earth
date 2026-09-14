@@ -6,7 +6,7 @@ import { createGameEvent } from './game-events-postgres.ts';
 async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: string, day: number): Promise<{ units: bigint; ruleVersion: string | null; transitionDays: number }> {
   const rule = await tx.query<{ id: string; value_json: unknown }>(
     `SELECT id, value_json FROM governance_rules
-      WHERE institution_id = 'OUC' AND category = 'succession' AND status = 'active'
+      WHERE institution_id = 'EARTH' AND category = 'succession' AND status = 'active'
         AND effective_from_game_day <= $1
         AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
       ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day],
@@ -15,17 +15,17 @@ async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: stri
   const value = typeof rule.rows[0].value_json === 'string'
     ? fromNanoMarkup<Record<string, unknown>>(rule.rows[0].value_json)
     : (rule.rows[0].value_json as Record<string, unknown> ?? {});
-  const accounts = await tx.query<{ owner_id: string; account_id: string; balance: string }>(
-    `SELECT o.id AS owner_id, a.id::TEXT AS account_id, a.balance::TEXT AS balance
+  const accounts = await tx.query<{ owner_id: string; account_id: string; balance_units: string }>(
+    `SELECT o.id AS owner_id, a.id::TEXT AS account_id, a.balance_units::TEXT AS balance_units
        FROM owner_registry o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
-      WHERE o.id = ANY($1::TEXT[]) AND a.asset_id = 1 AND a.is_default_settlement
-        AND a.status = 'active' AND a.account_type IN (1, 3)
-      ORDER BY o.id FOR UPDATE`, [['OUC', houseId]],
+      WHERE o.id = ANY($1::TEXT[]) AND a.asset_id = 1
+        AND a.status = 'ACTIVE' AND a.account_type IN ('WALLET', 'TREASURY')
+      ORDER BY o.id FOR UPDATE`, [['EARTH', houseId]],
   );
   const house = accounts.rows.find((account) => account.owner_id === houseId);
-  const ouc = accounts.rows.find((account) => account.owner_id === 'OUC');
-  if (!house || !ouc) throw new Error('Succession cost requires House and OUC CREDIT accounts');
-  const balance = BigInt(house.balance);
+  const ouc = accounts.rows.find((account) => account.owner_id === 'EARTH');
+  if (!house || !ouc) throw new Error('Succession cost requires House and EARTH CREDIT accounts');
+  const balance = BigInt(house.balance_units);
   const fixedUnits = BigInt(String(value.successionCostUnits ?? 0));
   const costBps = BigInt(String(value.successionCostBps ?? 0));
   const transitionDays = Math.max(0, Math.min(7, Math.trunc(Number(value.successionTransitionDays ?? 1))));
@@ -35,8 +35,8 @@ async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: stri
   await tx.query(
     `SELECT transaction_id FROM earth_post_transaction($1,$2,0,'SUCCESSION_COST','HOUSE',$3,$4,$5::jsonb)`,
     [`succession-cost:${houseId}:${day}`, day, houseId, rule.rows[0].id, JSON.stringify([
-      { account_id: house.account_id, delta: (-units).toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
-      { account_id: ouc.account_id, delta: units.toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
+      { account_id: house.account_id, asset_id: 1, delta_units: (-units).toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
+      { account_id: ouc.account_id, asset_id: 1, delta_units: units.toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
     ])],
   );
   return { units, ruleVersion: rule.rows[0].id, transitionDays };
@@ -136,14 +136,8 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
              COALESCE(condition.score, 100) AS life_condition_score,
              COALESCE(maintenance.recent_food_shortfall_days, 0) AS recent_food_shortfall_days,
              COALESCE(maintenance.recent_missed_maintenance_days, 0) AS recent_missed_maintenance_days,
-             CASE WHEN city.id IS NULL OR city.residents <= 0 THEN world.essential_services_index
-                  ELSE LEAST(1, city.health_capacity::numeric / GREATEST(1, city.residents)) END AS health_service_coverage,
-             CASE WHEN city.id IS NULL OR city.residents <= 0 THEN world.essential_services_index
-                  ELSE LEAST(1,
-                    city.housing_capacity::numeric / GREATEST(1, city.residents),
-                    city.energy_capacity::numeric / GREATEST(1, city.residents),
-                    city.connectivity_capacity::numeric / GREATEST(1, city.residents),
-                    city.health_capacity::numeric / GREATEST(1, city.residents)) END AS city_service_index
+             world.essential_services_index AS health_service_coverage,
+             world.essential_services_index AS city_service_index
         FROM humans human
         JOIN houses house ON house.id = human.house_id AND house.status = 'ACTIVE'
         CROSS JOIN world_state world
@@ -156,8 +150,6 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
            WHERE game_day BETWEEN $1 - 7 AND $1 - 1
            GROUP BY human_id
         ) maintenance ON maintenance.human_id = human.id
-        LEFT JOIN house_affiliations affiliation ON affiliation.house_id = house.id AND affiliation.status = 'ACTIVE'
-        LEFT JOIN cities city ON city.id = affiliation.city_id
         LEFT JOIN house_succession_plans plan
           ON plan.house_id = house.id AND plan.status = 'ACTIVE'
        WHERE human.life_status = 'active' AND human.age_years >= 65 AND world.id = 'WORLD'
@@ -187,8 +179,6 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     if (existingSuccession.rows[0]?.status === 'COMPLETED') continue;
     const newHumanId = `H-${human.house_id}-${nextGeneration}`;
     const newAccountId = `human-${human.house_id.toLowerCase()}-${nextGeneration}`;
-
-    await tx.query("INSERT INTO owner_registry (id, owner_type, source_id, status) VALUES ($1, 'human', $1, 'active')", [newHumanId]);
     await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, age_years, standing, legacy, life_status, activation_game_day, political_eligibility_game_day)
                     VALUES ($1, $2, $3, $4, 20, $5, $6, 'pending', $7, $8)`,
       [newHumanId, newAccountId, human.house_id, successorName, emergency ? -100 : 0, 0, day + 1, day + 30]);

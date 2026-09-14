@@ -20,7 +20,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO humans (id,account_id,house_id,display_name,birth_game_day,age_years) VALUES ($1,$2,$3,$4,$5,31)', [humanId, accountId, houseId, `${input.personName} ${input.houseSurname}`, worldDay - 31 * 365]);
     await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
     await tx.query("INSERT INTO owner_registry (id,owner_type,economic_id) VALUES ($1,'HOUSE',$2)", [houseId, economicId]);
-    await tx.query("INSERT INTO economic_accounts (owner_economic_id,asset_id,account_type) SELECT $1,id,CASE WHEN asset_kind='CREDIT' THEN 'WALLET' ELSE 'INVENTORY' END FROM economic_assets", [economicId]);
+    await tx.query('SELECT earth_provision_house_economy($1)', [economicId]);
     const starterAssets = [
       [1, starter.credits * 100],
       [2, starter.resources.material * 1_000_000],

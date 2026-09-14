@@ -3,6 +3,7 @@ import type { FeatureConfig } from './feature-config.ts';
 import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { createDailySettlementPhaseRegistry, type DailySettlementPhaseContext } from './daily-settlement-phases.ts';
 import { settleCorporationDynamics, settleTerritoryCapacityProjections } from './territory-settlement-postgres.ts';
+import { settleBuildingUpkeepAndRevenueV2 } from './building-settlement-v2.ts';
 
 export type SettlementResult = { status: 'completed' | 'already_processed' | 'busy' | 'failed'; gameDay: number; phasesCompleted: number };
 
@@ -15,7 +16,7 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   lifeMaintenance: noOpPhase,
   basicLevy: noOpPhase,
   ipLicenseBilling: noOpPhase,
-  buildingSettlement: noOpPhase,
+  buildingSettlement: async ({ tx, day }) => settleBuildingUpkeepAndRevenueV2(tx, day),
   corporationIncomeTax: noOpPhase,
   globalBank: noOpPhase,
   bankHealth: noOpPhase,

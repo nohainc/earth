@@ -27,13 +27,18 @@ export async function auditWorld(repository: PostgresRepository, humanId: string
 }
 
 export async function listInstitutions(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const [institutions, territories, corporations, budgets] = await Promise.all([
+  const [institutions, territories, corporations, budgets, earthAccounts] = await Promise.all([
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
     repository.query('SELECT id, corporation_id, name, status FROM territories ORDER BY id'),
     repository.query('SELECT id, status FROM corporations ORDER BY id'),
     repository.query('SELECT id, institution_id, fiscal_period_id, category_id, authorized_units, committed_units, spent_units, status, rule_version FROM institution_budget_lines ORDER BY id'),
+    repository.query(`SELECT a.account_type, a.balance_units::TEXT AS balance_units
+                        FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+                       WHERE o.id = 'EARTH' AND a.asset_id = 1 AND a.account_type IN ('TREASURY', 'OPERATIONS', 'RESERVE') AND a.status = 'ACTIVE'
+                       ORDER BY a.account_type`),
   ]);
-  return { institutions: institutions.rows, community: [], territories: territories.rows, corporation: corporations.rows, membership: [], budgets: budgets.rows };
+  const earth = Object.fromEntries(earthAccounts.rows.map((row) => [row.account_type.toLowerCase(), row.balance_units]));
+  return { institutions: institutions.rows, community: [], territories: territories.rows, corporation: corporations.rows, membership: [], budgets: budgets.rows, earth: { treasury: earth.treasury ?? '0', budgets: budgets.rows.filter((row) => row.institution_id === 'EARTH') } };
 }
 
 export interface RankingsQueryOptions { category?: string; metric?: string; search?: string; limit?: number; offset?: number; currentHumanId?: string; }

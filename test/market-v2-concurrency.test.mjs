@@ -110,10 +110,11 @@ test('duplicate correlations, deadlock retry, and stale leases are safe', async 
   assert.equal(stale.owner, 'worker-b');
 });
 
-test('production market paths use database leases and idempotent posting', () => {
+test('production market paths use clean batch state and idempotent posting', () => {
   const scheduler = fs.readFileSync(new URL('../cloudflare/src/market-scheduler.ts', import.meta.url), 'utf8');
   const escrow = fs.readFileSync(new URL('../cloudflare/src/market-escrow.ts', import.meta.url), 'utf8');
-  assert.match(scheduler, /earth_claim_market_batch_instrument/);
+  assert.match(scheduler, /market_batches WHERE status IN \('OPEN','CLEARING'\)/);
+  assert.doesNotMatch(scheduler, /earth_claim_market_batch_instrument|market_batch_instruments/);
   assert.match(escrow, /earth_post_transaction/);
   assert.match(escrow, /earth_post_settlement_batch/);
   assert.match(escrow, /market-order:\$\{input\.orderId\}:reserve/);

@@ -131,8 +131,17 @@ CREATE TABLE economic_policy_rules (code TEXT PRIMARY KEY, output_multiplier NUM
 
 CREATE TABLE economic_assets (id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, asset_kind TEXT NOT NULL CHECK (asset_kind IN ('CREDIT','RESOURCE')));
 CREATE TABLE owner_registry (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL CHECK (owner_type IN ('EARTH','CORPORATION','HOUSE','BANK','SYSTEM')), economic_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
-CREATE TABLE economic_account_types (code TEXT PRIMARY KEY, asset_kind TEXT NOT NULL, is_escrow BOOLEAN NOT NULL DEFAULT FALSE);
+CREATE TABLE economic_account_types (code TEXT PRIMARY KEY);
+CREATE TABLE economic_account_policies (
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('EARTH','CORPORATION','HOUSE','BANK','SYSTEM')),
+  account_type TEXT NOT NULL REFERENCES economic_account_types(code),
+  allowed_asset_kind TEXT NOT NULL CHECK (allowed_asset_kind IN ('CREDIT','RESOURCE','ANY')),
+  player_visible BOOLEAN NOT NULL DEFAULT TRUE,
+  PRIMARY KEY (owner_type, account_type, allowed_asset_kind)
+);
 CREATE TABLE economic_accounts (id BIGSERIAL PRIMARY KEY, owner_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), asset_id INTEGER NOT NULL REFERENCES economic_assets(id), account_type TEXT NOT NULL REFERENCES economic_account_types(code), balance_units BIGINT NOT NULL DEFAULT 0 CHECK (balance_units >= 0), status TEXT NOT NULL DEFAULT 'ACTIVE', UNIQUE (owner_economic_id, asset_id, account_type));
+CREATE TABLE economic_transaction_kinds (code TEXT PRIMARY KEY, semantic_class TEXT NOT NULL CHECK (semantic_class IN ('ASSET_TRANSFER','CREDIT_ISSUANCE','CREDIT_RETIREMENT','RESOURCE_PRODUCTION','RESOURCE_CONSUMPTION')), asset_kind TEXT NOT NULL CHECK (asset_kind IN ('CREDIT','RESOURCE','ANY')), description TEXT NOT NULL);
+CREATE TABLE economic_source_types (code TEXT PRIMARY KEY, source_class TEXT NOT NULL CHECK (source_class IN ('ACTOR','SYSTEM','MARKET','GOVERNANCE','SETTLEMENT','INTERACTIVE')), description TEXT NOT NULL);
 CREATE TABLE economic_transactions (id BIGSERIAL PRIMARY KEY, correlation_id TEXT NOT NULL UNIQUE, game_day BIGINT NOT NULL, game_minute INTEGER NOT NULL, transaction_kind TEXT NOT NULL, source_type TEXT NOT NULL, source_id TEXT, rules_version TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE economic_entries (id BIGSERIAL PRIMARY KEY, transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id), account_id BIGINT NOT NULL REFERENCES economic_accounts(id), delta_units BIGINT NOT NULL CHECK (delta_units <> 0), asset_id INTEGER NOT NULL REFERENCES economic_assets(id), UNIQUE (transaction_id, account_id));
 CREATE TABLE monetary_supply_snapshots (game_day BIGINT PRIMARY KEY, issued_total_units BIGINT NOT NULL, retired_total_units BIGINT NOT NULL, circulating_units BIGINT NOT NULL, escrow_units BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -141,9 +150,10 @@ CREATE TABLE building_catalog (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, t
 CREATE TABLE buildings (id TEXT PRIMARY KEY, owner_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), territory_id TEXT NOT NULL REFERENCES territories(id), catalog_id TEXT NOT NULL REFERENCES building_catalog(id), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE','DESTROYED')), started_game_day BIGINT NOT NULL, UNIQUE (id, owner_economic_id));
 CREATE TABLE building_catalog_effects (catalog_id TEXT NOT NULL REFERENCES building_catalog(id), effect_code TEXT NOT NULL, effect_value BIGINT NOT NULL CHECK (effect_value >= 0), rules_version TEXT NOT NULL DEFAULT 'building-effects-v1', PRIMARY KEY (catalog_id, effect_code, rules_version));
 
-CREATE TABLE market_instruments (id TEXT PRIMARY KEY, symbol TEXT NOT NULL UNIQUE, asset_id INTEGER NOT NULL REFERENCES economic_assets(id), quote_asset_id INTEGER NOT NULL REFERENCES economic_assets(id), status TEXT NOT NULL DEFAULT 'ACTIVE');
+CREATE TABLE market_instruments (id TEXT PRIMARY KEY, symbol TEXT NOT NULL UNIQUE, instrument_type TEXT NOT NULL DEFAULT 'SPOT' CHECK (instrument_type = 'SPOT'), asset_id INTEGER NOT NULL REFERENCES economic_assets(id), quote_asset_id INTEGER NOT NULL REFERENCES economic_assets(id), lot_size_units BIGINT NOT NULL DEFAULT 1 CHECK (lot_size_units > 0), price_tick_units BIGINT NOT NULL DEFAULT 1 CHECK (price_tick_units > 0), rules_version TEXT NOT NULL DEFAULT 'spot-market-v1', status TEXT NOT NULL DEFAULT 'ACTIVE');
 CREATE TABLE market_batches (id BIGSERIAL PRIMARY KEY, game_day BIGINT NOT NULL, game_minute INTEGER NOT NULL, status TEXT NOT NULL CHECK (status IN ('OPEN','CLEARING','COMPLETED','FAILED')), correlation_id TEXT NOT NULL UNIQUE, completed_transaction_id BIGINT REFERENCES economic_transactions(id));
-CREATE TABLE market_orders (id TEXT PRIMARY KEY, batch_id BIGINT NOT NULL REFERENCES market_batches(id), instrument_id TEXT NOT NULL REFERENCES market_instruments(id), owner_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), side TEXT NOT NULL CHECK (side IN ('BUY','SELL')), quantity_units BIGINT NOT NULL CHECK (quantity_units > 0), remaining_units BIGINT NOT NULL CHECK (remaining_units >= 0), limit_price_units BIGINT NOT NULL CHECK (limit_price_units > 0), status TEXT NOT NULL DEFAULT 'OPEN', rules_version TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), CHECK (remaining_units <= quantity_units));
+CREATE TABLE market_orders (id TEXT PRIMARY KEY, batch_id BIGINT NOT NULL REFERENCES market_batches(id), instrument_id TEXT NOT NULL REFERENCES market_instruments(id), owner_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), side TEXT NOT NULL CHECK (side IN ('BUY','SELL')), quantity_units BIGINT NOT NULL CHECK (quantity_units > 0), remaining_units BIGINT NOT NULL CHECK (remaining_units >= 0), limit_price_units BIGINT NOT NULL CHECK (limit_price_units > 0), buyer_fee_bps INTEGER NOT NULL DEFAULT 0 CHECK (buyer_fee_bps >= 0), seller_fee_bps INTEGER NOT NULL DEFAULT 0 CHECK (seller_fee_bps >= 0), status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','PARTIAL','FILLED','CANCELLED')), rules_version TEXT NOT NULL, correlation_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), CHECK (remaining_units <= quantity_units));
+CREATE TABLE market_order_reservations (id BIGSERIAL PRIMARY KEY, order_id TEXT NOT NULL REFERENCES market_orders(id), escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id), asset_id INTEGER NOT NULL REFERENCES economic_assets(id), reserved_units BIGINT NOT NULL CHECK (reserved_units > 0), remaining_units BIGINT NOT NULL CHECK (remaining_units >= 0 AND remaining_units <= reserved_units), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','CONSUMED','RELEASED')), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE (order_id, asset_id));
 CREATE TABLE market_fills (id BIGSERIAL PRIMARY KEY, batch_id BIGINT NOT NULL REFERENCES market_batches(id), instrument_id TEXT NOT NULL REFERENCES market_instruments(id), buy_order_id TEXT NOT NULL REFERENCES market_orders(id), sell_order_id TEXT NOT NULL REFERENCES market_orders(id), buyer_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), seller_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), quantity_units BIGINT NOT NULL CHECK (quantity_units > 0), price_units BIGINT NOT NULL CHECK (price_units > 0), gross_quote_units BIGINT NOT NULL CHECK (gross_quote_units > 0), buyer_fee_units BIGINT NOT NULL DEFAULT 0 CHECK (buyer_fee_units >= 0), seller_fee_units BIGINT NOT NULL DEFAULT 0 CHECK (seller_fee_units >= 0), economic_transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id), sequence_no INTEGER NOT NULL, UNIQUE (batch_id, sequence_no));
 CREATE TABLE market_instrument_state (instrument_id TEXT PRIMARY KEY REFERENCES market_instruments(id), last_completed_batch_id BIGINT, last_clearing_price_units BIGINT, best_bid_units BIGINT, best_ask_units BIGINT, open_buy_units BIGINT NOT NULL DEFAULT 0, open_sell_units BIGINT NOT NULL DEFAULT 0, rolling_volume_units BIGINT NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE market_candles (instrument_id TEXT NOT NULL REFERENCES market_instruments(id), interval_kind TEXT NOT NULL, period_id BIGINT NOT NULL, open_price_units BIGINT NOT NULL, high_price_units BIGINT NOT NULL, low_price_units BIGINT NOT NULL, close_price_units BIGINT NOT NULL, volume_units BIGINT NOT NULL DEFAULT 0, fill_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (instrument_id, interval_kind, period_id));
@@ -313,6 +323,171 @@ CREATE INDEX outbox_pending_idx ON event_outbox(status, created_at);
 
 -- Final baseline database logic only. Compatibility transfer functions are excluded.
 
+CREATE OR REPLACE FUNCTION earth_validate_economic_account_capability()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_owner_type TEXT;
+  v_asset_kind TEXT;
+BEGIN
+  SELECT owner_type INTO v_owner_type
+    FROM owner_registry
+   WHERE economic_id = NEW.owner_economic_id;
+  IF v_owner_type IS NULL THEN
+    RAISE EXCEPTION 'economic account owner does not exist: %', NEW.owner_economic_id;
+  END IF;
+
+  SELECT asset_kind INTO v_asset_kind
+    FROM economic_assets
+   WHERE id = NEW.asset_id;
+  IF v_asset_kind IS NULL THEN
+    RAISE EXCEPTION 'economic account asset does not exist: %', NEW.asset_id;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM economic_account_policies p
+     WHERE p.owner_type = v_owner_type
+       AND p.account_type = NEW.account_type
+       AND (p.allowed_asset_kind = v_asset_kind OR p.allowed_asset_kind = 'ANY')
+  ) THEN
+    RAISE EXCEPTION 'economic account capability denied: owner_type=%, account_type=%, asset_kind=%',
+      v_owner_type, NEW.account_type, v_asset_kind;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER economic_accounts_capability_integrity
+BEFORE INSERT OR UPDATE OF owner_economic_id, asset_id, account_type ON economic_accounts
+FOR EACH ROW EXECUTE FUNCTION earth_validate_economic_account_capability();
+
+CREATE OR REPLACE FUNCTION earth_validate_market_order_owner()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_owner_type TEXT;
+  v_asset_kind TEXT;
+BEGIN
+  SELECT o.owner_type, a.asset_kind
+    INTO v_owner_type, v_asset_kind
+    FROM owner_registry o
+    JOIN economic_assets a ON a.id = (SELECT asset_id FROM market_instruments WHERE id = NEW.instrument_id)
+   WHERE o.economic_id = NEW.owner_economic_id;
+  IF v_owner_type <> 'HOUSE' THEN
+    RAISE EXCEPTION 'market orders are House-only';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER market_orders_house_owner_integrity
+BEFORE INSERT OR UPDATE OF owner_economic_id, instrument_id ON market_orders
+FOR EACH ROW EXECUTE FUNCTION earth_validate_market_order_owner();
+
+CREATE OR REPLACE FUNCTION earth_provision_house_economy(p_economic_id TEXT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_owner_type TEXT;
+  v_account_count INTEGER;
+BEGIN
+  SELECT owner_type INTO v_owner_type FROM owner_registry WHERE economic_id = p_economic_id;
+  IF v_owner_type IS DISTINCT FROM 'HOUSE' THEN
+    RAISE EXCEPTION 'House economy provisioning requires a HOUSE owner: %', p_economic_id;
+  END IF;
+
+  INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
+  SELECT p_economic_id, id, 'WALLET' FROM economic_assets WHERE asset_kind = 'CREDIT'
+  ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;
+  INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
+  SELECT p_economic_id, id, 'INVENTORY' FROM economic_assets WHERE asset_kind = 'RESOURCE'
+  ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;
+
+  SELECT COUNT(*) INTO v_account_count
+    FROM economic_accounts
+   WHERE owner_economic_id = p_economic_id
+     AND ((account_type = 'WALLET' AND asset_id IN (SELECT id FROM economic_assets WHERE asset_kind = 'CREDIT'))
+       OR (account_type = 'INVENTORY' AND asset_id IN (SELECT id FROM economic_assets WHERE asset_kind = 'RESOURCE')));
+  RETURN v_account_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_provision_corporation_economy(p_economic_id TEXT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_owner_type TEXT;
+  v_account_count INTEGER;
+BEGIN
+  SELECT owner_type INTO v_owner_type FROM owner_registry WHERE economic_id = p_economic_id;
+  IF v_owner_type IS DISTINCT FROM 'CORPORATION' THEN
+    RAISE EXCEPTION 'Corporation economy provisioning requires a CORPORATION owner: %', p_economic_id;
+  END IF;
+
+  INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
+  SELECT p_economic_id, id, account_type
+    FROM economic_assets
+   CROSS JOIN (VALUES ('TREASURY'::TEXT), ('OPERATIONS'::TEXT), ('RESERVE'::TEXT)) types(account_type)
+   WHERE asset_kind = 'CREDIT'
+  ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;
+
+  SELECT COUNT(*) INTO v_account_count
+    FROM economic_accounts
+   WHERE owner_economic_id = p_economic_id AND account_type IN ('TREASURY', 'OPERATIONS', 'RESERVE')
+     AND asset_id IN (SELECT id FROM economic_assets WHERE asset_kind = 'CREDIT');
+  RETURN v_account_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_provision_earth_economy(p_economic_id TEXT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_owner_type TEXT;
+  v_account_count INTEGER;
+BEGIN
+  SELECT owner_type INTO v_owner_type FROM owner_registry WHERE economic_id = p_economic_id;
+  IF v_owner_type IS DISTINCT FROM 'EARTH' THEN
+    RAISE EXCEPTION 'EARTH economy provisioning requires an EARTH owner: %', p_economic_id;
+  END IF;
+
+  INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
+  SELECT p_economic_id, id, account_type
+    FROM economic_assets
+   CROSS JOIN (VALUES ('TREASURY'::TEXT), ('OPERATIONS'::TEXT), ('RESERVE'::TEXT)) types(account_type)
+   WHERE asset_kind = 'CREDIT'
+  ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;
+
+  SELECT COUNT(*) INTO v_account_count
+    FROM economic_accounts
+   WHERE owner_economic_id = p_economic_id AND account_type IN ('TREASURY', 'OPERATIONS', 'RESERVE')
+     AND asset_id IN (SELECT id FROM economic_assets WHERE asset_kind = 'CREDIT');
+  RETURN v_account_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_provision_bank_economy(p_economic_id TEXT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE
+  v_owner_type TEXT;
+  v_account_count INTEGER;
+BEGIN
+  SELECT owner_type INTO v_owner_type FROM owner_registry WHERE economic_id = p_economic_id;
+  IF v_owner_type IS DISTINCT FROM 'BANK' THEN
+    RAISE EXCEPTION 'Bank economy provisioning requires a BANK owner: %', p_economic_id;
+  END IF;
+
+  INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
+  SELECT p_economic_id, id, account_type
+    FROM economic_assets
+   CROSS JOIN (VALUES ('OPERATIONS'::TEXT), ('RESERVE'::TEXT)) types(account_type)
+   WHERE asset_kind = 'CREDIT'
+  ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;
+
+  SELECT COUNT(*) INTO v_account_count
+    FROM economic_accounts
+   WHERE owner_economic_id = p_economic_id AND account_type IN ('OPERATIONS', 'RESERVE')
+     AND asset_id IN (SELECT id FROM economic_assets WHERE asset_kind = 'CREDIT');
+  RETURN v_account_count;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION earth_settlement_watermark(p_game_day BIGINT)
 RETURNS BIGINT LANGUAGE SQL STABLE AS $$
   SELECT COALESCE(MAX(game_day) FILTER (WHERE status IN ('completed', 'baseline')), 0)::BIGINT
@@ -327,6 +502,9 @@ CREATE OR REPLACE FUNCTION earth_begin_economic_transaction(
 ) RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE v_id BIGINT;
 BEGIN
+  IF NULLIF(TRIM(p_transaction_kind), '') IS NULL OR NULLIF(TRIM(p_source_type), '') IS NULL THEN
+    RAISE EXCEPTION 'economic transaction kind and source type are required';
+  END IF;
   INSERT INTO economic_transactions(correlation_id, game_day, game_minute, transaction_kind, source_type, source_id, rules_version)
   VALUES (p_correlation_id, p_game_day, p_game_minute, p_transaction_kind, p_source_type, p_source_id, p_rules_version)
   ON CONFLICT (correlation_id) DO UPDATE SET correlation_id = EXCLUDED.correlation_id
@@ -340,14 +518,66 @@ CREATE OR REPLACE FUNCTION earth_post_transaction(
   p_transaction_kind TEXT, p_source_type TEXT, p_source_id TEXT,
   p_rules_version TEXT, p_entries JSONB
 ) RETURNS BIGINT LANGUAGE plpgsql AS $$
-DECLARE v_id BIGINT; v_entry JSONB;
+DECLARE
+  v_id BIGINT;
+  v_entry JSONB;
+  v_account_asset_id INTEGER;
+  v_entry_asset_kind TEXT;
+  v_semantic_class TEXT;
+  v_asset_kind TEXT;
+  v_asset_id INTEGER;
+  v_asset_total BIGINT;
 BEGIN
   v_id := earth_begin_economic_transaction(p_correlation_id, p_game_day, p_game_minute, p_transaction_kind, p_source_type, p_source_id, p_rules_version);
   IF EXISTS (SELECT 1 FROM economic_entries WHERE transaction_id = v_id) THEN RETURN v_id; END IF;
   IF COALESCE(jsonb_array_length(p_entries), 0) = 0 THEN RAISE EXCEPTION 'economic transaction must contain entries'; END IF;
-  IF (SELECT COALESCE(SUM((value->>'delta_units')::BIGINT), 0) FROM jsonb_array_elements(p_entries)) <> 0
-     AND p_source_type <> 'SYSTEM_ISSUANCE' THEN
-    RAISE EXCEPTION 'economic transaction entries are not balanced';
+
+  SELECT COALESCE(k.semantic_class, 'ASSET_TRANSFER'), COALESCE(k.asset_kind, 'ANY')
+    INTO v_semantic_class, v_asset_kind
+    FROM (SELECT 1) seed
+    LEFT JOIN economic_transaction_kinds k ON k.code = p_transaction_kind;
+
+  FOR v_entry IN SELECT value FROM jsonb_array_elements(p_entries) LOOP
+    SELECT asset_id INTO v_account_asset_id FROM economic_accounts WHERE id = (v_entry->>'account_id')::BIGINT;
+    IF v_account_asset_id IS NULL THEN
+      RAISE EXCEPTION 'economic transaction account does not exist: %', v_entry->>'account_id';
+    END IF;
+    IF v_account_asset_id <> (v_entry->>'asset_id')::INTEGER THEN
+      RAISE EXCEPTION 'economic entry asset does not match account asset: account=%, entry_asset=%', v_entry->>'account_id', v_entry->>'asset_id';
+    END IF;
+    SELECT asset_kind INTO v_entry_asset_kind FROM economic_assets WHERE id = (v_entry->>'asset_id')::INTEGER;
+    IF v_entry_asset_kind IS NULL THEN
+      RAISE EXCEPTION 'economic transaction asset does not exist: %', v_entry->>'asset_id';
+    END IF;
+    IF v_asset_kind <> 'ANY' AND v_entry_asset_kind <> v_asset_kind THEN
+      RAISE EXCEPTION 'transaction semantic % only accepts % assets', v_semantic_class, v_asset_kind;
+    END IF;
+  END LOOP;
+
+  FOR v_asset_id, v_asset_total IN
+    SELECT (value->>'asset_id')::INTEGER, SUM((value->>'delta_units')::BIGINT)
+      FROM jsonb_array_elements(p_entries)
+     GROUP BY (value->>'asset_id')::INTEGER
+  LOOP
+    IF v_semantic_class = 'ASSET_TRANSFER' AND v_asset_total <> 0 THEN
+      RAISE EXCEPTION 'asset transfer is not balanced for asset %', v_asset_id;
+    ELSIF v_semantic_class = 'CREDIT_ISSUANCE' AND v_asset_total <= 0 THEN
+      RAISE EXCEPTION 'CREDIT issuance must create a positive CREDIT amount for asset %', v_asset_id;
+    ELSIF v_semantic_class = 'CREDIT_RETIREMENT' AND v_asset_total >= 0 THEN
+      RAISE EXCEPTION 'CREDIT retirement must destroy a positive CREDIT amount for asset %', v_asset_id;
+    ELSIF v_semantic_class IN ('RESOURCE_PRODUCTION', 'RESOURCE_CONSUMPTION') AND v_asset_total <> 0 THEN
+      RAISE EXCEPTION 'resource production/consumption must balance against its dedicated system account for asset %', v_asset_id;
+    END IF;
+  END LOOP;
+
+  IF v_semantic_class = 'CREDIT_ISSUANCE' AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_entries) WHERE (value->>'delta_units')::BIGINT <= 0
+  ) THEN
+    RAISE EXCEPTION 'CREDIT issuance entries must all be positive';
+  ELSIF v_semantic_class = 'CREDIT_RETIREMENT' AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_entries) WHERE (value->>'delta_units')::BIGINT >= 0
+  ) THEN
+    RAISE EXCEPTION 'CREDIT retirement entries must all be negative';
   END IF;
   FOR v_entry IN SELECT value FROM jsonb_array_elements(p_entries) LOOP
     INSERT INTO economic_entries(transaction_id, account_id, delta_units, asset_id)
@@ -365,27 +595,83 @@ CREATE OR REPLACE FUNCTION earth_issue_starter_package(
   p_correlation_id TEXT, p_game_day BIGINT, p_house_economic_id TEXT,
   p_asset_id INTEGER, p_amount_units BIGINT
 ) RETURNS BIGINT LANGUAGE plpgsql AS $$
-DECLARE v_account BIGINT; v_tx BIGINT;
+DECLARE v_target_account BIGINT; v_source_account BIGINT; v_tx BIGINT;
 BEGIN
   IF p_amount_units <= 0 THEN RAISE EXCEPTION 'starter issuance amount must be positive'; END IF;
-  SELECT id INTO v_account FROM economic_accounts
+  SELECT id INTO v_target_account FROM economic_accounts
    WHERE owner_economic_id = p_house_economic_id AND asset_id = p_asset_id
      AND account_type = CASE WHEN p_asset_id = 1 THEN 'WALLET' ELSE 'INVENTORY' END
      AND status = 'ACTIVE' FOR UPDATE;
-  IF v_account IS NULL THEN RAISE EXCEPTION 'starter account is not provisioned'; END IF;
-  v_tx := earth_post_transaction(
-    p_correlation_id, p_game_day, 0, 'STARTER_ISSUANCE', 'SYSTEM_ISSUANCE',
-    p_house_economic_id, 'starter-package-v1',
-    jsonb_build_array(jsonb_build_object(
-      'account_id', v_account, 'asset_id', p_asset_id, 'delta_units', p_amount_units
-    ))
-  );
+  IF v_target_account IS NULL THEN RAISE EXCEPTION 'starter account is not provisioned'; END IF;
+  IF p_asset_id = 1 THEN
+    v_tx := earth_post_transaction(
+      p_correlation_id, p_game_day, 0, 'CREDIT_ISSUANCE', 'SYSTEM_ISSUANCE',
+      p_house_economic_id, 'starter-package-v1',
+      jsonb_build_array(jsonb_build_object(
+        'account_id', v_target_account, 'asset_id', p_asset_id, 'delta_units', p_amount_units
+      ))
+    );
+  ELSE
+    SELECT a.id INTO v_source_account
+      FROM economic_accounts a
+      JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+     WHERE o.economic_id = 'ECON-RESOURCE-PRODUCTION'
+       AND a.asset_id = p_asset_id AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'
+     FOR UPDATE;
+    IF v_source_account IS NULL THEN RAISE EXCEPTION 'resource production account is not provisioned'; END IF;
+    v_tx := earth_post_transaction(
+      p_correlation_id, p_game_day, 0, 'RESOURCE_PRODUCTION', 'SYSTEM_PRODUCTION',
+      p_house_economic_id, 'starter-package-v1',
+      jsonb_build_array(
+        jsonb_build_object('account_id', v_source_account, 'asset_id', p_asset_id, 'delta_units', -p_amount_units),
+        jsonb_build_object('account_id', v_target_account, 'asset_id', p_asset_id, 'delta_units', p_amount_units)
+      )
+    );
+  END IF;
   RETURN v_tx;
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION earth_daily_asset_flow(p_game_day BIGINT)
+RETURNS TABLE(asset_code TEXT, asset_kind TEXT, credit_created BIGINT, credit_destroyed BIGINT, resource_produced BIGINT, resource_consumed BIGINT)
+LANGUAGE SQL STABLE AS $$
+  SELECT a.code, a.asset_kind,
+    COALESCE(SUM(CASE WHEN k.semantic_class = 'CREDIT_ISSUANCE' AND e.delta_units > 0 THEN e.delta_units ELSE 0 END), 0)::BIGINT,
+    COALESCE(SUM(CASE WHEN k.semantic_class = 'CREDIT_RETIREMENT' AND e.delta_units < 0 THEN ABS(e.delta_units) ELSE 0 END), 0)::BIGINT,
+    COALESCE(SUM(CASE WHEN k.semantic_class = 'RESOURCE_PRODUCTION' AND e.delta_units > 0 AND o.owner_type <> 'SYSTEM' THEN e.delta_units ELSE 0 END), 0)::BIGINT,
+    COALESCE(SUM(CASE WHEN k.semantic_class = 'RESOURCE_CONSUMPTION' AND e.delta_units < 0 AND o.owner_type <> 'SYSTEM' THEN ABS(e.delta_units) ELSE 0 END), 0)::BIGINT
+    FROM economic_assets a
+    LEFT JOIN economic_entries e ON e.asset_id = a.id
+    LEFT JOIN economic_transactions t ON t.id = e.transaction_id AND t.game_day = p_game_day
+    LEFT JOIN economic_transaction_kinds k ON k.code = t.transaction_kind
+    LEFT JOIN economic_accounts ea ON ea.id = e.account_id
+    LEFT JOIN owner_registry o ON o.economic_id = ea.owner_economic_id
+   GROUP BY a.id, a.code, a.asset_kind
+   ORDER BY a.id;
+$$;
+
 CREATE OR REPLACE FUNCTION earth_assert_baseline_integrity() RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM economic_accounts a
+      JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+      JOIN economic_assets e ON e.id = a.asset_id
+     WHERE NOT EXISTS (
+       SELECT 1 FROM economic_account_policies p
+        WHERE p.owner_type = o.owner_type
+          AND p.account_type = a.account_type
+          AND (p.allowed_asset_kind = e.asset_kind OR p.allowed_asset_kind = 'ANY')
+     )
+  ) THEN RAISE EXCEPTION 'economic account capability invariant failed'; END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM market_orders m
+      JOIN owner_registry o ON o.economic_id = m.owner_economic_id
+      JOIN market_instruments i ON i.id = m.instrument_id
+      JOIN economic_assets a ON a.id = i.asset_id
+     WHERE o.owner_type <> 'HOUSE'
+  ) THEN RAISE EXCEPTION 'market owner invariant failed'; END IF;
   IF EXISTS (SELECT 1 FROM market_orders WHERE remaining_units < 0 OR remaining_units > quantity_units) THEN RAISE EXCEPTION 'market order quantity invariant failed'; END IF;
   IF EXISTS (SELECT 1 FROM institution_budget_lines WHERE authorized_units < committed_units + spent_units) THEN RAISE EXCEPTION 'budget authority invariant failed'; END IF;
   IF EXISTS (SELECT 1 FROM humans h JOIN houses x ON x.current_human_id = h.id WHERE h.status <> 'ACTIVE') THEN RAISE EXCEPTION 'House current Human invariant failed'; END IF;
@@ -531,6 +817,22 @@ CREATE OR REPLACE FUNCTION earth_integrity_report()
 RETURNS TABLE(check_name TEXT, invalid_count BIGINT)
 LANGUAGE SQL STABLE AS $$
   SELECT 'negative_economic_balances', COUNT(*) FROM economic_accounts WHERE balance_units < 0
+  UNION ALL SELECT 'invalid_economic_account_capabilities', COUNT(*)
+    FROM economic_accounts a
+    JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+    JOIN economic_assets e ON e.id = a.asset_id
+   WHERE NOT EXISTS (
+     SELECT 1 FROM economic_account_policies p
+      WHERE p.owner_type = o.owner_type
+        AND p.account_type = a.account_type
+        AND (p.allowed_asset_kind = e.asset_kind OR p.allowed_asset_kind = 'ANY')
+   )
+  UNION ALL SELECT 'invalid_market_order_owners', COUNT(*)
+    FROM market_orders m
+    JOIN owner_registry o ON o.economic_id = m.owner_economic_id
+    JOIN market_instruments i ON i.id = m.instrument_id
+    JOIN economic_assets e ON e.id = i.asset_id
+   WHERE o.owner_type <> 'HOUSE'
   UNION ALL SELECT 'invalid_house_current_human', COUNT(*) FROM houses h JOIN humans x ON x.id = h.current_human_id WHERE x.status <> 'ACTIVE'
   UNION ALL SELECT 'invalid_market_orders', COUNT(*) FROM market_orders WHERE remaining_units < 0 OR remaining_units > quantity_units
   UNION ALL SELECT 'invalid_budget_authority', COUNT(*) FROM institution_budget_lines WHERE authorized_units < committed_units + spent_units;
@@ -671,10 +973,52 @@ INSERT INTO economic_assets(id, code, asset_kind) VALUES
   (5, 'COMPUTE', 'RESOURCE'),
   (6, 'FOOD', 'RESOURCE');
 
-INSERT INTO economic_account_types(code, asset_kind, is_escrow) VALUES
-  ('WALLET', 'CREDIT', FALSE), ('TREASURY', 'CREDIT', FALSE),
-  ('OPERATIONS', 'CREDIT', FALSE), ('RESERVE', 'CREDIT', FALSE),
-  ('ESCROW', 'CREDIT', TRUE), ('INVENTORY', 'RESOURCE', FALSE);
+INSERT INTO economic_transaction_kinds(code, semantic_class, asset_kind, description) VALUES
+  ('ASSET_TRANSFER', 'ASSET_TRANSFER', 'ANY', 'Balanced movement of an existing asset between accounts'),
+  ('CREDIT_ISSUANCE', 'CREDIT_ISSUANCE', 'CREDIT', 'Creation of CREDIT outside existing account balances'),
+  ('CREDIT_RETIREMENT', 'CREDIT_RETIREMENT', 'CREDIT', 'Destruction of CREDIT outside existing account balances'),
+  ('RESOURCE_PRODUCTION', 'RESOURCE_PRODUCTION', 'RESOURCE', 'Production of a resource into an economic owner inventory'),
+  ('RESOURCE_CONSUMPTION', 'RESOURCE_CONSUMPTION', 'RESOURCE', 'Consumption of a resource from an economic owner inventory'),
+  ('STARTER_ISSUANCE', 'CREDIT_ISSUANCE', 'CREDIT', 'Initial CREDIT issuance to a newly registered House'),
+  ('SETTLEMENT', 'ASSET_TRANSFER', 'ANY', 'Balanced settlement posting'),
+  ('MARKET_TRADE', 'ASSET_TRANSFER', 'ANY', 'Balanced market settlement'),
+  ('BUILDING_CONSTRUCTION', 'ASSET_TRANSFER', 'ANY', 'Balanced construction payment'),
+  ('CORPORATION_CONTRIBUTION', 'ASSET_TRANSFER', 'CREDIT', 'Balanced House to Corporation contribution'),
+  ('CORPORATION_PUBLIC_SPENDING', 'ASSET_TRANSFER', 'CREDIT', 'Balanced Corporation public spending'),
+  ('RESEARCH_FUNDING', 'ASSET_TRANSFER', 'CREDIT', 'Balanced research funding'),
+  ('SUCCESSION_COST', 'ASSET_TRANSFER', 'CREDIT', 'Balanced House succession cost');
+
+INSERT INTO economic_source_types(code, source_class, description) VALUES
+  ('SYSTEM_ISSUANCE', 'SYSTEM', 'System-authorized asset issuance'),
+  ('SYSTEM_RETIREMENT', 'SYSTEM', 'System-authorized asset retirement'),
+  ('SYSTEM_PRODUCTION', 'SYSTEM', 'System resource production sink/source'),
+  ('SYSTEM_CONSUMPTION', 'SYSTEM', 'System resource consumption sink/source'),
+  ('HOUSE', 'ACTOR', 'House economic action'),
+  ('CORPORATION', 'ACTOR', 'Corporation economic action'),
+  ('CORPORATION_RESEARCH', 'ACTOR', 'Corporation research action'),
+  ('BANK', 'ACTOR', 'Bank economic action'),
+  ('MARKET', 'MARKET', 'Market clearing action'),
+  ('PROPOSAL', 'GOVERNANCE', 'Governance-authorized action'),
+  ('INTERACTIVE', 'INTERACTIVE', 'Interactive user action'),
+  ('SETTLEMENT', 'SETTLEMENT', 'Daily settlement action');
+
+INSERT INTO economic_account_types(code) VALUES
+  ('WALLET'), ('TREASURY'), ('OPERATIONS'), ('RESERVE'),
+  ('INVENTORY'), ('MARKET_ESCROW'), ('SYSTEM_ACCOUNT');
+
+INSERT INTO economic_account_policies(owner_type, account_type, allowed_asset_kind, player_visible) VALUES
+  ('HOUSE', 'WALLET', 'CREDIT', TRUE),
+  ('HOUSE', 'INVENTORY', 'RESOURCE', TRUE),
+  ('HOUSE', 'MARKET_ESCROW', 'ANY', TRUE),
+  ('CORPORATION', 'TREASURY', 'CREDIT', TRUE),
+  ('CORPORATION', 'OPERATIONS', 'CREDIT', TRUE),
+  ('CORPORATION', 'RESERVE', 'CREDIT', TRUE),
+  ('EARTH', 'TREASURY', 'CREDIT', TRUE),
+  ('EARTH', 'OPERATIONS', 'CREDIT', TRUE),
+  ('EARTH', 'RESERVE', 'CREDIT', TRUE),
+  ('BANK', 'OPERATIONS', 'CREDIT', TRUE),
+  ('BANK', 'RESERVE', 'CREDIT', TRUE),
+  ('SYSTEM', 'SYSTEM_ACCOUNT', 'ANY', FALSE);
 
 INSERT INTO budget_categories(id, institution_kind, category_code, spending_class, priority) VALUES
   ('BUDGET-DEBT', 'CORPORATION', 'DEBT_SERVICE', 'MANDATORY', 1),
@@ -787,23 +1131,31 @@ INSERT INTO owner_registry(id, owner_type, economic_id) VALUES
   ('GLOBAL-BANK', 'BANK', 'ECON-GLOBAL-BANK-001'),
   ('OWNER-MONETARY-ISSUANCE', 'SYSTEM', 'ECON-MONETARY-ISSUANCE'),
   ('OWNER-MONETARY-RETIREMENT', 'SYSTEM', 'ECON-MONETARY-RETIREMENT'),
-  ('OWNER-MARKET-CLEARING', 'SYSTEM', 'ECON-MARKET-CLEARING');
+  ('OWNER-MARKET-CLEARING', 'SYSTEM', 'ECON-MARKET-CLEARING'),
+  ('OWNER-RESOURCE-PRODUCTION', 'SYSTEM', 'ECON-RESOURCE-PRODUCTION'),
+  ('OWNER-RESOURCE-CONSUMPTION', 'SYSTEM', 'ECON-RESOURCE-CONSUMPTION');
+
+SELECT earth_provision_earth_economy('ECON-EARTH-001');
+SELECT earth_provision_bank_economy('ECON-GLOBAL-BANK-001');
 
 INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type) VALUES
-  ('ECON-EARTH-001', 1, 'TREASURY'),
-  ('ECON-EARTH-001', 1, 'OPERATIONS'),
-  ('ECON-EARTH-001', 1, 'RESERVE'),
-  ('ECON-GLOBAL-BANK-001', 1, 'RESERVE'),
-  ('ECON-GLOBAL-BANK-001', 1, 'OPERATIONS'),
-  ('ECON-MONETARY-ISSUANCE', 1, 'TREASURY'),
-  ('ECON-MONETARY-RETIREMENT', 1, 'TREASURY'),
-  ('ECON-MARKET-CLEARING', 1, 'TREASURY');
+  ('ECON-MONETARY-ISSUANCE', 1, 'SYSTEM_ACCOUNT'),
+  ('ECON-MONETARY-RETIREMENT', 1, 'SYSTEM_ACCOUNT'),
+  ('ECON-MARKET-CLEARING', 1, 'SYSTEM_ACCOUNT'),
+  ('ECON-RESOURCE-PRODUCTION', 2, 'SYSTEM_ACCOUNT'),
+  ('ECON-RESOURCE-CONSUMPTION', 2, 'SYSTEM_ACCOUNT');
 
 -- Resource consumption and production are recorded against a canonical system
 -- inventory owner; these accounts are not player wallets and never represent
 -- a second resource authority.
 INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
-SELECT 'ECON-MONETARY-RETIREMENT', id, 'INVENTORY'
+SELECT 'ECON-RESOURCE-PRODUCTION', id, 'SYSTEM_ACCOUNT'
+FROM economic_assets
+WHERE asset_kind = 'RESOURCE'
+ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;
+
+INSERT INTO economic_accounts(owner_economic_id, asset_id, account_type)
+SELECT 'ECON-RESOURCE-CONSUMPTION', id, 'SYSTEM_ACCOUNT'
 FROM economic_assets
 WHERE asset_kind = 'RESOURCE'
 ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING;

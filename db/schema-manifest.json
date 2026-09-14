@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 3,
+  "migrationVersion": 5,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -209,9 +209,13 @@
       "created_at"
     ],
     "economic_account_types": [
-      "code",
-      "asset_kind",
-      "is_escrow"
+      "code"
+    ],
+    "economic_account_policies": [
+      "owner_type",
+      "account_type",
+      "allowed_asset_kind",
+      "player_visible"
     ],
     "economic_accounts": [
       "id",
@@ -220,6 +224,17 @@
       "account_type",
       "balance_units",
       "status"
+    ],
+    "economic_transaction_kinds": [
+      "code",
+      "semantic_class",
+      "asset_kind",
+      "description"
+    ],
+    "economic_source_types": [
+      "code",
+      "source_class",
+      "description"
     ],
     "economic_transactions": [
       "id",
@@ -279,8 +294,12 @@
     "market_instruments": [
       "id",
       "symbol",
+      "instrument_type",
       "asset_id",
       "quote_asset_id",
+      "lot_size_units",
+      "price_tick_units",
+      "rules_version",
       "status"
     ],
     "market_batches": [
@@ -300,9 +319,23 @@
       "quantity_units",
       "remaining_units",
       "limit_price_units",
+      "buyer_fee_bps",
+      "seller_fee_bps",
       "status",
       "rules_version",
+      "correlation_id",
       "created_at"
+    ],
+    "market_order_reservations": [
+      "id",
+      "order_id",
+      "escrow_account_id",
+      "asset_id",
+      "reserved_units",
+      "remaining_units",
+      "status",
+      "created_at",
+      "updated_at"
     ],
     "market_fills": [
       "id",
@@ -703,10 +736,17 @@
     "outbox_pending_idx"
   ],
   "requiredFunctions": [
+    "earth_validate_economic_account_capability",
+    "earth_validate_market_order_owner",
+    "earth_provision_house_economy",
+    "earth_provision_corporation_economy",
+    "earth_provision_earth_economy",
+    "earth_provision_bank_economy",
     "earth_settlement_watermark",
     "earth_begin_economic_transaction",
     "earth_post_transaction",
     "earth_issue_starter_package",
+    "earth_daily_asset_flow",
     "earth_assert_baseline_integrity",
     "earth_game_day_from_total_minutes",
     "earth_get_current_game_time",

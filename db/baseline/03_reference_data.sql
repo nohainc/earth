@@ -6,10 +6,52 @@ INSERT INTO economic_assets(id, code, asset_kind) VALUES
   (5, 'COMPUTE', 'RESOURCE'),
   (6, 'FOOD', 'RESOURCE');
 
-INSERT INTO economic_account_types(code, asset_kind, is_escrow) VALUES
-  ('WALLET', 'CREDIT', FALSE), ('TREASURY', 'CREDIT', FALSE),
-  ('OPERATIONS', 'CREDIT', FALSE), ('RESERVE', 'CREDIT', FALSE),
-  ('ESCROW', 'CREDIT', TRUE), ('INVENTORY', 'RESOURCE', FALSE);
+INSERT INTO economic_transaction_kinds(code, semantic_class, asset_kind, description) VALUES
+  ('ASSET_TRANSFER', 'ASSET_TRANSFER', 'ANY', 'Balanced movement of an existing asset between accounts'),
+  ('CREDIT_ISSUANCE', 'CREDIT_ISSUANCE', 'CREDIT', 'Creation of CREDIT outside existing account balances'),
+  ('CREDIT_RETIREMENT', 'CREDIT_RETIREMENT', 'CREDIT', 'Destruction of CREDIT outside existing account balances'),
+  ('RESOURCE_PRODUCTION', 'RESOURCE_PRODUCTION', 'RESOURCE', 'Production of a resource into an economic owner inventory'),
+  ('RESOURCE_CONSUMPTION', 'RESOURCE_CONSUMPTION', 'RESOURCE', 'Consumption of a resource from an economic owner inventory'),
+  ('STARTER_ISSUANCE', 'CREDIT_ISSUANCE', 'CREDIT', 'Initial CREDIT issuance to a newly registered House'),
+  ('SETTLEMENT', 'ASSET_TRANSFER', 'ANY', 'Balanced settlement posting'),
+  ('MARKET_TRADE', 'ASSET_TRANSFER', 'ANY', 'Balanced market settlement'),
+  ('BUILDING_CONSTRUCTION', 'ASSET_TRANSFER', 'ANY', 'Balanced construction payment'),
+  ('CORPORATION_CONTRIBUTION', 'ASSET_TRANSFER', 'CREDIT', 'Balanced House to Corporation contribution'),
+  ('CORPORATION_PUBLIC_SPENDING', 'ASSET_TRANSFER', 'CREDIT', 'Balanced Corporation public spending'),
+  ('RESEARCH_FUNDING', 'ASSET_TRANSFER', 'CREDIT', 'Balanced research funding'),
+  ('SUCCESSION_COST', 'ASSET_TRANSFER', 'CREDIT', 'Balanced House succession cost');
+
+INSERT INTO economic_source_types(code, source_class, description) VALUES
+  ('SYSTEM_ISSUANCE', 'SYSTEM', 'System-authorized asset issuance'),
+  ('SYSTEM_RETIREMENT', 'SYSTEM', 'System-authorized asset retirement'),
+  ('SYSTEM_PRODUCTION', 'SYSTEM', 'System resource production sink/source'),
+  ('SYSTEM_CONSUMPTION', 'SYSTEM', 'System resource consumption sink/source'),
+  ('HOUSE', 'ACTOR', 'House economic action'),
+  ('CORPORATION', 'ACTOR', 'Corporation economic action'),
+  ('CORPORATION_RESEARCH', 'ACTOR', 'Corporation research action'),
+  ('BANK', 'ACTOR', 'Bank economic action'),
+  ('MARKET', 'MARKET', 'Market clearing action'),
+  ('PROPOSAL', 'GOVERNANCE', 'Governance-authorized action'),
+  ('INTERACTIVE', 'INTERACTIVE', 'Interactive user action'),
+  ('SETTLEMENT', 'SETTLEMENT', 'Daily settlement action');
+
+INSERT INTO economic_account_types(code) VALUES
+  ('WALLET'), ('TREASURY'), ('OPERATIONS'), ('RESERVE'),
+  ('INVENTORY'), ('MARKET_ESCROW'), ('SYSTEM_ACCOUNT');
+
+INSERT INTO economic_account_policies(owner_type, account_type, allowed_asset_kind, player_visible) VALUES
+  ('HOUSE', 'WALLET', 'CREDIT', TRUE),
+  ('HOUSE', 'INVENTORY', 'RESOURCE', TRUE),
+  ('HOUSE', 'MARKET_ESCROW', 'ANY', TRUE),
+  ('CORPORATION', 'TREASURY', 'CREDIT', TRUE),
+  ('CORPORATION', 'OPERATIONS', 'CREDIT', TRUE),
+  ('CORPORATION', 'RESERVE', 'CREDIT', TRUE),
+  ('EARTH', 'TREASURY', 'CREDIT', TRUE),
+  ('EARTH', 'OPERATIONS', 'CREDIT', TRUE),
+  ('EARTH', 'RESERVE', 'CREDIT', TRUE),
+  ('BANK', 'OPERATIONS', 'CREDIT', TRUE),
+  ('BANK', 'RESERVE', 'CREDIT', TRUE),
+  ('SYSTEM', 'SYSTEM_ACCOUNT', 'ANY', FALSE);
 
 INSERT INTO budget_categories(id, institution_kind, category_code, spending_class, priority) VALUES
   ('BUDGET-DEBT', 'CORPORATION', 'DEBT_SERVICE', 'MANDATORY', 1),

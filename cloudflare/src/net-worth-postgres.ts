@@ -115,14 +115,14 @@ export async function recordDailyNetWorthSnapshot(
   return repository.transaction(async (tx) => {
   // 1. Fetch liquid credits
   const accRes = await tx.query(
-    `SELECT COALESCE(a.balance_units, 0)::TEXT AS balance FROM humans h
+    `SELECT COALESCE(a.balance_units, 0)::TEXT AS balance_units FROM humans h
      JOIN houses house ON house.id = h.house_id
      JOIN owner_registry owner ON owner.id = house.id
      JOIN economic_accounts a ON a.owner_economic_id = owner.economic_id
      WHERE h.id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'`,
     [humanId]
   );
-  const liquid = accRes.rows.length > 0 ? Number(accRes.rows[0].balance) : 0;
+  const liquid = accRes.rows.length > 0 ? Number(accRes.rows[0].balance_units) : 0;
 
   // 2. Fetch commodity balances and value only against completed Spot prices.
   const resBalances = await tx.query(

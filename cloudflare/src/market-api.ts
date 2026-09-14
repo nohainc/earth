@@ -54,25 +54,19 @@ async function findInstrument(repository: PostgresRepository, key: string): Prom
 
 function serializeOrder(row: Record<string, unknown>, baseAssetId = Number(row.base_asset_id ?? row.asset_id ?? MARKET_ASSET_IDS.MATERIAL)): Record<string, unknown> {
   const quantity = BigInt(String(row.quantity_units ?? 0));
-  const filled = BigInt(String(row.filled_quantity_units ?? row.filled_units ?? 0));
-  const remaining = quantity - filled;
+  const remaining = BigInt(String(row.remaining_units ?? 0));
+  const filled = quantity - remaining;
   return {
     id: row.id,
     instrumentId: row.instrument_id,
-    product: row.product,
+    product: row.symbol ? String(row.symbol).replace(/^SPOT-/, '').toLowerCase() : null,
     side: row.side,
     status: row.status,
     quantity: numberUnits(quantity, assetUnitScale(baseAssetId)),
     filledQuantity: numberUnits(filled, assetUnitScale(baseAssetId)),
     remainingQuantity: numberUnits(remaining, assetUnitScale(baseAssetId)),
     limitPrice: priceUnitsToDisplayPrice(String(row.limit_price_units ?? 0)),
-    eligibleBatchId: row.eligible_batch_id,
-    sequenceNo: row.sequence_no,
-    buyerFeeBps: row.buyer_fee_bps,
-    sellerFeeBps: row.seller_fee_bps,
     rulesVersion: row.rules_version,
-    submittedGameDay: row.submitted_game_day,
-    submittedGameMinute: row.submitted_game_minute,
     createdAt: row.created_at,
   };
 }
@@ -88,11 +82,11 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
 
   if (resource === 'book') {
     const result = await repository.query<Record<string, unknown>>(
-      `SELECT id, side, status, quantity_units::TEXT, filled_quantity_units::TEXT,
-              limit_price_units::TEXT, eligible_batch_id, sequence_no, rules_version, created_at
-         FROM market_orders
-        WHERE instrument_id = $1 AND status IN ('open', 'partial')
-        ORDER BY side, limit_price_units DESC, sequence_no ASC
+      `SELECT o.id, o.instrument_id, i.symbol, o.side, o.status, o.quantity_units::TEXT, o.remaining_units::TEXT,
+              o.limit_price_units::TEXT, o.rules_version, o.created_at
+         FROM market_orders o JOIN market_instruments i ON i.id = o.instrument_id
+        WHERE o.instrument_id = $1 AND o.status IN ('OPEN', 'PARTIAL')
+        ORDER BY o.side, o.limit_price_units DESC, o.created_at ASC
         LIMIT 2000`, [instrument.id]);
     return {
       instrument: instrumentPayload(instrument),
@@ -103,18 +97,17 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
 
   if (resource === 'batches') {
     const result = await repository.query<Record<string, unknown>>(
-      `SELECT b.id, b.start_total_game_minute, b.end_total_game_minute, b.status AS batch_status,
-              bi.status, bi.eligible_order_count, bi.fill_count, bi.volume_units::TEXT,
-              bi.previous_price_units::TEXT, bi.clearing_price_units::TEXT,
-              bi.economic_transaction_id, bi.started_at, bi.completed_at, bi.error_message
-         FROM market_batches b JOIN market_batch_instruments bi ON bi.batch_id = b.id
-        WHERE bi.instrument_id = $1 ORDER BY b.id DESC LIMIT 200`, [instrument.id]);
+      `SELECT b.id, b.game_day, b.game_minute, b.status,
+              COUNT(DISTINCT f.id)::INTEGER AS fill_count,
+              COALESCE(SUM(f.quantity_units), 0)::TEXT AS volume_units,
+              MAX(f.economic_transaction_id) AS economic_transaction_id
+         FROM market_batches b
+         LEFT JOIN market_fills f ON f.batch_id = b.id AND f.instrument_id = $1
+        WHERE EXISTS (SELECT 1 FROM market_orders o WHERE o.batch_id = b.id AND o.instrument_id = $1)
+        GROUP BY b.id, b.game_day, b.game_minute, b.status ORDER BY b.id DESC LIMIT 200`, [instrument.id]);
     return { instrument: instrumentPayload(instrument), batches: result.rows.map((row) => ({
-      id: row.id, startTotalGameMinute: row.start_total_game_minute, endTotalGameMinute: row.end_total_game_minute,
-      status: row.status ?? row.batch_status, eligibleOrderCount: row.eligible_order_count, fillCount: row.fill_count,
-      volume: numberUnits(row.volume_units, baseScale), previousPrice: row.previous_price_units == null ? null : priceUnitsToDisplayPrice(String(row.previous_price_units)),
-      clearingPrice: row.clearing_price_units == null ? null : priceUnitsToDisplayPrice(String(row.clearing_price_units)),
-      economicTransactionId: row.economic_transaction_id, startedAt: row.started_at, completedAt: row.completed_at, error: row.error_message,
+      id: row.id, gameDay: row.game_day, gameMinute: row.game_minute, status: row.status,
+      fillCount: row.fill_count, volume: numberUnits(row.volume_units, baseScale), economicTransactionId: row.economic_transaction_id,
     })) };
   }
 
@@ -123,7 +116,7 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
       `SELECT id, batch_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id,
               quantity_units::TEXT, price_units::TEXT, gross_quote_units::TEXT,
               buyer_fee_units::TEXT, seller_fee_units::TEXT, economic_transaction_id,
-              sequence_no, game_day, game_minute, created_at
+              sequence_no
          FROM market_fills WHERE instrument_id = $1 ORDER BY id DESC LIMIT 500`, [instrument.id]);
     return { instrument: instrumentPayload(instrument), fills: result.rows.map((row) => ({
       id: row.id, batchId: row.batch_id, buyOrderId: row.buy_order_id, sellOrderId: row.sell_order_id,
@@ -131,7 +124,7 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
       quantity: numberUnits(row.quantity_units, baseScale), price: priceUnitsToDisplayPrice(String(row.price_units)),
       grossQuote: numberUnits(row.gross_quote_units, assetUnitScale(instrument.quote_asset_id)),
       buyerFee: numberUnits(row.buyer_fee_units, assetUnitScale(instrument.quote_asset_id)), sellerFee: numberUnits(row.seller_fee_units, assetUnitScale(instrument.quote_asset_id)),
-      economicTransactionId: row.economic_transaction_id, sequenceNo: row.sequence_no, gameDay: row.game_day, gameMinute: row.game_minute, createdAt: row.created_at,
+      economicTransactionId: row.economic_transaction_id, sequenceNo: row.sequence_no,
     })) };
   }
 

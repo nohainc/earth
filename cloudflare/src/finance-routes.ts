@@ -1,9 +1,6 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
-import {
-  recoverInstitution as recoverInstitutionPostgres,
-} from './finance-postgres.ts';
 import { getCorporationFiscalState, spendCorporationBudget } from './corporation-fiscal-postgres.ts';
 import { getNetWorthHistory } from './net-worth-postgres.ts';
 import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
@@ -60,9 +57,11 @@ export async function handleFinanceRoutes(
     const institutionId = url.pathname.split('/').pop() ?? '';
     const result = await withRepository(env, async (repository) => {
       const [accounts, state, obligations, financialProjection] = await Promise.all([
-        repository.query(`SELECT a.id AS account_id, ea.code AS asset_code, a.asset_id, a.account_type, a.balance::TEXT AS balance_units
+        repository.query(`SELECT a.id AS account_id, ea.code AS asset_code, a.asset_id, a.account_type, a.balance_units::TEXT AS balance_units
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id LEFT JOIN economic_assets ea ON ea.id = a.asset_id
-                           WHERE o.id = $1 AND a.status = 'active' ORDER BY a.asset_id, a.account_type`, [institutionId]),
+                           WHERE o.id = $1 AND o.owner_type IN ('EARTH', 'CORPORATION', 'BANK')
+                             AND a.asset_id = 1 AND a.account_type IN ('TREASURY', 'OPERATIONS', 'RESERVE') AND a.status = 'ACTIVE'
+                           ORDER BY a.account_type`, [institutionId]),
         repository.query('SELECT * FROM financial_states WHERE institution_id = $1', [institutionId]),
         repository.query(`SELECT f.* FROM financial_obligations f JOIN owner_registry o ON o.economic_id = f.debtor_economic_id WHERE o.id = $1`, [institutionId]),
         repository.query('SELECT * FROM institution_financial_projections WHERE institution_id = $1', [institutionId]),
@@ -105,15 +104,14 @@ export async function handleFinanceRoutes(
   if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
       const [account, state, buildings, context, latestMaintenance, arrears, taxRules, taxObligations, bankDeposits, transactions] = await Promise.all([
-        repository.query(`SELECT a.id::TEXT AS account_id, a.balance::TEXT AS balance_units,
-                                 (a.balance / 100.0) AS balance, 'CREDIT' AS currency,
-                                 a.account_type, a.is_default_settlement
+        repository.query(`SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance_units,
+                                 'CREDIT' AS currency,
+                                 a.account_type
                             FROM economic_accounts a
                             JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-                           WHERE o.id = $1 AND a.asset_id = 1 AND a.status = 'active'
-                           ORDER BY a.is_default_settlement DESC, a.account_type`, [viewer.house_id]),
+                           WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'`, [viewer.house_id]),
         repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
-        repository.query("SELECT b.id, b.name, b.building_type, b.status FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id WHERE o.id = $1 AND b.ownership_class = 'private'", [viewer.house_id]),
+        repository.query("SELECT b.id, b.catalog_id, b.status FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id JOIN building_catalog c ON c.id = b.catalog_id WHERE o.id = $1 AND c.ownership_scope = 'PRIVATE'", [viewer.house_id]),
         repository.query<{ age_years: number; corporation_id: string | null; living_cost_index: string }>("SELECT h.age_years, ha.corporation_id, w.living_cost_index FROM humans h LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE' CROSS JOIN world_state w WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
         repository.query('SELECT game_day, food_used, energy_used, compute_used, credits_for_resources, life_condition_after, shortfall_notes, paid, unpaid, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
         repository.query<{ total: string }>('SELECT COALESCE(SUM(unpaid), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
@@ -157,9 +155,9 @@ export async function handleFinanceRoutes(
   if (url.pathname === '/api/finance' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
       const [account, rules] = await Promise.all([
-        repository.query(`SELECT a.id::TEXT AS account_id, o.id AS owner_id, (a.balance / 100.0) AS balance, 'CREDIT' AS currency
+        repository.query(`SELECT a.id::TEXT AS account_id, o.id AS owner_id, a.balance_units::TEXT AS balance_units, 'CREDIT' AS currency
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-                           WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.house_id]),
+                           WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'`, [viewer.house_id]),
         repository.query(`SELECT DISTINCT ON (tax_rule_id) tax_rule_id AS id, scope, category, rate_bps, version,
                                  tax_base_definition, effective_from_game_day, effective_to_game_day
                             FROM tax_rule_versions
@@ -176,7 +174,7 @@ export async function handleFinanceRoutes(
   if (url.pathname === '/api/finance/liquidity' && request.method === 'GET') {
     const liquidity = (await withRepository(env, (repository) =>
       repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>(
-        "SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM economic_accounts WHERE asset_id = 1 AND account_type NOT IN (7, 8) AND status = 'active') / 100.0 AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index",
+        "SELECT (SELECT COUNT(*) FROM humans WHERE status = 'ACTIVE') AS active_humans, (SELECT COALESCE(SUM(a.balance_units), 0) FROM economic_accounts a WHERE a.asset_id = 1 AND a.account_type IN ('WALLET', 'TREASURY', 'OPERATIONS', 'RESERVE') AND a.status = 'ACTIVE') AS money_supply, 1::NUMERIC AS living_cost_index",
       ),
     ))?.rows[0];
     const activeHumans = Number(liquidity?.active_humans ?? 0);
@@ -214,31 +212,6 @@ export async function handleFinanceRoutes(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch net-worth history';
       return Response.json({ ok: false, error: message }, { status: 400 });
-    }
-  }
-
-  if (url.pathname === '/api/finance/recover' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ institutionId?: string; amount?: number; otp?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.value;
-    if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) {
-      return Response.json({ ok: false, error: 'Authenticator code required for financial recovery' }, { status: 401 });
-    }
-    const institutionId = body.institutionId?.trim() ?? '';
-    const amount = Math.round(Number(body.amount) * 100) / 100;
-    const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!institutionId || !Number.isFinite(amount) || amount <= 0 || amount > 100000 || !correlationId) {
-      return Response.json({ ok: false, error: 'Recovery amount must be between 0 and 100,000 Credits' }, { status: 400 });
-    }
-    try {
-      const result = await withRepository(env, (repository) =>
-        recoverInstitutionPostgres(repository, { humanId: viewer.id, institutionId, amount, correlationId }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Institution recovery failed';
-      return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : /insufficient|crisis/i.test(message) ? 409 : 400 });
     }
   }
 

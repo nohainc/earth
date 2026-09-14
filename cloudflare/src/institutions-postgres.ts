@@ -23,28 +23,13 @@ async function activeHumanHouse(tx: PostgresRepository, humanId: string): Promis
   return result.rows[0];
 }
 
-async function provisionCorporationTreasury(tx: PostgresRepository, corporationId: string): Promise<string> {
+async function provisionCorporationEconomy(tx: PostgresRepository, corporationId: string): Promise<string> {
   const economicId = `ECON-${corporationId}`;
   await tx.query(
     "INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)",
     [corporationId, economicId],
   );
-  await tx.query(
-    `INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type)
-     SELECT $1, id, 'TREASURY'
-       FROM economic_assets
-      WHERE asset_kind = 'CREDIT'
-     ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING`,
-    [economicId],
-  );
-  await tx.query(
-    `INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type)
-     SELECT $1, id, 'OPERATIONS'
-       FROM economic_assets
-      WHERE asset_kind = 'CREDIT'
-     ON CONFLICT (owner_economic_id, asset_id, account_type) DO NOTHING`,
-    [economicId],
-  );
+  await tx.query('SELECT earth_provision_corporation_economy($1)', [economicId]);
   return economicId;
 }
 
@@ -55,7 +40,10 @@ export async function listCorporations(repository: PostgresRepository, search = 
            c.admission_policy,
            (SELECT COUNT(*)::integer FROM territories t WHERE t.corporation_id = c.id AND t.status = 'ACTIVE') AS territory_count,
            (SELECT COUNT(*)::integer FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_count,
-           (SELECT t.id FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_id
+           (SELECT t.id FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_id,
+           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE'), 0)::TEXT AS treasury,
+           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'OPERATIONS' AND a.status = 'ACTIVE'), 0)::TEXT AS operating_budget,
+           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'RESERVE' AND a.status = 'ACTIVE'), 0)::TEXT AS reserve
       FROM corporations c
       JOIN institutions i ON i.id = c.id
      WHERE i.status = 'ACTIVE' AND ($1 = '%%' OR i.name ILIKE $1)
@@ -103,7 +91,7 @@ export async function createCorporation(
        VALUES ($1, $2, $3, 'PRIMARY', 'ACTIVE', TRUE, $4)`,
       [territoryId, corporationId, territoryName, gameDay],
     );
-    await provisionCorporationTreasury(tx, corporationId);
+    await provisionCorporationEconomy(tx, corporationId);
     await tx.query(
       `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status)
        VALUES ($1, $2, 'CORPORATION_EXECUTIVE', 'ACTIVE'), ($1, $2, 'CORPORATION_TREASURER', 'ACTIVE')`,
@@ -159,13 +147,13 @@ export async function corporationQualification(repository: PostgresRepository, c
   const [territories, governance, treasury] = await Promise.all([
     repository.query("SELECT id, name, status, is_primary FROM territories WHERE corporation_id = $1 AND status = 'ACTIVE' ORDER BY is_primary DESC, id", [corporationId]),
     repository.query("SELECT id FROM governance_rules WHERE institution_id = $1 AND status = 'ACTIVE' LIMIT 1", [corporationId]),
-    repository.query<{ balance: string }>(`SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS balance
+    repository.query<{ balance_units: string }>(`SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS balance_units
       FROM owner_registry o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
       JOIN economic_assets e ON e.id = a.asset_id AND e.code = 'CREDIT'
       WHERE o.id = $1 AND o.owner_type = 'CORPORATION' AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE'`, [corporationId]),
   ]);
-  const requirements = { primaryTerritory: territories.rows.some((item) => item.is_primary), governance: Boolean(governance.rows[0]), treasury: treasury.rows[0]?.balance !== undefined };
-  return { ok: true, corporation: corporation.rows[0], territories: territories.rows, treasury: treasury.rows[0]?.balance ?? '0', requirements, qualified: Object.values(requirements).every(Boolean) };
+  const requirements = { primaryTerritory: territories.rows.some((item) => item.is_primary), governance: Boolean(governance.rows[0]), treasury: treasury.rows[0]?.balance_units !== undefined };
+  return { ok: true, corporation: corporation.rows[0], territories: territories.rows, treasury: treasury.rows[0]?.balance_units ?? '0', requirements, qualified: Object.values(requirements).every(Boolean) };
 }
 
 async function currentAffiliation(tx: PostgresRepository, houseId: string): Promise<{ id: string; corporation_id: string; primary_territory_id: string | null } | null> {

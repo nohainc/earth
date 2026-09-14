@@ -2702,6 +2702,8 @@ class CorporationOverviewPanel extends StatelessWidget {
     final memberCount =
         asIntOr(corporation['member_count'] ?? corporation['members'], 0);
     final treasury = asDouble(corporation['treasury']);
+    final operatingBudget = asDouble(corporation['operating_budget']);
+    final reserve = asDouble(corporation['reserve']);
     final territoryName = corporation['primary_territory_name']?.toString() ??
         corporation['territory_name']?.toString() ??
         'Primary Territory';
@@ -2738,10 +2740,10 @@ class CorporationOverviewPanel extends StatelessWidget {
       statusColor: isAffiliated ? context.successColor : context.primaryColor,
       infoTitle: 'CORPORATE GOVERNANCE & COMMONS ARCHITECTURE',
       infoDescription:
-          '• Chartered Governance: Corporations establish sovereign bylaws, taxation rates, and supermajority governance thresholds (67%).\n\n• Municipal City Network: Corporations charter and sponsor member cities, providing shared civic infrastructure and services.\n\n• Corporate Treasury & Commons: Distinct institutional treasury funding corporate research, shared patents, payroll, and collective expansion.',
+          '• Chartered Governance: Corporations establish sovereign bylaws, taxation rates, and supermajority governance thresholds (67%).\n\n• Territory Network: Corporations own and operate Territories, providing shared infrastructure and services.\n\n• Corporate Treasury & Commons: Distinct institutional CREDIT accounts fund public infrastructure, research, shared patents, and collective expansion.',
       title: name.toUpperCase(),
       subtitle:
-          'Chartered corporate governance, municipal city networks, and shared enterprise commons across Earth',
+          'Chartered corporate governance, Territory infrastructure, and shared enterprise commons across Earth',
       metrics: [
         CockpitMetric(
           label: 'Members',
@@ -2825,8 +2827,8 @@ class CorporationOverviewPanel extends StatelessWidget {
                       _buildAttributeRow(
                         context,
                         icon: Icons.hub_outlined,
-                        label: 'CHARTERED CITIES',
-                        value: '${corporation['city_count'] ?? 1}',
+                        label: 'TERRITORIES',
+                        value: '${corporation['territory_count'] ?? 1}',
                         accentColor: context.secondaryColor,
                       ),
                       _buildAttributeRow(
@@ -2858,6 +2860,24 @@ class CorporationOverviewPanel extends StatelessWidget {
                             ? 'UNAVAILABLE'
                             : '${formatWholeNumber(treasury)} C',
                         accentColor: context.warningColor,
+                      ),
+                      _buildAttributeRow(
+                        context,
+                        icon: Icons.settings_suggest_outlined,
+                        label: 'OPERATING BUDGET',
+                        value: operatingBudget == null
+                            ? 'UNAVAILABLE'
+                            : '${formatWholeNumber(operatingBudget)} C',
+                        accentColor: context.secondaryColor,
+                      ),
+                      _buildAttributeRow(
+                        context,
+                        icon: Icons.shield_outlined,
+                        label: 'RESERVE',
+                        value: reserve == null
+                            ? 'UNAVAILABLE'
+                            : '${formatWholeNumber(reserve)} C',
+                        accentColor: context.successColor,
                       ),
                     ];
 
@@ -2896,7 +2916,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                 : '${formatWholeNumber(treasury)} C',
             icon: Icons.account_balance_wallet_outlined,
             description:
-                'Separate corporate funds for research, patents, payroll, and corporate projects. This budget is not the city budget or your personal account.',
+                'Corporation CREDIT accounts are separated into treasury, operating budget, and reserve. Corporations do not hold player resources.',
             accent: context.warningColor,
           ),
           const SizedBox(height: 12),
