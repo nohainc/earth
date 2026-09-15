@@ -44,7 +44,16 @@ export async function listTerritoryRights(repository: PostgresRepository, input:
       WHERE ${predicates.join(' AND ')}
       ORDER BY r.territory_id, r.slot_class, r.id`, params,
   );
-  return { rights: result.rows, generatedFrom: 'postgres-canonical-facts' };
+  return {
+    rights: result.rows,
+    rentPolicy: {
+      rentPerSlotUnits: BASE_RENT_UNITS.toString(),
+      billing: 'UPFRONT_AT_ACQUISITION',
+      rulesVersion: 'territory-lease-v1',
+      maxTermDays: MAX_RIGHT_DAYS,
+    },
+    generatedFrom: 'postgres-canonical-facts',
+  };
 }
 
 export async function acquireTerritoryRight(repository: PostgresRepository, input: LeaseInput) {

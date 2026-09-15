@@ -12,6 +12,8 @@ test('PostgreSQL decision queue derives service and obligation actions from curr
       if (query.includes('from proposals')) return { rows: [] };
       if (query.includes('from financial_obligations')) return { rows: [{ unpaid: '25' }] };
       if (query.includes('from corporation_research_projects')) return { rows: [{ progress: '100' }] };
+      if (query.includes('from market_instruments')) return { rows: [] };
+      if (query.includes('from buildings')) return { rows: [] };
       throw new Error(`Unexpected query: ${sql}`);
     },
   };

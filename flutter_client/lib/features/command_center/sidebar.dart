@@ -63,32 +63,39 @@ class _SidebarState extends State<Sidebar> {
 
   int _groupForSection(String section) {
     if (section.startsWith('my-community')) return 2;
-    if (section == 'corporations') return 4;
+    if (section == 'corporations' || section == 'directory') return 4;
     const groups = [
       ['command', 'briefing', 'news'],
       [
         'buildings',
-        'market',
         'technology',
+        'market',
+        'contracts',
       ],
       [
         'corporation',
         'my-corporation',
+        'organizations',
         'territories',
+        'territory-commons',
+        'communities',
         'my-community',
+        'messages',
+        'notifications',
         'civic',
         'public-finance'
       ],
-      ['life', 'house', 'dynasty', 'finance', 'account'],
+      ['life', 'house', 'dynasty', 'finance', 'policies', 'account'],
       [
+        'directory',
         'corporations',
-        'communities',
         'civic-rankings',
         'pantheon',
         'history',
         'world',
+        'programs',
+        'public-projects',
         'mutual-credit',
-        'territory-commons',
         'constitution'
       ],
     ];
@@ -141,18 +148,18 @@ class _SidebarState extends State<Sidebar> {
 
     final groups = [
       (
-        'NOW',
+        'COMMAND',
         Icons.radar_rounded,
         [
           (
             'command',
-            'Command Center',
+            'Command',
             Icons.dashboard_outlined,
             null,
           ),
           (
             'briefing',
-            'Daily Priorities',
+            'Briefing',
             Icons.today_outlined,
             null,
           ),
@@ -170,7 +177,7 @@ class _SidebarState extends State<Sidebar> {
         [
           (
             'buildings',
-            'Buildings',
+            'Assets',
             Icons.domain_outlined,
             null,
           ),
@@ -186,26 +193,44 @@ class _SidebarState extends State<Sidebar> {
             Icons.swap_horiz_rounded,
             null,
           ),
+          (
+            'contracts',
+            'Contracts',
+            Icons.handshake_outlined,
+            null,
+          ),
         ]
       ),
       (
-        'CIVIC',
+        'SOCIETY',
         Icons.account_balance_rounded,
         [
-          if (isCorporationMember) ...[
-            (
-              'corporation',
-              corporationName,
-              Icons.account_balance_outlined,
-              null,
-            ),
-            (
-              'territories',
-              'Territories',
-              Icons.map_outlined,
-              null,
-            ),
-          ],
+          (
+            'corporation',
+            corporationName != 'Corporations'
+                ? corporationName
+                : 'Organizations',
+            Icons.account_balance_outlined,
+            null,
+          ),
+          (
+            'organizations',
+            'Organization directory',
+            Icons.account_tree_outlined,
+            null,
+          ),
+          (
+            'territories',
+            'Territories',
+            Icons.map_outlined,
+            null,
+          ),
+          (
+            'communities',
+            'Communities',
+            Icons.diversity_3_outlined,
+            null,
+          ),
           for (final comm in myCommunities)
             (
               'my-community:${comm['id']}',
@@ -214,16 +239,32 @@ class _SidebarState extends State<Sidebar> {
               null,
             ),
           (
+            'messages',
+            'Messages',
+            Icons.forum_outlined,
+            widget.unreadCommMessages > 0
+                ? '${widget.unreadCommMessages}'
+                : null,
+          ),
+          (
+            'notifications',
+            'Notifications',
+            Icons.notifications_none_outlined,
+            widget.unreadNotifications > 0
+                ? '${widget.unreadNotifications}'
+                : null,
+          ),
+          (
             'civic',
-            'Public Governance',
+            'Governance',
             Icons.public_outlined,
             null,
           ),
         ]
       ),
       (
-        'LIFE',
-        Icons.fingerprint_rounded,
+        'HOUSE',
+        Icons.shield_outlined,
         [
           (
             'life',
@@ -233,7 +274,7 @@ class _SidebarState extends State<Sidebar> {
           ),
           (
             'house',
-            houseName.isNotEmpty == true ? houseName : 'House',
+            houseName.isNotEmpty == true ? houseName : 'Dynasty',
             Icons.shield_outlined,
             null,
           ),
@@ -241,6 +282,12 @@ class _SidebarState extends State<Sidebar> {
             'finance',
             'Finance',
             Icons.account_balance_wallet_outlined,
+            null,
+          ),
+          (
+            'policies',
+            'Policies',
+            Icons.tune_outlined,
             null,
           ),
           (
@@ -252,19 +299,13 @@ class _SidebarState extends State<Sidebar> {
         ]
       ),
       (
-        'EARTH',
+        'WORLD',
         Icons.public_rounded,
         [
           (
             'corporations',
-            'Corporations',
+            'Directory',
             Icons.domain_outlined,
-            null,
-          ),
-          (
-            'communities',
-            'Communities',
-            Icons.groups_outlined,
             null,
           ),
           (
@@ -287,20 +328,20 @@ class _SidebarState extends State<Sidebar> {
           ),
           (
             'world',
-            'World Conditions',
+            'Conditions',
             Icons.public_outlined,
             null,
           ),
           (
-            'mutual-credit',
-            'Mutual Credit (Experimental)',
-            Icons.account_balance_wallet_outlined,
+            'programs',
+            'Programs',
+            Icons.biotech_outlined,
             null,
           ),
           (
-            'territory-commons',
-            'Territory Commons',
-            Icons.park_outlined,
+            'public-projects',
+            'Public projects',
+            Icons.construction_outlined,
             null,
           ),
         ]
@@ -562,7 +603,10 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
-  Widget _buildSlimSidebar(BuildContext context, List<(String, IconData, List<(String, String, IconData, String?)>)> groups) {
+  Widget _buildSlimSidebar(
+      BuildContext context,
+      List<(String, IconData, List<(String, String, IconData, String?)>)>
+          groups) {
     return Container(
       width: 60,
       decoration: BoxDecoration(
@@ -587,7 +631,8 @@ class _SidebarState extends State<Sidebar> {
                   for (int g = 0; g < groups.length; g++) ...[
                     if (g > 0)
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
                         child: Divider(
                           height: 1,
                           thickness: 1,
@@ -663,7 +708,9 @@ class _SidebarState extends State<Sidebar> {
                     Icon(
                       icon,
                       size: 20,
-                      color: isSelected ? context.primaryColor : context.mutedColor,
+                      color: isSelected
+                          ? context.primaryColor
+                          : context.mutedColor,
                     ),
                     if (badge != null)
                       Positioned(

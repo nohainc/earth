@@ -19,19 +19,21 @@ class CivicStatusPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final human = state.human;
     final membership = state.membership;
-    final city = state.institutions['city'];
-    final cityMap = city is Map
-        ? Map<String, dynamic>.from(city)
-        : const <String, dynamic>{};
-    final citizenship = membership?['status']?.toString() ??
-        membership?['type']?.toString() ??
-        'Independent citizen';
+    final residency = state.residency;
+    final territoryId = membership?['territory_id'] ??
+        residency['currentTerritoryId'] ??
+        residency['territoryId'] ??
+        state.house['primary_territory_id'];
+    final citizenship = membership?['corporation_name']?.toString() != null
+        ? 'Territory resident'
+        : 'Independent citizen';
     final standing =
         human['standing'] ?? human['civic_standing'] ?? 'UNAVAILABLE';
     final voting =
-        membership?['voting_eligible'] ?? membership?['votingEligible'] ?? true;
-    final obligations = membership?['obligations']?.toString() ??
-        'Review current laws and tax obligations';
+        membership?['voting_eligible'] ?? membership?['votingEligible'];
+    final obligationCount = state.finance['obligations'] is List
+        ? (state.finance['obligations'] as List).length
+        : 0;
 
     return EarthSection(
       title: 'CIVIC STATUS',
@@ -39,7 +41,7 @@ class CivicStatusPanel extends StatelessWidget {
       infoBulletPoints: const [
         'Your current place in the civic system: residency, standing, voting access, and obligations.',
         'These details explain what you can do in governance today.',
-        'City services and detailed membership history remain on City & Services and your personal record.',
+        'Territory commons, services, and organization memberships remain on Institutions and your House record.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -48,9 +50,8 @@ class CivicStatusPanel extends StatelessWidget {
             metrics: [
               EarthMetricTile(
                 label: 'RESIDENCY',
-                value:
-                    cityMap['name']?.toString().toUpperCase() ?? 'INDEPENDENT',
-                icon: Icons.location_city_outlined,
+                value: territoryId?.toString().toUpperCase() ?? 'NOT RECORDED',
+                icon: Icons.location_on_outlined,
                 accentColor: context.primaryColor,
               ),
               EarthMetricTile(
@@ -61,11 +62,15 @@ class CivicStatusPanel extends StatelessWidget {
               ),
               EarthMetricTile(
                 label: 'VOTING',
-                value: voting == true ? 'ELIGIBLE' : 'RESTRICTED',
+                value: voting == null
+                    ? 'UNAVAILABLE'
+                    : (voting == true ? 'ELIGIBLE' : 'RESTRICTED'),
                 icon: Icons.how_to_vote_outlined,
-                accentColor: voting == true
-                    ? context.successColor
-                    : context.warningColor,
+                accentColor: voting == null
+                    ? context.warningColor
+                    : (voting == true
+                        ? context.successColor
+                        : context.warningColor),
               ),
               EarthMetricTile(
                 label: 'STANDING',
@@ -77,7 +82,7 @@ class CivicStatusPanel extends StatelessWidget {
           ),
           SizedBox(height: context.spacingInline),
           Text(
-            'Current obligation: $obligations',
+            'Open financial obligations: $obligationCount · Review the active rules before making civic decisions.',
             style: context.widgetFooterStyle,
           ),
         ],
@@ -114,17 +119,18 @@ class ActiveGovernanceRulePanel extends StatelessWidget {
       infoBulletPoints: const [
         'Quorum is the minimum participation required for a valid vote.',
         'Approval is the share of decisive votes required for a proposal to pass.',
-        'Approved proposals start automatically after daily settlement, or remain approved while city resources accumulate.',
+        'Approved proposals start automatically after daily settlement, or remain approved while Territory resources accumulate.',
       ],
       child: rule == null
           ? const EarthEmptyState(
-              message: 'No active governance rule is configured for this city.',
+              message:
+                  'No active governance rule is published for this Territory.',
               icon: Icons.rule_outlined)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    '${rule['name'] ?? 'City governance rule'} · Version ${rule['version'] ?? '—'}',
+                    '${rule['name'] ?? 'Territory governance rule'} · Version ${rule['version'] ?? '—'}',
                     style: context.widgetTitleStyle),
                 const SizedBox(height: 10),
                 EarthMetricGrid(metrics: [
@@ -144,8 +150,8 @@ class ActiveGovernanceRulePanel extends StatelessWidget {
                       icon: Icons.schedule_outlined,
                       accentColor: context.primaryColor),
                   EarthMetricTile(
-                      label: 'FUNDING WINDOW',
-                      value: '7 DAYS',
+                      label: 'IMPLEMENTATION DELAY',
+                      value: '${rule['implementation_delay_days'] ?? '—'} DAYS',
                       icon: Icons.hourglass_bottom_outlined,
                       accentColor: context.warningColor),
                 ]),
@@ -207,7 +213,7 @@ class CivicInfluencePanel extends StatelessWidget {
           ),
           SizedBox(height: context.spacingInline),
           Text(
-            'Possible paths: independent citizen · community leader · business-backed politician · city administrator · legal or planetary delegate.',
+            'Possible paths: independent citizen · community leader · organization delegate · Territory steward · legal or planetary delegate.',
             style: context.widgetFooterStyle,
           ),
         ],
@@ -261,12 +267,14 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
         institutionId == 'OUC-001') {
       return 'WORLD';
     }
-    final cityId = widget.state.institutions['city'] is Map
-        ? (widget.state.institutions['city'] as Map)['id']?.toString()
-        : null;
-    if (institutionId == cityId ||
-        institutionId.toUpperCase().startsWith('CITY-')) {
-      return 'CITY';
+    final territoryIds = widget.state.territories
+        .whereType<Map>()
+        .map((row) => row['id']?.toString())
+        .whereType<String>()
+        .toSet();
+    if (territoryIds.contains(institutionId) ||
+        institutionId.toUpperCase().startsWith('TERR-')) {
+      return 'TERRITORY';
     }
     return 'CORPORATION';
   }
@@ -318,7 +326,7 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
   Widget build(BuildContext context) {
     final worldCount = _proposalsForScope('WORLD').length;
     final corpCount = _proposalsForScope('CORPORATION').length;
-    final cityCount = _proposalsForScope('CITY').length;
+    final territoryCount = _proposalsForScope('TERRITORY').length;
 
     return EarthSection(
       title: 'PROPOSALS',
@@ -332,16 +340,16 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildScopeTabs(context, cityCount, corpCount, worldCount),
+          _buildScopeTabs(context, territoryCount, corpCount, worldCount),
           SizedBox(height: context.spacingTitleOffset),
           AnimatedBuilder(
             animation: _tabController,
             builder: (context, _) {
               final scope = switch (_tabController.index) {
-                0 => 'CITY',
+                0 => 'TERRITORY',
                 1 => 'CORPORATION',
                 2 => 'WORLD',
-                _ => 'CITY',
+                _ => 'TERRITORY',
               };
               return _ProposalTabContent(
                 key: ValueKey(scope),
@@ -361,7 +369,7 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
   }
 
   Widget _buildScopeTabs(
-      BuildContext context, int cityCount, int corpCount, int worldCount) {
+      BuildContext context, int territoryCount, int corpCount, int worldCount) {
     return AnimatedBuilder(
       animation: _tabController,
       builder: (context, _) => Container(
@@ -371,8 +379,8 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
           border: Border.all(color: context.subtleBorderColor),
         ),
         child: Row(children: [
-          _scopeTab(
-              context, 0, 'CITY ($cityCount)', Icons.location_city_outlined),
+          _scopeTab(context, 0, 'TERRITORY ($territoryCount)',
+              Icons.location_on_outlined),
           _scopeTab(context, 1, 'CORPORATION ($corpCount)',
               Icons.account_balance_outlined),
           _scopeTab(context, 2, 'WORLD ($worldCount)', Icons.public_outlined),
@@ -475,8 +483,8 @@ class _ProposalTabContentState extends State<_ProposalTabContent> {
     final currentRule =
         rules.isEmpty ? null : Map<String, dynamic>.from(rules.first as Map);
     final ruleSummary = currentRule == null
-        ? 'Common governance defaults apply: 25% quorum · 50% approval · 3-day vote · 7-day funding window.'
-        : 'Current rule: ${asIntOr(asDoubleOr(currentRule['quorum_threshold'], .25) * 100, 25)}% quorum · ${asIntOr(asDoubleOr(currentRule['approval_threshold'], .5) * 100, 50)}% approval · ${currentRule['voting_period_days'] ?? '—'}-day vote · 7-day funding window.';
+        ? 'No active governance rule is published for this scope.'
+        : 'Current rule: ${asIntOr(asDoubleOr(currentRule['quorum_threshold'], .25) * 100, 25)}% quorum · ${asIntOr(asDoubleOr(currentRule['approval_threshold'], .5) * 100, 50)}% approval · ${currentRule['voting_period_days'] ?? '—'}-day vote · implementation delay ${currentRule['implementation_delay_days'] ?? '—'} days.';
 
     if (widget.proposals.isEmpty) {
       return Column(
@@ -1080,7 +1088,7 @@ class _ProposalCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                'Blocker: the approved item is waiting for city capacity or the required resources.',
+                'Blocker: the approved item is waiting for Territory capacity or the required resources.',
                 style: context.widgetFooterStyle
                     .copyWith(color: context.warningColor),
               ),
@@ -1853,12 +1861,16 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taxRules =
-        ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
+    final taxRules = ((state.finance['taxRules'] ?? state.json['taxRules'])
+            as List<dynamic>?) ??
+        const [];
     final proposals =
         ((state.governance['proposals'] as List<dynamic>?) ?? const []);
     final openProposals = proposals
-        .where((raw) => raw is Map && raw['status']?.toString() == 'open')
+        .where((raw) =>
+            raw is Map &&
+            {'OPEN', 'VOTING'}
+                .contains(raw['status']?.toString().toUpperCase()))
         .length;
     const heldRoles = 0;
 
@@ -1894,7 +1906,7 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
       infoBulletPoints: const [
         'These are the rules currently shaping taxes and public services.',
         'Review what you pay, what public systems receive, and how the rules affect your work, business, and residency.',
-        'Detailed municipal treasury controls belong in City & Services.',
+        'Detailed Territory commons and treasury controls belong in Territories.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1931,7 +1943,7 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        'Tax rules change the credits you keep from work, business profit, property, and resource activity. Public budgets return value through city services and infrastructure. Review the rule, then decide whether to vote, adapt the business, or change residency.',
+                        'Tax rules change the credits you keep from work, business profit, property, and resource activity. Public budgets return value through Territory services and infrastructure. Review the rule, then decide whether to vote, adapt the business, or change residency.',
                         style: context.widgetFooterStyle.copyWith(height: 1.35),
                       ),
                     ],
@@ -1950,8 +1962,16 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
                     rule['category']?.toString().toLowerCase() ?? '';
                 final scope =
                     rule['scope']?.toString().toUpperCase() ?? 'GLOBAL';
-                final ratePct = NumberFormatHelper.percent(rule['rate']);
-                final version = rule['version'] ?? 1;
+                final minimumRate =
+                    rule['minimum_rate_bps'] ?? rule['minimumRateBps'];
+                final maximumRate =
+                    rule['maximum_rate_bps'] ?? rule['maximumRateBps'];
+                final ratePct = rule['rate'] != null
+                    ? NumberFormatHelper.percent(rule['rate'])
+                    : (minimumRate != null || maximumRate != null
+                        ? '${NumberFormatHelper.percent(minimumRate ?? 0)}–${NumberFormatHelper.percent(maximumRate ?? 0)}'
+                        : 'UNAVAILABLE');
+                final version = rule['version'] ?? rule['rules_version'] ?? '—';
 
                 String formattedTitle;
                 String description;

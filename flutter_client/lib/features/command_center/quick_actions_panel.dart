@@ -33,11 +33,11 @@ class QuickActionsPanel extends StatelessWidget {
         color: context.primaryColor,
       ),
       (
-        label: 'CHECK CITY SERVICES',
-        detail: membership['city_id'] == null
-            ? 'Choose a city to unlock services'
+        label: 'CHECK TERRITORY SERVICES',
+        detail: membership['territory_id'] == null
+            ? 'Choose a territory to unlock services'
             : 'Review local capacity and infrastructure',
-        section: 'city',
+        section: 'territory-commons',
         icon: Icons.location_city_outlined,
         color: context.successColor,
       ),

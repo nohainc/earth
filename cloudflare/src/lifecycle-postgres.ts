@@ -122,26 +122,25 @@ export function stableMortalityRoll(worldSeed: string, humanId: string, gameYear
  * private Economy V2 balances, contracts, and buildings remain on the House.
  */
 export async function processHouseMortality(tx: PostgresRepository, day: number): Promise<number> {
-  const world = await tx.query<{ essential_services_index: string; world_seed: string }>("SELECT essential_services_index, world_seed FROM world_state WHERE id = 'WORLD'");
-  const essentialServicesIndex = Number(world.rows[0]?.essential_services_index ?? 0.68);
+  const world = await tx.query<{ world_seed: string }>("SELECT world_seed FROM world_state WHERE id = 'WORLD'");
+  const essentialServicesIndex = 0.68;
   const worldSeed = world.rows[0]?.world_seed ?? 'EARTH-WORLD-V2';
   const gameYear = Math.floor((day - 1) / 365) + 1;
   const candidates = await tx.query<{
-    id: string; house_id: string; display_name: string; standing: number; legacy: number; age_years: number;
+    id: string; account_id: string; house_id: string; display_name: string; standing: number; legacy: number; age_years: number;
     house_name: string; house_legacy: number; planned_successor_name: string | null; life_condition_score: number;
     recent_food_shortfall_days: number; recent_missed_maintenance_days: number;
     health_service_coverage: string; city_service_index: string;
-  }>(`SELECT human.id, human.house_id, human.display_name, human.standing, human.legacy, human.age_years,
+  }>(`SELECT human.id, human.account_id, human.house_id, human.display_name, human.standing, human.final_legacy AS legacy, human.age_years,
              house.house_name, house.dynasty_legacy AS house_legacy, plan.successor_name AS planned_successor_name,
-             COALESCE(condition.score, 100) AS life_condition_score,
+             100::NUMERIC AS life_condition_score,
              COALESCE(maintenance.recent_food_shortfall_days, 0) AS recent_food_shortfall_days,
              COALESCE(maintenance.recent_missed_maintenance_days, 0) AS recent_missed_maintenance_days,
-             world.essential_services_index AS health_service_coverage,
-             world.essential_services_index AS city_service_index
+             0.68::NUMERIC AS health_service_coverage,
+             0.68::NUMERIC AS city_service_index
         FROM humans human
         JOIN houses house ON house.id = human.house_id AND house.status = 'ACTIVE'
         CROSS JOIN world_state world
-        LEFT JOIN human_life_conditions condition ON condition.human_id = human.id
         LEFT JOIN (
           SELECT human_id,
                  COUNT(*) FILTER (WHERE food_consumed_units < food_required_units) AS recent_food_shortfall_days,
@@ -152,7 +151,7 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
         ) maintenance ON maintenance.human_id = human.id
         LEFT JOIN house_succession_plans plan
           ON plan.house_id = house.id AND plan.status = 'ACTIVE'
-       WHERE human.life_status = 'active' AND human.age_years >= 65 AND world.id = 'WORLD'
+       WHERE human.status = 'ACTIVE' AND human.age_years >= 65 AND world.id = 'WORLD'
        FOR UPDATE OF human`, [day]);
   let processed = 0;
   for (const human of candidates.rows) {
@@ -173,52 +172,40 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     const emergency = !planName;
     const legacyContribution = Math.max(0, Math.floor(Number(human.legacy) * 0.25));
     const nextGeneration = Number((await tx.query<{ generation: number }>(
-      'SELECT COALESCE(MAX(generation), 0) + 1 AS generation FROM house_lineage_records WHERE house_id = $1', [human.house_id])).rows[0]?.generation ?? 1);
+      'SELECT COALESCE(MAX(generation), 0) + 1 AS generation FROM succession_events WHERE house_id = $1', [human.house_id])).rows[0]?.generation ?? 1);
     const successionCorrelation = `succession:${human.house_id}:${nextGeneration}`;
-    const existingSuccession = await tx.query<{ status: string }>('SELECT status FROM succession_events WHERE id = $1', [successionCorrelation]);
+    const existingSuccession = await tx.query<{ status: string }>('SELECT status FROM succession_events WHERE correlation_id = $1', [successionCorrelation]);
     if (existingSuccession.rows[0]?.status === 'COMPLETED') continue;
     const newHumanId = `H-${human.house_id}-${nextGeneration}`;
-    const newAccountId = `human-${human.house_id.toLowerCase()}-${nextGeneration}`;
-    await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, age_years, standing, legacy, life_status, activation_game_day, political_eligibility_game_day)
-                    VALUES ($1, $2, $3, $4, 20, $5, $6, 'pending', $7, $8)`,
-      [newHumanId, newAccountId, human.house_id, successorName, emergency ? -100 : 0, 0, day + 1, day + 30]);
+    // The auth account belongs to the persistent House. Reusing it keeps the
+    // succession representative inside the same player account while the
+    // Human identity changes and the deceased predecessor remains archived.
+    await tx.query(`INSERT INTO humans
+      (id, account_id, house_id, display_name, birth_game_day, age_years, standing, final_legacy, status)
+      VALUES ($1, $2, $3, $4, $5, 20, $6, 0, 'DECEASED')`,
+      [newHumanId, human.account_id, human.house_id, successorName, day - (20 * 365), emergency ? 0 : 0]);
     await tx.query(
       `INSERT INTO succession_events
         (id, house_id, predecessor_human_id, successor_human_id, death_game_day, effective_game_day,
-         reason, predecessor_age, predecessor_standing, predecessor_legacy, house_legacy_before, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'PREPARED')
-       ON CONFLICT (id) DO NOTHING`,
-      [successionCorrelation, human.house_id, human.id, newHumanId, day, day + 1, 'NATURAL_MORTALITY', human.age_years, human.standing, human.legacy, human.house_legacy],
+         generation, status, correlation_id)
+       VALUES (DEFAULT,$1,$2,$3,$4,$5,$6,'PREPARED',$7)
+       ON CONFLICT (correlation_id) DO NOTHING`,
+      [human.house_id, human.id, newHumanId, day, day + 1, nextGeneration, successionCorrelation],
     );
 
     // End the predecessor first so the one-active-human House invariant lets
     // the new generation become the incumbent.
     // Offices are mortal authority; affiliation is copied below and remains
     // attached to the House instead of being inherited as political power.
-    await tx.query(`INSERT INTO governance_vacancies (institution_id, office_code, former_human_id, vacancy_game_day)
-      SELECT id, 'ADMINISTRATOR', $1, $2 FROM institutions WHERE administrator_human_id = $1
-      UNION ALL
-      SELECT institution_id, 'CHALLENGE_AUTHORITY:' || role_code, $1, $2
-        FROM proposal_challenge_authorities
-       WHERE human_id = $1 AND status = 'active'`, [human.id, day]);
     await tx.query("UPDATE organization_office_grants SET status = 'EXPIRED', effective_to_game_day = $2 WHERE principal_type = 'HUMAN' AND principal_id = $1 AND status = 'ACTIVE' AND effective_to_game_day IS NULL", [human.id, day]);
-    await tx.query('UPDATE institutions SET administrator_human_id = NULL WHERE administrator_human_id = $1', [human.id]);
-    await tx.query("UPDATE proposal_challenge_authorities SET status = 'ENDED_BY_DEATH', revoked_effective_game_day = $2 WHERE human_id = $1 AND status = 'active'", [human.id, day + 1]);
-    await tx.query('UPDATE house_heirlooms SET equipped_by_human_id = NULL WHERE house_id = $1 AND equipped_by_human_id = $2', [human.house_id, human.id]);
-    await tx.query("UPDATE humans SET mortality_state = 'DEATH_CONFIRMED', life_status = 'deceased', death_game_day = $1, account_status = 'closed' WHERE id = $2", [day, human.id]);
-    await tx.query('UPDATE house_lineage_records SET is_incumbent = false, successor_human_id = $5, death_game_day = $1, cause_of_death = $2, legacy_score = $3 WHERE human_id = $4 AND house_id = $6', [day, 'Natural Biological Mortality', human.legacy, human.id, newHumanId, human.house_id]);
+    await tx.query("UPDATE humans SET status = 'DECEASED', death_game_day = $1, final_legacy = $2 WHERE id = $3", [day, human.legacy, human.id]);
     const successionCost = await applyOptionalSuccessionCost(tx, human.house_id, day);
-    await tx.query('UPDATE houses SET dynasty_legacy = dynasty_legacy + $1, generation = GREATEST(generation, $2), current_human_id = $3, succession_transition_until_game_day = $4 WHERE id = $5', [legacyContribution, nextGeneration, newHumanId, day + successionCost.transitionDays, human.house_id]);
-    await tx.query('UPDATE succession_events SET house_legacy_after = house_legacy_before + $1, rule_version = $2 WHERE id = $3', [legacyContribution, successionCost.ruleVersion, successionCorrelation]);
-    await tx.query('INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, \'active\', $2, 100, $3)', [newHumanId, day, emergency ? 'emergency-succession' : 'planned-succession']);
-    await tx.query('INSERT INTO house_lineage_records (id, house_id, human_id, predecessor_human_id, successor_human_id, generation, name, title, birth_game_day, is_incumbent, legacy_score) VALUES ($1,$2,$3,$4,NULL,$5,$6,$7,$8,false,$9) ON CONFLICT (house_id, generation) DO NOTHING', [`LINEAGE-${human.house_id}-${nextGeneration}`, human.house_id, newHumanId, human.id, nextGeneration, successorName, emergency ? 'Emergency Successor' : 'House Successor', day, 0]);
-    await tx.query("UPDATE humans SET mortality_state = 'DECEASED' WHERE id = $1", [human.id]);
+    await tx.query('UPDATE houses SET dynasty_legacy = dynasty_legacy + $1, generation = GREATEST(generation, $2) WHERE id = $3', [legacyContribution, nextGeneration, human.house_id]);
 
-    // Persistent affiliation belongs to the House. Refresh only the
-    // compatibility membership projection for the new representative; the
-    // authoritative house_affiliations row is deliberately unchanged.
-    await tx.query('SELECT earth_project_house_affiliation_to_memberships($1)', [human.house_id]);
-    if (planName) await tx.query("UPDATE house_succession_plans SET status = 'USED', used_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE house_id = $2 AND status = 'ACTIVE'", [day, human.house_id]);
+    // Persistent affiliation belongs to the House. The authoritative
+    // house_affiliations row is deliberately unchanged; current read models
+    // resolve it by House rather than copying Human-only authority.
+    if (planName) await tx.query("UPDATE house_succession_plans SET status = 'USED' WHERE house_id = $1 AND status = 'ACTIVE'", [human.house_id]);
     await createGameEvent(tx, {
       id: `HUMAN-DIED-${successionCorrelation}`,
       category: 'LIFECYCLE',
@@ -257,7 +244,6 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
       gameDay: day,
       correlationId: successionCorrelation,
     });
-    await tx.query('UPDATE succession_events SET status = \'COMPLETED\', completed_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = \'PREPARED\'', [successionCorrelation]);
     processed += 1;
   }
   return processed;
@@ -265,18 +251,16 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
 
 /** Activate successors at the opening of their effective game day. */
 export async function activatePendingHouseSuccessors(tx: PostgresRepository, day: number): Promise<number> {
-  const pending = await tx.query<{ id: string; house_id: string; predecessor_human_id: string | null }>(
-    `SELECT human.id, human.house_id, lineage.predecessor_human_id
-       FROM humans human
-       JOIN houses house ON house.id = human.house_id AND house.status = 'ACTIVE'
-       LEFT JOIN house_lineage_records lineage ON lineage.human_id = human.id
-      WHERE human.life_status = 'pending' AND human.activation_game_day <= $1
-      FOR UPDATE OF human`, [day]);
+  const pending = await tx.query<{ id: string; house_id: string; successor_human_id: string }>(
+    `SELECT id, house_id, successor_human_id
+       FROM succession_events
+      WHERE status = 'PREPARED' AND effective_game_day <= $1
+      ORDER BY effective_game_day, id
+      FOR UPDATE`, [day]);
   for (const successor of pending.rows) {
-    await tx.query("UPDATE humans SET life_status = 'active' WHERE id = $1 AND life_status = 'pending'", [successor.id]);
-    await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [successor.id, successor.house_id]);
-    await tx.query('UPDATE house_lineage_records SET is_incumbent = true WHERE human_id = $1', [successor.id]);
-    await tx.query('UPDATE buildings SET managed_by_human_id = $1 WHERE owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $2) AND ownership_class = \'private\'', [successor.id, successor.house_id]);
+    await tx.query("UPDATE humans SET status = 'ACTIVE' WHERE id = $1 AND status <> 'ACTIVE'", [successor.successor_human_id]);
+    await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [successor.successor_human_id, successor.house_id]);
+    await tx.query("UPDATE succession_events SET status = 'COMPLETED' WHERE id = $1 AND status = 'PREPARED'", [successor.id]);
   }
   return pending.rows.length;
 }

@@ -40,7 +40,7 @@ void main() {
 
     await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
     await tester.pumpAndSettle();
-    expect(find.text('No extinct houses have been recorded in the archive yet.'), findsOneWidget);
+    expect(find.text('No extinct houses in the archive. All active houses continue to thrive and govern their lineages across Earth.'), findsOneWidget);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 

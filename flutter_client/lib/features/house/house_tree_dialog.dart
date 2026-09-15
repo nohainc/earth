@@ -100,8 +100,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
 
     try {
       final res = await widget.api.houseOverview();
-      final houseData =
-          Map<String, dynamic>.from((res['house'] ?? res['dynasty']) as Map? ?? {});
+      final houseData = Map<String, dynamic>.from(
+          (res['house'] ?? res['dynasty']) as Map? ?? {});
       final lineageList = ((res['lineage'] as List<dynamic>?) ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
@@ -196,10 +196,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               final copy = Map<String, dynamic>.from(h);
               copy['is_equipped'] = isEquipped;
               copy['isEquipped'] = isEquipped;
-              copy['equipped_by_human_id'] =
-                  isEquipped ? (equippedBy ?? 'H-0044') : null;
-              copy['equippedBy'] =
-                  isEquipped ? (equippedBy ?? 'H-0044') : null;
+              copy['equipped_by_human_id'] = isEquipped ? equippedBy : null;
+              copy['equippedBy'] = isEquipped ? equippedBy : null;
               return copy;
             }
             return h;
@@ -232,19 +230,23 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       builder: (ctx) => AlertDialog(
         backgroundColor: tokens.color('colors.panel', EarthColors.panelSurface),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
+          borderRadius:
+              BorderRadius.circular(tokens.number('radius.panel', 14)),
           side: BorderSide(color: themeColor.withValues(alpha: .35)),
         ),
         title: Row(
           children: [
-            Icon(Icons.edit, color: themeColor, size: tokens.number('controls.iconSize', 16)),
+            Icon(Icons.edit,
+                color: themeColor,
+                size: tokens.number('controls.iconSize', 16)),
             SizedBox(width: tokens.number('spacing.inline', 8)),
             Text('EDIT HOUSE NAME',
                 style: TextStyle(
                     color: themeColor,
                     fontSize: tokens.number('typography.topicTitle.size', 12),
                     fontWeight: FontWeight.w700,
-                    letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4))),
+                    letterSpacing: tokens.number(
+                        'typography.topicTitle.letterSpacing', 1.4))),
           ],
         ),
         content: TextField(
@@ -267,7 +269,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     color: mutedColor,
                     fontSize: tokens.number('typography.control.size', 10),
                     fontWeight: FontWeight.w700,
-                    letterSpacing: tokens.number('typography.control.letterSpacing', 1.4))),
+                    letterSpacing: tokens.number(
+                        'typography.control.letterSpacing', 1.4))),
           ),
           SizedBox(
             height: tokens.number('controls.buttonHeight', 34),
@@ -278,7 +281,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                 Navigator.of(ctx).pop();
                 try {
                   await widget.api.updateHouseMotto(
-                    motto: '',
+                    motto: _house['motto']?.toString() ?? '',
                     houseName: nameCtrl.text.trim(),
                   );
                   if (mounted) {
@@ -298,7 +301,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                 backgroundColor: themeColor,
                 foregroundColor: tokens.color('colors.canvas', canvasColor),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
+                  borderRadius:
+                      BorderRadius.circular(tokens.number('radius.control', 6)),
                 ),
               ),
               child: const Text('SAVE',
@@ -322,7 +326,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final dialogWidth = math.min(1060.0, screenSize.width - 24);
     final dialogHeight = math.min(840.0, screenSize.height - 24);
 
-    final houseName = (_house['house_name'] ?? _house['dynasty_name'] ?? 'House')
+    final houseName = (_house['house_name'] ??
+            _house['dynasty_name'] ??
+            'House')
         .toString()
         .replaceFirst(RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
         .replaceFirst(RegExp(r'^of\s+', caseSensitive: false), '')
@@ -338,10 +344,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         _house['peak_standing'] ??
         widget.state?.human['civic_standing'] ??
         widget.state?.json['civic_standing']);
-    final rawScore = _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
-    final houseScore = (rawScore != null && _parseNum(rawScore) > 0)
-        ? _parseNum(rawScore)
-        : (legacy * 50 + standing * 10);
+    final rawScore =
+        _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
+    final houseScore = rawScore == null ? null : _parseNum(rawScore);
     final successor = widget.state?.life['successor'];
     final successorName = successor is Map
         ? (successor['successor_name'] ?? successor['name'])?.toString()
@@ -358,7 +363,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       statusColor: context.goldColor,
       infoTitle: 'DYNASTY HERITAGE & SUCCESSION ARCHITECTURE',
       infoDescription:
-          '• Generational Continuity: Preserves your family lineage across biological successions, retaining ancestral standing and dynastic achievements.\n\n• Legacy Points & Perks: Measured in permanent influence (LP) passed down to empower ancestral perks and unlock heirloom technologies.\n\n• House Score: Aggregates total generational achievements, civic contributions, and economic standing across all ancestors.',
+          '• Generational Continuity: Preserves your family lineage across biological successions, retaining House identity and accumulated capital.\n\n• Succession: Appointed successors inherit House-controlled assets and ongoing economic continuity.\n\n• Human offices and personal status do not transfer automatically after mortality.',
       title: 'HOUSE OF ${houseName.toUpperCase()}',
       titleWidget: Row(
         mainAxisSize: MainAxisSize.min,
@@ -402,7 +407,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         ],
       ),
       subtitle:
-          'Dynastic lineage, ancestral heirlooms, generational perks, and house succession across Earth',
+          'House identity, durable assets, generational continuity, and succession across Earth',
       metrics: [
         CockpitMetric(
           label: 'Legacy',
@@ -412,7 +417,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         ),
         CockpitMetric(
           label: 'Prestige',
-          value: formatWholeNumber(houseScore),
+          value: houseScore == null
+              ? 'UNAVAILABLE'
+              : formatWholeNumber(houseScore),
           icon: Icons.emoji_events_outlined,
           color: context.goldColor,
         ),
@@ -431,14 +438,6 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
 
         final leftColumn = [
           if (!_loading) _buildHouseIdentitySection(houseName, legacyPoints),
-          if (!_loading && _catalogPerks.isNotEmpty) ...[
-            const SizedBox(height: 34),
-            _buildPerksSection(),
-          ],
-          if (!_loading && _heirlooms.isNotEmpty) ...[
-            const SizedBox(height: 34),
-            _buildHeirloomsSection(),
-          ],
         ];
 
         final rightColumn = [
@@ -483,9 +482,12 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       width: widget.isPageMode ? double.infinity : dialogWidth,
       height: widget.isPageMode ? null : dialogHeight,
       decoration: BoxDecoration(
-        color: widget.isPageMode ? Colors.transparent : tokens.color('colors.canvas', canvasColor),
-        borderRadius:
-            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(tokens.number('radius.panel', 14)),
+        color: widget.isPageMode
+            ? Colors.transparent
+            : tokens.color('colors.canvas', canvasColor),
+        borderRadius: widget.isPageMode
+            ? BorderRadius.zero
+            : BorderRadius.circular(tokens.number('radius.panel', 14)),
         border: widget.isPageMode
             ? null
             : Border.all(color: themeColor.withValues(alpha: .35)),
@@ -500,8 +502,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               ],
       ),
       child: ClipRRect(
-        borderRadius:
-            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(tokens.number('radius.panel', 14)),
+        borderRadius: widget.isPageMode
+            ? BorderRadius.zero
+            : BorderRadius.circular(tokens.number('radius.panel', 14)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: widget.isPageMode ? MainAxisSize.min : MainAxisSize.max,
@@ -513,9 +516,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             if (_loading && _lineage.isEmpty)
               Center(
                   child: Padding(
-                      padding: EdgeInsets.all(tokens.number('spacing.page', 24)),
-                      child: CircularProgressIndicator(
-                          color: themeColor)))
+                      padding:
+                          EdgeInsets.all(tokens.number('spacing.page', 24)),
+                      child: CircularProgressIndicator(color: themeColor)))
             else if (widget.isPageMode)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -603,32 +606,58 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final houseName = rawHouseName.trim().toUpperCase();
     final initials = houseName.length >= 2 ? houseName.substring(0, 2) : 'HO';
 
-    final activeHumanName = (widget.state?.human['display_name'] ?? widget.state?.human['name'] ?? '').toString().trim();
+    final activeHumanName = (widget.state?.human['display_name'] ??
+            widget.state?.human['name'] ??
+            '')
+        .toString()
+        .trim();
     final gen1Member = _lineage.firstWhere(
       (m) => _parseInt(m['generation'], fallback: 0) == 1,
-      orElse: () => _lineage.isNotEmpty ? _lineage.first : const <String, dynamic>{},
+      orElse: () =>
+          _lineage.isNotEmpty ? _lineage.first : const <String, dynamic>{},
     );
-    final isIncumbentGen1 = gen1Member['is_incumbent'] == true || _lineage.length <= 1;
+    final isIncumbentGen1 =
+        gen1Member['is_incumbent'] == true || _lineage.length <= 1;
     final founder = (isIncumbentGen1 && activeHumanName.isNotEmpty)
         ? activeHumanName
-        : (_house['founder_name'] ?? _house['founder'] ?? gen1Member['name'] ?? (activeHumanName.isNotEmpty ? activeHumanName : 'Founding Ancestor')).toString();
-    final rawFoundedDay = _parseInt(_house['founded_game_day'] ?? _house['founded_day'] ?? gen1Member['birth_game_day'], fallback: 1);
+        : (_house['founder_name'] ??
+                _house['founder'] ??
+                gen1Member['name'] ??
+                (activeHumanName.isNotEmpty
+                    ? activeHumanName
+                    : 'Founding Ancestor'))
+            .toString();
+    final rawFoundedDay = _parseInt(
+        _house['founded_game_day'] ??
+            _house['founded_day'] ??
+            gen1Member['birth_game_day'],
+        fallback: 1);
     final fYear = ((rawFoundedDay - 1) ~/ 365) + 1;
     final fDay = ((rawFoundedDay - 1) % 365) + 1;
     final foundedText = 'Year $fYear, Day $fDay';
 
-    final legacy = _parseNum(_house['legacy_points'] ?? _house['total_legacy'] ?? widget.state?.json['legacy_score'] ?? legacyPoints);
-    final standing = _parseNum(_house['standing'] ?? _house['civic_standing'] ?? _house['peak_standing'] ?? widget.state?.human['civic_standing'] ?? widget.state?.json['civic_standing']);
-    final rawScore = _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
-    final houseScore = (rawScore != null && _parseNum(rawScore) > 0)
-        ? _parseNum(rawScore)
-        : (legacy * 50 + standing * 10);
+    final legacy = _parseNum(_house['legacy_points'] ??
+        _house['total_legacy'] ??
+        widget.state?.json['legacy_score'] ??
+        legacyPoints);
+    final standing = _parseNum(_house['standing'] ??
+        _house['civic_standing'] ??
+        _house['peak_standing'] ??
+        widget.state?.human['civic_standing'] ??
+        widget.state?.json['civic_standing']);
+    final rawScore =
+        _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
+    final houseScore = rawScore == null ? null : _parseNum(rawScore);
 
     final successor = widget.state?.life['successor'];
     final successorName = successor is Map
         ? (successor['successor_name'] ?? successor['name'])?.toString()
         : null;
-    final activeHeir = (_house['active_heir'] ?? _house['heir_name'] ?? successorName ?? 'Undesignated').toString();
+    final activeHeir = (_house['active_heir'] ??
+            _house['heir_name'] ??
+            successorName ??
+            'Undesignated')
+        .toString();
 
     return EarthSection(
       title: 'HOUSE IDENTITY',
@@ -675,7 +704,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     context,
                     icon: Icons.emoji_events_outlined,
                     label: 'HOUSE SCORE',
-                    value: '${formatWholeNumber(houseScore)} PTS',
+                    value: houseScore == null
+                        ? 'UNAVAILABLE'
+                        : '${formatWholeNumber(houseScore)} PTS',
                     accentColor: context.secondaryColor,
                   ),
                   _buildAttributeRow(
@@ -772,12 +803,14 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                   color: color,
                   fontSize: tokens.number('typography.widgetFooter.size', 10),
                   fontWeight: FontWeight.w700,
-                  letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0)),
+                  letterSpacing: tokens.number(
+                      'typography.widgetFooter.letterSpacing', 1.0)),
             ),
           ),
           IconButton(
-            icon:
-                Icon(Icons.close, size: 14, color: tokens.color('colors.muted', EarthColors.textMuted)),
+            icon: Icon(Icons.close,
+                size: 14,
+                color: tokens.color('colors.muted', EarthColors.textMuted)),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => setState(() {
@@ -829,30 +862,42 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final gen = member['generation'] ?? 1;
     final isIncumbent = member['is_incumbent'] == true;
-    final activeHumanName = (widget.state?.human['display_name'] ?? widget.state?.human['name'] ?? '').toString().trim();
+    final activeHumanName = (widget.state?.human['display_name'] ??
+            widget.state?.human['name'] ??
+            '')
+        .toString()
+        .trim();
     final name = (isIncumbent && activeHumanName.isNotEmpty)
         ? activeHumanName
         : (member['name'] ?? 'House Heir').toString();
     final birth = _parseInt(member['birth_game_day'], fallback: 1);
-    final death = member['death_game_day'] != null ? _parseInt(member['death_game_day']) : null;
+    final death = member['death_game_day'] != null
+        ? _parseInt(member['death_game_day'])
+        : null;
     final wealth = isIncumbent
-        ? _parseNum(widget.state?.human['credits'] ?? member['lifetime_wealth'] ?? 18420)
+        ? _parseNum(widget.state?.human['credits'] ?? member['lifetime_wealth'])
         : _parseNum(member['lifetime_wealth']);
     final legacy = isIncumbent
-        ? _parseNum(widget.state?.human['legacy'] ?? member['legacy_score'] ?? 31)
+        ? _parseNum(widget.state?.human['legacy'] ?? member['legacy_score'])
         : _parseNum(member['legacy_score'] ?? 0);
     final standing = isIncumbent
-        ? _parseNum(widget.state?.human['standing'] ?? widget.state?.human['civic_standing'] ?? member['standing'] ?? 742)
-        : _parseNum(member['standing'] ?? member['final_standing'] ?? (legacy * 3));
+        ? _parseNum(widget.state?.human['standing'] ??
+            widget.state?.human['civic_standing'] ??
+            member['standing'])
+        : _parseNum(
+            member['standing'] ?? member['final_standing'] ?? (legacy * 3));
     final age = isIncumbent
-        ? _parseInt(widget.state?.human['age_years'] ?? member['age_years'], fallback: 31)
-        : _parseInt(member['age_years'], fallback: (((death ?? (birth + 140)) - birth) ~/ 365) + 18);
+        ? _parseInt(widget.state?.human['age_years'] ?? member['age_years'])
+        : _parseInt(member['age_years'],
+            fallback: (((death ?? (birth + 140)) - birth) ~/ 365) + 18);
 
     final epitaph = (member['epitaph'] ?? '').toString().trim();
 
     final cardBorderColor = isExpanded
         ? themeColor.withValues(alpha: .6)
-        : (isIncumbent ? themeColor.withValues(alpha: .35) : context.subtleBorderColor);
+        : (isIncumbent
+            ? themeColor.withValues(alpha: .35)
+            : context.subtleBorderColor);
 
     return Container(
       padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 12)),
@@ -861,7 +906,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             ? context.surfaceColor
             : context.surfaceColor.withValues(alpha: .75),
         borderRadius: BorderRadius.circular(context.radiusCard),
-        border: Border.all(color: cardBorderColor, width: isExpanded ? 1.5 : 1.0),
+        border:
+            Border.all(color: cardBorderColor, width: isExpanded ? 1.5 : 1.0),
         boxShadow: isExpanded
             ? [
                 BoxShadow(
@@ -916,9 +962,11 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                           child: Text(
                             name,
                             style: TextStyle(
-                              color: isIncumbent ? themeColor : context.inkColor,
+                              color:
+                                  isIncumbent ? themeColor : context.inkColor,
                               fontWeight: FontWeight.w700,
-                              fontSize: tokens.number('typography.widgetValue.size', 13),
+                              fontSize: tokens.number(
+                                  'typography.widgetValue.size', 13),
                               letterSpacing: 1.2,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -927,19 +975,24 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                         const SizedBox(width: 8),
                         if (isIncumbent)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: themeColor.withValues(alpha: .15),
-                              borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
-                              border: Border.all(color: themeColor.withValues(alpha: .35)),
+                              borderRadius: BorderRadius.circular(
+                                  tokens.number('radius.control', 6)),
+                              border: Border.all(
+                                  color: themeColor.withValues(alpha: .35)),
                             ),
                             child: Text(
                               'ACTIVE HEAD',
                               style: TextStyle(
                                 color: themeColor,
                                 fontWeight: FontWeight.w700,
-                                fontSize: tokens.number('typography.caption.size', 8),
-                                letterSpacing: tokens.number('typography.caption.letterSpacing', 1.4),
+                                fontSize:
+                                    tokens.number('typography.caption.size', 8),
+                                letterSpacing: tokens.number(
+                                    'typography.caption.letterSpacing', 1.4),
                               ),
                             ),
                           )
@@ -948,7 +1001,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                             'Day $birth – Day ${death ?? 'Present'}',
                             style: TextStyle(
                               color: mutedColor,
-                              fontSize: tokens.number('typography.widgetFooter.size', 10),
+                              fontSize: tokens.number(
+                                  'typography.widgetFooter.size', 10),
                               fontWeight: FontWeight.w400,
                               letterSpacing: 1.0,
                             ),
@@ -974,7 +1028,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                       children: [
                         _nodeMiniStat('Age', '$age'),
                         _nodeMiniStat('Standing', formatWholeNumber(standing)),
-                        _nodeMiniStat('Legacy', '${formatWholeNumber(legacy)} LP'),
+                        _nodeMiniStat(
+                            'Legacy', '${formatWholeNumber(legacy)} LP'),
                       ],
                     ),
                   ],
@@ -982,7 +1037,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               ),
               const SizedBox(width: 8),
               Icon(
-                isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                isExpanded
+                    ? Icons.keyboard_arrow_up
+                    : Icons.keyboard_arrow_down,
                 color: isExpanded ? themeColor : mutedColor,
                 size: 22,
               ),
@@ -1027,7 +1084,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
   }
 
   double _calculateActiveCapital() {
-    if (widget.state == null) return 18420.0;
+    if (widget.state == null) return 0.0;
     final state = widget.state!;
 
     final explicitNw = state.json['total_net_worth'] ??
@@ -1050,17 +1107,17 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
 
     for (final b in state.buildings) {
       if (b is Map) {
-        total += _parseNum(b['value'] ?? b['cost'] ?? 10000.0);
+        total += _parseNum(b['value'] ?? b['cost']);
       }
     }
 
     for (final s in state.investmentShares) {
       if (s is Map) {
-        total += _parseNum(s['value'] ?? s['valuation'] ?? s['total_value'] ?? 2500.0);
+        total += _parseNum(s['value'] ?? s['valuation'] ?? s['total_value']);
       }
     }
 
-    return total > 0 ? total : _parseNum(state.human['credits'], fallback: 18420.0);
+    return total > 0 ? total : _parseNum(state.human['credits']);
   }
 
   Widget _buildMemberInspectorContent(Map<String, dynamic> member) {
@@ -1072,32 +1129,60 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
 
     final wealth = isIncumbent
         ? _calculateActiveCapital()
-        : _parseNum(member['lifetime_wealth'] ?? member['capital_generated'] ?? member['total_wealth']);
+        : _parseNum(member['lifetime_wealth'] ??
+            member['capital_generated'] ??
+            member['total_wealth']);
     final legacy = isIncumbent
-        ? _parseNum(widget.state?.human['legacy'] ?? member['legacy_score'] ?? 31)
+        ? _parseNum(
+            widget.state?.human['legacy'] ?? member['legacy_score'] ?? 31)
         : _parseNum(member['legacy_score'] ?? 0);
 
-    final activeCityName = widget.state?.institutions['city'] is Map
-        ? (widget.state!.institutions['city'] as Map)['name']?.toString().toUpperCase()
-        : null;
-    final activeCorporationName = (widget.state?.institutions['corporation'] is Map
-            ? (widget.state!.institutions['corporation'] as Map)['name']?.toString().toUpperCase()
-            : null) ??
-        (widget.state?.membership?['corporation_name']?.toString().toUpperCase()) ??
-        (widget.state?.membership?['name']?.toString().toUpperCase());
+    final activeTerritoryName =
+        widget.state?.residency['territory_name']?.toString().toUpperCase() ??
+            (widget.state?.institutions['territory'] is Map
+                ? (widget.state!.institutions['territory'] as Map)['name']
+                    ?.toString()
+                    .toUpperCase()
+                : null);
+    final activeCorporationName =
+        (widget.state?.institutions['corporation'] is Map
+                ? (widget.state!.institutions['corporation'] as Map)['name']
+                    ?.toString()
+                    .toUpperCase()
+                : null) ??
+            (widget.state?.membership?['corporation_name']
+                ?.toString()
+                .toUpperCase()) ??
+            (widget.state?.membership?['name']?.toString().toUpperCase());
 
-    final rawCity = isIncumbent
-        ? (activeCityName ?? widget.state?.human['city_name'] ?? widget.state?.human['city_id'])
-        : (member['city_name'] ?? member['city']);
+    final rawTerritory = isIncumbent
+        ? (activeTerritoryName ??
+            widget.state?.membership?['territory_name'] ??
+            widget.state?.membership?['territory_id'])
+        : (member['territory_name'] ?? member['territory_id']);
     final rawCorp = isIncumbent
-        ? (activeCorporationName ?? widget.state?.human['corporation_name'] ?? widget.state?.human['corporation_id'])
+        ? (activeCorporationName ??
+            widget.state?.human['corporation_name'] ??
+            widget.state?.human['corporation_id'])
         : (member['corporation_name'] ?? member['corporation']);
 
-    final city = (rawCity != null && rawCity.toString().trim().isNotEmpty && rawCity.toString() != 'null')
-        ? rawCity.toString().replaceAll('city-', '').replaceAll('-', ' ').toUpperCase()
+    final territory = (rawTerritory != null &&
+            rawTerritory.toString().trim().isNotEmpty &&
+            rawTerritory.toString() != 'null')
+        ? rawTerritory
+            .toString()
+            .replaceAll('territory-', '')
+            .replaceAll('-', ' ')
+            .toUpperCase()
         : 'INDEPENDENT';
-    final corporation = (rawCorp != null && rawCorp.toString().trim().isNotEmpty && rawCorp.toString() != 'null')
-        ? rawCorp.toString().replaceAll('corp-', '').replaceAll('-', ' ').toUpperCase()
+    final corporation = (rawCorp != null &&
+            rawCorp.toString().trim().isNotEmpty &&
+            rawCorp.toString() != 'null')
+        ? rawCorp
+            .toString()
+            .replaceAll('corp-', '')
+            .replaceAll('-', ' ')
+            .toUpperCase()
         : 'INDEPENDENT';
 
     final businesses = member['operations_completed'] ?? 0;
@@ -1116,8 +1201,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         _buildAttributeRow(
           context,
           icon: Icons.location_city_outlined,
-          label: 'RESIDENCE',
-          value: city,
+          label: 'TERRITORY',
+          value: territory,
           accentColor: context.secondaryColor,
         ),
         _buildAttributeRow(
@@ -1191,7 +1276,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               color: mutedColor,
               fontSize: tokens.number('typography.widgetFooter.size', 10),
               fontWeight: FontWeight.w400,
-              letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0),
+              letterSpacing:
+                  tokens.number('typography.widgetFooter.letterSpacing', 1.0),
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -1203,7 +1289,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               color: inkColor,
               fontWeight: FontWeight.w700,
               fontSize: tokens.number('typography.widgetValue.size', 12),
-              letterSpacing: tokens.number('typography.widgetValue.letterSpacing', 1.4)),
+              letterSpacing:
+                  tokens.number('typography.widgetValue.letterSpacing', 1.4)),
         ),
       ],
     );
@@ -1227,7 +1314,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       ),
       child: Row(
         children: [
-          Icon(icon, size: tokens.number('controls.iconSize', 16) - 2, color: themeColor),
+          Icon(icon,
+              size: tokens.number('controls.iconSize', 16) - 2,
+              color: themeColor),
           SizedBox(width: tokens.number('spacing.inline', 8)),
           Expanded(
             child: Text(label,
@@ -1235,14 +1324,16 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     color: mutedColor,
                     fontSize: tokens.number('typography.widgetFooter.size', 10),
                     fontWeight: FontWeight.w400,
-                    letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0))),
+                    letterSpacing: tokens.number(
+                        'typography.widgetFooter.letterSpacing', 1.0))),
           ),
           Text(value,
               style: TextStyle(
                   color: inkColor,
                   fontWeight: FontWeight.w700,
                   fontSize: tokens.number('typography.widgetValue.size', 12),
-                  letterSpacing: tokens.number('typography.widgetValue.letterSpacing', 1.4))),
+                  letterSpacing: tokens.number(
+                      'typography.widgetValue.letterSpacing', 1.4))),
         ],
       ),
     );
@@ -1274,7 +1365,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             final perkKey = perk['key']?.toString() ?? '';
             final name = perk['name']?.toString() ?? 'Trait';
             final category = perk['category']?.toString() ?? 'Operations';
-            final cost = _parseInt(perk['cost'], fallback: 100);
+            final cost = _parseInt(perk['cost'], fallback: 0);
             final desc = perk['description']?.toString() ?? '';
 
             final isUnlocked = _perks.any((p) => p['perk_key'] == perkKey);
@@ -1285,7 +1376,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: isLast ? BorderSide.none : BorderSide(color: context.subtleBorderColor),
+                  bottom: isLast
+                      ? BorderSide.none
+                      : BorderSide(color: context.subtleBorderColor),
                 ),
               ),
               child: Row(
@@ -1299,7 +1392,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                           ? themeColor.withValues(alpha: .2)
                           : context.surfaceColor,
                       border: Border.all(
-                        color: isUnlocked ? themeColor : context.subtleBorderColor,
+                        color:
+                            isUnlocked ? themeColor : context.subtleBorderColor,
                       ),
                     ),
                     child: Icon(
@@ -1327,7 +1421,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: themeColor.withValues(alpha: .15),
                                 borderRadius: BorderRadius.circular(4),
@@ -1357,11 +1452,13 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                   const SizedBox(width: 12),
                   if (isUnlocked)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: context.successColor.withValues(alpha: .15),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: context.successColor.withValues(alpha: .35)),
+                        border: Border.all(
+                            color: context.successColor.withValues(alpha: .35)),
                       ),
                       child: Text(
                         'UNLOCKED',
@@ -1375,12 +1472,17 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                   else
                     EarthButton(
                       buttonKey: Key('btn-unlock-perk-$perkKey'),
-                      label: _isActionInProgress ? 'UNLOCKING...' : 'UNLOCK ($cost LP)',
+                      label: _isActionInProgress
+                          ? 'UNLOCKING...'
+                          : (cost > 0
+                              ? 'UNLOCK ($cost LP)'
+                              : 'COST UNAVAILABLE'),
                       variant: EarthButtonVariant.ghost,
                       isLoading: _isActionInProgress,
-                      onPressed: (!canAfford || _isActionInProgress)
-                          ? null
-                          : () => _unlockPerk(perkKey, name),
+                      onPressed:
+                          (cost <= 0 || !canAfford || _isActionInProgress)
+                              ? null
+                              : () => _unlockPerk(perkKey, name),
                     ),
                 ],
               ),
@@ -1416,7 +1518,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             final isLast = indexed.$1 == _heirlooms.length - 1;
             final id = h['id']?.toString() ?? '';
             final name = h['name']?.toString() ?? 'Heirloom';
-            final quality = h['quality_tier']?.toString() ?? h['quality']?.toString() ?? 'Common';
+            final quality = h['quality_tier']?.toString() ??
+                h['quality']?.toString() ??
+                'Common';
             final statBuff = h['stat_buff']?.toString() ?? 'None';
             final inscription = h['inscription']?.toString() ?? '';
             final isEquipped = h['is_equipped'] == true ||
@@ -1432,7 +1536,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 border: Border(
-                  bottom: isLast ? BorderSide.none : BorderSide(color: context.subtleBorderColor),
+                  bottom: isLast
+                      ? BorderSide.none
+                      : BorderSide(color: context.subtleBorderColor),
                 ),
               ),
               child: Row(
@@ -1443,7 +1549,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Colors.amber.withValues(alpha: .15),
-                      border: Border.all(color: Colors.amber.withValues(alpha: .5)),
+                      border:
+                          Border.all(color: Colors.amber.withValues(alpha: .5)),
                     ),
                     child: const Center(
                       child: Icon(
@@ -1472,7 +1579,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
                                 color: Colors.amber.withValues(alpha: .15),
                                 borderRadius: BorderRadius.circular(4),
@@ -1488,11 +1596,15 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                             ),
                             if (isEquipped)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: context.primaryColor.withValues(alpha: .15),
+                                  color: context.primaryColor
+                                      .withValues(alpha: .15),
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: context.primaryColor.withValues(alpha: .4)),
+                                  border: Border.all(
+                                      color: context.primaryColor
+                                          .withValues(alpha: .4)),
                                 ),
                                 child: Text(
                                   'EQUIPPED TO HEAD',
@@ -1519,8 +1631,12 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                   EarthButton(
                     buttonKey: Key('btn-equip-heirloom-$id'),
                     label: isEquipped ? 'UNEQUIP' : 'EQUIP TO HEAD',
-                    variant: isEquipped ? EarthButtonVariant.secondary : EarthButtonVariant.primary,
-                    onPressed: _isActionInProgress ? null : () => _equipHeirloom(id, name),
+                    variant: isEquipped
+                        ? EarthButtonVariant.secondary
+                        : EarthButtonVariant.primary,
+                    onPressed: _isActionInProgress
+                        ? null
+                        : () => _equipHeirloom(id, name),
                   ),
                 ],
               ),

@@ -125,11 +125,11 @@ void main() {
       // Verify Filter Pills
       expect(find.textContaining('ALL ('), findsOneWidget);
       expect(find.textContaining('CRITICAL / HIGH'), findsOneWidget);
-      expect(find.text('CORPORATION & ASSETS'), findsOneWidget);
+      expect(find.text('ORGANIZATIONS & ASSETS'), findsOneWidget);
       expect(find.text('CIVIC & HOUSE'), findsOneWidget);
 
       // Verify Decision Card Titles
-      expect(find.text('Your corporation is losing energy'), findsOneWidget);
+      expect(find.text('An Organization is losing energy'), findsOneWidget);
       expect(find.text('A contract expires in 2 days'), findsOneWidget);
       expect(
           find.text('You have an unresolved governance vote'), findsOneWidget);

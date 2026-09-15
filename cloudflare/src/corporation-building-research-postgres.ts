@@ -56,18 +56,23 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     // Research progression is corporation-specific. The global catalog may
     // contain tiers researched by another corporation, but those tiers do
     // not advance this corporation's own research path.
+    // Building unlocks are represented by completed, corporation-owned
+    // research projects.  The retired corporation_building_unlocks mirror was
+    // never part of the canonical V4 schema.
     const unlocked = await tx.query<{ tier: string }>(
       `SELECT COALESCE(MAX(c.tier), 1)::text AS tier
-       FROM corporation_building_unlocks u
-       JOIN building_catalog c ON c.id = u.catalog_id
-       WHERE u.corporation_id = $1
-         AND u.status = 'unlocked'
-         AND c.building_type = $2`,
+       FROM corporation_research_projects p
+       JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
+       JOIN building_catalog c ON c.id = p.target_id
+       WHERE o.id = $1
+         AND p.target_type = 'BUILDING_BLUEPRINT'
+         AND p.status = 'COMPLETED'
+         AND c.family_code = $2`,
       [corporationId, input.buildingType],
     );
     const priorTier = Number(unlocked.rows[0]?.tier ?? 1);
-    const previous = await tx.query<{ id: string; tier: number; cost_credits: string; construction_days: number; slot_footprint: number; ownership_class: string }>(
-      'SELECT id, tier, cost_credits, construction_days, slot_footprint, ownership_class FROM building_catalog WHERE building_type = $1 AND tier = $2 LIMIT 1',
+    const previous = await tx.query<{ id: string; tier: number; construction_credit_units: string; construction_minutes: number; slot_footprint: number; ownership_scope: string }>(
+      'SELECT id, tier, construction_credit_units, construction_minutes, slot_footprint, ownership_scope FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1',
       [input.buildingType, priorTier],
     );
     if (!previous.rows[0]) throw new Error('Building blueprint not found');
@@ -77,7 +82,7 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     // Tiers are authored in the catalog. Research unlocks a predefined
     // blueprint; it never generates or mutates shared catalog economics.
     const targetCatalog = await tx.query(
-      'SELECT * FROM building_catalog WHERE id = $1 AND building_type = $2 AND tier = $3 AND tier BETWEEN 1 AND 5',
+      'SELECT * FROM building_catalog WHERE id = $1 AND family_code = $2 AND tier = $3 AND tier BETWEEN 1 AND 5',
       [targetCatalogId, input.buildingType, targetTier],
     );
     if (!targetCatalog.rows[0]) throw new Error(`Predefined Tier ${targetTier} blueprint is missing from the building catalog`);
@@ -88,8 +93,8 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     if (existingProject.rows[0]) {
       throw new Error(`Your corporation has already researched or is researching Tier ${targetTier} for this building`);
     }
-    const costUnits = researchCost(previous.rows[0].cost_credits, targetTier, previous.rows[0].ownership_class);
-    const durationDays = researchDurationDays(Number(previous.rows[0].slot_footprint ?? 1), targetTier, previous.rows[0].ownership_class);
+    const costUnits = researchCost(previous.rows[0].construction_credit_units, targetTier, previous.rows[0].ownership_scope);
+    const durationDays = researchDurationDays(Number(previous.rows[0].slot_footprint ?? 1), targetTier, previous.rows[0].ownership_scope);
     // The database clock is the sole source of time. Do not derive or submit
     // a client/server timestamp for research start or completion.
     const timeRes = await tx.query<{ game_day: number }>(
@@ -156,13 +161,17 @@ export async function listCorporationBuildingResearch(repository: PostgresReposi
   );
   const corporationId = membership.rows[0]?.corporation_id;
   if (!corporationId) return { corporationId: null, projects: [], unlocks: [] };
-  const [projects, unlocks] = await Promise.all([
-    repository.query(`SELECT p.*, c.name AS catalog_name FROM corporation_research_projects p
+  const projects = await repository.query(`SELECT p.*, c.code AS catalog_name FROM corporation_research_projects p
       JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
       JOIN building_catalog c ON c.id = p.target_id
-      WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' ORDER BY p.created_at DESC`, [corporationId]),
-    repository.query('SELECT u.*, c.name AS catalog_name, c.building_type, c.tier FROM corporation_building_unlocks u JOIN building_catalog c ON c.id = u.catalog_id WHERE u.corporation_id = $1 AND u.status = \'unlocked\' ORDER BY c.building_type, c.tier', [corporationId]),
-  ]);
+      WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' ORDER BY p.created_at DESC`, [corporationId]);
+  const unlocks = await repository.query(`SELECT p.id AS project_id, p.target_id AS catalog_id,
+      c.code AS catalog_name, c.family_code, c.tier, p.completed_game_day
+    FROM corporation_research_projects p
+    JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
+    JOIN building_catalog c ON c.id = p.target_id
+    WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' AND p.status = 'COMPLETED'
+    ORDER BY c.family_code, c.tier`, [corporationId]);
   return { corporationId, projects: projects.rows, unlocks: unlocks.rows };
 }
 

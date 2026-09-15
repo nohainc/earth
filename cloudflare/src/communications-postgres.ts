@@ -3,7 +3,7 @@ import { toNanoMarkup } from './nano-markup.ts';
 
 export interface CommChannel {
   id: string;
-  scope: 'global' | 'city' | 'corporation' | 'community' | 'direct';
+  scope: 'global' | 'city' | 'corporation' | 'community' | 'organization' | 'direct';
   scope_id: string | null;
   name: string;
   description: string | null;
@@ -48,20 +48,23 @@ export async function listAccessibleChannels(
     ) latest ON TRUE
     WHERE ch.scope = 'global'
        OR (ch.scope = 'city' AND EXISTS (
-            SELECT 1 FROM house_affiliations ha
-             WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $1) AND ha.status = 'ACTIVE' AND ha.city_id = ch.scope_id))
+            SELECT 1 FROM house_residencies r
+             WHERE r.house_id = (SELECT house_id FROM humans WHERE id = $1) AND r.status = 'ACTIVE' AND r.residency_class = 'PRIMARY' AND r.territory_id = ch.scope_id))
        OR (ch.scope = 'corporation' AND EXISTS (
             SELECT 1 FROM house_affiliations ha
              WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $1) AND ha.status = 'ACTIVE' AND ha.corporation_id = ch.scope_id))
        OR (ch.scope = 'community' AND EXISTS (
             SELECT 1 FROM communities c JOIN community_memberships cm ON cm.community_id = c.id
              WHERE c.id = ch.scope_id AND c.status = 'ACTIVE' AND cm.house_id = (SELECT house_id FROM humans WHERE id = $1) AND cm.status = 'ACTIVE'))
+       OR (ch.scope = 'organization' AND EXISTS (
+            SELECT 1 FROM organizations o JOIN organization_memberships om ON om.organization_id = o.id
+             WHERE o.id = ch.scope_id AND o.status = 'ACTIVE' AND om.house_id = (SELECT house_id FROM humans WHERE id = $1) AND om.status = 'ACTIVE'))
        OR (ch.scope = 'direct' AND EXISTS (
             SELECT 1 FROM comm_direct_conversations d
             WHERE d.channel_id = ch.id AND (SELECT house_id FROM humans WHERE id = $1) IN (d.participant_low_house_id, d.participant_high_house_id)))
     ORDER BY CASE ch.scope
       WHEN 'corporation' THEN 1 WHEN 'city' THEN 2 WHEN 'community' THEN 3
-      WHEN 'direct' THEN 4 WHEN 'global' THEN 5 ELSE 6 END,
+      WHEN 'organization' THEN 4 WHEN 'direct' THEN 5 WHEN 'global' THEN 6 ELSE 7 END,
       latest.created_at DESC NULLS LAST, name ASC
   `;
   const res = await repository.query<CommChannel>(sql, [humanId]);
@@ -137,11 +140,14 @@ export async function canAccessChannel(
        SELECT 1 FROM comm_channels ch
        WHERE ch.id = $1 AND (
          ch.scope = 'global'
-         OR (ch.scope = 'city' AND EXISTS (SELECT 1 FROM house_affiliations ha WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $2) AND ha.status = 'ACTIVE' AND ha.city_id = ch.scope_id))
+         OR (ch.scope = 'city' AND EXISTS (SELECT 1 FROM house_residencies r WHERE r.house_id = (SELECT house_id FROM humans WHERE id = $2) AND r.status = 'ACTIVE' AND r.residency_class = 'PRIMARY' AND r.territory_id = ch.scope_id))
          OR (ch.scope = 'corporation' AND EXISTS (SELECT 1 FROM house_affiliations ha WHERE ha.house_id = (SELECT house_id FROM humans WHERE id = $2) AND ha.status = 'ACTIVE' AND ha.corporation_id = ch.scope_id))
          OR (ch.scope = 'community' AND EXISTS (
               SELECT 1 FROM communities c JOIN community_memberships cm ON cm.community_id = c.id
                WHERE c.id = ch.scope_id AND c.status = 'ACTIVE' AND cm.house_id = (SELECT house_id FROM humans WHERE id = $2) AND cm.status = 'ACTIVE'))
+         OR (ch.scope = 'organization' AND EXISTS (
+              SELECT 1 FROM organizations o JOIN organization_memberships om ON om.organization_id = o.id
+               WHERE o.id = ch.scope_id AND o.status = 'ACTIVE' AND om.house_id = (SELECT house_id FROM humans WHERE id = $2) AND om.status = 'ACTIVE'))
        OR (ch.scope = 'direct' AND EXISTS (SELECT 1 FROM comm_direct_conversations d WHERE d.channel_id = ch.id AND (SELECT house_id FROM humans WHERE id = $2) IN (d.participant_low_house_id, d.participant_high_house_id)))
        )
      ) AS allowed`,

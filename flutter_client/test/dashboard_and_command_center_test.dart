@@ -7,19 +7,19 @@ void main() {
   test('dashboardSectionTitle maps keys to human-readable titles', () {
     expect(dashboardSectionTitle('market'), 'MARKET');
     expect(dashboardSectionTitle('business'), 'BUSINESS');
-    expect(dashboardSectionTitle('civic'), 'PUBLIC');
-    expect(dashboardSectionTitle('corporations'), 'CORPORATIONS');
-    expect(dashboardSectionTitle('corporation'), 'CORPORATION');
-    expect(dashboardSectionTitle('city'), 'MY CITY');
-    expect(dashboardSectionTitle('my-community'), 'MY COMMUNITY');
+    expect(dashboardSectionTitle('civic'), 'GOVERNANCE');
+    expect(dashboardSectionTitle('corporations'), 'DIRECTORY');
+    expect(dashboardSectionTitle('corporation'), 'ORGANIZATION');
+    expect(dashboardSectionTitle('city'), 'TERRITORY');
+    expect(dashboardSectionTitle('my-community'), 'COMMUNITY');
     expect(dashboardSectionTitle('communities'), 'COMMUNITIES');
-    expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
+    expect(dashboardSectionTitle('technology'), 'RESEARCH');
     expect(dashboardSectionTitle('life'), 'LIFE');
     expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
     expect(dashboardSectionTitle('finance'), 'FINANCE');
-    expect(dashboardSectionTitle('activity'), 'ACTIVITY & EVENTS');
-    expect(dashboardSectionTitle('command'), 'COMMAND CENTER');
-    expect(dashboardSectionTitle('other'), 'COMMAND CENTER');
+    expect(dashboardSectionTitle('activity'), 'ACTIVITY');
+    expect(dashboardSectionTitle('command'), 'COMMAND');
+    expect(dashboardSectionTitle('other'), 'COMMAND');
   });
 
   testWidgets('Dashboard renders sections in wide and compact layouts',

@@ -10,7 +10,7 @@ function budgetCategory(category: string): string {
 
 export async function getCorporationFiscalState(repository: PostgresRepository, corporationId: string): Promise<Record<string, unknown>> {
   const [corporation, accounts, budgets, taxes] = await Promise.all([
-    repository.query('SELECT c.id, i.name, c.status, c.admission_policy FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1', [corporationId]),
+    repository.query('SELECT c.id, i.name, c.status, c.admission_policy, c.tax_charter, c.tax_charter_version, c.tax_charter_updated_game_day FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1', [corporationId]),
     repository.query(`SELECT a.id::TEXT AS account_id, a.account_type, a.balance_units::TEXT AS balance_units
       FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
       WHERE o.id = $1 AND o.owner_type = 'CORPORATION' AND a.asset_id = 1 AND a.status = 'ACTIVE'

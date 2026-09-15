@@ -8,7 +8,13 @@ test('Database Backup, Migration Preflight, and Checksum Verification', async ()
   const migrationsDir = resolve('db/migrations');
   const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
 
-  assert.deepEqual(files, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql', '004_public_infrastructure_credit.sql', '005_architecture_integrity_report.sql', '006_resource_flow_schema.sql', '007_core_resource_graph_t1.sql', '008_house_food_maintenance.sql', '009_private_building_settlement_journals.sql', '010_market_state_completion.sql', '011_resource_analytics_read_models.sql', '012_resource_economic_integrity.sql', '013_financial_obligations.sql', '014_construction_settlement_destination.sql', '015_resumable_settlement_work.sql', '016_house_daily_statements.sql', '017_house_needs_services.sql'], 'Active migrations must be contiguous');
+  assert.ok(files.length > 0, 'At least one active migration is required');
+  assert.equal(files[0], '001_baseline.sql');
+  assert.deepEqual(
+    files.map((file) => Number(file.match(/^(\d+)_/)?.[1])),
+    files.map((_, index) => index + 1),
+    'Active migrations must be contiguous'
+  );
 
   // Verify that all migration files are non-empty and have valid SQL syntax prefixes
   for (const file of files) {

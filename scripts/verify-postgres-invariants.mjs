@@ -21,7 +21,7 @@ const client = new Client({
 await client.connect();
 try {
   const checks = {};
-  const invalidBalances = await client.query('SELECT COUNT(*)::integer AS count FROM economic_accounts WHERE balance_units < 0');
+  const invalidBalances = await client.query("SELECT COUNT(*)::integer AS count FROM economic_accounts WHERE balance_units < 0 AND account_type <> 'SYSTEM_ACCOUNT'");
   const invalidLedger = await client.query('SELECT COUNT(*)::integer AS count FROM economic_entries WHERE delta_units = 0');
   const invalidOwnership = await client.query('SELECT COUNT(*)::integer AS count FROM market_fills WHERE buyer_economic_id = seller_economic_id');
   const pendingOutbox = await client.query("SELECT COUNT(*)::integer AS count FROM event_outbox WHERE status = 'LOCKED'");

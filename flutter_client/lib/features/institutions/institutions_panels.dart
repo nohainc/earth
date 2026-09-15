@@ -189,7 +189,10 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   bool _loading = true;
   int _searchGeneration = 0;
 
-  bool get _isMember => widget.state.membership?['corporation_id'] != null;
+  bool get _isMember =>
+      widget.state.membership?['corporation_id'] != null ||
+      widget.state.membership?['organization_id'] != null ||
+      widget.state.membership?['territory_id'] != null;
 
   @override
   void initState() {
@@ -202,7 +205,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.state.json, widget.state.json) ||
         oldWidget.state.membership?['corporation_id'] !=
-        widget.state.membership?['corporation_id']) {
+            widget.state.membership?['corporation_id']) {
       _load();
     } else if (widget.selectedCorporationId != null &&
         widget.selectedCorporationId != oldWidget.selectedCorporationId &&
@@ -477,11 +480,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         : const <String, dynamic>{};
 
     final incomeTaxBps =
-        asIntOr(rules['incomeTaxBps'] ?? rules['income_tax_bps'], 200);
+        asIntOr(rules['incomeTaxBps'] ?? rules['income_tax_bps'], -1);
     final salesTaxBps =
-        asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], 100);
+        asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], -1);
     final corporateTaxBps =
-        asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], 250);
+        asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], -1);
     final propertyTaxBps =
         asIntOr(rules['propertyTaxBps'] ?? rules['property_tax_bps'], 150);
 
@@ -590,7 +593,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               Icon(Icons.gavel_outlined, size: 16, color: context.primaryColor),
               const SizedBox(width: 8),
               Text(
-                'UNIVERSAL CHARTER PRINCIPLES',
+                'ORGANIZATION CHARTER PRINCIPLES',
                 style: TextStyle(
                   color: context.primaryColor,
                   fontSize: 11,
@@ -602,7 +605,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Core constitutional rules applied uniformly across all sovereign corporate jurisdictions on Earth:',
+            'Core constitutional rules applied uniformly across all organizations, syndicates, and enterprises on Earth:',
             style: context.widgetFooterStyle,
           ),
           const SizedBox(height: 12),
@@ -613,22 +616,22 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                 _buildBenefitRow(
                   context,
                   Icons.shield_outlined,
-                  'Corporate Tax Protection',
-                  'Affiliated citizens enjoy protected municipal tax caps across all constituent network cities.',
+                  'Commercial Subsidiarity',
+                  'Organizations coordinate enterprise equity and production across territories while respecting local territorial commons.',
                 ),
                 const SizedBox(height: 10),
                 _buildBenefitRow(
                   context,
                   Icons.biotech_outlined,
                   'Shared Technology & Patents',
-                  'Free access to shared corporate technology and patent pool without external licensing fees.',
+                  'Free access to shared organizational technology, patent pool, and joint industrial contracts.',
                 ),
                 const SizedBox(height: 10),
                 _buildBenefitRow(
                   context,
                   Icons.how_to_vote_outlined,
                   'Shareholder Democratic Franchise',
-                  'Every member votes on corporate leadership, municipal tax updates, and city adoptions.',
+                  'Every member votes on organization leadership, charter amendments, and asset ventures.',
                 ),
               ];
               final col2 = [
@@ -650,7 +653,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                   context,
                   Icons.manage_accounts_outlined,
                   'Executive Governance Authority',
-                  'Active Executives hold statutory authority to manage municipal charters and introduce proposals.',
+                  'Active Executives hold statutory authority to manage operations, proposals, and agreements.',
                 ),
               ];
 
@@ -884,22 +887,26 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         : const <String, dynamic>{};
 
     final currentCorpName = current['name']?.toString();
-    final allCities = widget.state.rankings['cities'] is List
-        ? (widget.state.rankings['cities'] as List)
-        : const <dynamic>[];
+    final allTerritories = widget.state.territories.isNotEmpty
+        ? widget.state.territories
+        : (widget.state.rankings['territories'] is List
+            ? (widget.state.rankings['territories'] as List)
+            : (widget.state.rankings['cities'] is List
+                ? (widget.state.rankings['cities'] as List)
+                : const <dynamic>[]));
 
     final cockpit = EarthPageCockpit(
       status: 'PLANETARY COMMONS',
       statusColor: context.primaryColor,
-      infoTitle: 'PLANETARY CORPORATIONS & CHARTER ARCHITECTURE',
+      infoTitle: 'ORGANIZATION DIRECTORY & CHARTER ARCHITECTURE',
       infoDescription:
-          '• Sovereign Enterprise Alliances: Intermediate institutions governing constituent city charters, municipal taxation, and corporate dividend distribution.\n\n• Municipal Network: Each corporation is formed by and supports a network of chartered cities across Earth.\n\n• Shareholder Democratic Franchise: Every member votes on corporate leadership, municipal tax updates, and city adoptions.',
-      title: 'PLANETARY CORPORATIONS',
+          '• Sovereign Enterprise Alliances: Organizations coordinate corporate equity, commercial joint ventures, technology pools, and dividend distribution.\n\n• Subsidiarity & Geography: Organizations operate across territorial commons without superseding territorial local sovereignty.\n\n• Shareholder Democratic Franchise: Every member votes on organization leadership, charter updates, and venture participation.',
+      title: 'ORGANIZATION DIRECTORY',
       subtitle:
-          'Sovereign enterprise networks and municipal alliances across Earth',
+          'Registered corporate entities, commercial syndicates, and cooperatives across Earth',
       metrics: [
         CockpitMetric(
-          label: 'Enterprises',
+          label: 'Organizations',
           value: '${_corporations.length}',
           icon: Icons.domain_outlined,
           color: context.primaryColor,
@@ -913,9 +920,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           color: context.secondaryColor,
         ),
         CockpitMetric(
-          label: 'Cities',
-          value: '${allCities.length}',
-          icon: Icons.location_city_outlined,
+          label: 'Territories',
+          value: '${allTerritories.length}',
+          icon: Icons.location_on_outlined,
           color: context.goldColor,
         ),
       ],
@@ -935,7 +942,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               _memberView(current),
               const SizedBox(height: 32),
               Text(
-                'ALL PLANETARY CORPORATIONS',
+                'ALL ORGANIZATIONS',
                 style:
                     context.topicTitleStyle.copyWith(color: context.mutedColor),
               ),
@@ -950,9 +957,12 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
   Widget _memberView(Map<String, dynamic> current) {
     final name = current['name']?.toString() ?? 'your corporation';
-    final city = current['capital_city_name']?.toString() ??
-        widget.state.membership?['city_id']?.toString() ??
-        'capital city';
+    final territory = current['primary_territory_name']?.toString() ??
+        current['territory_name']?.toString() ??
+        current['capital_city_name']?.toString() ??
+        widget.state.membership?['territory_name']?.toString() ??
+        widget.state.membership?['territory_id']?.toString() ??
+        'territory';
     final members = current['member_count'] ?? 0;
     final treasury = asDouble(current['treasury']) ?? 0.0;
 
@@ -992,7 +1002,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'You are affiliated with $name. Your residency is registered in its capital city: $city ($members citizens · ${treasury.toStringAsFixed(0)} C treasury reserves).',
+                      'You are affiliated with $name. Your residency is registered in its primary territory: $territory ($members houses · ${treasury.toStringAsFixed(0)} C treasury reserves).',
                       style:
                           context.bodyStyle.copyWith(color: context.inkColor),
                     ),
@@ -1055,8 +1065,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               icon: Icons.add_business_outlined,
               onPressed: _isMember || widget.busy
                   ? null
-                  : () =>
-                      showFormationComposer(context, widget.action),
+                  : () => showFormationComposer(context, widget.action),
             ),
           ],
         ),
@@ -1122,9 +1131,10 @@ class CivicRankingsPanel extends StatefulWidget {
 }
 
 class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
-  int _singleTab = 0; // 0: Citizens, 1: Houses, 2: Corps, 3: Cities
+  int _singleTab = 0; // Legacy compatibility view.
   int _leftTab = 0; // 0: Citizens, 1: Houses
   int _rightTab = 0; // 0: Corps, 1: Cities
+  int _metricTab = 0;
   int _citizenPage = 0;
   int _housePage = 0;
   int _corpPage = 0;
@@ -1173,6 +1183,17 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final canonicalMetrics =
+            _canonicalMetrics(widget.state.rankings['metrics']);
+        if (canonicalMetrics.isNotEmpty ||
+            widget.state.rankings['generatedFrom'] == 'ranking-snapshots') {
+          return _buildCanonicalMetricRankings(
+              context,
+              canonicalMetrics,
+              widget.state.rankings['gameDay'],
+              widget.state.rankings['rulesVersion']);
+        }
+
         final citizens = _citizenRows(
           widget.state.rankings['citizens'],
           widget.state.rankings['humans'],
@@ -1332,10 +1353,10 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
           statusColor: context.goldColor,
           infoTitle: 'CIVIC RANKINGS & LEADERBOARD ARCHITECTURE',
           infoDescription:
-              '• Planetary Index (0–100): Normalized dynamic rating across citizens, dynasties, corporations, and cities evaluated against real-time planetary economy metrics.\n\n• Citizen Index: Personal Legacy (45%) + Civic Standing (35%) + Capitalization (20%).\n\n• Dynastic House Index: Ancestral Inscriptions + Accumulated House Standing + Generational Peak Legacy.\n\n• Corporation Index: Total Enterprise Capitalization (45%) + Productive Ecosystem (30%) + Municipal Excellence (15%) + Workforce Population (10%).\n\n• City Index: Municipal Capitalization (35%) + Infrastructure Coverage (35%) + Commercial Vitality (20%) + Demographic Population (10%).\n\n• Prestige Tiers: Sovereign (90–100), Patrician (75–89), Pioneer (50–74), Citizen (0–49).',
+              '• Planetary Index (0–100): Normalized dynamic rating across citizens, dynasties, organizations, and territories evaluated against real-time planetary economy metrics.\n\n• Citizen Index: Personal Legacy (45%) + Civic Standing (35%) + Capitalization (20%).\n\n• Dynastic House Index: Ancestral Inscriptions + Accumulated House Standing + Generational Peak Legacy.\n\n• Organization Index: Total Enterprise Capitalization (45%) + Productive Ecosystem (30%) + Commercial Vitality (15%) + Workforce Population (10%).\n\n• Territory Index: Municipal Capitalization (35%) + Infrastructure Coverage (35%) + Commercial Vitality (20%) + Demographic Population (10%).\n\n• Prestige Tiers: Sovereign (90–100), Patrician (75–89), Pioneer (50–74), Citizen (0–49).',
           title: 'CIVIC RANKINGS',
           subtitle:
-              'Global prestige and economic hierarchy across citizens, dynasties, corporations, and cities',
+              'Global prestige and economic hierarchy across citizens, dynasties, organizations, and territories',
           metrics: [
             CockpitMetric(
               label: 'Citizens',
@@ -1350,15 +1371,15 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
               color: context.warningColor,
             ),
             CockpitMetric(
-              label: 'Corporations',
+              label: 'Organizations',
               value: '${corp.length}',
               icon: Icons.account_balance_outlined,
               color: context.secondaryColor,
             ),
             CockpitMetric(
-              label: 'Cities',
+              label: 'Territories',
               value: '${cities.length}',
-              icon: Icons.location_city_outlined,
+              icon: Icons.location_on_outlined,
               color: context.goldColor,
             ),
           ],
@@ -1409,7 +1430,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                     ),
                   ),
                   const SizedBox(width: 40),
-                  // Column 2: Institutional & Municipal Sphere (Corps / Cities)
+                  // Column 2: Institutional & Territorial Sphere (Organizations / Territories)
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1427,7 +1448,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                               Expanded(
                                 child: _buildNarrowTabButton(
                                   context,
-                                  title: 'CORPS',
+                                  title: 'ORGANIZATIONS',
                                   icon: Icons.account_balance_outlined,
                                   isSelected: _rightTab == 0,
                                   onTap: () => setState(() => _rightTab = 0),
@@ -1436,8 +1457,8 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                               Expanded(
                                 child: _buildNarrowTabButton(
                                   context,
-                                  title: 'CITIES',
-                                  icon: Icons.location_city_outlined,
+                                  title: 'TERRITORIES',
+                                  icon: Icons.location_on_outlined,
                                   isSelected: _rightTab == 1,
                                   onTap: () => setState(() => _rightTab = 1),
                                 ),
@@ -1484,7 +1505,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                         Expanded(
                           child: _buildNarrowTabButton(
                             context,
-                            title: 'CORPS',
+                            title: 'ORGANIZATIONS',
                             icon: Icons.account_balance_outlined,
                             isSelected: _singleTab == 2,
                             onTap: () => setState(() => _singleTab = 2),
@@ -1493,8 +1514,8 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                         Expanded(
                           child: _buildNarrowTabButton(
                             context,
-                            title: 'CITIES',
-                            icon: Icons.location_city_outlined,
+                            title: 'TERRITORIES',
+                            icon: Icons.location_on_outlined,
                             isSelected: _singleTab == 3,
                             onTap: () => setState(() => _singleTab = 3),
                           ),
@@ -1519,6 +1540,132 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
           ],
         );
       },
+    );
+  }
+
+  Map<String, List<Map<String, dynamic>>> _canonicalMetrics(dynamic raw) {
+    if (raw is! Map) return const {};
+    final result = <String, List<Map<String, dynamic>>>{};
+    for (final entry in raw.entries) {
+      final rows = entry.value is List
+          ? (entry.value as List)
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList()
+          : <Map<String, dynamic>>[];
+      if (rows.isNotEmpty) result[entry.key.toString()] = rows;
+    }
+    return result;
+  }
+
+  Widget _buildCanonicalMetricRankings(
+    BuildContext context,
+    Map<String, List<Map<String, dynamic>>> metrics,
+    dynamic rawGameDay,
+    dynamic rulesVersion,
+  ) {
+    final codes = metrics.keys.toList()..sort();
+    final metricIndex = codes.isEmpty
+        ? 0
+        : (_metricTab < codes.length ? _metricTab : codes.length - 1);
+    final selected = codes.isEmpty ? '' : codes[metricIndex];
+    final rows = metrics[selected] ?? const <Map<String, dynamic>>[];
+    final title = selected.isEmpty
+        ? 'NO SETTLED DIMENSIONS'
+        : selected.replaceAll('_', ' ');
+    final gameDay = rawGameDay?.toString() ?? '—';
+    final version = rulesVersion?.toString() ?? '—';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EarthPageCockpit(
+          status: 'SETTLED RANKING SNAPSHOT',
+          statusColor: context.goldColor,
+          infoTitle: 'MULTIDIMENSIONAL CIVIC RANKINGS',
+          infoDescription:
+              'Each leaderboard is an independent, server-settled metric snapshot. Values are not combined into a hidden composite score. Rankings are ordered by the finalized game day and rules version shown below.',
+          title: 'CIVIC RANKINGS',
+          subtitle:
+              'Canonical House performance across the active planetary metrics',
+          metrics: [
+            CockpitMetric(
+                label: 'Dimensions',
+                value: '${codes.length}',
+                icon: Icons.stacked_bar_chart_outlined,
+                color: context.primaryColor),
+            CockpitMetric(
+                label: 'Snapshot Day',
+                value: gameDay,
+                icon: Icons.calendar_today_outlined,
+                color: context.secondaryColor),
+            CockpitMetric(
+                label: 'Visible Rows',
+                value: '${rows.length}',
+                icon: Icons.list_alt_outlined,
+                color: context.goldColor),
+          ],
+        ),
+        const SizedBox(height: 28),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (var index = 0; index < codes.length; index++)
+              _buildNarrowTabButton(
+                context,
+                title: codes[index].replaceAll('_', ' '),
+                icon: Icons.leaderboard_outlined,
+                isSelected: index == metricIndex,
+                onTap: () => setState(() => _metricTab = index),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        EarthSection(
+          title: '${title.toUpperCase()} · RULES $version · DAY $gameDay',
+          showHeader: true,
+          showSurface: false,
+          child: rows.isEmpty
+              ? const EarthEmptyState(
+                  message:
+                      'No finalized entries exist for this ranking dimension yet.',
+                  icon: Icons.hourglass_empty_outlined)
+              : Column(
+                  children: [
+                    for (final row in rows)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: EdgeInsets.all(context.cardPadding),
+                        decoration: BoxDecoration(
+                          color: context.surfaceColor,
+                          borderRadius:
+                              BorderRadius.circular(context.radiusCard),
+                          border: Border.all(color: context.subtleBorderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                                width: 42,
+                                child: Text('#${row['rank'] ?? '—'}',
+                                    style: context.widgetValueStyle
+                                        .copyWith(color: context.goldColor))),
+                            Expanded(
+                                child: Text(
+                                    row['subject_name']?.toString() ??
+                                        row['subject_id']?.toString() ??
+                                        'Unknown subject',
+                                    style: context.bodyStyle.copyWith(
+                                        fontWeight: FontWeight.w700))),
+                            Text(row['metric_value']?.toString() ?? '0',
+                                style: context.widgetValueStyle),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+      ],
     );
   }
 
@@ -2665,11 +2812,16 @@ class CorporationOverviewPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final myCorp = state.institutions['corporation'] is Map
-        ? Map<String, dynamic>.from(state.institutions['corporation'] as Map)
-        : const <String, dynamic>{};
+    final myCorp = state.json['corporation'] is Map
+        ? Map<String, dynamic>.from(state.json['corporation'] as Map)
+        : (state.institutions['corporation'] is Map
+            ? Map<String, dynamic>.from(
+                state.institutions['corporation'] as Map)
+            : const <String, dynamic>{});
     final membership = state.membership ?? const <String, dynamic>{};
-    final myCorpId = membership['corporation_id']?.toString();
+    final myCorpId = membership['corporation_id']?.toString() ??
+        membership['organization_id']?.toString() ??
+        myCorp['id']?.toString();
     final isMember = myCorpId != null && myCorpId.isNotEmpty;
 
     final targetCorp = selectedCorporation ?? (isMember ? myCorp : null);
@@ -2689,7 +2841,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                     .copyWith(color: context.warningColor)),
             const SizedBox(height: 5),
             Text(
-              'Join a corporation to access shared cities, technologies, contracts, and civic influence. Select any corporation in the directory to inspect its details.',
+              'Join a corporation to access shared Territories, technologies, contracts, and civic influence. Select any corporation in the directory to inspect its details.',
               style: context.widgetFooterStyle,
             ),
           ],
@@ -2722,11 +2874,14 @@ class CorporationOverviewPanel extends StatelessWidget {
         : const <String, dynamic>{};
 
     final incomeTaxBps =
-        asIntOr(rules['incomeTaxBps'] ?? rules['income_tax_bps'], 200);
+        asIntOr(rules['incomeTaxBps'] ?? rules['income_tax_bps'], -1);
     final salesTaxBps =
-        asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], 100);
+        asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], -1);
     final corporateTaxBps =
-        asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], 250);
+        asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], -1);
+
+    String formatRate(int bps) =>
+        bps < 0 ? 'UNAVAILABLE' : '${(bps / 100).toStringAsFixed(1)}%';
 
     final corpProposalsCount =
         ((state.governance['proposals'] as List<dynamic>?) ?? const [])
@@ -2754,7 +2909,7 @@ class CorporationOverviewPanel extends StatelessWidget {
         ),
         CockpitMetric(
           label: 'Territories',
-          value: '${corporation['territory_count'] ?? 1}',
+          value: '${corporation['territory_count'] ?? 'UNAVAILABLE'}',
           icon: Icons.map_outlined,
           color: context.secondaryColor,
         ),
@@ -2831,7 +2986,8 @@ class CorporationOverviewPanel extends StatelessWidget {
                         context,
                         icon: Icons.hub_outlined,
                         label: 'TERRITORIES',
-                        value: '${corporation['territory_count'] ?? 1}',
+                        value:
+                            '${corporation['territory_count'] ?? 'UNAVAILABLE'}',
                         accentColor: context.secondaryColor,
                       ),
                       _buildAttributeRow(
@@ -2981,7 +3137,7 @@ class CorporationOverviewPanel extends StatelessWidget {
               EarthDataRow(
                 title: 'Internal Corporate Tax Levy',
                 subtitle:
-                    '${(corporateTaxBps / 100).toStringAsFixed(1)}% on affiliated business revenues\nAllocated directly to the sovereign corporate treasury to fund public goods and research. Parent Earth ceiling: Max 15.0%.',
+                    '${formatRate(corporateTaxBps)} on affiliated business revenues\nAllocated directly to the corporate treasury to fund public goods and research. Parent Earth ceiling: governed by the active Earth tax rule.',
                 leading: Icon(Icons.receipt_long_outlined,
                     size: context.iconSize, color: context.secondaryColor),
                 badges: const [
@@ -2994,7 +3150,7 @@ class CorporationOverviewPanel extends StatelessWidget {
               EarthDataRow(
                 title: 'Market Sales Tax & Exchange Fee',
                 subtitle:
-                    '${(salesTaxBps / 100).toStringAsFixed(1)}% transaction fee on local commodity and machine trades.',
+                    '${formatRate(salesTaxBps)} transaction fee on local commodity and machine trades.',
                 leading: Icon(Icons.storefront_outlined,
                     size: context.iconSize, color: context.secondaryColor),
                 badges: const [
@@ -3007,7 +3163,7 @@ class CorporationOverviewPanel extends StatelessWidget {
               EarthDataRow(
                 title: 'Citizen Income Tax Rate',
                 subtitle:
-                    '${(incomeTaxBps / 100).toStringAsFixed(1)}% income levy on worker wages and personal distributions.',
+                    '${formatRate(incomeTaxBps)} income levy on worker wages and personal distributions.',
                 leading: Icon(Icons.person_pin_outlined,
                     size: context.iconSize, color: context.secondaryColor),
                 badges: const [
@@ -3070,7 +3226,7 @@ class CorporationOverviewPanel extends StatelessWidget {
               EarthDataRow(
                 title: 'Executive Role & Adoption Powers',
                 subtitle:
-                    'Active Corporation Executives hold statutory authority to adopt unclaimed cities and introduce governance proposals.',
+                    'Active Corporation Executives hold statutory authority to govern assigned Territories and introduce governance proposals.',
                 leading: Icon(Icons.manage_accounts_outlined,
                     size: context.iconSize, color: context.secondaryColor),
                 badges: const [
@@ -3086,7 +3242,7 @@ class CorporationOverviewPanel extends StatelessWidget {
           Text('CORPORATION DECISIONS', style: context.widgetTitleStyle),
           const SizedBox(height: 5),
           Text(
-            'Choose belonging · compare cities · support or challenge corporation rules · use shared technology · build a business network · move when another city offers a better future.',
+            'Choose belonging · compare Territories · support or challenge corporation rules · use shared technology · build a business network · move when another Territory offers a better future.',
             style: context.widgetFooterStyle,
           ),
           if (id != '—') ...[
@@ -3253,16 +3409,19 @@ class CorporationTerritorySection extends StatefulWidget {
   const CorporationTerritorySection({super.key, required this.corporationId});
 
   @override
-  State<CorporationTerritorySection> createState() => _CorporationTerritorySectionState();
+  State<CorporationTerritorySection> createState() =>
+      _CorporationTerritorySectionState();
 }
 
-class _CorporationTerritorySectionState extends State<CorporationTerritorySection> {
+class _CorporationTerritorySectionState
+    extends State<CorporationTerritorySection> {
   late Future<Map<String, dynamic>> _territories;
 
   @override
   void initState() {
     super.initState();
-    _territories = const EarthApi().listCorporationTerritories(widget.corporationId);
+    _territories =
+        const EarthApi().listCorporationTerritories(widget.corporationId);
   }
 
   @override
@@ -3283,16 +3442,21 @@ class _CorporationTerritorySectionState extends State<CorporationTerritorySectio
           child: snapshot.connectionState == ConnectionState.waiting
               ? const LinearProgressIndicator()
               : rows.isEmpty
-                  ? Text('No active Territories are available.', style: context.bodyStyle)
+                  ? Text('No active Territories are available.',
+                      style: context.bodyStyle)
                   : Column(
                       children: rows.map((row) {
-                        final name = row['name']?.toString() ?? row['id']?.toString() ?? 'Territory';
-                        final primary = row['is_primary'] == true ? ' · PRIMARY' : '';
+                        final name = row['name']?.toString() ??
+                            row['id']?.toString() ??
+                            'Territory';
+                        final primary =
+                            row['is_primary'] == true ? ' · PRIMARY' : '';
                         return ListTile(
                           dense: true,
                           leading: const Icon(Icons.map_outlined),
                           title: Text('$name$primary'),
-                          subtitle: Text('${row['territory_type'] ?? 'TERRITORY'} · ${row['status'] ?? 'ACTIVE'}'),
+                          subtitle: Text(
+                              '${row['territory_type'] ?? 'TERRITORY'} · ${row['status'] ?? 'ACTIVE'}'),
                         );
                       }).toList(),
                     ),
@@ -3404,17 +3568,23 @@ class InstitutionsCapacityPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final city = state.institutions['city'] is Map<String, dynamic>
-        ? (state.institutions['city'] as Map<String, dynamic>)
-        : <String, dynamic>{};
-    final cityId = city['id']?.toString() ?? 'CITY-0084';
-    final cityName = (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
-    final residents = asIntOr(city['residents'], 100);
-    final housingCap = asIntOr(city['housing_capacity'], 120);
-    final energyCap = asIntOr(city['energy_capacity'], 200);
-    final cityFinance = state.json['cityFinance'] is Map
-        ? Map<String, dynamic>.from(state.json['cityFinance'] as Map)
-        : const <String, dynamic>{};
+    final city = state.institutions['territory'] is Map<String, dynamic>
+        ? (state.institutions['territory'] as Map<String, dynamic>)
+        : state.institutions['city'] is Map<String, dynamic>
+            ? (state.institutions['city'] as Map<String, dynamic>)
+            : <String, dynamic>{};
+    final cityId =
+        city['id']?.toString() ?? state.residency['territory_id']?.toString();
+    final cityName =
+        (city['name']?.toString() ?? 'TERRITORY UNAVAILABLE').toUpperCase();
+    final residents = asInt(city['residents']);
+    final housingCap = asInt(city['housing_capacity']);
+    final energyCap = asInt(city['energy_capacity']);
+    final cityFinance = state.json['territoryFinance'] is Map
+        ? Map<String, dynamic>.from(state.json['territoryFinance'] as Map)
+        : state.json['cityFinance'] is Map
+            ? Map<String, dynamic>.from(state.json['cityFinance'] as Map)
+            : const <String, dynamic>{};
     final cityResources = cityFinance['resources'] is Map
         ? Map<String, dynamic>.from(cityFinance['resources'] as Map)
         : const <String, dynamic>{};
@@ -3425,7 +3595,8 @@ class InstitutionsCapacityPanel extends StatelessWidget {
         .map(Map<String, dynamic>.from)
         .where(
           (building) =>
-              building['city_id']?.toString() == cityId &&
+              (building['territory_id']?.toString() == cityId ||
+                  building['city_id']?.toString() == cityId) &&
               building['ownership_class']?.toString() == 'civic' &&
               building['status']?.toString() == 'active',
         )
@@ -3437,7 +3608,9 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     final cityCreditStatement =
         _cityCreditStatement(cityCashflow, cityBuildings);
 
-    final isCityResident = state.membership?['city_id'] != null;
+    final isCityResident = state.residency['territory_id'] != null ||
+        state.membership?['territory_id'] != null ||
+        state.membership?['city_id'] != null;
 
     final housingRatio =
         formatPercent(state.world['serviceRatios']?['housing']);
@@ -3445,9 +3618,11 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     final connectRatio =
         formatPercent(state.world['serviceRatios']?['connectivity']);
     final healthRatio = formatPercent(state.world['serviceRatios']?['health']);
-    final cityMembers = state.json['cityMembers'] is List
-        ? List<dynamic>.from(state.json['cityMembers'] as List)
-        : const <dynamic>[];
+    final cityMembers = state.json['territoryMembers'] is List
+        ? List<dynamic>.from(state.json['territoryMembers'] as List)
+        : state.json['cityMembers'] is List
+            ? List<dynamic>.from(state.json['cityMembers'] as List)
+            : const <dynamic>[];
     final playerId = state.human['id']?.toString();
     final standing = asIntOr(state.human['standing'], 0);
 
@@ -3478,13 +3653,13 @@ class InstitutionsCapacityPanel extends StatelessWidget {
 
     return EarthSection(
       key: panelKey,
-      title: 'INSTITUTIONS / CITY & SERVICES',
+      title: 'TERRITORIES / SERVICES',
       showSurface: false,
       showHeader: false,
       infoBulletPoints: const [
         'Municipal Administration & Service Capacity: Oversight of public housing, energy grid, connectivity, and healthcare.',
-        'City Standing: Civic prestige and influence among resident citizens.',
-        'City Budget: The municipal treasury pays for civic operations, public services, and explicit resident subsidies.',
+        'Territory Standing: Civic prestige and influence among resident Houses.',
+        'Territory Budget: The territorial treasury pays for civic operations, public services, and explicit resident subsidies.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3524,12 +3699,12 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                         accentColor: context.secondaryColor),
                     _buildAttributeRow(context,
                         icon: Icons.workspace_premium_outlined,
-                        label: 'CITY STANDING',
+                        label: 'TERRITORY STANDING',
                         value: '$standing',
                         accentColor: context.goldColor),
                     _buildAttributeRow(context,
                         icon: Icons.account_balance_wallet_outlined,
-                        label: 'CITY BUDGET',
+                        label: 'TERRITORY BUDGET',
                         value: '${formatWholeNumber(cityTreasury)} C',
                         accentColor: context.warningColor),
                   ];
@@ -3548,11 +3723,10 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                   );
                 },
               ),
-
               const SizedBox(height: 12),
               _institutionBudgetCard(
                 context,
-                title: 'CITY BUDGET',
+                title: 'TERRITORY BUDGET',
                 amount: '${formatWholeNumber(cityTreasury)} C',
                 icon: Icons.account_balance_wallet_outlined,
                 description:
@@ -3565,26 +3739,22 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                 institution: city,
                 projection: cityFinance,
               ),
-
               SizedBox(height: context.spacingTitleOffset),
-              Text('CITY RESERVES', style: context.topicTitleStyle),
+              Text('TERRITORY RESERVES', style: context.topicTitleStyle),
               SizedBox(height: context.spacingControl),
               _resourceSummary(context, cityResources, credits: cityTreasury),
-
               SizedBox(height: context.spacingTitleOffset),
-              Text('DAILY CITY INCOME', style: context.topicTitleStyle),
+              Text('DAILY TERRITORY INCOME', style: context.topicTitleStyle),
               SizedBox(height: context.spacingControl),
               _resourceSummary(context, cityDailyIncome, signed: true),
               const SizedBox(height: 12),
               _cityCreditIncomeCard(context, cityCreditStatement),
-
               SizedBox(height: context.spacingTitleOffset),
-
             ],
           ),
           if (isCityResident && cityMembers.isNotEmpty) ...[
             SizedBox(height: context.spacingTitleOffset),
-            Text('CITY STANDING', style: context.topicTitleStyle),
+            Text('TERRITORY STANDING', style: context.topicTitleStyle),
             SizedBox(height: context.spacingControl),
             EarthDataList(
               children:
@@ -3806,9 +3976,11 @@ class CityImpactPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final city = state.institutions['city'] is Map
-        ? Map<String, dynamic>.from(state.institutions['city'] as Map)
-        : const <String, dynamic>{};
+    final city = state.institutions['territory'] is Map
+        ? Map<String, dynamic>.from(state.institutions['territory'] as Map)
+        : state.institutions['city'] is Map
+            ? Map<String, dynamic>.from(state.institutions['city'] as Map)
+            : const <String, dynamic>{};
     final ratios = state.world['serviceRatios'] is Map
         ? Map<String, dynamic>.from(state.world['serviceRatios'] as Map)
         : const <String, dynamic>{};
@@ -3826,19 +3998,19 @@ class CityImpactPanel extends StatelessWidget {
     final taxRate = asDouble(city['tax_rate'] ?? city['taxRate']);
 
     return EarthSection(
-      title: 'CITY EFFECTS / LIFE & BUSINESS',
+      title: 'TERRITORY EFFECTS / LIFE & BUSINESS',
       showSurface: false,
       infoBulletPoints: const [
-        'City conditions affect your life and businesses through services, taxes, workforce quality, and operating costs.',
-        'Pressure above the city baseline can increase friction and reduce service reliability.',
-        'Values marked unavailable require current city or business data; they are not estimates.',
+        'Territory conditions affect your life and businesses through services, taxes, workforce quality, and operating costs.',
+        'Pressure above the territory baseline can increase friction and reduce service reliability.',
+        'Values marked unavailable require current territory or business data; they are not estimates.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             city['name'] == null
-                ? 'No city effect is currently reported.'
+                ? 'No territory effect is currently reported.'
                 : 'Living in ${city['name']} changes your services, costs, and opportunities.',
             style: context.widgetFooterStyle,
           ),
@@ -3846,7 +4018,7 @@ class CityImpactPanel extends StatelessWidget {
           EarthMetricGrid(
             metrics: [
               EarthMetricTile(
-                label: 'CITY PRESSURE',
+                label: 'TERRITORY PRESSURE',
                 value: pressure == null
                     ? 'UNAVAILABLE'
                     : '${(pressure * 100).toStringAsFixed(0)}%',
@@ -3861,7 +4033,7 @@ class CityImpactPanel extends StatelessWidget {
                     : context.primaryColor,
               ),
               EarthMetricTile(
-                label: 'CITY TAX',
+                label: 'TERRITORY TAX',
                 value: taxRate == null
                     ? 'UNAVAILABLE'
                     : '${taxRate.toStringAsFixed(1)}%',
@@ -3872,11 +4044,11 @@ class CityImpactPanel extends StatelessWidget {
             ],
           ),
           SizedBox(height: context.spacingTopic),
-          Text('MUNICIPAL ORDINANCES & TARIFFS',
+          Text('TERRITORY ORDINANCES & TARIFFS',
               style: context.widgetTitleStyle),
           const SizedBox(height: 4),
           Text(
-            'Local ordinances and service tariffs set by this municipality. Restricted by Corporate Charters and Earth Law.',
+            'Local ordinances and service tariffs set by this territory. Restricted by Organization Charters and Earth Law.',
             style: context.widgetFooterStyle,
           ),
           SizedBox(height: context.spacingControl),
@@ -3885,7 +4057,7 @@ class CityImpactPanel extends StatelessWidget {
               EarthDataRow(
                 title: 'Municipal Energy & Grid Tariff',
                 subtitle:
-                    '${taxRate == null ? '3.0' : (taxRate * 100).toStringAsFixed(1)}% consumption tariff\nApplied to municipal energy grid load and infrastructure utility draws.',
+                    '${taxRate == null ? 'UNAVAILABLE' : (taxRate * 100).toStringAsFixed(1)}% consumption tariff\nApplied to territory energy grid load and infrastructure utility draws.',
                 leading: Icon(Icons.bolt_outlined,
                     size: context.iconSize, color: context.warningColor),
                 badges: const [
@@ -4050,7 +4222,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       statusColor: context.primaryColor,
       infoTitle: 'CITIZEN COMMUNITIES & GUILDS ARCHITECTURE',
       infoDescription:
-          '• Civic Communities: Voluntary associations for social, cultural, and professional coordination.\n\n• House Membership: Your House remains affiliated across Human succession; the current Human acts and speaks for the House.\n\n• Cross-World Belonging: Communities are independent associations spanning corporations and cities on Earth, without a treasury or economic settlement.',
+          '• Civic Communities: Voluntary associations for social, cultural, and professional coordination.\n\n• House Membership: Your House remains affiliated across Human succession; the current Human acts and speaks for the House.\n\n• Cross-World Belonging: Communities are independent associations spanning organizations and Territories on Earth, without a treasury or economic settlement.',
       title: 'COMMUNITIES & GUILDS',
       subtitle:
           'Grassroots civic associations, trade guilds, and mutual aid cooperatives across Earth',
@@ -5018,6 +5190,756 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                 ],
               ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class OrganizationCapTablePanel extends StatefulWidget {
+  final String organizationId;
+  final String? assetId;
+  final EarthApi? api;
+  final VoidCallback? onRefresh;
+
+  const OrganizationCapTablePanel({
+    super.key,
+    required this.organizationId,
+    this.assetId,
+    this.api,
+    this.onRefresh,
+  });
+
+  @override
+  State<OrganizationCapTablePanel> createState() =>
+      _OrganizationCapTablePanelState();
+}
+
+class _OrganizationCapTablePanelState extends State<OrganizationCapTablePanel> {
+  bool _isLoading = false;
+  Map<String, dynamic>? _ownershipData;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCapTable();
+  }
+
+  @override
+  void didUpdateWidget(covariant OrganizationCapTablePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.organizationId != widget.organizationId ||
+        oldWidget.assetId != widget.assetId) {
+      _loadCapTable();
+    }
+  }
+
+  Future<void> _loadCapTable() async {
+    if (widget.api == null || widget.organizationId.isEmpty) return;
+    final assetId = widget.assetId ?? '1';
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final res = await widget.api!.getAssetOwnership(
+        organizationId: widget.organizationId,
+        assetId: assetId,
+      );
+      setState(() {
+        _ownershipData = res;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _showSubscribeDialog(BuildContext context) async {
+    final unitsCtrl = TextEditingController(text: '100');
+    final priceCtrl = TextEditingController(text: '100');
+    final assetId = widget.assetId ?? '1';
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('SUBSCRIBE TO SHARE ISSUANCE'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Organization: ${widget.organizationId}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: unitsCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Share Units (Basis points / units)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: priceCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Total Price (CREDIT)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Capital subscription moves CREDIT into the Organization operations account and issues fractional equity units.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('CANCEL')),
+          FilledButton(
+            onPressed: () async {
+              final units = unitsCtrl.text.trim();
+              final price = priceCtrl.text.trim();
+              if (units.isEmpty || price.isEmpty) return;
+              Navigator.of(dialogCtx).pop();
+              final messenger = ScaffoldMessenger.of(context);
+              setState(() => _isLoading = true);
+              try {
+                await widget.api!.subscribeToAssetOwnership(
+                  organizationId: widget.organizationId,
+                  assetId: assetId,
+                  units: units,
+                  priceUnits: price,
+                  sourceAccountId: '1',
+                );
+                if (mounted) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                        content: Text('Subscription completed successfully')),
+                  );
+                  _loadCapTable();
+                  widget.onRefresh?.call();
+                }
+              } catch (e) {
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                        content: Text('Subscription failed: $e'),
+                        backgroundColor: Colors.red),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _isLoading = false);
+              }
+            },
+            child: const Text('SUBSCRIBE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDistributeDialog(BuildContext context) async {
+    final amountCtrl = TextEditingController(text: '1000');
+    final assetId = widget.assetId ?? '1';
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('DISTRIBUTE PROPORTIONAL DIVIDEND'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Total Distribution Amount (CREDIT)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Dividends are paid from Organization Operations account to all registered shareholders according to cap table proportions.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('CANCEL')),
+          FilledButton(
+            onPressed: () async {
+              final amount = amountCtrl.text.trim();
+              if (amount.isEmpty) return;
+              Navigator.of(dialogCtx).pop();
+              final messenger = ScaffoldMessenger.of(context);
+              setState(() => _isLoading = true);
+              try {
+                await widget.api!.distributeOwnership(
+                  organizationId: widget.organizationId,
+                  assetId: assetId,
+                  amountUnits: amount,
+                );
+                if (mounted) {
+                  messenger.showSnackBar(
+                    const SnackBar(
+                        content: Text('Dividend distribution executed')),
+                  );
+                  _loadCapTable();
+                  widget.onRefresh?.call();
+                }
+              } catch (e) {
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                        content: Text('Distribution failed: $e'),
+                        backgroundColor: Colors.red),
+                  );
+                }
+              } finally {
+                if (mounted) setState(() => _isLoading = false);
+              }
+            },
+            child: const Text('EXECUTE DISTRIBUTION'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final positions = (_ownershipData?['positions'] as List<dynamic>?) ?? [];
+    return EarthSection(
+      title: 'CAP TABLE & SHARED OWNERSHIP',
+      showSurface: false,
+      infoBulletPoints: const [
+        'Shared ownership distributes equity positions across member and investor Houses.',
+        'Cap table tracks share units, voting weight, and proportional dividend rights.',
+        'Dividends distribute real CREDIT ledger balances with integer precision.',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isLoading) const LinearProgressIndicator(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('SHAREHOLDERS & POSITIONS', style: context.topicTitleStyle),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _showSubscribeDialog(context),
+                    icon: const Icon(Icons.add_chart_outlined, size: 16),
+                    label: const Text('SUBSCRIBE'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => _showDistributeDialog(context),
+                    icon: const Icon(Icons.payments_outlined, size: 16),
+                    label: const Text('DISTRIBUTE'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_error != null)
+            Text('Notice: $_error',
+                style: TextStyle(color: context.warningColor))
+          else if (positions.isEmpty)
+            Text(
+                '100% direct founder ownership. No secondary fractional shares issued yet.',
+                style: context.widgetFooterStyle)
+          else
+            ...positions.whereType<Map>().map((p) {
+              final owner = p['owner_id']?.toString() ??
+                  p['holder_id']?.toString() ??
+                  'House';
+              final units = p['share_units']?.toString() ?? '0';
+              final pct =
+                  ((double.tryParse(units) ?? 0) / 100.0).toStringAsFixed(2);
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  title: Text('$owner · $pct%',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                      'Units: $units · Rights Class: ${p['rights_class'] ?? 'COMMON'}'),
+                  trailing: Text('${p['status'] ?? 'ACTIVE'}'),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+class OrganizationContractsPanel extends StatefulWidget {
+  final String organizationId;
+  final EarthApi? api;
+  final VoidCallback? onRefresh;
+
+  const OrganizationContractsPanel({
+    super.key,
+    required this.organizationId,
+    this.api,
+    this.onRefresh,
+  });
+
+  @override
+  State<OrganizationContractsPanel> createState() =>
+      _OrganizationContractsPanelState();
+}
+
+class _OrganizationContractsPanelState
+    extends State<OrganizationContractsPanel> {
+  bool _isLoading = false;
+  List<dynamic> _contracts = [];
+  List<dynamic> _performance = [];
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContracts();
+  }
+
+  @override
+  void didUpdateWidget(covariant OrganizationContractsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.organizationId != widget.organizationId) {
+      _loadContracts();
+    }
+  }
+
+  Future<void> _loadContracts() async {
+    if (widget.api == null || widget.organizationId.isEmpty) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final res = await widget.api!
+          .listOrganizationContracts(organizationId: widget.organizationId);
+      final performanceRes =
+          await widget.api!.listContractPerformance(widget.organizationId);
+      final list = (res['contracts'] as List<dynamic>?) ?? [];
+      setState(() {
+        _contracts = list;
+        _performance = (performanceRes['performance'] as List<dynamic>?) ?? [];
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _performanceAction(String performanceId, String action) async {
+    if (widget.api == null) return;
+    final note = TextEditingController();
+    final units = TextEditingController(text: '1');
+    final quality = TextEditingController(text: '10000');
+    String resolution = 'ACCEPTED';
+    final result = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => StatefulBuilder(
+            builder: (dialogCtx, setDialogState) => AlertDialog(
+                  title: Text(action == 'deliver'
+                      ? 'SUBMIT DELIVERY'
+                      : action == 'resolve'
+                          ? 'RESOLVE DISPUTE'
+                          : '${action.toUpperCase()} DELIVERY'),
+                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                    if (action == 'deliver') ...[
+                      TextField(
+                          controller: units,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Delivered units')),
+                      TextField(
+                          controller: quality,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Quality score (0–10000)')),
+                    ],
+                    if (action == 'resolve')
+                      DropdownButtonFormField<String>(
+                          value: resolution,
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'ACCEPTED', child: Text('Accept')),
+                            DropdownMenuItem(
+                                value: 'FAILED', child: Text('Fail')),
+                            DropdownMenuItem(
+                                value: 'WAIVED', child: Text('Waive'))
+                          ],
+                          onChanged: (value) => setDialogState(
+                              () => resolution = value ?? resolution)),
+                    TextField(
+                        controller: note,
+                        onChanged: (_) => setDialogState(() {}),
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                            labelText: 'Evidence / reason')),
+                  ]),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialogCtx, false),
+                        child: const Text('CANCEL')),
+                    FilledButton(
+                        onPressed:
+                            note.text.trim().isEmpty && action != 'deliver'
+                                ? null
+                                : () => Navigator.pop(dialogCtx, true),
+                        child: const Text('SUBMIT'))
+                  ],
+                )));
+    if (result != true || !mounted) {
+      note.dispose();
+      units.dispose();
+      quality.dispose();
+      return;
+    }
+    try {
+      await widget.api!.contractPerformanceAction(
+          organizationId: widget.organizationId,
+          performanceId: performanceId,
+          action: action,
+          note: note.text.trim(),
+          units: action == 'deliver' ? units.text.trim() : null,
+          qualityBps:
+              action == 'deliver' ? int.tryParse(quality.text.trim()) : null,
+          resolution: action == 'resolve' ? resolution : null);
+      await _loadContracts();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Performance action failed: $error')));
+      }
+    }
+    note.dispose();
+    units.dispose();
+    quality.dispose();
+  }
+
+  Future<void> _signContract(String contractId) async {
+    if (widget.api == null) return;
+    setState(() => _isLoading = true);
+    try {
+      await widget.api!.signOrganizationContract(
+        organizationId: widget.organizationId,
+        contractId: contractId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contract signed successfully')),
+        );
+        _loadContracts();
+        widget.onRefresh?.call();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Signing failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _showCreateContractDialog(BuildContext context) async {
+    if (widget.organizationId.isEmpty) return;
+    final directory = await widget.api!.listOrganizations();
+    if (!context.mounted) return;
+    final counterparties = (directory['organizations'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['id']?.toString() != widget.organizationId)
+        .toList();
+    final templateCtrl = TextEditingController(text: 'SUPPLY_AGREEMENT');
+    final amountCtrl = TextEditingController();
+    int startDay = 1;
+    int endDay = 30;
+    String? selectedCounterparty;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => AlertDialog(
+          title: const Text('DRAFT B2B CONTRACT'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: counterparties.any((row) =>
+                          row['id']?.toString() == selectedCounterparty)
+                      ? selectedCounterparty
+                      : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Counterparty organization',
+                      border: OutlineInputBorder()),
+                  items: counterparties
+                      .map((row) => DropdownMenuItem(
+                          value: row['id']?.toString(),
+                          child: Text('${row['name'] ?? row['id']}')))
+                      .toList(),
+                  onChanged: (value) =>
+                      setDialogState(() => selectedCounterparty = value),
+                  hint: Text(counterparties.isEmpty
+                      ? 'No eligible counterparties found'
+                      : 'Select an organization'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: templateCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Template ID / Contract Type',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Amount Per Period (CREDIT)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Start Day',
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (v) => startDay = int.tryParse(v) ?? 0,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'End Day',
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (v) => endDay = int.tryParse(v) ?? 0,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Bilateral contracts require mutual digital signatures before financial and delivery obligations materialize.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('CANCEL')),
+            FilledButton(
+              onPressed: () async {
+                final counterparty = selectedCounterparty ?? '';
+                final amount = amountCtrl.text.trim();
+                final parsedAmount = double.tryParse(amount);
+                if (counterparty.isEmpty ||
+                    templateCtrl.text.trim().isEmpty ||
+                    parsedAmount == null ||
+                    !parsedAmount.isFinite ||
+                    parsedAmount <= 0 ||
+                    startDay < 1 ||
+                    endDay < startDay) {
+                  if (dialogCtx.mounted) {
+                    ScaffoldMessenger.of(dialogCtx).showSnackBar(const SnackBar(
+                        content: Text(
+                            'Enter a positive amount and valid contract days.')));
+                  }
+                  return;
+                }
+                Navigator.of(dialogCtx).pop();
+                final messenger = ScaffoldMessenger.of(context);
+                setState(() => _isLoading = true);
+                try {
+                  await widget.api!.createOrganizationContract(
+                    organizationId: widget.organizationId,
+                    counterpartyOrganizationId: counterparty,
+                    templateId: templateCtrl.text.trim(),
+                    terms: {'rate': amount, 'delivery': 'STANDARD'},
+                    startGameDay: startDay,
+                    endGameDay: endDay,
+                    amountPerPeriod: amount,
+                    periodDays: 1,
+                  );
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      const SnackBar(
+                          content: Text('Contract drafted successfully')),
+                    );
+                    _loadContracts();
+                    widget.onRefresh?.call();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                          content: Text('Drafting failed: $e'),
+                          backgroundColor: Colors.red),
+                    );
+                  }
+                } finally {
+                  if (mounted) setState(() => _isLoading = false);
+                }
+              },
+              child: const Text('SUBMIT DRAFT'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasOrganization = widget.organizationId.isNotEmpty;
+    return EarthSection(
+      title: 'B2B CONTRACTS & PROCUREMENT',
+      showSurface: false,
+      infoBulletPoints: const [
+        'Organizations establish formal supply and procurement contracts.',
+        'Both counterparty organizations must digitally sign before obligations take effect.',
+        'Settled contracts generate double-entry financial obligations in the daily ledger.',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!hasOrganization)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Join an organization to view and create procurement contracts.',
+                style: context.widgetFooterStyle,
+              ),
+            ),
+          if (_isLoading) const LinearProgressIndicator(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('ACTIVE & PENDING CONTRACTS',
+                  style: context.topicTitleStyle),
+              FilledButton.icon(
+                onPressed: hasOrganization && !_isLoading
+                    ? () => _showCreateContractDialog(context)
+                    : null,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('DRAFT CONTRACT'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_error != null)
+            Text('Notice: $_error',
+                style: TextStyle(color: context.warningColor))
+          else if (!hasOrganization)
+            Text('No organization is associated with this account.',
+                style: context.widgetFooterStyle)
+          else if (_contracts.isEmpty)
+            Text(
+                'No active or pending contracts registered for this organization.',
+                style: context.widgetFooterStyle)
+          else
+            ..._contracts.whereType<Map>().map((c) {
+              final id = c['id']?.toString() ?? '—';
+              final counterparty =
+                  c['counterparty_organization_id']?.toString() ?? '—';
+              final status = c['status']?.toString() ?? 'PENDING';
+              final amount = c['amount_per_period']?.toString() ?? '—';
+              final start = c['start_game_day']?.toString() ?? '1';
+              final end = c['end_game_day']?.toString() ?? '—';
+              final periodDays = c['period_days']?.toString() ?? '—';
+              final template = c['template_id']?.toString() ?? '—';
+              final terms = c['terms'] is Map
+                  ? Map<String, dynamic>.from(c['terms'] as Map)
+                  : const <String, dynamic>{};
+              final delivery = terms['delivery']?.toString() ?? '—';
+              final signed = c['signed'] == true || status == 'ACTIVE';
+
+              return Card(
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                child: ListTile(
+                  title: Text('$id · With: $counterparty',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                      'Template: $template · Amount: $amount CREDIT/period · Delivery: $delivery\nDays: $start–$end · Period: $periodDays days · Status: $status'),
+                  trailing: !signed && status == 'PENDING'
+                      ? FilledButton.tonal(
+                          onPressed: () => _signContract(id),
+                          child: const Text('SIGN'),
+                        )
+                      : Chip(
+                          label: Text(status),
+                          backgroundColor: status == 'ACTIVE'
+                              ? Colors.green.withOpacity(0.2)
+                              : null,
+                        ),
+                ),
+              );
+            }),
+          if (_performance.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('DELIVERY PERFORMANCE', style: context.topicTitleStyle),
+            ..._performance.whereType<Map>().map((p) {
+              final status = p['status']?.toString() ?? 'DUE';
+              final id = p['id']?.toString() ?? '';
+              final actions = status == 'DUE'
+                  ? const ['deliver']
+                  : status == 'DELIVERED'
+                      ? const ['accept', 'reject', 'dispute']
+                      : status == 'DISPUTED'
+                          ? const ['resolve']
+                          : const <String>[];
+              return Card(
+                  child: ListTile(
+                      title: Text('$id · $status'),
+                      subtitle: Text(
+                          'Period ${p['period_start_game_day'] ?? '—'}–${p['period_end_game_day'] ?? '—'}${p['delivery_note'] == null ? '' : '\n${p['delivery_note']}'}'),
+                      trailing: actions.isEmpty
+                          ? null
+                          : Wrap(
+                              spacing: 4,
+                              children: actions
+                                  .map((action) => TextButton(
+                                      onPressed: () =>
+                                          _performanceAction(id, action),
+                                      child: Text(action.toUpperCase())))
+                                  .toList())));
+            }),
           ],
         ],
       ),

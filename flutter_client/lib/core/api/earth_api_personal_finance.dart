@@ -18,16 +18,20 @@ extension EarthApiPersonalFinance on EarthApi {
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> economicTransactions({int limit = 50, int? beforeId}) async {
-    final query = StringBuffer('/api/economy/transactions?limit=${limit.clamp(1, 100)}');
+  Future<Map<String, dynamic>> economicTransactions(
+      {int limit = 50, int? beforeId}) async {
+    final query =
+        StringBuffer('/api/economy/transactions?limit=${limit.clamp(1, 100)}');
     if (beforeId != null) query.write('&beforeId=$beforeId');
     final response = await _request(query.toString());
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> recoverInstitution(
-      String institutionId, double amount, {String? otp}) async {
-    final response = await _request('/api/finance/recover', method: 'POST', body: {
+      String institutionId, double amount,
+      {String? otp}) async {
+    final response =
+        await _request('/api/finance/recover', method: 'POST', body: {
       'institutionId': institutionId,
       'amount': amount,
       if (otp != null && otp.isNotEmpty) 'otp': otp,
@@ -40,8 +44,15 @@ extension EarthApiPersonalFinance on EarthApi {
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> createBankDeposit({required double amount, required int termDays}) async {
-    final response = await _request('/api/finance/bank/deposit', method: 'POST', body: {
+  Future<Map<String, dynamic>> bankLoans() async {
+    final response = await _request('/api/finance/bank/loans');
+    return response is Map<String, dynamic> ? response : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> createBankDeposit(
+      {required double amount, required int termDays}) async {
+    final response =
+        await _request('/api/finance/bank/deposit', method: 'POST', body: {
       'amount': amount,
       'termDays': termDays,
       'correlationId': newClientCorrelationId('BANK-DEP'),
@@ -50,20 +61,25 @@ extension EarthApiPersonalFinance on EarthApi {
   }
 
   Future<Map<String, dynamic>> withdrawBankDeposit(String depositId) async {
-    final response = await _request('/api/finance/bank/withdraw', method: 'POST', body: {
+    final response =
+        await _request('/api/finance/bank/withdraw', method: 'POST', body: {
       'depositId': depositId,
       'correlationId': newClientCorrelationId('BANK-WITHDRAW'),
     });
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> bankLoanQuote({required String requestedUnits, int termDays = 30}) async {
-    final response = await _request('/api/finance/bank/loan-quote?requestedUnits=$requestedUnits&termDays=$termDays');
+  Future<Map<String, dynamic>> bankLoanQuote(
+      {required String requestedUnits, int termDays = 30}) async {
+    final response = await _request(
+        '/api/finance/bank/loan-quote?requestedUnits=$requestedUnits&termDays=$termDays');
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> originateBankLoan({required String requestedUnits, int termDays = 30}) async {
-    final response = await _request('/api/finance/bank/loan', method: 'POST', body: {
+  Future<Map<String, dynamic>> originateBankLoan(
+      {required String requestedUnits, int termDays = 30}) async {
+    final response =
+        await _request('/api/finance/bank/loan', method: 'POST', body: {
       'requestedUnits': requestedUnits,
       'termDays': termDays,
       'correlationId': newClientCorrelationId('BANK-LOAN'),
@@ -71,19 +87,25 @@ extension EarthApiPersonalFinance on EarthApi {
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> repayBankLoan(String loanId, {String? amountUnits}) async {
-    final response = await _request('/api/finance/bank/loan/$loanId/repay', method: 'POST', body: {
-      if (amountUnits != null) 'amountUnits': amountUnits,
-      'correlationId': newClientCorrelationId('BANK-REPAY'),
-    });
+  Future<Map<String, dynamic>> repayBankLoan(String loanId,
+      {String? amountUnits}) async {
+    final response = await _request('/api/finance/bank/loan/$loanId/repay',
+        method: 'POST',
+        body: {
+          if (amountUnits != null) 'amountUnits': amountUnits,
+          'correlationId': newClientCorrelationId('BANK-REPAY'),
+        });
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> guaranteeBankLoan({required String loanId, required String guaranteedUnits}) async {
-    final response = await _request('/api/finance/bank/loan/$loanId/guarantee', method: 'POST', body: {
-      'guaranteedUnits': guaranteedUnits,
-      'correlationId': newClientCorrelationId('BANK-GUARANTEE'),
-    });
+  Future<Map<String, dynamic>> guaranteeBankLoan(
+      {required String loanId, required String guaranteedUnits}) async {
+    final response = await _request('/api/finance/bank/loan/$loanId/guarantee',
+        method: 'POST',
+        body: {
+          'guaranteedUnits': guaranteedUnits,
+          'correlationId': newClientCorrelationId('BANK-GUARANTEE'),
+        });
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 

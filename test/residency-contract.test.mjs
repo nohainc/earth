@@ -8,6 +8,7 @@ test('House residency is independent, capacity-locked, and retains remote assets
   const routes = fs.readFileSync('cloudflare/src/house-routes.ts', 'utf8');
   const api = fs.readFileSync('flutter_client/lib/core/api/earth_api_residency.dart', 'utf8');
   const services = fs.readFileSync('cloudflare/src/service-settlement-postgres.ts', 'utf8');
+  const territoryDecoupling = fs.readFileSync('db/migrations/075_territory_residency_decoupling.sql', 'utf8');
   assert.match(migration, /CREATE TABLE IF NOT EXISTS house_residencies/);
   assert.match(migration, /house_residencies_one_primary_idx/);
   assert.match(migration, /residency-backfill/);
@@ -18,4 +19,6 @@ test('House residency is independent, capacity-locked, and retains remote assets
   assert.match(routes, /\/api\/house\/residency\/move/);
   assert.match(api, /quoteHouseMove/);
   assert.match(services, /JOIN house_residencies/);
+  assert.match(territoryDecoupling, /ALTER COLUMN corporation_id DROP NOT NULL/);
+  assert.match(fs.readFileSync('cloudflare/src/territory-capacity-postgres.ts', 'utf8'), /governing Organization for public construction/);
 });

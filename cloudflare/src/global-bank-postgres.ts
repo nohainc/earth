@@ -4,10 +4,10 @@ import { bankTransactionMetadata } from './bank-transaction-metadata.ts';
 export async function listBankDeposits(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const deposits = await repository.query(
     `SELECT d.id, d.principal_units, d.accrued_interest_units, d.rate_bps,
-            d.rate_rule_version, d.start_total_game_minute, d.maturity_total_game_minute,
-            d.status, d.created_transaction_id, d.payout_transaction_id, d.correlation_id, d.created_at
+            d.maturity_total_game_minute, d.status, d.created_transaction_id,
+            d.payout_transaction_id, d.correlation_id
        FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id
-      WHERE o.economic_id = earth_private_economic_owner_id($1) ORDER BY d.created_at DESC`,
+      WHERE o.id = $1 ORDER BY d.id DESC`,
     [humanId],
   );
   return { deposits: deposits.rows.map((row) => ({
@@ -15,7 +15,6 @@ export async function listBankDeposits(repository: PostgresRepository, humanId: 
     principal: centsToMoney(BigInt(String(row.principal_units))),
     accruedInterest: centsToMoney(BigInt(String(row.accrued_interest_units))),
     rateBps: row.rate_bps,
-    startTotalGameMinute: row.start_total_game_minute,
     maturityTotalGameMinute: row.maturity_total_game_minute,
   })) };
 }

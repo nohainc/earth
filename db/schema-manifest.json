@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 59,
+  "migrationVersion": 75,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -270,8 +270,6 @@
       "construction_credit_units",
       "construction_minutes",
       "operating_credit_units",
-      "resource_input_units",
-      "resource_output_units",
       "service_type",
       "service_capacity_units",
       "slot_footprint",

@@ -4,12 +4,13 @@ import fs from 'node:fs';
 
 const read = (file) => fs.readFileSync(file, 'utf8');
 
-test('Building V2 has no repair or condition authority', () => {
+test('Building V2 has no repair authority and reads only active world modifiers', () => {
   const source = read('cloudflare/src/building-settlement-v2.ts');
-  assert.doesNotMatch(source, /condition|auto_repair|repair_|BUILDING_WEAR|REPAIR_EFFICIENCY|wear/);
+  assert.doesNotMatch(source, /auto_repair|repair_|BUILDING_WEAR|REPAIR_EFFICIENCY|wear/);
+  assert.match(source, /FROM world_conditions/);
   assert.doesNotMatch(source, /UPDATE buildings SET/);
-  assert.match(source, /building_physical_upkeep/);
-  assert.match(source, /building_output/);
+  assert.match(source, /building_settlement_journals/);
+  assert.match(source, /private_building_operating_output/);
 });
 
 test('clean baseline contains no building condition or repair schema', () => {
@@ -24,8 +25,8 @@ test('clean baseline contains no building condition or repair schema', () => {
 test('repair API surfaces are gone while construction remains', () => {
   const routes = read('cloudflare/src/real-estate-routes.ts');
   const api = read('flutter_client/lib/core/api/earth_api_real_estate.dart');
-  assert.doesNotMatch(routes, /repair|auto-repair/);
-  assert.doesNotMatch(api, /repair|auto-repair/);
-  assert.match(routes, /complete-construction/);
+  assert.doesNotMatch(routes, /repair|auto-repair/i);
+  assert.doesNotMatch(api, /repair|auto-repair/i);
+  assert.match(routes, /capital-projects/);
   assert.match(api, /upgradeBuilding/);
 });

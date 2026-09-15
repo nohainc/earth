@@ -33,6 +33,7 @@ export interface DecisionQueueInput {
   finance?: { unpaid_tax?: unknown; status?: string; debt?: unknown };
   territory?: { id?: string; residents?: unknown; housing_capacity?: unknown; energy_capacity?: unknown; connectivity_capacity?: unknown; health_capacity?: unknown };
   market?: Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>;
+  buildings?: Array<{ id: string; utilization_bps?: unknown; status?: string }>;
   needs?: Array<{ need_code: string; demand_units?: unknown; allocated_units?: unknown; shortfall_units?: unknown; risk_level?: string }>;
   gameDay?: number;
 }
@@ -138,8 +139,26 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     });
   }
 
+  for (const building of input.buildings ?? []) {
+    const utilization = num(building.utilization_bps) / 100;
+    if (String(building.status ?? '').toUpperCase() === 'ACTIVE' && utilization < 75) {
+      items.push({
+        id: `decision-building-utilization-${building.id}`,
+        category: 'organization',
+        title: 'A building is operating below capacity',
+        whyItMatters: `Latest settlement utilization is ${Math.round(utilization)}%; shortages or operating policy may be limiting output.`,
+        deadline: 'Before the next settlement',
+        expectedImpact: 'Restore productive utilization and improve operating margin.',
+        riskLevel: utilization === 0 ? 'critical' : 'high',
+        primaryActionLabel: 'Review Buildings',
+        targetSection: 'business',
+        urgencyScore: Math.round(80 - Math.min(30, utilization / 3)),
+      });
+    }
+  }
+
   // 2. Unresolved Governance & Civic Referendums
-  const openProposals = (input.proposals ?? []).filter((p) => p.status === 'open');
+  const openProposals = (input.proposals ?? []).filter((p) => String(p.status ?? '').toLowerCase() === 'open');
   if (openProposals.length > 0) {
     const proposal = openProposals[0];
     items.push({
@@ -195,7 +214,7 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
       category: 'house',
       title: 'Legacy points can unlock a family trait',
       whyItMatters: 'A house perk creates a lasting advantage for every future generation.',
-      deadline: 'When legacy points are available',
+      deadline: 'When House continuity capacity is available',
       expectedImpact: 'Improve production, research, finance, or civic influence across the lineage.',
       riskLevel: 'low',
       primaryActionLabel: 'Open House',

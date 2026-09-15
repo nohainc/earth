@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 57;
+export const EARTH_SCHEMA_VERSION = 75;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -268,8 +268,6 @@ export const REQUIRED_SCHEMA_TABLES = {
     "construction_credit_units",
     "construction_minutes",
     "operating_credit_units",
-    "resource_input_units",
-    "resource_output_units",
     "service_type",
     "service_capacity_units",
     "slot_footprint",
@@ -863,8 +861,6 @@ export const REQUIRED_INDEXES = [
   "service_allocations_provider_day_idx",
   "house_operating_policies_active_idx",
   "policy_execution_log_house_day_idx",
-  "house_need_assessments_day_idx",
-  "service_allocations_provider_day_idx",
   "economic_entries_transaction_idx",
   "auth_email_deliveries_correlation_uq",
   "auth_email_deliveries_account_idx",

@@ -23,19 +23,17 @@ function total(rows: FlowRow[], field: 'inflow_units' | 'outflow_units'): string
 export async function getHouseFinancialProjection(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
   const owner = (await repository.query<{ economic_id: string }>('SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = \'HOUSE\'', [houseId])).rows[0];
   if (!owner) throw new Error('House financial owner not found');
-  const [cash, flows, taxes, loans] = await Promise.all([
-    repository.query<{ balance_units: string }>(`SELECT COALESCE(SUM(balance_units), 0)::TEXT AS balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET' AND status = 'ACTIVE'`, [owner.economic_id]),
-    ledgerFlows(repository, owner.economic_id),
-    repository.query<{ paid_units: string }>(`SELECT COALESCE(SUM(paid_units), 0)::TEXT AS paid_units FROM financial_obligations WHERE debtor_economic_id = $1 AND obligation_type = 'TAX'`, [owner.economic_id]),
-    repository.query<{ outstanding_principal_units: string; accrued_interest_units: string }>('SELECT outstanding_principal_units::TEXT, accrued_interest_units::TEXT FROM bank_loans WHERE borrower_economic_id = $1 AND status NOT IN (\'PAID\', \'CANCELLED\')', [owner.economic_id]),
-  ]);
-  const income = total(flows.rows, 'inflow_units');
-  const expenses = total(flows.rows, 'outflow_units');
+  const cash = await repository.query<{ balance_units: string }>(`SELECT COALESCE(SUM(balance_units), 0)::TEXT AS balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET' AND status = 'ACTIVE'`, [owner.economic_id]);
+  const flows = await ledgerFlows(repository, owner.economic_id);
+  const taxes = await repository.query<{ paid_units: string }>(`SELECT COALESCE(SUM(paid_units), 0)::TEXT AS paid_units FROM financial_obligations WHERE debtor_economic_id = $1 AND obligation_type = 'TAX'`, [owner.economic_id]);
+  const loans = await repository.query<{ outstanding_principal_units: string; accrued_interest_units: string }>('SELECT outstanding_principal_units::TEXT, accrued_interest_units::TEXT FROM bank_loans WHERE borrower_economic_id = $1 AND status NOT IN (\'PAID\', \'CANCELLED\')', [owner.economic_id]);
+  const income = total(flows, 'inflow_units');
+  const expenses = total(flows, 'outflow_units');
   return {
     scope: 'HOUSE', principalId: houseId, cashBalanceUnits: cash.rows[0]?.balance_units ?? '0', incomeUnits: income,
     expenseUnits: expenses, taxUnits: taxes.rows[0]?.paid_units ?? '0',
     loanUnits: loans.rows.reduce((sum, row) => sum + BigInt(row.outstanding_principal_units) + BigInt(row.accrued_interest_units), 0n).toString(),
-    netCashFlowUnits: (BigInt(income) - BigInt(expenses)).toString(), byTransactionKind: flows.rows,
+    netCashFlowUnits: (BigInt(income) - BigInt(expenses)).toString(), byTransactionKind: flows,
   };
 }
 

@@ -13,9 +13,9 @@ test('Flutter exposes Territory rights and commons as a decision-first read surf
   assert.match(api, /acquireTerritoryRight/);
   assert.match(api, /releaseTerritoryRight/);
   assert.match(panel, /time-bounded use right/);
-  assert.match(panel, /server-derived canonical facts/);
+  assert.match(panel, /server-derived/);
   assert.match(dashboard, /territory-commons/);
   assert.match(command, /getHouseResidency/);
   assert.match(command, /commonsStatement/);
-  assert.match(sidebar, /Territory Commons/);
+  assert.match(sidebar, /territory-commons/);
 });

@@ -5,6 +5,7 @@ import '../../core/models/decision_queue_item.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../../core/audio/earth_audio_engine.dart';
+import '../../core/api/earth_api.dart';
 
 class ExecutiveCommandSummary extends StatefulWidget {
   final EarthState state;
@@ -26,12 +27,50 @@ class ExecutiveCommandSummary extends StatefulWidget {
 
 class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   String _selectedActionFilter = 'ALL';
+  DailySummaryReport? _briefing;
+  bool _briefingLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBriefing();
+  }
+
+  Future<void> _loadBriefing() async {
+    try {
+      final response = await const EarthApi().getDailySummary();
+      if (!mounted) return;
+      setState(() {
+        _briefing = response['ok'] == true
+            ? DailySummaryReport.fromJson(Map<String, dynamic>.from(response))
+            : DailySummaryReport.empty(gameDay: _currentGameDay);
+        _briefingLoading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          // Keep the “what changed” surface useful during a transient API
+          // failure. The fallback is explicitly empty; it never invents
+          // financial or settlement facts, but still anchors the player to
+          // the current game day and explains why no delta is shown.
+          _briefing = DailySummaryReport.empty(gameDay: _currentGameDay);
+          _briefingLoading = false;
+        });
+      }
+    }
+  }
+
+  int get _currentGameDay {
+    final raw = widget.state.clock['day'] ??
+        widget.state.world['game_day'] ??
+        widget.state.world['day'] ??
+        0;
+    return raw is num ? raw.toInt() : int.tryParse(raw.toString()) ?? 0;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rawClock = widget.state.json['clock'];
-    final currentDay = rawClock is Map ? int.tryParse('${rawClock['day']}') ?? 0 : 0;
-    final briefing = DailySummaryReport.empty(gameDay: currentDay);
+    final briefing = _briefing;
     final decisionItems = DecisionQueueItem.synthesizeFromState(widget.state);
     final opportunities = widget.state.opportunities;
 
@@ -43,7 +82,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           title: 'WHAT IS MY CURRENT SITUATION?',
           showSurface: false,
           infoBulletPoints: const [
-            'Situation Matrix & Core Metrics: Real-time overview of spendable capital reserves, enterprise solvency, workforce capacity, machine fleet condition, and municipal pressure.',
+            'Situation Matrix & Core Metrics: Real-time overview of spendable capital reserves, enterprise solvency, workforce capacity, machine fleet condition, and territorial service pressure.',
             'Actionable Drill-Down: Tap any metric tile to jump directly to its detailed management interface.',
           ],
           child: _buildSituationMatrix(context),
@@ -57,7 +96,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           infoBulletPoints: const [
             'Nightly Cycle & Overnight Intelligence: Summary of net wealth shifts, overnight revenue & operating expenses, and passed civic referendums since your previous login session.',
           ],
-          child: _buildWhatChangedCard(context, briefing),
+          child: _buildWhatChangedCard(context, briefing, _briefingLoading),
         ),
         SizedBox(height: context.spacingTopic),
 
@@ -78,21 +117,33 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // 1. SITUATION MATRIX
   // ==========================================================================
   Widget _buildSituationMatrix(BuildContext context) {
-    final business = <String, dynamic>{};
-    final credits = asDouble(widget.state.human['credits']) ??
-        asDouble(widget.state.json['player'] is Map
+    final business = widget.state.json['operations'] is Map
+        ? Map<String, dynamic>.from(widget.state.json['operations'] as Map)
+        : widget.state.json['business'] is Map
+            ? Map<String, dynamic>.from(widget.state.json['business'] as Map)
+            : const <String, dynamic>{};
+    final credits = asDouble(widget.state.finance['balance'] ??
+        widget.state.personalFinance['balance'] ??
+        widget.state.human['credits'] ??
+        (widget.state.json['player'] is Map
             ? (widget.state.json['player'] as Map)['credits']
-            : null);
+            : null));
     final profit = asDouble(business['profit']);
     final margin = asDouble(business['margin'] ?? business['profit_margin']);
     final workforce = widget.state.json['workforce'] is List
         ? (widget.state.json['workforce'] as List)
-        : const [];
+        : widget.state.human['workforce'] is List
+            ? (widget.state.human['workforce'] as List)
+            : const [];
     final activeStaff = workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
     final capacity = asInt(business['workforceCapacity'] ?? business['staffCapacity']);
-    final city = widget.state.institutions['city'];
-    final cityMap = city is Map ? Map<String, dynamic>.from(city) : const <String, dynamic>{};
-    final cityPressure = asDouble(cityMap['service_pressure'] ?? cityMap['servicePressure']);
+    final territory = widget.state.residency['territory'] ??
+        widget.state.institutions['territory'];
+    final territoryMap = territory is Map
+        ? Map<String, dynamic>.from(territory)
+        : const <String, dynamic>{};
+    final territoryPressure = asDouble(
+        territoryMap['service_pressure'] ?? territoryMap['servicePressure']);
     final buildings = widget.state.buildings;
 
     return EarthMetricGrid(
@@ -144,16 +195,16 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           },
         ),
         EarthMetricTile(
-          label: 'CITY EFFECT',
-          value: cityMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
-          subtitle: cityPressure == null
+          label: 'TERRITORY EFFECT',
+          value: territoryMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
+          subtitle: territoryPressure == null
               ? 'Pressure unavailable'
-              : 'Pressure ${cityPressure.toStringAsFixed(0)}%',
+              : 'Pressure ${territoryPressure.toStringAsFixed(0)}%',
           icon: Icons.location_city_outlined,
-          accentColor: cityPressure != null && cityPressure > 70 ? context.warningColor : context.successColor,
+          accentColor: territoryPressure != null && territoryPressure > 70 ? context.warningColor : context.successColor,
           onTap: () {
             EarthAudioEngine.instance.playClick();
-            widget.onNavigate?.call('city');
+            widget.onNavigate?.call('territory-commons');
           },
         ),
       ],
@@ -163,7 +214,21 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // ==========================================================================
   // 2. WHAT CHANGED SINCE MY LAST VISIT
   // ==========================================================================
-  Widget _buildWhatChangedCard(BuildContext context, DailySummaryReport briefing) {
+  Widget _buildWhatChangedCard(BuildContext context, DailySummaryReport? briefing,
+      bool loading) {
+    if (loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (briefing == null) {
+      return const EarthEmptyState(
+        message: 'Daily change data is unavailable. Open Briefing to retry.',
+        icon: Icons.sync_problem_outlined,
+      );
+    }
+    return _buildWhatChangedContent(context, briefing);
+  }
+
+  Widget _buildWhatChangedContent(BuildContext context, DailySummaryReport briefing) {
     final netDelta = briefing.netWealthDelta;
     final isPositiveDelta = netDelta.delta >= 0;
     final sign = isPositiveDelta ? '+' : '';
@@ -281,9 +346,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               Expanded(
                 child: _microStat(
                   context,
-                  'ACTIVE CITIZEN RESIDENCY',
-                  briefing.governance.cityResidency,
-                  'Tax Rate: ${briefing.governance.cityTaxRatePct.toStringAsFixed(1)}%',
+                  'ACTIVE TERRITORY RESIDENCY',
+                  briefing.governance.territoryResidency,
+                  'Tax Rate: ${briefing.governance.territoryTaxRatePct.toStringAsFixed(1)}%',
                   context.primaryColor,
                 ),
               ),

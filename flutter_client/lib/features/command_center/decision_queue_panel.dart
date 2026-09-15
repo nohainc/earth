@@ -31,6 +31,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 i.riskLevel.toLowerCase() == 'critical' ||
                 i.riskLevel.toLowerCase() == 'high')
             .toList();
+      case 'ORGANIZATION':
       case 'CORPORATION':
         return widget.items
             .where((i) =>

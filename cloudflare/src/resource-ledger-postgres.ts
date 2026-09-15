@@ -1,8 +1,10 @@
 import type { PostgresRepository } from './repository.ts';
 
 export type ResourceKind = 'MATERIAL' | 'COMPONENTS' | 'ENERGY' | 'COMPUTE' | 'FOOD';
+export const RESOURCE_PRODUCTION_OWNER = 'ECON-RESOURCE-PRODUCTION';
+export const RESOURCE_CONSUMPTION_OWNER = 'ECON-RESOURCE-CONSUMPTION';
 export type ResourceLedgerRow = { id: string; game_day: string | number; game_minute: number; owner_id: string; resource: ResourceKind; delta: string | number; balance_after: string | number; reason_type: string; reason_id: string | null; correlation_id: string | null; created_at: string };
-export type ResourceDailyAggregate = { game_day: number; resource: ResourceKind; total_inflow: number; total_outflow: number; net_change: number; ending_balance?: number };
+export type ResourceDailyAggregate = { game_day: number; resource: ResourceKind; total_inflow: string; total_outflow: string; net_change: string; ending_balance?: string };
 
 /** Read-only ledger history. Resource mutations use canonical settlement transactions. */
 export async function getResourceLedgerHistory(repository: PostgresRepository, ownerId: string, options?: { resource?: ResourceKind; limit?: number; offset?: number }): Promise<ResourceLedgerRow[]> {
@@ -22,6 +24,6 @@ export async function getResourceDailyBreakdown(repository: PostgresRepository, 
        FROM economic_entries e JOIN economic_transactions t ON t.id=e.transaction_id JOIN economic_accounts a ON a.id=e.account_id JOIN economic_assets asset ON asset.id=e.asset_id
       WHERE a.owner_economic_id=$1 AND asset.asset_kind='RESOURCE' GROUP BY t.game_day,asset.code ORDER BY t.game_day DESC LIMIT $2`, [ownerId, Math.max(1, days) * 5]);
   const output: Record<string, ResourceDailyAggregate[]> = {};
-  for (const row of result.rows) (output[row.resource] ??= []).push({ game_day: Number(row.game_day), resource: row.resource, total_inflow: Number(row.total_inflow), total_outflow: Number(row.total_outflow), net_change: Number(row.net_change), ending_balance: Number(row.ending_balance) });
+  for (const row of result.rows) (output[row.resource] ??= []).push({ game_day: Number(row.game_day), resource: row.resource, total_inflow: String(row.total_inflow), total_outflow: String(row.total_outflow), net_change: String(row.net_change), ending_balance: String(row.ending_balance) });
   return output;
 }

@@ -152,18 +152,16 @@ class LifeTodayPanel extends StatelessWidget {
             human['vitality'] ??
             life['health'] ??
             life['vitality']) ??
-        100.0;
+        0.0;
     final energy = asDouble(human['energy'] ??
             human['stamina'] ??
             life['energy'] ??
             life['stamina']) ??
-        100.0;
-    final age =
-        asInt(human['age_years'] ?? human['age'] ?? life['ageYears']) ?? 31;
+        0.0;
+    final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
     final legacy = asDouble(human['legacy'] ?? life['legacy']) ?? 0.0;
     final standing = asIntOr(human['standing'], 0);
     final credits = asDouble(human['credits']) ?? 0.0;
-    final humanId = (human['id'] ?? 'H-0001').toString();
     final rawFullName =
         (human['display_name'] ?? human['name'] ?? 'CITIZEN').toString().trim();
     final displayName =
@@ -186,26 +184,33 @@ class LifeTodayPanel extends StatelessWidget {
             'Founding Lineage')
         .toString();
     final generation = asIntOr(life['generation'] ?? human['generation'], 1);
-    final birthGameDay = asIntOr(
-        human['birth_game_day'] ??
-            human['birth_day'] ??
-            human['birthDay'] ??
-            life['birth_game_day'],
-        1);
+    final birthGameDay = asInt(
+      human['birth_game_day'] ??
+          human['birth_day'] ??
+          human['birthDay'] ??
+          life['birth_game_day'],
+    );
 
-    final birthYear = ((birthGameDay - 1) ~/ 365) + 1;
-    final birthDayInYear = ((birthGameDay - 1) % 365) + 1;
-    final birthDayFormatted = 'Year $birthYear, Day $birthDayInYear';
+    final birthDayFormatted = birthGameDay == null
+        ? '—'
+        : 'Year ${((birthGameDay - 1) ~/ 365) + 1}, Day ${((birthGameDay - 1) % 365) + 1}';
 
-    final cityName = state.institutions['city'] is Map
-        ? (state.institutions['city'] as Map)['name']?.toString().toUpperCase()
-        : null;
-    final corporationName = (state.institutions['corporation'] is Map
+    final territoryName = (state.residency['territory_name'] ??
+            (state.institutions['territory'] is Map
+                ? (state.institutions['territory'] as Map)['name']
+                : null) ??
+            (state.institutions['city'] is Map
+                ? (state.institutions['city'] as Map)['name']
+                : null))
+        ?.toString()
+        .toUpperCase();
+    final organizationName = (state.institutions['corporation'] is Map
             ? (state.institutions['corporation'] as Map)['name']
                 ?.toString()
                 .toUpperCase()
             : null) ??
         (state.membership?['corporation_name']?.toString().toUpperCase()) ??
+        (state.membership?['organization_name']?.toString().toUpperCase()) ??
         (state.membership?['name']?.toString().toUpperCase());
 
     final healthColor =
@@ -216,9 +221,9 @@ class LifeTodayPanel extends StatelessWidget {
       showSurface: false,
       showHeader: false,
       infoBulletPoints: const [
-        'Your active citizen situation: biometric vitality, labor energy, municipal jurisdiction, and legal standing.',
+        'Your active citizen situation: biometric vitality, labor energy, territorial jurisdiction, and legal standing.',
         'Health represents physical vitality (100% base). Life energy measures daily operational capacity.',
-        'All economic balances and productive assets remain synchronized with Finance and Business.',
+        'All economic balances and productive assets remain synchronized with Finance and Operations.',
       ],
       child: Container(
         width: double.infinity,
@@ -235,7 +240,7 @@ class LifeTodayPanel extends StatelessWidget {
                 context,
                 icon: Icons.person_outline,
                 label: 'AGE',
-                value: '$age',
+                value: age?.toString() ?? '—',
                 accentColor: context.primaryColor,
               ),
               _buildAttributeRow(
@@ -247,9 +252,9 @@ class LifeTodayPanel extends StatelessWidget {
               ),
               _buildAttributeRow(
                 context,
-                icon: Icons.location_city_outlined,
-                label: 'RESIDENCE',
-                value: cityName ?? 'INDEPENDENT',
+                icon: Icons.map_outlined,
+                label: 'TERRITORY',
+                value: territoryName ?? 'INDEPENDENT COMMONS',
                 accentColor: context.secondaryColor,
               ),
             ];
@@ -278,21 +283,51 @@ class LifeTodayPanel extends StatelessWidget {
               ),
             ];
 
-            if (isWide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: Column(children: leftColumn)),
-                  const SizedBox(width: 24),
-                  Expanded(child: Column(children: rightColumn)),
-                ],
-              );
-            }
+            final attributesBlock = isWide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: Column(children: leftColumn)),
+                      const SizedBox(width: 24),
+                      Expanded(child: Column(children: rightColumn)),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      ...leftColumn,
+                      ...rightColumn,
+                    ],
+                  );
 
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...leftColumn,
-                ...rightColumn,
+                attributesBlock,
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'LIFESTYLE & HEALTH ACTIONS',
+                      style: TextStyle(
+                        color: context.primaryColor,
+                        fontSize: 10.5,
+                        letterSpacing: 1.1,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'MEDICAL ACCESS: AUTOMATIC VIA TERRITORY SERVICES',
+                      style: TextStyle(
+                        color: context.mutedColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             );
           },
@@ -381,19 +416,23 @@ class SuccessionPanel extends StatelessWidget {
         successor?['successorHumanId']?.toString();
     final registeredDay =
         successor?['registered_game_day'] ?? successor?['registeredOnDay'];
-    final estatePeriodDays = asIntOr(
-        successor?['estate_period_days'] ?? life['estatePeriodDays'], 30);
+    final estatePeriodDays =
+        asInt(successor?['estate_period_days'] ?? life['estatePeriodDays']);
 
-    final heirPct = asIntOr(successor?['heir_pct'], 70);
-    final trustPct = asIntOr(successor?['trust_pct'], 20);
-    final reservePct = asIntOr(successor?['reserve_pct'], 10);
+    final heirPct = asInt(successor?['heir_pct']);
+    final trustPct = asInt(successor?['trust_pct']);
+    final reservePct = asInt(successor?['reserve_pct']);
 
     final isEstatePeriod = lifeStatus == 'estate';
     final isDeceased = lifeStatus == 'deceased';
 
     final credits = asDouble(human['credits']) ?? 0.0;
-    final estimatedTax = isEstatePeriod ? credits * 0.20 : credits * 0.10;
-    final estimatedNet = (credits - estimatedTax).clamp(0.0, double.infinity);
+    final estateTaxRate =
+        asDouble(successor?['estate_tax_rate'] ?? life['estate_tax_rate']);
+    final estimatedTax = estateTaxRate == null ? null : credits * estateTaxRate;
+    final estimatedNet = estimatedTax == null
+        ? null
+        : (credits - estimatedTax).clamp(0.0, double.infinity);
 
     final displayName = successorName != null && successorName.isNotEmpty
         ? successorName
@@ -407,8 +446,8 @@ class SuccessionPanel extends StatelessWidget {
       showSurface: false,
       infoBulletPoints: const [
         'Your succession plan keeps your enterprises, machinery, and capital moving forward without liquidation.',
-        'Tap the edit icon to designate or update your heir. Estate buffer default is 30 game days.',
-        'Standard statutory distribution: 70% to primary heir, 20% to home city trust, 10% to House reserve.',
+        'Tap the edit icon to designate or update your heir. The active estate buffer is published by the lifecycle rules.',
+        'Statutory distribution percentages are read from the active lifecycle rules.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,40 +563,44 @@ class SuccessionPanel extends StatelessWidget {
                   children: [
                     EarthStatusPill(
                         label: 'PRIMARY HEIR',
-                        value: '$heirPct%',
+                        value: heirPct == null ? 'N/A' : '$heirPct%',
                         color: context.primaryColor),
                     EarthStatusPill(
-                        label: 'MUNICIPAL TRUST',
-                        value: '$trustPct%',
+                        label: 'COMMONS TRUST',
+                        value: trustPct == null ? 'N/A' : '$trustPct%',
                         color: context.successColor),
                     EarthStatusPill(
-                        label: 'HOUSE RESERVE',
-                        value: '$reservePct%',
+                        label: 'HOUSE VAULT',
+                        value: reservePct == null ? 'N/A' : '$reservePct%',
                         color: context.secondaryColor),
                     EarthStatusPill(
                         label: 'ESTATE BUFFER',
-                        value: '$estatePeriodDays DAYS',
+                        value: estatePeriodDays == null
+                            ? 'N/A'
+                            : '$estatePeriodDays DAYS',
                         color: context.primaryColor),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '• Primary Heir inherits $heirPct% of liquid credits plus 100% of business shares, production machines, buildings, and fleet licenses.',
+                  '• Primary Heir allocation: ${heirPct == null ? 'unavailable' : '$heirPct%'} of liquid credits; asset treatment follows the active lifecycle rules.',
                   style: context.widgetFooterStyle,
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '• Municipal Trust receives $trustPct% for city services, and House Reserve receives $reservePct% for generational house perks.',
+                  '• Territory Commons Trust: ${trustPct == null ? 'unavailable' : '$trustPct%'}; House Vault: ${reservePct == null ? 'unavailable' : '$reservePct%'} according to the active lifecycle rules.',
                   style: context.widgetFooterStyle,
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '• Statutory Estate Buffer is 30 game days to claim inheritance prior to public liquidation.',
+                  '• Statutory Estate Buffer: ${estatePeriodDays == null ? 'unavailable' : '$estatePeriodDays game days'} before public liquidation.',
                   style: context.widgetFooterStyle,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Est. Net Transfer: ~${formatCreditsAmount(estimatedNet)} (after ~${formatCreditsAmount(estimatedTax)} estate tax)',
+                  estimatedNet == null || estimatedTax == null
+                      ? 'Estimated transfer is unavailable until the active estate tax rule is published.'
+                      : 'Est. Net Transfer: ~${formatCreditsAmount(estimatedNet)} (after ~${formatCreditsAmount(estimatedTax)} estate tax)',
                   style: context.widgetFooterStyle
                       .copyWith(fontWeight: FontWeight.w600),
                 ),
@@ -575,7 +618,6 @@ class SuccessionPanel extends StatelessWidget {
               ],
             ),
           ),
-
         ],
       ),
     );
@@ -1627,7 +1669,7 @@ class WorldRankingsPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Civilizational Leaderboards & Metrics: Live global rankings aggregated across all planetary municipalities, corporate conglomerates, citizen leaders, and technology portfolios.\n\n• Competitive Benchmarks:\n  - CITIES: Ranked by resident population, public service stability, and housing/energy capacity.\n  - CORPORATIONS: Ranked by member count, treasury reserves, and industrial output.\n  - CITIZENS: Ranked by civic standing, legacy points, and net wealth.\n  - TECHNOLOGIES: Ranked by active patent licenses and diffusion rate.',
+          '• Civilizational Leaderboards & Metrics: Live global rankings aggregated across all Territories, Organizations, citizens, and technology portfolios.\n\n• Competitive Benchmarks:\n  - TERRITORIES: Ranked by resident population, public service stability, and housing/energy capacity.\n  - ORGANIZATIONS: Ranked by member count, treasury reserves, and industrial output.\n  - CITIZENS: Ranked by civic standing, House continuity and net wealth.\n  - TECHNOLOGIES: Ranked by active patent licenses and diffusion rate.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2134,22 +2176,26 @@ class MacroLiquidityPanel extends StatelessWidget {
     final supplyVal = asDouble(liq['moneySupply']);
     final targetVal = asDouble(liq['target']);
     final supplyStr =
-        supplyVal != null ? formatCreditsAmount(supplyVal) : '142,500.00 C';
+        supplyVal != null ? formatCreditsAmount(supplyVal) : 'UNAVAILABLE';
     final targetStr =
-        targetVal != null ? formatCreditsAmount(targetVal) : '150,000.00 C';
+        targetVal != null ? formatCreditsAmount(targetVal) : 'UNAVAILABLE';
 
-    final cpiVal = asDouble(liq['cpi']) ?? 102.4;
-    final cpiDelta = cpiVal - 100.0;
-    final cpiDeltaStr = (cpiDelta >= 0
-        ? '+${cpiDelta.toStringAsFixed(1)}%'
-        : '${cpiDelta.toStringAsFixed(1)}%');
+    final cpiVal = asDouble(liq['cpi']);
+    final cpiStr = cpiVal == null ? 'UNAVAILABLE' : cpiVal.toStringAsFixed(1);
+    final cpiDeltaStr = cpiVal == null
+        ? 'Awaiting world snapshot'
+        : '${cpiVal - 100.0 >= 0 ? '+' : ''}${(cpiVal - 100.0).toStringAsFixed(1)}% vs base';
 
-    final giniVal = asDouble(liq['gini']) ?? 0.28;
-    final giniLabel = giniVal <= 0.35
-        ? 'EQUITABLE'
-        : (giniVal <= 0.50 ? 'MODERATE' : 'CONCENTRATED');
+    final giniVal = asDouble(liq['gini']);
+    final giniStr =
+        giniVal == null ? 'UNAVAILABLE' : giniVal.toStringAsFixed(2);
+    final giniLabel = giniVal == null
+        ? 'Awaiting world snapshot'
+        : (giniVal <= 0.35
+            ? 'EQUITABLE'
+            : (giniVal <= 0.50 ? 'MODERATE' : 'CONCENTRATED'));
 
-    final velocityVal = asDouble(liq['velocity']) ?? 1.84;
+    final velocityVal = asDouble(liq['velocity']);
 
     return EarthPanel(
       title: 'UC MONETARY STABILITY BOARD / MACRO BASE',
@@ -2190,8 +2236,10 @@ class MacroLiquidityPanel extends StatelessWidget {
                         : (constraints.maxWidth - 12) / 2,
                     child: _metricCard(
                       '30-DAY CPI',
-                      cpiVal.toStringAsFixed(1),
-                      '$cpiDeltaStr vs Base 100.0',
+                      cpiStr,
+                      cpiVal == null
+                          ? cpiDeltaStr
+                          : '$cpiDeltaStr vs Base 100.0',
                       Colors.tealAccent,
                       Icons.show_chart_outlined,
                     ),
@@ -2202,7 +2250,7 @@ class MacroLiquidityPanel extends StatelessWidget {
                         : (constraints.maxWidth - 12) / 2,
                     child: _metricCard(
                       'PLANETARY GINI (G)',
-                      giniVal.toStringAsFixed(2),
+                      giniStr,
                       '$giniLabel (<0.45 target)',
                       violetColor,
                       Icons.pie_chart_outline,
@@ -2214,7 +2262,9 @@ class MacroLiquidityPanel extends StatelessWidget {
                         : (constraints.maxWidth - 12) / 2,
                     child: _metricCard(
                       'MONEY VELOCITY (V)',
-                      '${velocityVal.toStringAsFixed(2)}x',
+                      velocityVal == null
+                          ? 'UNAVAILABLE'
+                          : '${velocityVal.toStringAsFixed(2)}x',
                       'Target M*: $targetStr',
                       Colors.orangeAccent,
                       Icons.speed_outlined,

@@ -251,7 +251,16 @@ void main() {
               onPressed: () => showBuildingAcquisitionDialog(
                 context,
                 (cb) async => cb(),
-                const [],
+                const [
+                  {
+                    'type': 'micro_factory_t1',
+                    'name': 'Micro Factory',
+                    'ownershipClass': 'private',
+                    'baseCreditCost': 8500,
+                    'baseMaterialCost': 120,
+                    'slotFootprint': 1,
+                  },
+                ],
                 'CITY-0084',
                 5,
               ),

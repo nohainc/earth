@@ -47,12 +47,15 @@ test('canonical registration creates one House principal and outbox delivery is 
       await tx.query('DELETE FROM event_outbox WHERE aggregate_id = $1', [humanId]);
       await tx.query('DELETE FROM auth_sessions WHERE human_id = $1', [humanId]);
       await tx.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [economicId]);
+      await tx.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE $1)', [`starter:${houseId}:%`]);
       await tx.query('DELETE FROM economic_transactions WHERE correlation_id LIKE $1', [`starter:${houseId}:%`]);
       await tx.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [economicId]);
       await tx.query('DELETE FROM owner_registry WHERE economic_id = $1', [economicId]);
       await tx.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
       await tx.query('DELETE FROM humans WHERE id = $1', [humanId]);
       await tx.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [email]);
+      await tx.query('DELETE FROM house_entry_support WHERE house_id = $1', [houseId]);
+      await tx.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [houseId]);
       await tx.query('DELETE FROM houses WHERE id = $1', [houseId]);
       await tx.query('DELETE FROM auth_accounts WHERE email = $1', [email]);
     });

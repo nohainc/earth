@@ -257,5 +257,29 @@ export async function setCorporationTaxCharter(repository: PostgresRepository, i
     corporateTaxBps: Math.max(0, Math.min(5000, Math.round(Number(input.corporateTaxBps ?? 0)))),
     propertyTaxBps: Math.max(0, Math.min(3000, Math.round(Number(input.propertyTaxBps ?? 0)))),
   };
-  return { ok: true, corporationId: input.corporationId, charter, correlationId: input.correlationId };
+  return repository.transaction(async (tx) => {
+    const prior = (await tx.query<{ tax_charter_version: number; tax_charter: Record<string, unknown>; tax_charter_correlation_id: string | null }>(
+      'SELECT tax_charter_version, tax_charter, tax_charter_correlation_id FROM corporations WHERE id = $1 AND status = \'ACTIVE\' FOR UPDATE',
+      [input.corporationId],
+    )).rows[0];
+    if (!prior) throw new Error('Corporation not found');
+    if (prior.tax_charter_correlation_id === input.correlationId) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, charter, version: prior.tax_charter_version, correlationId: input.correlationId };
+    const authority = await tx.query(
+      `SELECT 1 FROM institution_governance_roles
+        WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
+          AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')`,
+      [input.corporationId, input.humanId],
+    );
+    if (!authority.rows[0]) throw new Error('Corporation tax authority is required');
+    const current = JSON.stringify(prior.tax_charter ?? {});
+    const next = JSON.stringify(charter);
+    if (current === next) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, charter, version: prior.tax_charter_version, correlationId: input.correlationId };
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const version = Number(prior.tax_charter_version ?? 0) + 1;
+    await tx.query(
+      'UPDATE corporations SET tax_charter = $1::JSONB, tax_charter_version = $2, tax_charter_updated_game_day = $3, tax_charter_correlation_id = $4 WHERE id = $5',
+      [next, version, day, input.correlationId, input.corporationId],
+    );
+    return { ok: true, corporationId: input.corporationId, charter, version, effectiveGameDay: day + 1, correlationId: input.correlationId };
+  });
 }

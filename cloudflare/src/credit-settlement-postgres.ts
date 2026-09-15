@@ -48,10 +48,21 @@ export async function release(repository: PostgresRepository, input: { principal
 
 export async function settleObligation(repository: PostgresRepository, input: { obligationId: string; context: CreditSettlementContext }): Promise<CreditTransferResult> {
   return repository.transaction(async (tx) => {
-    const obligation = await tx.query<{ debtor_economic_id: string; creditor_economic_id: string; principal_due_units: string; interest_due_units: string; paid_units: string; debtor_account_purpose: string; creditor_account_purpose: string; status: string }>(
-      `SELECT debtor_economic_id, creditor_economic_id, principal_due_units::TEXT, interest_due_units::TEXT, paid_units::TEXT, debtor_account_purpose, creditor_account_purpose, status FROM financial_obligations WHERE id=$1 FOR UPDATE`, [input.obligationId]);
+    const obligation = await tx.query<{ debtor_economic_id: string; creditor_economic_id: string; principal_due_units: string; interest_due_units: string; paid_units: string; debtor_account_purpose: string; creditor_account_purpose: string; status: string; obligation_type: string; source_id: string | null }>(
+      `SELECT debtor_economic_id, creditor_economic_id, principal_due_units::TEXT, interest_due_units::TEXT, paid_units::TEXT, debtor_account_purpose, creditor_account_purpose, status, obligation_type, source_id FROM financial_obligations WHERE id=$1 FOR UPDATE`, [input.obligationId]);
     const row = obligation.rows[0];
     if (!row) throw new Error('CREDIT obligation not found');
+    if (row.obligation_type === 'SERVICE_INVOICE' && row.source_id) {
+      const performance = (await tx.query<{ status: string }>('SELECT status FROM contract_performance_events WHERE obligation_id = $1 FOR UPDATE', [input.obligationId])).rows[0];
+      if (performance && performance.status !== 'ACCEPTED') {
+        if (['FAILED', 'WAIVED'].includes(performance.status)) {
+          await tx.query("UPDATE financial_obligations SET status = 'CANCELLED', cancelled_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1", [input.obligationId, input.context.gameDay]);
+        } else {
+          await tx.query('UPDATE financial_obligations SET due_game_day = GREATEST(due_game_day, $2 + 1), updated_at = CURRENT_TIMESTAMP WHERE id = $1', [input.obligationId, input.context.gameDay]);
+        }
+        return { status: 'already_processed', transactionId: 'delivery-pending', amountUnits: 0n, amount: formatCreditUnits(0n) };
+      }
+    }
     const remaining = BigInt(row.principal_due_units) + BigInt(row.interest_due_units) - BigInt(row.paid_units);
     if (row.status === 'CANCELLED' || remaining <= 0n) return { status: 'already_processed', transactionId: 'already-paid', amountUnits: 0n, amount: formatCreditUnits(0n) };
     const payment = await postCreditEntries(tx, { ...input.context, transactionKind: 'ASSET_TRANSFER', purpose: 'OBLIGATION_PAYMENT', reasonId: input.obligationId }, await resolveEconomicAccount(tx, row.debtor_economic_id, row.debtor_account_purpose), await resolveEconomicAccount(tx, row.creditor_economic_id, row.creditor_account_purpose), remaining);

@@ -328,7 +328,7 @@ class HouseLineageDialog extends StatelessWidget {
                           children: [
                             const Icon(Icons.location_city, size: 14, color: Colors.white54),
                             const SizedBox(width: 8),
-                            const Text('Seat City: ', style: TextStyle(fontSize: 12, color: Colors.white54)),
+                            const Text('Seat Territory: ', style: TextStyle(fontSize: 12, color: Colors.white54)),
                             Text(seat, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
                           ],
                         ),

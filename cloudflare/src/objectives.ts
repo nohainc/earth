@@ -25,15 +25,15 @@ export interface PlayerObjective {
 }
 
 export interface ObjectivesEvaluationInput {
-  human?: { credits?: unknown; standing?: unknown; legacy?: unknown; voting_weight?: unknown; age_years?: unknown };
+  human?: { credits?: unknown; standing?: unknown; house_standing?: unknown; voting_weight?: unknown; age_years?: unknown };
   institutions?: {
     city?: { health_capacity?: unknown; essential_services_index?: unknown; standing?: unknown };
     corporation?: { treasury?: unknown; member_count?: unknown };
   };
   governance?: { proposals_voted?: unknown; voting_weight?: unknown };
   technology?: { research_progress?: unknown; active_patents?: unknown; active_licenses?: unknown };
-  house?: { generation?: unknown; perks_count?: unknown; heirlooms_count?: unknown; successor_id?: string | null };
-  dynasty?: { generation?: unknown; perks_count?: unknown; heirlooms_count?: unknown; successor_id?: string | null };
+  house?: { generation?: unknown; successor_id?: string | null; durable_assets?: unknown };
+  dynasty?: { generation?: unknown; successor_id?: string | null; durable_assets?: unknown };
   resources?: Record<string, unknown>;
   netWorth?: number;
 }
@@ -69,7 +69,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput, rules
     progressPercentage: corpProgress,
     metricLabel: `${corporationValuation.toLocaleString()} / ${targetCorpVal.toLocaleString()} C Valuation`,
     status: corpProgress >= 100 ? 'completed' : 'in_progress',
-    rewardDescription: 'Title: "Industrial Titan" · +500 Legacy Points · Corporate Tax Charter Exemption',
+    rewardDescription: 'Title: "Industrial Titan" · +500 House standing · Corporate Tax Charter Exemption',
     targetSection: 'business',
     iconName: 'business_center',
   });
@@ -88,7 +88,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput, rules
     progressPercentage: foodProgress,
     metricLabel: `${Math.round(foodReserve).toLocaleString()} / ${targetFoodReserve.toLocaleString()} Food Units`,
     status: foodProgress >= 100 ? 'completed' : 'in_progress',
-    rewardDescription: 'Title: "Food Systems Steward" · +200 Legacy Points · Reduced emergency supply costs',
+    rewardDescription: 'Title: "Food Systems Steward" · +200 House standing · Reduced emergency supply costs',
     targetSection: 'business',
     iconName: 'restaurant',
   });
@@ -118,9 +118,9 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput, rules
   // 3. Create a house with specific traits
   const houseData = input.house || input.dynasty;
   const houseGen = num(houseData?.generation, 1);
-  const perksCount = num(houseData?.perks_count, 0) + num(houseData?.heirlooms_count, 0) + (houseData?.successor_id ? 1 : 0);
+  const continuityCount = num(houseData?.durable_assets, 0) + (houseData?.successor_id ? 1 : 0);
   const targetHousePerks = rule('objectives.house_traits', 3);
-  const houseProgressUnits = Math.max(0, houseGen - 1) + perksCount;
+  const houseProgressUnits = Math.max(0, houseGen - 1) + continuityCount;
   const houseTargetUnits = targetHousePerks + 1;
   const houseProgress = Math.min(
     100,
@@ -130,7 +130,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput, rules
     id: 'obj-house-traits',
     category: 'house',
     title: 'Create a House with Sovereign Traits',
-    description: 'Advance your generational lineage to Generation 2+ and unlock at least 3 distinct house traits and heirlooms.',
+    description: 'Advance your generational lineage to Generation 2+ and preserve durable House assets across succession.',
     currentValue: houseProgressUnits,
     targetValue: houseTargetUnits,
     progressPercentage: houseProgress,

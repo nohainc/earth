@@ -6,11 +6,16 @@ async function currentDay(tx: PostgresRepository): Promise<number> {
 }
 
 export async function listGlobalPrograms(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const programs = await repository.query(`SELECT id, program_type, name, description, status, authorized_units::TEXT, funded_units::TEXT, spent_units::TEXT, progress_units::TEXT, target_units::TEXT, authorization_proposal_id, created_game_day, completed_game_day FROM global_programs ORDER BY status, created_game_day DESC, id`);
+  const programs = await repository.query(`SELECT p.id, p.program_type, p.name, p.description, p.status, p.authorized_units::TEXT, p.funded_units::TEXT, p.spent_units::TEXT, p.progress_units::TEXT, p.target_units::TEXT, p.matching_authorized_units::TEXT, p.matching_used_units::TEXT, p.funding_deadline_game_day, p.authorization_proposal_id, p.created_game_day, p.completed_game_day, COUNT(c.id) FILTER (WHERE c.status IN ('ESCROWED','APPLIED'))::INTEGER AS supporter_count FROM global_programs p LEFT JOIN global_program_contributions c ON c.program_id = p.id GROUP BY p.id ORDER BY p.status, p.created_game_day DESC, p.id`);
   return { programs: programs.rows, generatedFrom: 'postgres-canonical-facts' };
 }
 
-export async function createGlobalProgram(repository: PostgresRepository, input: { programType: 'TECHNOLOGY' | 'COMMONS' | 'EMERGENCY'; name: string; description: string; targetUnits: string; authorizedUnits: string; proposalId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
+export async function listGlobalProgramContributions(repository: PostgresRepository, programId: string, houseId: string): Promise<Record<string, unknown>> {
+  const rows = await repository.query(`SELECT id, program_id, amount_units::TEXT, matching_units::TEXT, status, game_day, refunded_game_day, transaction_id::TEXT FROM global_program_contributions WHERE program_id = $1 AND house_id = $2 ORDER BY game_day DESC, id`, [programId, houseId]);
+  return { programId, contributions: rows.rows, generatedFrom: 'postgres-canonical-facts' };
+}
+
+export async function createGlobalProgram(repository: PostgresRepository, input: { programType: 'TECHNOLOGY' | 'COMMONS' | 'EMERGENCY'; name: string; description: string; targetUnits: string; authorizedUnits: string; matchingAuthorizedUnits?: string; fundingDeadlineGameDay?: number; proposalId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ id: string }>('SELECT id FROM global_programs WHERE correlation_id = $1', [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, programId: prior.rows[0].id, correlationId: input.correlationId };
@@ -18,12 +23,15 @@ export async function createGlobalProgram(repository: PostgresRepository, input:
     if (!proposal || proposal.subject_type !== 'EARTH' || proposal.subject_id !== null || proposal.action_type !== 'PUBLIC_PROJECT' || !['VOTING', 'PASSED'].includes(proposal.status)) throw new Error('Global programs require an EARTH public-project proposal');
     const target = BigInt(input.targetUnits);
     const authorized = BigInt(input.authorizedUnits);
-    if (!input.name.trim() || input.name.trim().length > 120 || target <= 0n || authorized < target) throw new Error('Invalid global program definition or authority');
+    const matching = BigInt(input.matchingAuthorizedUnits ?? '0');
+    if (!input.name.trim() || input.name.trim().length > 120 || target <= 0n || authorized < target || matching < 0n || matching > authorized) throw new Error('Invalid global program definition or authority');
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const id = `EARTH-PROGRAM-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
-    await tx.query(`INSERT INTO global_programs (id, program_type, name, description, authorized_units, target_units, authorization_proposal_id, created_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [id, input.programType, input.name.trim(), input.description.trim(), authorized.toString(), target.toString(), input.proposalId, day, input.correlationId]);
+    const deadline = input.fundingDeadlineGameDay ?? day + 365;
+    if (!Number.isInteger(deadline) || deadline < day) throw new Error('Funding deadline must be a future game day');
+    await tx.query(`INSERT INTO global_programs (id, program_type, name, description, authorized_units, matching_authorized_units, target_units, funding_deadline_game_day, authorization_proposal_id, created_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [id, input.programType, input.name.trim(), input.description.trim(), authorized.toString(), matching.toString(), target.toString(), deadline, input.proposalId, day, input.correlationId]);
     await createGameEvent(tx, { id: `EARTH-PROGRAM-CREATED-${id}`, category: 'GOVERNANCE', eventType: 'EARTH_GLOBAL_PROGRAM_CREATED', gameDay: day, actorHumanId: input.humanId, subjectType: 'EARTH', subjectId: 'EARTH', title: input.name.trim(), details: { programId: id, programType: input.programType, targetUnits: target.toString(), authorizedUnits: authorized.toString(), proposalId: input.proposalId }, correlationId: input.correlationId });
-    return { ok: true, programId: id, status: 'PROPOSED', authorizationProposalId: input.proposalId, correlationId: input.correlationId };
+    return { ok: true, programId: id, status: 'PROPOSED', fundingDeadlineGameDay: deadline, authorizationProposalId: input.proposalId, correlationId: input.correlationId };
   });
 }
 
@@ -49,6 +57,65 @@ export async function fundGlobalProgram(repository: PostgresRepository, input: {
   });
 }
 
+export async function contributeToGlobalProgram(repository: PostgresRepository, input: { programId: string; houseId: string; sourceAccountId: string; amountUnits: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ id: string }>('SELECT id FROM global_program_contributions WHERE correlation_id = $1', [input.correlationId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, contributionId: prior.rows[0].id, correlationId: input.correlationId };
+    const program = (await tx.query<{ authorized_units: string; funded_units: string; matching_authorized_units: string; matching_used_units: string; status: string; funding_deadline_game_day: number }>('SELECT authorized_units::TEXT, funded_units::TEXT, matching_authorized_units::TEXT, matching_used_units::TEXT, status, funding_deadline_game_day FROM global_programs WHERE id = $1 FOR UPDATE', [input.programId])).rows[0];
+    if (!program || !['PROPOSED', 'ACTIVE'].includes(program.status)) throw new Error('Global program is not accepting contributions');
+    const amount = BigInt(input.amountUnits);
+    if (amount <= 0n) throw new Error('Contribution must be positive');
+    const day = await currentDay(tx);
+    if (day > Number(program.funding_deadline_game_day)) throw new Error('Global program funding deadline has passed');
+    const source = (await tx.query<{ id: string; balance_units: string }>(`SELECT a.id::TEXT, a.balance_units::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.id = $2 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' FOR UPDATE`, [input.houseId, input.sourceAccountId])).rows[0];
+    const earth = (await tx.query<{ id: string; balance_units: string }>(`SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = 'ECON-EARTH-001' AND asset_id = 1 AND account_type = 'TREASURY' AND status = 'ACTIVE' FOR UPDATE`)).rows[0];
+    const sink = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.owner_type = 'SYSTEM' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' ORDER BY a.id LIMIT 1`)).rows[0];
+    if (!source || !earth || !sink || BigInt(source.balance_units) < amount) throw new Error('House wallet balance is insufficient or program escrow is unavailable');
+    const remainingAuthority = BigInt(program.authorized_units) - BigInt(program.funded_units);
+    if (amount > remainingAuthority) throw new Error('Contribution exceeds remaining program authority');
+    const daily = await tx.query<{ total: string }>(`SELECT COALESCE(SUM(amount_units), 0)::TEXT AS total FROM global_program_contributions WHERE program_id = $1 AND house_id = $2 AND game_day = $3 AND status = 'ESCROWED'`, [input.programId, input.houseId, day]);
+    if (BigInt(daily.rows[0]?.total ?? '0') + amount > 10000n) throw new Error('House daily program contribution limit exceeded');
+    const remainingMatch = BigInt(program.matching_authorized_units) - BigInt(program.matching_used_units);
+    const match = amount < remainingMatch ? amount : remainingMatch;
+    const authorizedMatch = remainingAuthority - amount;
+    const appliedMatch = match < authorizedMatch ? match : (authorizedMatch > 0n ? authorizedMatch : 0n);
+    if (BigInt(earth.balance_units) < appliedMatch) throw new Error('Earth matching treasury is insufficient');
+    const transaction = await tx.query<{ transaction_id: string; created: boolean }>('SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,\'GLOBAL_PROGRAM_CONTRIBUTION\',\'HOUSE\',\'EARTH\',\'earth-programs-v2\',$3::JSONB)', [input.correlationId, day, JSON.stringify([{ account_id: source.id, asset_id: 1, delta_units: (-amount).toString() }, { account_id: earth.id, asset_id: 1, delta_units: (-appliedMatch).toString() }, { account_id: sink.id, asset_id: 1, delta_units: (amount + appliedMatch).toString() }])]);
+    if (!transaction.rows[0]?.created) return { ok: true, alreadyProcessed: true, correlationId: input.correlationId };
+    const id = `PROGRAM-CONTRIBUTION-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+    await tx.query('INSERT INTO global_program_contributions (id, program_id, house_id, amount_units, matching_units, transaction_id, game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [id, input.programId, input.houseId, amount.toString(), appliedMatch.toString(), transaction.rows[0].transaction_id, day, input.correlationId]);
+    await tx.query('UPDATE global_programs SET funded_units = funded_units + $1, matching_used_units = matching_used_units + $2, status = \'ACTIVE\', recipient_account_id = $3 WHERE id = $4', [(amount + appliedMatch).toString(), appliedMatch.toString(), sink.id, input.programId]);
+    await createGameEvent(tx, { id: `EARTH-PROGRAM-CONTRIBUTION-${id}`, category: 'GOVERNANCE', eventType: 'EARTH_GLOBAL_PROGRAM_PLAYER_FUNDED', gameDay: day, actorHumanId: input.humanId, subjectType: 'EARTH', subjectId: 'EARTH', title: 'House funded an EARTH program', details: { programId: input.programId, houseId: input.houseId, contributionUnits: amount.toString(), matchingUnits: appliedMatch.toString() }, correlationId: input.correlationId });
+    return { ok: true, contributionId: id, programId: input.programId, contributionUnits: amount.toString(), matchingUnits: appliedMatch.toString(), fundedUnits: (BigInt(program.funded_units) + amount + appliedMatch).toString(), transactionId: transaction.rows[0].transaction_id, correlationId: input.correlationId };
+  });
+}
+
+export async function settleGlobalProgramFunding(repository: PostgresRepository, programId: string, gameDay: number): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const program = (await tx.query<{ status: string; funding_deadline_game_day: number; funded_units: string; target_units: string }>('SELECT status, funding_deadline_game_day, funded_units::TEXT, target_units::TEXT FROM global_programs WHERE id = $1 FOR UPDATE', [programId])).rows[0];
+    if (!program) throw new Error('Global program not found');
+    if (['CANCELLED', 'COMPLETED'].includes(program.status)) return { ok: true, alreadyProcessed: true, programId, status: program.status };
+    if (gameDay < Number(program.funding_deadline_game_day)) throw new Error('Global program funding deadline is not reached');
+    const funded = BigInt(program.funded_units) >= BigInt(program.target_units);
+    if (funded) {
+      await tx.query("UPDATE global_program_contributions SET status = 'APPLIED' WHERE program_id = $1 AND status = 'ESCROWED'", [programId]);
+      return { ok: true, programId, status: 'ACTIVE', contributionsApplied: true };
+    }
+    const rows = await tx.query<{ id: string; house_id: string; amount_units: string; matching_units: string; transaction_id: string }>(`SELECT c.id, c.house_id, c.amount_units::TEXT, c.matching_units::TEXT, c.transaction_id::TEXT FROM global_program_contributions c WHERE c.program_id = $1 AND c.status = 'ESCROWED' FOR UPDATE`, [programId]);
+    const escrow = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.owner_type = 'SYSTEM' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' ORDER BY a.id LIMIT 1`)).rows[0];
+    const earth = (await tx.query<{ id: string }>(`SELECT id::TEXT FROM economic_accounts WHERE owner_economic_id = 'ECON-EARTH-001' AND asset_id = 1 AND account_type = 'TREASURY' AND status = 'ACTIVE'`)).rows[0];
+    if (!escrow || !earth) throw new Error('Program escrow or Earth treasury is unavailable for refund');
+    for (const row of rows.rows) {
+      const wallet = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'`, [row.house_id])).rows[0];
+      if (!wallet) throw new Error('House wallet is unavailable for refund');
+      const refund = await tx.query<{ transaction_id: string }>('SELECT transaction_id FROM earth_post_transaction($1,$2,0,\'GLOBAL_PROGRAM_REFUND\',\'EARTH\',\'HOUSE\',\'earth-programs-v2\',$3::JSONB)', [`program-refund:${row.id}`, gameDay, JSON.stringify([{ account_id: escrow.id, asset_id: 1, delta_units: (-BigInt(row.amount_units) - BigInt(row.matching_units)).toString() }, { account_id: wallet.id, asset_id: 1, delta_units: row.amount_units }, { account_id: earth.id, asset_id: 1, delta_units: row.matching_units }])]);
+      await tx.query("UPDATE global_program_contributions SET status = 'REFUNDED', refunded_game_day = $2, refund_transaction_id = $3 WHERE id = $1", [row.id, gameDay, refund.rows[0]?.transaction_id ?? null]);
+    }
+    await tx.query("UPDATE global_programs SET status = 'CANCELLED' WHERE id = $1", [programId]);
+    return { ok: true, programId, status: 'CANCELLED', refundedContributions: rows.rows.length };
+  });
+}
+
 export async function advanceGlobalPrograms(repository: PostgresRepository, gameDay: number): Promise<Record<string, unknown>> {
   const result = await repository.query<{ id: string; funding: string; remaining: string }>(`SELECT id, LEAST(funded_units - spent_units, target_units - progress_units)::TEXT AS funding, (target_units - progress_units)::TEXT AS remaining FROM global_programs WHERE status = 'ACTIVE' AND funded_units > spent_units AND progress_units < target_units ORDER BY id LIMIT 100`);
   let advanced = 0;
@@ -62,6 +129,7 @@ export async function advanceGlobalPrograms(repository: PostgresRepository, game
       const correlation = `earth-program:${locked.id}:${gameDay}`;
       await tx.query('INSERT INTO global_program_progress (program_id, game_day, progress_units, funding_spent_units, correlation_id) VALUES ($1,$2,$3,$3,$4) ON CONFLICT (correlation_id) DO NOTHING', [locked.id, gameDay, actual.toString(), correlation]);
       await tx.query("UPDATE global_programs SET progress_units = progress_units + $1, spent_units = spent_units + $1, status = CASE WHEN progress_units + $1 >= target_units THEN 'COMPLETED' ELSE status END, completed_game_day = CASE WHEN progress_units + $1 >= target_units THEN $2 ELSE completed_game_day END WHERE id = $3", [actual.toString(), gameDay, locked.id]);
+      if (BigInt(locked.progress_units) + actual >= BigInt(locked.target_units)) await tx.query(`INSERT INTO global_program_benefit_attributions (id, program_id, beneficiary_type, beneficiary_id, benefit_type, amount_units, effective_game_day, rules_version, correlation_id) VALUES ($1,$2,'EARTH','EARTH',$3,$4,$5,'global-program-benefits-v1',$6) ON CONFLICT (correlation_id) DO NOTHING`, [`PROGRAM-BENEFIT-${locked.id}`, locked.id, 'PLANETARY_PROGRAM_OUTPUT', actual.toString(), gameDay, `program-benefit:${locked.id}`]);
       advanced += 1;
     });
   }

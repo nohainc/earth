@@ -118,8 +118,8 @@ class DecisionQueueItem {
     final raw = state.json['decisionQueue'] as List<dynamic>?;
     if (raw != null && raw.isNotEmpty) {
       return raw
-          .map((item) =>
-              DecisionQueueItem.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map((item) => DecisionQueueItem.fromJson(
+              Map<String, dynamic>.from(item as Map)))
           .toList()
         ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
     }
@@ -130,9 +130,10 @@ class DecisionQueueItem {
     final rawResources = state.json['resources'];
     final resources = rawResources is Map ? rawResources : const {};
     final energy = asDoubleOr(resources['energy'], 100.0);
-    final materials = asDoubleOr(
-        resources['material'] ?? resources['materials'], 100.0);
-    final rawOrganization = state.json['organization'] ?? state.json['business'];
+    final materials =
+        asDoubleOr(resources['material'] ?? resources['materials'], 100.0);
+    final rawOrganization =
+        state.json['organization'] ?? state.json['business'];
     final organization = rawOrganization is Map ? rawOrganization : const {};
     final profit = asDoubleOr(organization['profit'], 0.0);
 
@@ -140,7 +141,8 @@ class DecisionQueueItem {
     final territory = rawTerritory is Map ? rawTerritory : const {};
     final territoryId = territory['id']?.toString();
     if (territoryId != null && territoryId.isNotEmpty) {
-      final residents = asDoubleOr(territory['residents'], 1.0).clamp(1.0, double.infinity);
+      final residents =
+          asDoubleOr(territory['residents'], 1.0).clamp(1.0, double.infinity);
       final energyCapacity = asDoubleOr(territory['energy_capacity'], 0.0);
       final healthCapacity = asDoubleOr(territory['health_capacity'], 0.0);
       final energyRatio = energyCapacity / residents;
@@ -149,9 +151,11 @@ class DecisionQueueItem {
           id: 'decision-territory-energy-$territoryId',
           category: 'civic',
           title: 'Your Territory needs an energy recovery plan',
-          whyItMatters: 'The local grid provides ${energyCapacity.round()} capacity for ${residents.round()} residents.',
+          whyItMatters:
+              'The local grid provides ${energyCapacity.round()} capacity for ${residents.round()} residents.',
           deadline: 'Before the next settlement',
-          expectedImpact: 'Restore reliable local services and protect productive assets from brownouts.',
+          expectedImpact:
+              'Restore reliable local services and protect productive assets from brownouts.',
           riskLevel: energyRatio < 0.75 ? 'critical' : 'high',
           primaryActionLabel: 'Review Territory Capacity',
           targetSection: 'territory',
@@ -163,9 +167,11 @@ class DecisionQueueItem {
           id: 'decision-territory-health-$territoryId',
           category: 'civic',
           title: 'Your Territory needs a health recovery plan',
-          whyItMatters: 'Health capacity is at ${(healthCapacity / 100.0 * 100).round()}%; prolonged deficits can reduce quality of life.',
+          whyItMatters:
+              'Health capacity is at ${(healthCapacity / 100.0 * 100).round()}%; prolonged deficits can reduce quality of life.',
           deadline: 'Before the next settlement',
-          expectedImpact: 'Raise health capacity and keep your household and workforce in place.',
+          expectedImpact:
+              'Raise health capacity and keep your household and workforce in place.',
           riskLevel: 'critical',
           primaryActionLabel: 'Review Territory Capacity',
           targetSection: 'territory',
@@ -226,7 +232,8 @@ class DecisionQueueItem {
     final governance = rawGov is Map ? rawGov : const {};
     final proposals = (governance['proposals'] as List<dynamic>?) ?? const [];
     final openProps = proposals
-        .where((p) => p is Map && (p['status'] == 'open' || p['status'] == null))
+        .where(
+            (p) => p is Map && (p['status'] == 'open' || p['status'] == null))
         .toList();
     if (openProps.isNotEmpty) {
       final p = Map<String, dynamic>.from(openProps.first as Map);
@@ -250,7 +257,8 @@ class DecisionQueueItem {
     final rawContracts = state.json['contracts'];
     final contracts = rawContracts is List ? rawContracts : const [];
     final activeContracts = contracts
-        .where((c) => c is Map && (c['status'] == 'active' || c['status'] == null))
+        .where(
+            (c) => c is Map && (c['status'] == 'active' || c['status'] == null))
         .toList();
     if (activeContracts.isNotEmpty) {
       final c = Map<String, dynamic>.from(activeContracts.first as Map);
@@ -339,7 +347,7 @@ class DecisionQueueItem {
             'No legal successor is registered for your lineage. In the event of mortal transition, your accumulated estate faces heavy OUC liquidation penalties.',
         deadline: 'Prior to Transition',
         expectedImpact:
-            'Guarantee 100% generational wealth preservation and unlock family house perks.',
+            'Protect House continuity across succession and preserve durable assets for the next generation.',
         riskLevel: 'high',
         primaryActionLabel: 'Manage House',
         targetSection: 'house',

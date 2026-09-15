@@ -1594,7 +1594,8 @@ Future<void> showCorporationCharterDialog(
   final id = corporation['id']?.toString() ?? '';
   final name = corporation['name']?.toString() ?? id;
   final capitalCity =
-      corporation['capital_city_name']?.toString() ?? 'Capital City';
+      corporation['capital_territory_name']?.toString() ??
+      corporation['capital_city_name']?.toString() ?? 'Territory unavailable';
   final members = asIntOr(corporation['member_count'], 0);
   final cityCount = asIntOr(corporation['city_count'], 1);
   final treasury = asDouble(corporation['treasury']) ?? 0.0;
@@ -1681,7 +1682,7 @@ Future<void> showCorporationCharterDialog(
               EarthMetricGrid(
                 metrics: [
                   EarthMetricTile(
-                    label: 'CAPITAL CITY',
+                    label: 'CAPITAL TERRITORY',
                     value: capitalCity,
                     subtitle: 'Administrative Seat',
                     icon: Icons.location_city_outlined,
@@ -1700,7 +1701,7 @@ Future<void> showCorporationCharterDialog(
                   ),
                   EarthMetricTile(
                     label: 'MUNICIPAL NETWORK',
-                    value: '$cityCount Cities',
+                    value: '$cityCount Territories',
                     subtitle: 'Chartered Territories',
                     icon: Icons.hub_outlined,
                   ),
@@ -1733,7 +1734,7 @@ Future<void> showCorporationCharterDialog(
                       context,
                       Icons.shield_outlined,
                       'Corporate Tax Protection',
-                      'Members enjoy capped municipal tax rates ($incomeTaxBps bps income / $salesTaxBps bps sales) across all $cityCount affiliated cities.',
+                      'Members enjoy capped territorial tax rates ($incomeTaxBps bps income / $salesTaxBps bps sales) across all $cityCount affiliated territories.',
                     ),
                     const SizedBox(height: 10),
                     _buildBenefitRow(
@@ -1747,7 +1748,7 @@ Future<void> showCorporationCharterDialog(
                       context,
                       Icons.how_to_vote_outlined,
                       'Shareholder Democratic Franchise',
-                      'Vote on corporate leadership, municipal tax updates, and city territorial adoptions.',
+                      'Vote on organization leadership, territorial tax updates, and territory adoptions.',
                     ),
                   ],
                 ),

@@ -13,6 +13,7 @@ type Building = {
   design_life_days: string;
   overdue_burden_bps_per_day: string;
   maximum_burden_bps: string;
+  operating_mode: 'CONSERVATIVE' | 'BALANCED' | 'GROWTH';
 };
 function ageBurden(building: Building, day: number): bigint {
   const age = day >= Number(building.last_major_rebuild_game_day) ? BigInt(day - Number(building.last_major_rebuild_game_day)) : 0n;
@@ -27,6 +28,7 @@ type ModifierResolver = (effectType: string, targetKey: string, territoryId: str
 const ASSET_IDS: Record<string, number> = { CREDIT: 1, MATERIAL: 2, COMPONENTS: 3, ENERGY: 4, COMPUTE: 5, FOOD: 6 };
 const RESOURCE_PRODUCTION_OWNER = 'ECON-RESOURCE-PRODUCTION';
 const RESOURCE_CONSUMPTION_OWNER = 'ECON-RESOURCE-CONSUMPTION';
+const PUBLIC_INFRASTRUCTURE_OWNER = 'ECON-PUBLIC-INFRASTRUCTURE';
 
 function catalogUnits(value: unknown): Record<string, bigint> {
   const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : (value ?? {});
@@ -88,7 +90,7 @@ function adjustedInputUnits(building: Building, modifiers: ModifierResolver): Re
 }
 
 function utilizationFor(building: Building, available: Map<number, bigint>, demand: Map<number, bigint>, modifiers: ModifierResolver): bigint {
-  let utilization = 10000n;
+  let utilization = building.operating_mode === 'CONSERVATIVE' ? 7000n : 10000n;
   for (const [code, required] of Object.entries(adjustedInputUnits(building, modifiers))) {
     if (required <= 0n) continue;
     const assetId = ASSET_IDS[code];
@@ -194,10 +196,11 @@ async function settlePublicBuilding(tx: PostgresRepository, day: number, buildin
   const cost = (nonNegativeUnits(building.operating_credit_units) * ageBurden(building, day)) / 10000n;
   if (cost <= 0n) return;
   const treasury = await account(tx, building.owner_economic_id, ASSET_IDS.CREDIT, 'TREASURY');
-  const operations = await account(tx, building.owner_economic_id, ASSET_IDS.CREDIT, 'OPERATIONS');
+  const beneficiary = await account(tx, PUBLIC_INFRASTRUCTURE_OWNER, ASSET_IDS.CREDIT, 'SYSTEM_ACCOUNT');
+  if (!beneficiary) throw new Error('Missing public infrastructure settlement account');
   await post(tx, day, `building:${building.id}:${day}:public-credit`, 'CORPORATION_PUBLIC_SPENDING', 'CORPORATION', building.id, [
     { accountId: treasury.id, assetId: ASSET_IDS.CREDIT, delta: -cost, reason: 'public_infrastructure_operating_expense' },
-    { accountId: operations.id, assetId: ASSET_IDS.CREDIT, delta: cost, reason: 'public_infrastructure_operating_expense' },
+    { accountId: beneficiary.id, assetId: ASSET_IDS.CREDIT, delta: cost, reason: 'public_infrastructure_operating_expense' },
   ]);
 }
 
@@ -213,6 +216,7 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
             r.design_life_days::TEXT,
             r.overdue_burden_bps_per_day::TEXT,
             r.maximum_burden_bps::TEXT,
+            b.operating_mode,
             COALESCE(jsonb_object_agg(a.code, f.operating_input_units) FILTER (WHERE f.operating_input_units > 0), '{}'::jsonb) AS operating_input_units,
             COALESCE(jsonb_object_agg(a.code, f.operating_output_units) FILTER (WHERE f.operating_output_units > 0), '{}'::jsonb) AS operating_output_units
        FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id
@@ -221,7 +225,7 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
        LEFT JOIN economic_assets a ON a.id = f.asset_id
       WHERE b.status = 'ACTIVE'
         AND mod(abs(hashtextextended(b.owner_economic_id, 0)), $1) = $2
-      GROUP BY b.id, b.owner_economic_id, b.territory_id, c.ownership_scope, c.operating_credit_units, b.last_major_rebuild_game_day, b.started_game_day, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps
+      GROUP BY b.id, b.owner_economic_id, b.territory_id, c.ownership_scope, c.operating_credit_units, b.last_major_rebuild_game_day, b.started_game_day, b.operating_mode, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps
       ORDER BY b.owner_economic_id, b.id`, [shardCount, shardId],
   );
   const modifiers = await loadModifierResolver(tx, day);

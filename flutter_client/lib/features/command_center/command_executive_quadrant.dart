@@ -20,15 +20,32 @@ class CommandExecutiveQuadrant extends StatelessWidget {
       return (building['status']?.toString().toLowerCase() ?? 'active') == 'active';
     }).length;
     final buildingName = activeBuildings == 0 ? 'NO ACTIVE BUILDINGS' : 'PRIVATE OPERATIONS';
-    final condition = activeBuildings == 0 ? 0 : 100;
-    final profit = 0.0;
-    final policy = 'BALANCED';
+    final condition = state.buildings
+        .whereType<Map>()
+        .map((b) => b['condition'] ?? b['health'] ?? b['integrity'])
+        .whereType<num>()
+        .toList();
+    final averageCondition = condition.isEmpty
+        ? null
+        : condition.reduce((a, b) => a + b) / condition.length;
+    final operations = state.json['operations'] is Map
+        ? Map<String, dynamic>.from(state.json['operations'] as Map)
+        : state.json['business'] is Map
+            ? Map<String, dynamic>.from(state.json['business'] as Map)
+            : const <String, dynamic>{};
+    final profit = asDouble(operations['profit'] ?? operations['netProfit']);
+    final policy = operations['policy']?.toString();
 
-    final cityRaw = state.institutions['city'];
-    final city = cityRaw is Map ? Map<String, dynamic>.from(cityRaw) : <String, dynamic>{};
-    final cityName =
-        (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
-    final cityHealth = formatWholeNumber(city['fiscal_health'] ?? city['health'], fallback: '82');
+    final territoryRaw = state.residency['territory'] ?? state.institutions['territory'];
+    final territory = territoryRaw is Map ? Map<String, dynamic>.from(territoryRaw) : <String, dynamic>{};
+    final territoryName =
+        (state.residency['territory_name'] ?? territory['name'] ?? 'NEW CARTHAGE')
+            .toString()
+            .toUpperCase();
+    final territoryHealth = formatWholeNumber(
+      territory['fiscal_health'] ?? territory['health'],
+      fallback: 'UNAVAILABLE',
+    );
 
     final marketProducts = state.market;
     String formatPrice(dynamic val) {
@@ -43,11 +60,11 @@ class CommandExecutiveQuadrant extends StatelessWidget {
     }
 
     final rawComp = formatPrice(marketProducts['components']);
-    final componentsPrice = rawComp != '—' ? rawComp : '118.70';
+    final componentsPrice = rawComp;
     final rawEnergy = formatPrice(marketProducts['energy']);
-    final energyPrice = rawEnergy != '—' ? rawEnergy : '14.20';
+    final energyPrice = rawEnergy;
     final rawMat = formatPrice(marketProducts['materials']);
-    final materialsPrice = rawMat != '—' ? rawMat : '42.00';
+    final materialsPrice = rawMat;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -117,43 +134,65 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rowMetric('Building Condition', '$condition%',
-                          condition < 50 ? Colors.orangeAccent : cyanAccentColor),
+                      _rowMetric(
+                          'Building Condition',
+                          averageCondition == null
+                              ? 'UNAVAILABLE'
+                              : '${averageCondition.toStringAsFixed(0)}%',
+                          averageCondition != null && averageCondition < 50
+                              ? Colors.orangeAccent
+                              : cyanAccentColor),
                       const SizedBox(height: 5),
                       _rowMetric(
                         'Projected Net P&L',
-                        '${profit >= 0 ? '+' : ''}${profit.toStringAsFixed(1)} C / cycle',
-                        profit >= 0 ? cyanAccentColor : Colors.redAccent,
+                        profit == null
+                            ? 'UNAVAILABLE'
+                            : '${profit >= 0 ? '+' : ''}${profit.toStringAsFixed(1)} C / cycle',
+                        profit == null
+                            ? mutedColor
+                            : profit >= 0
+                                ? cyanAccentColor
+                                : Colors.redAccent,
                       ),
                       const SizedBox(height: 5),
-                      _rowMetric('Operating Policy', policy, mutedColor),
+                      _rowMetric('Operating Policy', policy ?? 'UNAVAILABLE', mutedColor),
                     ],
                   ),
                   onTap: () => onNavigate?.call('buildings'),
                 ),
 
-                // 3. CIVIC & CITY CARD
+                // 3. TERRITORY COMMONS CARD
                 _ExecutiveCard(
                   width: cardWidth,
                   icon: '⊙',
                   iconColor: Colors.amberAccent,
-                  title: cityName,
-                  subtitle: 'MUNICIPAL RESIDENCY · HEALTH $cityHealth',
+                  title: territoryName,
+                  subtitle: 'TERRITORY COMMONS · HEALTH $territoryHealth',
                   infoDescription:
-                      '• Power Grid Stability: Percentage of total municipal electrical demand satisfied by local energy generation.\n\n• Housing Capacity: Proportion of available residential capacity preventing citizen overcrowding and homelessness.\n\n• Health Coverage: Municipal medical support level preventing biological health decay.\n\n• Action: Tap card to inspect city capacity, community roles, and active governance referendums.',
+                      '• Power Grid Stability: Percentage of total territorial electrical demand satisfied by local energy generation.\n\n• Housing & Slot Capacity: Available territorial lease slots preventing overcrowding.\n\n• Commons Dividend Yield: Shared territorial revenue returned to verified resident Houses.\n\n• Action: Tap card to inspect territory commons, slot leases, dividends, and residency relocation.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rowMetric('Power Grid Stability', '92% coverage',
+                      _rowMetric(
+                          'Power Grid Stability',
+                          _formatPercent(territory['power_grid_stability'] ??
+                              territory['energy_coverage']),
                           cyanAccentColor),
                       const SizedBox(height: 5),
                       _rowMetric(
-                          'Housing Capacity', '76% available', mutedColor),
+                          'Slot Capacity',
+                          _formatPercent(territory['slot_capacity_available'] ??
+                              territory['available_capacity']),
+                          mutedColor),
                       const SizedBox(height: 5),
-                      _rowMetric('Health Coverage', '64% coverage', mutedColor),
+                      _rowMetric(
+                          'Commons Dividend',
+                          territory['commons_dividend']?.toString() ??
+                              'UNAVAILABLE',
+                          Colors.greenAccent),
                     ],
                   ),
-                  onTap: () => onNavigate?.call('city'),
+                  onTap: () => onNavigate?.call('territory-commons'),
                 ),
 
                 // 4. FINANCE CARD
@@ -169,7 +208,9 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _rowMetric('Liquid Credits',
-                          formatCreditsAmount(state.human['credits']), violetColor),
+                          formatCreditsAmount(state.finance['balance'] ??
+                              state.personalFinance['balance'] ??
+                              state.human['credits']), violetColor),
                       const SizedBox(height: 5),
                       const SizedBox(height: 5),
                       _rowMetric('Ledger Integrity', 'Audited', cyanAccentColor),
@@ -206,6 +247,11 @@ class CommandExecutiveQuadrant extends StatelessWidget {
           ),
         ],
       );
+
+  String _formatPercent(dynamic value) {
+    final parsed = asDouble(value);
+    return parsed == null ? 'UNAVAILABLE' : '${parsed.toStringAsFixed(0)}%';
+  }
 }
 
 class _ExecutiveCard extends StatelessWidget {

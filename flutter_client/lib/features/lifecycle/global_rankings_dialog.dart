@@ -200,7 +200,7 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
               if (entity['legacy'] != null)
                 _inspectorRow('Personal Legacy', '${entity['legacy']} pts'),
               if (entity['cityId'] != null)
-                _inspectorRow('City Jurisdiction', entity['cityId'].toString()),
+                _inspectorRow('Territory Jurisdiction', entity['cityId'].toString()),
               if (entity['houseName'] != null || entity['house_name'] != null || entity['dynastyName'] != null || entity['dynasty_name'] != null)
                 _inspectorRow('House', (entity['houseName'] ?? entity['house_name'] ?? entity['dynastyName'] ?? entity['dynasty_name']).toString()),
               if (entity['residents'] != null)

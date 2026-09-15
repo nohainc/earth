@@ -14,6 +14,7 @@ import { listHousePolicies, saveHousePolicy } from './house-policy-postgres.ts';
 import { advanceHouseOnboarding, getHouseOnboarding } from './house-onboarding-postgres.ts';
 import { getHouseResidency, moveHouseResidence, quoteHouseMove } from './residency-postgres.ts';
 import { claimHouseEntrySupport, getHouseEntrySupport } from './catch-up-postgres.ts';
+import { getHouseCatchUpTargets } from './catch-up-targets-postgres.ts';
 
 /**
  * Canonical routes for the generational house system.
@@ -26,6 +27,14 @@ export async function handleHouseRoutes(
 
   const isHousePath = url.pathname.startsWith('/api/house');
   if (!isHousePath) return null;
+
+  if (url.pathname === '/api/house/catch-up-targets' && request.method === 'GET') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const result = await withRepository(env, (repository) => getHouseCatchUpTargets(repository, viewer.houseId));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json(result);
+  }
 
   if (url.pathname === '/api/house/residency' && request.method === 'GET') {
     const viewer = await currentHuman(request, env);

@@ -27,6 +27,8 @@ import { refreshInstitutionFinancialSnapshots } from './institution-financial-se
 import { refreshPostSuccessionAccess } from './post-succession-access-postgres.ts';
 import { settlePatentExpirations } from './patent-settlement-postgres.ts';
 import { settleTechnologyLicenseFees } from './ip-license-settlement-postgres.ts';
+import { settleGlobalBank } from './global-bank-settlement-engine.ts';
+import { settleCorporationIncomeTax } from './corporation-tax-settlement-postgres.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -46,9 +48,9 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   basicLevy: noOpPhase,
   ipLicenseBilling: async ({ tx, day }) => settleTechnologyLicenseFees(tx, day),
   buildingSettlement: async ({ tx, day, shard, shardCount }) => settleBuildingUpkeepAndRevenueV2(tx, day, { shard, shardCount }),
-  corporationIncomeTax: noOpPhase,
+  corporationIncomeTax: async ({ tx, day }) => settleCorporationIncomeTax(tx, day),
   publicTaxAssessment: async ({ tx, day, shard, shardCount }) => settlePublicTaxesInTransaction(tx, day, shard, shardCount),
-  globalBank: noOpPhase,
+  globalBank: async ({ tx, day }) => ({ settled: await settleGlobalBank(tx, day) }),
   bankHealth: async ({ tx, day }) => settleBankLoanRisk(tx, day),
   mandatoryBudgetPayments: noOpPhase,
   scheduledBudgetPayments: noOpPhase,

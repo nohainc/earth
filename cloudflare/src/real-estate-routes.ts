@@ -6,9 +6,10 @@ import {
   startCorporationBuildingResearch,
   listCorporationBuildingResearch,
 } from './corporation-building-research-postgres.ts';
-import { getBuildingCapitalOptions } from './building-age-postgres.ts';
+import { getBuildingCapitalOptions, startBuildingCapitalProject } from './building-age-postgres.ts';
 import { acquireTerritoryRight, listTerritoryRights, releaseTerritoryRight } from './territory-rights-postgres.ts';
 import { declareCommonsDividend, getCommonsStatement } from './commons-dividends-postgres.ts';
+import { decommissionBuilding, setBuildingOperatingMode, upgradeBuilding } from './building-investment-postgres.ts';
 
 export async function handleRealEstateRoutes(
   request: Request,
@@ -16,6 +17,39 @@ export async function handleRealEstateRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/real-estate/upgrade' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ buildingId?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.buildingId) return Response.json({ ok: false, error: 'Building ID and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => upgradeBuilding(repository, { buildingId: parsed.value.buildingId!, humanId: viewer.id, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade failed' }, { status: 409 }); }
+  }
+  if (url.pathname === '/api/real-estate/policy' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ buildingId?: string; policy?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.buildingId || !parsed.value.policy) return Response.json({ ok: false, error: 'Building ID, policy, and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => setBuildingOperatingMode(repository, { buildingId: parsed.value.buildingId!, humanId: viewer.id, mode: parsed.value.policy!, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building policy update failed' }, { status: 409 }); }
+  }
+  if (url.pathname === '/api/real-estate/demolish' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ buildingId?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.buildingId) return Response.json({ ok: false, error: 'Building ID and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => decommissionBuilding(repository, { buildingId: parsed.value.buildingId!, humanId: viewer.id, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building decommission failed' }, { status: 409 }); }
+  }
   const territoryRightsMatch = url.pathname.match(/^\/api\/territories\/([^/]+)\/rights$/);
   if (territoryRightsMatch && request.method === 'GET') {
     try {
@@ -89,6 +123,21 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Capital options unavailable' }, { status: 404 }); }
+  }
+
+  const capitalProjectMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/capital-projects$/);
+  if (capitalProjectMatch && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ projectKind?: 'OVERHAUL' | 'GENERATION_RETROFIT'; targetGenerationId?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.projectKind) return Response.json({ ok: false, error: 'Project kind and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => startBuildingCapitalProject(repository, { buildingId: capitalProjectMatch[1], humanId: viewer.id, projectKind: parsed.value.projectKind!, targetGenerationId: parsed.value.targetGenerationId, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Capital project failed' }, { status: 409 });
+    }
   }
 
   const cancelMatch = url.pathname.match(/^\/api\/real-estate\/projects\/([^/]+)\/cancel$/);

@@ -1,3 +1,5 @@
+import { formatFixedUnits, parseFixedUnits, roundDivide } from './units.ts';
+
 const MONEY_PATTERN = /^(-?)(\d+)(?:\.(\d{1,2}))?$/;
 const RATE_PATTERN = /^(-?)(\d+)(?:\.(\d{1,6}))?$/;
 const RATE_SCALE = 1_000_000n;
@@ -5,17 +7,9 @@ const RATE_SCALE = 1_000_000n;
 /** Smallest authoritative CREDIT denomination. Never convert this to Number. */
 export type CreditUnits = bigint;
 
-function decimalParts(value: unknown, pattern: RegExp): { negative: boolean; whole: bigint; fraction: string } {
-  const text = typeof value === 'number' ? (Number.isFinite(value) ? String(value) : '') : String(value ?? '').trim();
-  const match = text.match(pattern);
-  if (!match) throw new Error('Invalid decimal value');
-  return { negative: match[1] === '-', whole: BigInt(match[2]), fraction: match[3] ?? '' };
-}
-
 export function moneyToCents(value: unknown): bigint {
-  const parts = decimalParts(value, MONEY_PATTERN);
-  const cents = parts.whole * 100n + BigInt((parts.fraction + '00').slice(0, 2));
-  return parts.negative ? -cents : cents;
+  if (typeof value === 'string' && !MONEY_PATTERN.test(value.trim())) throw new Error('Invalid decimal value');
+  return parseFixedUnits(value, 100n, 2);
 }
 
 /** Parses a user/API CREDIT amount exactly into ledger units. */
@@ -29,44 +23,40 @@ export function formatCreditUnits(units: CreditUnits): string {
 }
 
 export function quantityToCents(value: unknown): bigint {
-  const parts = decimalParts(value, RATE_PATTERN);
-  const micros = parts.whole * RATE_SCALE + BigInt(parts.fraction.padEnd(6, '0').slice(0, 6));
-  const cents = (micros + 5_000n) / 10_000n;
-  return parts.negative ? -cents : cents;
+  return roundDivide(parseFixedUnits(value, RATE_SCALE, 6), 10_000n);
 }
 
 export function centsToMoney(cents: bigint): string {
-  const negative = cents < 0n;
-  const absolute = negative ? -cents : cents;
-  const whole = absolute / 100n;
-  const fraction = String(absolute % 100n).padStart(2, '0');
-  return `${negative ? '-' : ''}${whole}.${fraction}`;
+  return formatFixedUnits(cents, 100n, 2);
 }
 
 export function rateToMicros(value: unknown): bigint {
-  const parts = decimalParts(value, RATE_PATTERN);
-  const micros = parts.whole * RATE_SCALE + BigInt((parts.fraction.padEnd(6, '0')).slice(0, 6));
-  return parts.negative ? -micros : micros;
+  if (typeof value === 'string' && !RATE_PATTERN.test(value.trim())) throw new Error('Invalid decimal value');
+  return parseFixedUnits(value, RATE_SCALE, 6);
 }
 
 export function taxToCents(taxableAmount: unknown, rate: unknown): bigint {
   const cents = moneyToCents(taxableAmount);
   const micros = rateToMicros(rate);
   if (cents < 0n || micros < 0n || micros > 250_000n) throw new Error('Tax inputs are outside engine bounds');
-  return (cents * micros + RATE_SCALE / 2n) / RATE_SCALE;
+  return roundDivide(cents * micros, RATE_SCALE);
 }
 
-export function marketValueToCents(quantity: number, unitPrice: unknown): bigint {
-  if (!Number.isInteger(quantity) || quantity <= 0) throw new Error('Market quantity must be a positive integer');
+export function marketValueToCents(quantity: bigint | number | string, unitPrice: unknown): bigint {
+  const quantityUnits = typeof quantity === 'number'
+    ? (Number.isSafeInteger(quantity) ? BigInt(quantity) : 0n)
+    : BigInt(String(quantity));
+  if (quantityUnits <= 0n) throw new Error('Market quantity must be a positive integer');
   const cents = moneyToCents(unitPrice);
   if (cents <= 0n) throw new Error('Market price must be positive');
-  return BigInt(quantity) * cents;
+  return quantityUnits * cents;
 }
 
-export function rateAmountToCents(amountCents: bigint, rate: unknown, maximumRate = 0.05): bigint {
+export function rateAmountToCents(amountCents: bigint, rate: unknown, maximumRate: unknown = '0.05'): bigint {
   const micros = rateToMicros(rate);
-  if (amountCents < 0n || micros < 0n || micros > BigInt(Math.round(maximumRate * 1_000_000))) throw new Error('Rate inputs are outside engine bounds');
-  return (amountCents * micros + RATE_SCALE / 2n) / RATE_SCALE;
+  const maximumMicros = rateToMicros(maximumRate);
+  if (amountCents < 0n || micros < 0n || micros > maximumMicros) throw new Error('Rate inputs are outside engine bounds');
+  return roundDivide(amountCents * micros, RATE_SCALE);
 }
 
 export function compoundRateAmountToCents(amountCents: bigint, ...rates: unknown[]): bigint {
@@ -79,5 +69,5 @@ export function compoundRateAmountToCents(amountCents: bigint, ...rates: unknown
     numerator *= micros;
     denominator *= RATE_SCALE;
   }
-  return (numerator + denominator / 2n) / denominator;
+  return roundDivide(numerator, denominator);
 }

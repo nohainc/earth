@@ -46,28 +46,39 @@ class PersonalFinancePanel extends StatelessWidget {
         .whereType<Map>()
         .map((deposit) => Map<String, dynamic>.from(deposit))
         .toList();
-    final investmentDividend = bankDeposits.fold<double>(0, (total, deposit) =>
-        total + asDoubleOr(deposit['principal'], 0) * asDoubleOr(deposit['daily_rate'], 0));
+    final investmentDividend = bankDeposits.fold<double>(
+        0,
+        (total, deposit) =>
+            total +
+            asDoubleOr(deposit['principal'], 0) *
+                asDoubleOr(deposit['daily_rate'], 0));
     final buildingChange = _buildingResourceChange(privateBuildings);
-    final preparedBuildingChange = _addChanges(buildingChange, {'credits': investmentDividend});
+    final preparedBuildingChange =
+        _addChanges(buildingChange, {'credits': investmentDividend});
     final basicRule = taxRules
         .where((rule) => rule['category']?.toString() == 'basic_income')
         .firstOrNull;
     final basicRate = asDoubleOr(basicRule?['rate'], 0);
-    final grossCredits = preparedBuildingChange['credits']!;
-    final incomeTax = grossCredits > 0 ? grossCredits * basicRate : 0.0;
+    final projection = _map(
+        personalFinanceData['summary'] ?? personalFinanceData['projection']);
+    final projectedIncome = _creditUnits(projection['incomeUnits']);
+    final projectedTax = _creditUnits(projection['taxUnits']);
+    final grossCredits = projectedIncome ?? preparedBuildingChange['credits']!;
+    final incomeTax =
+        projectedTax ?? (grossCredits > 0 ? grossCredits * basicRate : 0.0);
     final finalChange =
         _addChanges(preparedBuildingChange, {'credits': -incomeTax});
     final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
-    final protected = asDoubleOr(
-        _map(personalFinanceData['protectedMinimum'])['credits'], 100);
+    final protected =
+        asDouble(_map(personalFinanceData['protectedMinimum'])['credits']);
     final statusColor = unpaid > 0 ? Colors.orangeAccent : cyanAccentColor;
 
     final economic = _map(personalFinanceData['economic']);
     final economicAssets = (economic['assets'] as List? ?? const [])
         .whereType<Map>()
         .map((asset) => Map<String, dynamic>.from(asset));
-    final v2Credit = economicAssets.where((asset) => asset['code'] == 'CREDIT').firstOrNull;
+    final v2Credit =
+        economicAssets.where((asset) => asset['code'] == 'CREDIT').firstOrNull;
     final liquidCredits = v2Credit != null
         ? asDoubleOr(v2Credit['balance'], 0)
         : (asDouble(state.human['credits']) ?? 0.0);
@@ -75,17 +86,6 @@ class PersonalFinancePanel extends StatelessWidget {
     final netSign = netDailyCredits >= 0 ? '+' : '';
 
     final rawClock = state.clock;
-    final rawServerTime = rawClock['serverCurrentTime'];
-    final int serverMs = rawServerTime is num
-        ? rawServerTime.toInt()
-        : (rawServerTime is String ? int.tryParse(rawServerTime) : null) ??
-            DateTime.now().toUtc().millisecondsSinceEpoch;
-    final epochStartMs = DateTime.utc(2026, 1, 1).millisecondsSinceEpoch;
-    final diffMs = serverMs - epochStartMs;
-    final totalSimMinutes = diffMs > 0 ? (diffMs ~/ 1000) : 0;
-    final fallbackDay = (totalSimMinutes ~/ 1440) + 1;
-    final fallbackMinute = totalSimMinutes % 1440;
-
     final parsedDay = asInt(rawClock['day']) ??
         asInt(rawClock['game_day']) ??
         asInt(rawClock['current_day']);
@@ -93,11 +93,8 @@ class PersonalFinancePanel extends StatelessWidget {
         asInt(rawClock['game_minute']) ??
         asInt(rawClock['current_minute']);
 
-    final currentDay =
-        (parsedDay != null && parsedDay > 0) ? parsedDay : fallbackDay;
-    final currentMinute = (parsedMinute != null && parsedMinute >= 0)
-        ? parsedMinute
-        : fallbackMinute;
+    final currentDay = parsedDay;
+    final currentMinute = parsedMinute;
 
     final cockpit = EarthPageCockpit(
       status: unpaid > 0 ? 'NEEDS ATTENTION' : 'ON TRACK',
@@ -160,18 +157,24 @@ class PersonalFinancePanel extends StatelessWidget {
         _BankDepositsCard(
           deposits: bankDeposits,
           liquidCredits: liquidCredits,
-          currentDay: currentDay,
-          currentMinute: currentMinute,
+          currentDay: currentDay ?? 0,
+          currentMinute: currentMinute ?? 0,
           action: action,
         ),
+        const SizedBox(height: 24),
+        _BankCreditCard(action: action),
         const SizedBox(height: 24),
         if (unpaid > 0) ...[
           _notice(Icons.warning_amber_rounded, Colors.orangeAccent,
               '${_credits(unpaid)} of essential costs remain unpaid.'),
           const SizedBox(height: 24),
         ],
-        _notice(Icons.shield_outlined, violetColor,
-            'Protected reserve: ${_credits(protected)}. Essential shortfalls are recorded; they do not remove you from the game.'),
+        _notice(
+            Icons.shield_outlined,
+            violetColor,
+            protected == null
+                ? 'Protected reserve is unavailable until the active financial rule is published.'
+                : 'Protected reserve: ${_credits(protected)}. Essential shortfalls are recorded; they do not remove you from the game.'),
       ]),
     );
   }
@@ -184,6 +187,11 @@ class PersonalFinancePanel extends StatelessWidget {
   static Map<String, dynamic> _map(dynamic value) => value is Map
       ? Map<String, dynamic>.from(value)
       : const <String, dynamic>{};
+  static double? _creditUnits(dynamic value) {
+    final units = asDouble(value);
+    return units == null ? null : units / 100;
+  }
+
   static Map<String, double> _profileChange(Map<String, dynamic> profile) => {
         'credits':
             asDoubleOr(profile['credits_delta'] ?? profile['credits'], 0),
@@ -274,17 +282,8 @@ class PersonalFinancePanel extends StatelessWidget {
     final changes = _emptyChanges();
     double rounded(double value) => (value * 10).ceil() / 10;
     for (final building in buildings) {
-      final policy = building['operating_policy']?.toString() ?? 'balanced';
-      final outputMultiplier = policy == 'high_output'
-          ? 1.3
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .75
-              : 1.0;
-      final costMultiplier = policy == 'high_output'
-          ? 1.4
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .7
-              : 1.0;
+      final outputMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
+      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
 
       for (final key in [
         'credits',
@@ -346,7 +345,7 @@ class PersonalFinancePanel extends StatelessWidget {
           asDoubleOr(building['daily_operating_credits'], 0) * costMultiplier;
       total += (gross - cost).clamp(0, double.infinity) *
           asDoubleOr(holding['shares_owned'], 0) /
-          asDoubleOr(holding['total_shares_issued'], 1000)
+          asDoubleOr(holding['total_shares_issued'], 0)
               .clamp(1, double.infinity);
     }
     return total;
@@ -466,6 +465,184 @@ class PersonalFinancePanel extends StatelessWidget {
                 style: const TextStyle(
                     color: inkColor, fontSize: 10.5, height: 1.35)))
       ]));
+}
+
+class _BankCreditCard extends StatefulWidget {
+  final Future<void> Function(Future<EarthState> Function()) action;
+  const _BankCreditCard({required this.action});
+
+  @override
+  State<_BankCreditCard> createState() => _BankCreditCardState();
+}
+
+class _BankCreditCardState extends State<_BankCreditCard> {
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _loans = const [];
+  Map<String, dynamic> _risk = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final results = await Future.wait([
+        const EarthApi().bankLoans(),
+        const EarthApi().bankRiskProjection()
+      ]);
+      if (!mounted) return;
+      final rawLoans = results[0]['loans'];
+      setState(() {
+        _loans = rawLoans is List
+            ? rawLoans
+                .whereType<Map>()
+                .map((r) => Map<String, dynamic>.from(r))
+                .toList()
+            : const [];
+        _risk = results[1]['projection'] is Map
+            ? Map<String, dynamic>.from(results[1]['projection'] as Map)
+            : const {};
+        _loading = false;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = error.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _borrow() async {
+    final result = await showDialog<Map<String, String>>(
+        context: context, builder: (_) => const _LoanDialog());
+    if (result == null || !mounted) return;
+    try {
+      final quote = await const EarthApi().bankLoanQuote(
+          requestedUnits: result['amount']!,
+          termDays: int.parse(result['term']!));
+      final approved =
+          quote['quote'] is Map && (quote['quote'] as Map)['eligible'] == true;
+      if (!approved) {
+        throw Exception((quote['quote'] as Map?)?['reason'] ??
+            'The bank declined this request');
+      }
+      await widget.action(() => const EarthApi()
+          .originateBankLoan(
+              requestedUnits: result['amount']!,
+              termDays: int.parse(result['term']!))
+          .then((_) => const EarthApi().world()));
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  Future<void> _repay(Map<String, dynamic> loan) async {
+    try {
+      await widget.action(() => const EarthApi()
+          .repayBankLoan(loan['id'].toString())
+          .then((_) => const EarthApi().world()));
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => EarthSection(
+        title: 'BANK CREDIT',
+        showSurface: true,
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(
+              'Borrow against eligible House cashflow and collateral. Rates, limits, collateral and settlement remain server-authoritative.',
+              style: context.widgetFooterStyle),
+          const SizedBox(height: 12),
+          if (_error != null)
+            Text(_error!, style: TextStyle(color: context.warningColor)),
+          if (_loading) const LinearProgressIndicator(),
+          if (!_loading && _loans.isEmpty)
+            const Text('No active loans. Request a quote before borrowing.',
+                style: TextStyle(color: mutedColor)),
+          for (final loan in _loans)
+            Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Expanded(
+                      child: Text(
+                          '${loan['status'] ?? 'UNKNOWN'} · outstanding ${loan['outstanding_principal_units'] ?? '0'} C · due day ${loan['maturity_game_day'] ?? '—'}')),
+                  TextButton(
+                      onPressed:
+                          loan['status'] == 'PAID' ? null : () => _repay(loan),
+                      child: const Text('REPAY'))
+                ])),
+          const SizedBox(height: 10),
+          Text(
+              'Bank capital buffer: ${_risk['capitalBufferUnits'] ?? '—'} C · defaulted loans: ${_risk['defaultedLoanCount'] ?? '0'}',
+              style: context.captionStyle),
+          const SizedBox(height: 12),
+          Align(
+              alignment: Alignment.centerLeft,
+              child: EarthButton(
+                  label: 'REQUEST LOAN QUOTE',
+                  icon: Icons.request_quote_outlined,
+                  onPressed: _loading ? null : _borrow)),
+        ]),
+      );
+}
+
+class _LoanDialog extends StatefulWidget {
+  const _LoanDialog();
+  @override
+  State<_LoanDialog> createState() => _LoanDialogState();
+}
+
+class _LoanDialogState extends State<_LoanDialog> {
+  final _amount = TextEditingController();
+  final _term = TextEditingController(text: '30');
+  @override
+  void dispose() {
+    _amount.dispose();
+    _term.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('REQUEST BANK LOAN'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: _amount,
+              keyboardType: TextInputType.number,
+              decoration:
+                  const InputDecoration(labelText: 'Requested CREDIT units')),
+          TextField(
+              controller: _term,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Term in game days'))
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CANCEL')),
+          FilledButton(
+              onPressed: () {
+                if (RegExp(r'^\d+$').hasMatch(_amount.text.trim()) &&
+                    RegExp(r'^\d+$').hasMatch(_term.text.trim())) {
+                  Navigator.pop(context, {
+                    'amount': _amount.text.trim(),
+                    'term': _term.text.trim()
+                  });
+                }
+              },
+              child: const Text('GET QUOTE'))
+        ],
+      );
 }
 
 class _BankDepositsCard extends StatefulWidget {

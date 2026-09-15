@@ -192,7 +192,7 @@ class PlayerObjective {
         status:
             (35000.0 + profit * 10) >= 100000.0 ? 'completed' : 'in_progress',
         rewardDescription:
-            'Title: "Industrial Titan" · +500 Legacy Points · Corporate Tax Charter Exemption',
+            'Title: "Industrial Titan" · +500 House standing · Corporate Tax Charter Exemption',
         targetSection: 'business',
       ),
       PlayerObjective(
@@ -214,13 +214,15 @@ class PlayerObjective {
         id: 'obj-food-security',
         category: 'enterprise',
         title: 'Build a Self-Sustaining Food Reserve',
-        description: 'Use productive assets and food systems to maintain a 500-unit reserve that protects your household and businesses from supply shocks.',
+        description:
+            'Use productive assets and food systems to maintain a 500-unit reserve that protects your household and businesses from supply shocks.',
         currentValue: foodReserve,
         targetValue: 500.0,
         progressPercentage: (foodReserve / 500.0 * 100.0).clamp(0.0, 100.0),
         metricLabel: '${foodReserve.round()} / 500 Food Units',
         status: foodReserve >= 500.0 ? 'completed' : 'in_progress',
-        rewardDescription: 'Title: "Food Systems Steward" · +200 Legacy Points · Reduced emergency supply costs',
+        rewardDescription:
+            'Title: "Food Systems Steward" · +200 House standing · Reduced emergency supply costs',
         targetSection: 'business',
         iconName: 'restaurant',
       ),
@@ -228,13 +230,15 @@ class PlayerObjective {
         id: 'obj-enterprise-portfolio',
         category: 'enterprise',
         title: 'Build a Portfolio of Enterprises',
-        description: 'Own or manage three distinct operations so your house is not dependent on a single source of income or production.',
+        description:
+            'Own or manage three distinct operations so your house is not dependent on a single source of income or production.',
         currentValue: businessCount,
         targetValue: 3.0,
         progressPercentage: (businessCount / 3.0 * 100.0).clamp(0.0, 100.0),
         metricLabel: '${businessCount.round()} / 3 Active Operations',
         status: businessCount >= 3.0 ? 'completed' : 'in_progress',
-        rewardDescription: 'Title: "Enterprise Builder" · +300 Legacy Points · Portfolio management privileges',
+        rewardDescription:
+            'Title: "Enterprise Builder" · +300 House standing · Portfolio management privileges',
         targetSection: 'business',
         iconName: 'business_center',
       ),
@@ -242,13 +246,16 @@ class PlayerObjective {
         id: 'obj-service-enterprise',
         category: 'enterprise',
         title: 'Build a Service Enterprise',
-        description: 'Develop two people-powered service businesses that earn recurring revenue through expertise, contracts, and corporate networks.',
+        description:
+            'Develop two people-powered service businesses that earn recurring revenue through expertise, contracts, and corporate networks.',
         currentValue: serviceBusinessCount,
         targetValue: 2.0,
-        progressPercentage: (serviceBusinessCount / 2.0 * 100.0).clamp(0.0, 100.0),
+        progressPercentage:
+            (serviceBusinessCount / 2.0 * 100.0).clamp(0.0, 100.0),
         metricLabel: '${serviceBusinessCount.round()} / 2 Service Businesses',
         status: serviceBusinessCount >= 2.0 ? 'completed' : 'in_progress',
-        rewardDescription: 'Title: "Civic Service Architect" · +250 Legacy Points · Priority access to institutional contracts',
+        rewardDescription:
+            'Title: "Civic Service Architect" · +250 House standing · Priority access to institutional contracts',
         targetSection: 'business',
         iconName: 'support_agent',
       ),
@@ -257,7 +264,7 @@ class PlayerObjective {
         category: 'house',
         title: 'Found a House with Sovereign Traits',
         description:
-            'Advance your generational lineage to Generation 2+ and unlock at least 3 distinct house traits and heirlooms.',
+            'Advance your generational lineage to Generation 2+ and preserve at least 3 durable House achievements across succession.',
         currentValue: (gen - 1).clamp(0.0, 3.0),
         targetValue: 3.0,
         progressPercentage:

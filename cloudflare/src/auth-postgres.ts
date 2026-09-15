@@ -15,7 +15,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const passwordHash = await derivePassword(input.password, salt, 100000);
     await tx.query('INSERT INTO auth_accounts (id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,100000)', [accountId, input.email, passwordHash, bytesToBase64(salt)]);
-    await tx.query('INSERT INTO houses (id,account_id,house_name,motto) VALUES ($1,$2,$3,$4)', [houseId, accountId, `House ${input.houseSurname}`, 'From the Red Dust We Build Eternity']);
+    await tx.query('INSERT INTO houses (id,account_id,house_name,motto,created_game_day) VALUES ($1,$2,$3,$4,$5)', [houseId, accountId, `House ${input.houseSurname}`, 'From the Red Dust We Build Eternity', worldDay]);
     await tx.query('UPDATE auth_accounts SET house_id = $1 WHERE id = $2', [houseId, accountId]);
     await tx.query('INSERT INTO humans (id,account_id,house_id,display_name,birth_game_day,age_years) VALUES ($1,$2,$3,$4,$5,31)', [humanId, accountId, houseId, `${input.personName} ${input.houseSurname}`, worldDay - 31 * 365]);
     await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);

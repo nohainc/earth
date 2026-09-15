@@ -9,6 +9,43 @@ extension EarthApiHouse on EarthApi {
     return <String, dynamic>{'ok': true};
   }
 
+  Future<Map<String, dynamic>> listHousePolicies() async {
+    final response = await _request('/api/house/policies');
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{'ok': false, 'error': 'Policies unavailable'};
+  }
+
+  Future<Map<String, dynamic>> saveHousePolicy({
+    required String policyType,
+    required int effectiveFromGameDay,
+    String operatingMode = 'BALANCED',
+    String dailySpendCapUnits = '0',
+    Map<String, String> reserveFloorUnits = const {},
+    Map<String, String> maxInputPriceUnits = const {},
+    Map<String, String> minSalePriceUnits = const {},
+    Map<String, String> procurementQuantityUnits = const {},
+  }) async {
+    final response = await _request(
+      '/api/house/policies',
+      method: 'POST',
+      body: {
+        'policyType': policyType,
+        'effectiveFromGameDay': effectiveFromGameDay,
+        'operatingMode': operatingMode,
+        'dailySpendCapUnits': dailySpendCapUnits,
+        'reserveFloorUnits': reserveFloorUnits,
+        'maxInputPriceUnits': maxInputPriceUnits,
+        'minSalePriceUnits': minSalePriceUnits,
+        'procurementQuantityUnits': procurementQuantityUnits,
+        'correlationId': newClientCorrelationId('HOUSE-POLICY'),
+      },
+    );
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{'ok': false, 'error': 'Policy could not be saved'};
+  }
+
   Future<Map<String, dynamic>> unlockHousePerk(String perkKey) async {
     final response = await _request(
       '/api/house/perks/unlock',

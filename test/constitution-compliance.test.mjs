@@ -38,7 +38,8 @@ test('constitutional compliance guard: House continuity keeps economic ownership
   assert.ok(start >= 0 && end > start, 'Modern House mortality handler must exist');
   const houseMortality = lifecycle.slice(start, end);
   assert.match(houseMortality, /owner_economic_id|house_affiliations/);
-  assert.match(houseMortality, /current_human_id/);
+  assert.match(houseMortality, /house_affiliations/);
+  assert.match(houseMortality, /human\.house_id/);
   assert.doesNotMatch(houseMortality, /account_balances|resource_balances/);
   assert.match(read('docs/CONSTITUTION.md'), /House property, contracts, debts, affiliations/);
 });

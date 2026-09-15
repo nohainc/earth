@@ -24,7 +24,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 120,
     'upkeep_credits': 20,
     'operating_credits': 120,
-    'description': 'High-margin dining producing continuous municipal revenues.',
+    'description':
+        'High-margin dining producing continuous municipal revenues.',
   },
   {
     'building_type': 'retail-store',
@@ -38,7 +39,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 100,
     'upkeep_credits': 18,
     'operating_credits': 140,
-    'description': 'Commercial storefront providing consumer goods and steady cash flow.',
+    'description':
+        'Commercial storefront providing consumer goods and steady cash flow.',
   },
   {
     'building_type': 'commercial-mall',
@@ -53,7 +55,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 380,
     'upkeep_credits': 65,
     'operating_credits': 600,
-    'description': 'Large-scale trade plaza yielding community commerce dividends.',
+    'description':
+        'Large-scale trade plaza yielding community commerce dividends.',
   },
   {
     'building_type': 'fabrication-plant',
@@ -83,7 +86,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_materials': 55,
     'upkeep_energy': 28,
     'operating_credits': 160,
-    'description': 'Chemical synthesis foundry producing high-grade structural compounds.',
+    'description':
+        'Chemical synthesis foundry producing high-grade structural compounds.',
   },
   {
     'building_type': 'vertical-farm',
@@ -97,7 +101,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_food': 80,
     'upkeep_energy': 15,
     'operating_credits': 110,
-    'description': 'Climate-controlled multi-tier agricultural food production facility.',
+    'description':
+        'Climate-controlled multi-tier agricultural food production facility.',
   },
   {
     'building_type': 'server-farm',
@@ -113,7 +118,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_compute': 60,
     'upkeep_energy': 40,
     'operating_credits': 180,
-    'description': 'High-density computational clusters powering automated systems.',
+    'description':
+        'High-density computational clusters powering automated systems.',
   },
   {
     'building_type': 'solar-array-complex',
@@ -128,7 +134,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_energy': 120,
     'upkeep_credits': 15,
     'operating_credits': 80,
-    'description': 'High-efficiency photovoltaic generation feeding regional grids.',
+    'description':
+        'High-efficiency photovoltaic generation feeding regional grids.',
   },
   {
     'building_type': 'geothermal-grid',
@@ -143,7 +150,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_energy': 320,
     'upkeep_credits': 45,
     'operating_credits': 300,
-    'description': 'Deep borehole subterranean thermal energy tap for planetary power.',
+    'description':
+        'Deep borehole subterranean thermal energy tap for planetary power.',
   },
   {
     'building_type': 'medical-clinic',
@@ -158,7 +166,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 60,
     'upkeep_energy': 25,
     'operating_credits': 220,
-    'description': 'Specialized bionic and cellular regeneration healthcare facility.',
+    'description':
+        'Specialized bionic and cellular regeneration healthcare facility.',
   },
   {
     'building_type': 'transit-hyperloop',
@@ -173,7 +182,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 150,
     'upkeep_energy': 50,
     'operating_credits': 500,
-    'description': 'Pneumatic ultra-speed passenger and logistics transit connection.',
+    'description':
+        'Pneumatic ultra-speed passenger and logistics transit connection.',
   },
   {
     'building_type': 'orbital-spaceport',
@@ -189,7 +199,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 500,
     'upkeep_energy': 90,
     'operating_credits': 1500,
-    'description': 'Planetary surface-to-orbit launch and recovery operations hub.',
+    'description':
+        'Planetary surface-to-orbit launch and recovery operations hub.',
   },
   {
     'building_type': 'transit-terminus',
@@ -204,7 +215,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 75,
     'upkeep_energy': 20,
     'operating_credits': 260,
-    'description': 'Regional multimodal urban mobility terminal connecting districts.',
+    'description':
+        'Regional multimodal urban mobility terminal connecting districts.',
   },
   {
     'building_type': 'urban-district-module',
@@ -218,7 +230,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 110,
     'upkeep_energy': 35,
     'operating_credits': 100,
-    'description': 'Modular civic habitat providing citizen housing and municipal capacity.',
+    'description':
+        'Modular civic habitat providing citizen housing and municipal capacity.',
   },
   {
     'building_type': 'private-estate-plot',
@@ -232,7 +245,8 @@ const _kDefaultBlueprints = <Map<String, dynamic>>[
     'output_credits': 40,
     'upkeep_credits': 10,
     'operating_credits': 10,
-    'description': 'Personal headquarters deed unlocking expanded private plot capacity.',
+    'description':
+        'Personal headquarters deed unlocking expanded private plot capacity.',
   },
 ];
 
@@ -290,15 +304,17 @@ class _CorporateBuildingResearchPanelState
 
   void _startResearchProgressTimer() {
     final projects = widget.state.corporationBuildingResearch['projects'];
-    final hasActiveResearch = projects is List && projects.any((project) =>
-        project is Map && project['status']?.toString() == 'active');
+    final hasActiveResearch = projects is List &&
+        projects.any((project) =>
+            project is Map && project['status']?.toString() == 'active');
     if (!hasActiveResearch) {
       _researchProgressTimer?.cancel();
       _researchProgressTimer = null;
       return;
     }
     if (_researchProgressTimer?.isActive ?? false) return;
-    _researchProgressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _researchProgressTimer =
+        Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
@@ -330,7 +346,8 @@ class _CorporateBuildingResearchPanelState
     return math.max(persisted, projected).clamp(0.0, 100.0);
   }
 
-  int _calculateResearchCost(dynamic baseCost, int targetTier, {String ownership = 'private'}) {
+  int _calculateResearchCost(dynamic baseCost, int targetTier,
+      {String ownership = 'private'}) {
     final base = math.max(1000.0, asDoubleOr(baseCost, 1000.0));
     final double scopeMul = ownership == 'public_investment'
         ? 3.5
@@ -339,7 +356,8 @@ class _CorporateBuildingResearchPanelState
     return math.max(1000, (base * scopeMul * tierMul).round());
   }
 
-  int _calculateDurationDays(dynamic slotFootprint, int targetTier, {String ownership = 'private'}) {
+  int _calculateDurationDays(dynamic slotFootprint, int targetTier,
+      {String ownership = 'private'}) {
     final slots = math.max(1, asIntOr(slotFootprint, 1));
     return (targetTier + 3) * slots;
   }
@@ -413,7 +431,6 @@ class _CorporateBuildingResearchPanelState
     return (outputStr, upkeepStr);
   }
 
-
   String _formatDecimal(double val) {
     if (val == val.roundToDouble()) {
       return val.toInt().toString();
@@ -461,7 +478,8 @@ class _CorporateBuildingResearchPanelState
           Icon(
             icon,
             size: 13,
-            color: hasValue ? color : context.mutedColor.withValues(alpha: 0.35),
+            color:
+                hasValue ? color : context.mutedColor.withValues(alpha: 0.35),
           ),
           const SizedBox(width: 4),
           Expanded(
@@ -571,15 +589,20 @@ class _CorporateBuildingResearchPanelState
       final bType = b['building_type']?.toString() ?? '';
       final aTier = (unlockedTiers[aType] ?? 1) + 1;
       final bTier = (unlockedTiers[bType] ?? 1) + 1;
-      final aBaseCost = asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 35000);
-      final bBaseCost = asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 35000);
+      final aBaseCost =
+          asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 35000);
+      final bBaseCost =
+          asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 35000);
       final aOwnership = a['ownership_class']?.toString() ?? 'private';
       final bOwnership = b['ownership_class']?.toString() ?? 'private';
-      final aCost = _calculateResearchCost(aBaseCost, aTier, ownership: aOwnership);
-      final bCost = _calculateResearchCost(bBaseCost, bTier, ownership: bOwnership);
+      final aCost =
+          _calculateResearchCost(aBaseCost, aTier, ownership: aOwnership);
+      final bCost =
+          _calculateResearchCost(bBaseCost, bTier, ownership: bOwnership);
       final costCmp = aCost.compareTo(bCost);
       if (costCmp != 0) return costCmp;
-      return (a['name']?.toString() ?? '').compareTo(b['name']?.toString() ?? '');
+      return (a['name']?.toString() ?? '')
+          .compareTo(b['name']?.toString() ?? '');
     });
 
     return Column(
@@ -637,7 +660,8 @@ class _CorporateBuildingResearchPanelState
               final columnsCount = constraints.maxWidth >= 1150
                   ? 3
                   : (constraints.maxWidth >= 700 ? 2 : 1);
-              final cards = filteredBlueprints.map<Widget Function({bool fillHeight})>((bp) {
+              final cards = filteredBlueprints
+                  .map<Widget Function({bool fillHeight})>((bp) {
                 final type = bp['building_type']?.toString() ?? '';
                 final name = bp['name']?.toString() ?? type;
                 final ownership =
@@ -646,7 +670,8 @@ class _CorporateBuildingResearchPanelState
                 final currentTier = unlockedTiers[type] ?? 1;
                 final targetTier = currentTier + 1;
 
-                final baseCost = asDoubleOr(bp['cost_credits'] ?? bp['baseCreditCost'], 35000);
+                final baseCost = asDoubleOr(
+                    bp['cost_credits'] ?? bp['baseCreditCost'], 35000);
                 final slots = math.max(1, asIntOr(bp['slot_footprint'], 1));
                 final nextResearchCost = _calculateResearchCost(
                   baseCost,
@@ -666,56 +691,79 @@ class _CorporateBuildingResearchPanelState
                     : 0.0;
                 final category =
                     (bp['category']?.toString() ?? 'commercial').toUpperCase();
-                final desc = (bp['description'] ?? bp['catalog_description'] ?? '').toString();
-                final rawPurpose = (bp['primary_economic_purpose'] ?? bp['primaryEconomicPurpose'])?.toString();
-                final purpose = (rawPurpose != null && rawPurpose.trim().isNotEmpty)
-                    ? rawPurpose
-                    : EarthBuildingMeta.getEconomicPurpose(
-                        bp,
-                        ownership: ownership,
-                        category: category,
-                      );
+                final desc =
+                    (bp['description'] ?? bp['catalog_description'] ?? '')
+                        .toString();
+                final rawPurpose = (bp['primary_economic_purpose'] ??
+                        bp['primaryEconomicPurpose'])
+                    ?.toString();
+                final purpose =
+                    (rawPurpose != null && rawPurpose.trim().isNotEmpty)
+                        ? rawPurpose
+                        : EarthBuildingMeta.getEconomicPurpose(
+                            bp,
+                            ownership: ownership,
+                            category: category,
+                          );
                 final civicBenefit = bp['civicBenefit']?.toString();
 
                 // 1. Cost line entries (CapEx +70% per tier)
-                final costCreditsCur = baseCost * math.pow(1.70, currentTier - 1);
-                final costCreditsNext = baseCost * math.pow(1.70, targetTier - 1);
-                final matBase = asDoubleOr(bp['cost_materials'] ?? bp['baseMaterialCost'], 0);
+                final costCreditsCur =
+                    baseCost * math.pow(1.70, currentTier - 1);
+                final costCreditsNext =
+                    baseCost * math.pow(1.70, targetTier - 1);
+                final matBase = asDoubleOr(
+                    bp['cost_materials'] ?? bp['baseMaterialCost'], 0);
                 final compBase = asDoubleOr(bp['cost_components'], 0);
                 final computeBase = asDoubleOr(bp['cost_compute'], 0);
 
                 // 2. Upkeep Inputs (Daily Upkeep +12% per tier)
-                final upkeepInputs = <(IconData, Color, String, double, double)>[];
+                final upkeepInputs =
+                    <(IconData, Color, String, double, double)>[];
                 void addUpkeep(String key, IconData icon, Color color) {
                   final raw = asDoubleOr(bp['upkeep_$key'], 0);
                   if (raw > 0) {
                     final cur = raw * math.pow(1.12, currentTier - 1);
                     final next = raw * math.pow(1.12, targetTier - 1);
-                    upkeepInputs.add((icon, color, key.toUpperCase(), cur, next));
+                    upkeepInputs
+                        .add((icon, color, key.toUpperCase(), cur, next));
                   }
                 }
-                addUpkeep('energy', Icons.bolt_rounded, EarthResourceColors.energy);
+
+                addUpkeep(
+                    'energy', Icons.bolt_rounded, EarthResourceColors.energy);
                 addUpkeep('food', Icons.eco_outlined, EarthResourceColors.food);
-                addUpkeep('materials', Icons.terrain_outlined, EarthResourceColors.materials);
-                addUpkeep('components', Icons.precision_manufacturing_outlined, EarthResourceColors.components);
-                addUpkeep('compute', Icons.memory_rounded, EarthResourceColors.compute);
+                addUpkeep('materials', Icons.terrain_outlined,
+                    EarthResourceColors.materials);
+                addUpkeep('components', Icons.precision_manufacturing_outlined,
+                    EarthResourceColors.components);
+                addUpkeep('compute', Icons.memory_rounded,
+                    EarthResourceColors.compute);
 
                 // 3. Output entries (Output +25% per tier)
-                final outputItems = <(IconData, Color, String, double, double)>[];
+                final outputItems =
+                    <(IconData, Color, String, double, double)>[];
                 void addOutput(String key, IconData icon, Color color) {
                   final raw = asDoubleOr(bp['output_$key'], 0);
                   if (raw > 0) {
                     final cur = raw * math.pow(1.25, currentTier - 1);
                     final next = raw * math.pow(1.25, targetTier - 1);
-                    outputItems.add((icon, color, key.toUpperCase(), cur, next));
+                    outputItems
+                        .add((icon, color, key.toUpperCase(), cur, next));
                   }
                 }
-                addOutput('credits', Icons.account_balance_wallet_outlined, EarthResourceColors.credits);
-                addOutput('energy', Icons.bolt_rounded, EarthResourceColors.energy);
+
+                addOutput('credits', Icons.account_balance_wallet_outlined,
+                    EarthResourceColors.credits);
+                addOutput(
+                    'energy', Icons.bolt_rounded, EarthResourceColors.energy);
                 addOutput('food', Icons.eco_outlined, EarthResourceColors.food);
-                addOutput('materials', Icons.terrain_outlined, EarthResourceColors.materials);
-                addOutput('components', Icons.precision_manufacturing_outlined, EarthResourceColors.components);
-                addOutput('compute', Icons.memory_rounded, EarthResourceColors.compute);
+                addOutput('materials', Icons.terrain_outlined,
+                    EarthResourceColors.materials);
+                addOutput('components', Icons.precision_manufacturing_outlined,
+                    EarthResourceColors.components);
+                addOutput('compute', Icons.memory_rounded,
+                    EarthResourceColors.compute);
 
                 // 4. Operating Expenses (+12% per tier)
                 final opCreditsBase = asDoubleOr(
@@ -727,8 +775,10 @@ class _CorporateBuildingResearchPanelState
                 );
                 final opEnergyBase = asDoubleOr(bp['operating_energy'], 0);
                 final opFoodBase = asDoubleOr(bp['operating_food'], 0);
-                final opMaterialsBase = asDoubleOr(bp['operating_materials'], 0);
-                final opComponentsBase = asDoubleOr(bp['operating_components'], 0);
+                final opMaterialsBase =
+                    asDoubleOr(bp['operating_materials'], 0);
+                final opComponentsBase =
+                    asDoubleOr(bp['operating_components'], 0);
                 final opComputeBase = asDoubleOr(bp['operating_compute'], 0);
 
                 final hasOperating = opCreditsBase > 0 ||
@@ -757,7 +807,8 @@ class _CorporateBuildingResearchPanelState
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
+                      mainAxisSize:
+                          fillHeight ? MainAxisSize.max : MainAxisSize.min,
                       children: [
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -781,11 +832,13 @@ class _CorporateBuildingResearchPanelState
                                     runSpacing: 4,
                                     children: [
                                       EarthBadge(
-                                        label: 'TIER $currentTier -> $targetTier',
+                                        label:
+                                            'TIER $currentTier -> $targetTier',
                                         variant: EarthBadgeVariant.primary,
                                       ),
                                       EarthBadge(
-                                        label: '$slots ${slots == 1 ? "SPACE" : "SPACES"}',
+                                        label:
+                                            '$slots ${slots == 1 ? "SPACE" : "SPACES"}',
                                         variant: EarthBadgeVariant.neutral,
                                       ),
                                       EarthBadge(
@@ -809,19 +862,24 @@ class _CorporateBuildingResearchPanelState
                                     'Economic Purpose: $purpose',
                                     style: context.widgetFooterStyle,
                                   ),
-                                  if (civicBenefit != null && civicBenefit.isNotEmpty) ...[
+                                  if (civicBenefit != null &&
+                                      civicBenefit.isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     Wrap(
                                       spacing: 6,
                                       runSpacing: 4,
-                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
-                                        Text('CIVIC BENEFIT', style: context.captionStyle),
+                                        Text('CIVIC BENEFIT',
+                                            style: context.captionStyle),
                                         const SizedBox(width: 2),
                                         const Icon(Icons.star_outline_rounded,
-                                            size: 14, color: Colors.purpleAccent),
+                                            size: 14,
+                                            color: Colors.purpleAccent),
                                         Text(civicBenefit,
-                                            style: context.widgetFooterStyle.copyWith(
+                                            style: context.widgetFooterStyle
+                                                .copyWith(
                                               color: Colors.purpleAccent,
                                             )),
                                       ],
@@ -854,7 +912,8 @@ class _CorporateBuildingResearchPanelState
                             if (matBase > 0) ...[
                               const SizedBox(width: 4),
                               Icon(
-                                EarthResourceMeta.forCommodity('materials').icon,
+                                EarthResourceMeta.forCommodity('materials')
+                                    .icon,
                                 size: 14,
                                 color: EarthResourceColors.materials,
                               ),
@@ -866,7 +925,8 @@ class _CorporateBuildingResearchPanelState
                             if (compBase > 0) ...[
                               const SizedBox(width: 4),
                               Icon(
-                                EarthResourceMeta.forCommodity('components').icon,
+                                EarthResourceMeta.forCommodity('components')
+                                    .icon,
                                 size: 14,
                                 color: EarthResourceColors.components,
                               ),
@@ -980,7 +1040,8 @@ class _CorporateBuildingResearchPanelState
                               if (opMaterialsBase > 0) ...[
                                 const SizedBox(width: 4),
                                 Icon(
-                                  EarthResourceMeta.forCommodity('materials').icon,
+                                  EarthResourceMeta.forCommodity('materials')
+                                      .icon,
                                   size: 14,
                                   color: EarthResourceColors.materials,
                                 ),
@@ -992,7 +1053,8 @@ class _CorporateBuildingResearchPanelState
                               if (opComponentsBase > 0) ...[
                                 const SizedBox(width: 4),
                                 Icon(
-                                  EarthResourceMeta.forCommodity('components').icon,
+                                  EarthResourceMeta.forCommodity('components')
+                                      .icon,
                                   size: 14,
                                   color: EarthResourceColors.components,
                                 ),
@@ -1004,7 +1066,8 @@ class _CorporateBuildingResearchPanelState
                               if (opComputeBase > 0) ...[
                                 const SizedBox(width: 4),
                                 Icon(
-                                  EarthResourceMeta.forCommodity('compute').icon,
+                                  EarthResourceMeta.forCommodity('compute')
+                                      .icon,
                                   size: 14,
                                   color: EarthResourceColors.compute,
                                 ),
@@ -1022,7 +1085,8 @@ class _CorporateBuildingResearchPanelState
                         Divider(
                           height: 1,
                           thickness: 1,
-                          color: context.subtleBorderColor.withValues(alpha: .6),
+                          color:
+                              context.subtleBorderColor.withValues(alpha: .6),
                         ),
                         const SizedBox(height: 10),
 
@@ -1051,15 +1115,14 @@ class _CorporateBuildingResearchPanelState
                                   color: cyanAccentColor.withValues(alpha: .15),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                      color: cyanAccentColor
-                                          .withValues(alpha: .4)),
+                                      color: cyanAccentColor.withValues(
+                                          alpha: .4)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     const Icon(Icons.science_outlined,
-                                        size: 13,
-                                        color: cyanAccentColor),
+                                        size: 13, color: cyanAccentColor),
                                     const SizedBox(width: 5),
                                     const Text(
                                       'R&D IN PROGRESS',
@@ -1086,10 +1149,11 @@ class _CorporateBuildingResearchPanelState
                           Builder(
                             builder: (context) {
                               final userCredits = asDouble(
-                                widget.state.human['credits'] ??
-                                    widget.state.finance['balance'] ??
-                                    widget.state.personalFinance['balance'],
-                              ) ?? 0.0;
+                                    widget.state.human['credits'] ??
+                                        widget.state.finance['balance'] ??
+                                        widget.state.personalFinance['balance'],
+                                  ) ??
+                                  0.0;
                               final isPrivate = ownership == 'private';
                               // Do not check corporation credits for corporate/public research proposals
                               final canAffordResearch = isPrivate
@@ -1174,17 +1238,22 @@ class _CorporateBuildingResearchPanelState
                                                   currentTier: currentTier,
                                                   costCredits: nextResearchCost,
                                                   durationDays: durationDays,
-                                                  costCreditsCur: costCreditsCur,
-                                                  costCreditsNext: costCreditsNext,
+                                                  costCreditsCur:
+                                                      costCreditsCur,
+                                                  costCreditsNext:
+                                                      costCreditsNext,
                                                   upkeepInputs: upkeepInputs,
                                                   outputItems: outputItems,
                                                   opCreditsBase: opCreditsBase,
                                                   opEnergyBase: opEnergyBase,
-                                                  opMaterialsBase: opMaterialsBase,
-                                                  opComponentsBase: opComponentsBase,
+                                                  opMaterialsBase:
+                                                      opMaterialsBase,
+                                                  opComponentsBase:
+                                                      opComponentsBase,
                                                   opComputeBase: opComputeBase,
                                                   ownership: ownership,
-                                                  tierDaysCurrent: tierDaysCurrent,
+                                                  tierDaysCurrent:
+                                                      tierDaysCurrent,
                                                   tierDaysNext: tierDaysNext,
                                                 ),
                                       ),
@@ -1270,8 +1339,7 @@ class _CorporateBuildingResearchPanelState
               leading: const Icon(Icons.lock_open_outlined,
                   size: 16, color: cyanAccentColor),
               title: name,
-              subtitle:
-                  tier == null ? 'Tier unlocked' : 'Tier $tier unlocked',
+              subtitle: tier == null ? 'Tier unlocked' : 'Tier $tier unlocked',
               badges: const [
                 Chip(
                     label: Text('TIER UNLOCKED'),
@@ -1307,9 +1375,8 @@ class _CorporateBuildingResearchPanelState
               : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected
-                ? context.primaryColor
-                : context.subtleBorderColor,
+            color:
+                isSelected ? context.primaryColor : context.subtleBorderColor,
           ),
         ),
         child: Row(
@@ -1333,7 +1400,6 @@ class _CorporateBuildingResearchPanelState
       ),
     );
   }
-
 
   Future<void> _confirmAndStartResearch(
     BuildContext context, {
@@ -1389,7 +1455,9 @@ class _CorporateBuildingResearchPanelState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isPrivate ? 'Initiate R&D Project' : 'Propose Civic Research',
+                    isPrivate
+                        ? 'Initiate R&D Project'
+                        : 'Propose Civic Research',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -1418,7 +1486,7 @@ class _CorporateBuildingResearchPanelState
               Text(
                 isPrivate
                     ? 'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.'
-                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(costCredits)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for all member cities.',
+                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(costCredits)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for the corporation\'s territories.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -1545,10 +1613,14 @@ class _CorporateBuildingResearchPanelState
                     if (outputItems.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       ...outputItems.map((out) {
-                        final curStr = out.$3 == 'CREDITS' || out.$3 == 'CRD' || out.$3 == 'C'
+                        final curStr = out.$3 == 'CREDITS' ||
+                                out.$3 == 'CRD' ||
+                                out.$3 == 'C'
                             ? formatWholeNumber(out.$4)
                             : _formatDecimal(out.$4);
-                        final nextStr = out.$3 == 'CREDITS' || out.$3 == 'CRD' || out.$3 == 'C'
+                        final nextStr = out.$3 == 'CREDITS' ||
+                                out.$3 == 'CRD' ||
+                                out.$3 == 'C'
                             ? formatWholeNumber(out.$5)
                             : _formatDecimal(out.$5);
                         return Padding(
@@ -1640,7 +1712,8 @@ class _CorporateBuildingResearchPanelState
           ),
           EarthButton(
             label: isPrivate ? 'CONFIRM R&D PROJECT' : 'SUBMIT CIVIC PROPOSAL',
-            icon: isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
+            icon:
+                isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
             variant: EarthButtonVariant.primary,
             onPressed: () => Navigator.pop(dialogContext, true),
           ),
@@ -1726,7 +1799,7 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
               'name': 'Civic Network Infrastructure',
               'branch': 'Civic Systems',
               'description':
-                  'Improves the coordination capacity of city services and civic institutions.',
+                  'Improves the coordination capacity of territorial services and civic institutions.',
               'effect': 'Better civic capacity',
               'target': 'Civic buildings · Public services',
             },
@@ -2111,8 +2184,8 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
             : tech);
     final techName = (research['name'] as String?)?.toUpperCase() ??
         (tech['name'] as String?)?.toUpperCase() ??
-        'ADAPTIVE MAINTENANCE AI';
-    final techId = research['id']?.toString() ?? 'TECH-001';
+        'NO ACTIVE RESEARCH PROJECT';
+    final techId = research['id']?.toString() ?? '—';
     final corporationId =
         widget.state.membership?['corporation_id']?.toString();
     final isCorporationMember =
@@ -2123,8 +2196,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
     final focus = (research['focus'] ?? tech['focus'] ?? 'efficiency')
         .toString()
         .toUpperCase();
-    final budgetNum = research['budget'] ?? research['budgetPerDay'] ?? 240;
-    final budget = asDoubleOr(budgetNum, 240.0);
+    final budget = asDouble(research['budget'] ?? research['budgetPerDay']);
     final isComplete = progress >= 100;
     final computeReserve = asDoubleOr(widget.state.resources['compute'], 0);
     final buildingCount = widget.state.buildings.length;
@@ -2164,7 +2236,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                 asDoubleOr(p['progress'], 0) < 100 &&
                 (p['status']?.toString().toLowerCase() != 'completed'))
             .length
-        : (!isComplete ? 1 : 0);
+        : 0;
 
     final corp = widget.state.institutions['corporation'];
     final corpTreasury = corp is Map ? asDouble(corp['treasury']) : null;
@@ -2179,7 +2251,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
           isCorporationMember ? context.primaryColor : context.warningColor,
       infoTitle: 'RESEARCH & TECHNOLOGY ARCHITECTURE',
       infoDescription:
-          '• Corporate R&D Sponsorship: Both industrial building tiers and general technologies are sponsored by corporations and funded from their corporate treasuries.\n\n• Capabilities & Breakthroughs: Choose and fund a capability that improves business outcomes. A completed capability can be activated for each business with a subscription.\n\n• Building Tiers: Researches the next technological tier for shared industrial, commercial, and utility buildings in Earth\'s catalog.\n\n• Blueprint Tier Progression Multipliers:\n  - Output Yield: +25% higher production per tier\n  - Upkeep Cost: +12% daily OpEx scaling per tier\n  - Build Cost: +70% installation CapEx per tier\n  - Build Time: Slot × Tier construction days',
+          '• Corporate R&D Sponsorship: Industrial building tiers and general technologies are sponsored by corporations and funded from their corporate treasuries.\n\n• Capabilities & Breakthroughs: Choose and fund a capability that improves business outcomes. A completed capability can be activated with a subscription.\n\n• Building Tiers: Researches the next technological tier for shared industrial, commercial, and utility buildings in Earth\'s catalog.\n\n• Effects, cost, duration, prerequisites, and rules version are authoritative values from the active technology catalog; this page never estimates unpublished research values.',
       title: 'RESEARCH & TECHNOLOGY',
       subtitle:
           'Planetary patent trees, corporate capability breakthroughs, and industrial tech tiers across Earth',
@@ -2216,7 +2288,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• General technology research is owned and funded by corporations. Independent characters can read the research catalogue, but cannot start or fund a project until they join a corporation.\n\n• Choose and fund a capability that improves business outcomes. A completed capability can be activated for each business with a simple subscription.\n\n• Building-tier research remains a separate corporation-owned path and uses the same corporate treasury.\n\n• Blueprint Tier Progression Multipliers:\n  - Output Yield: +25% higher production per tier\n  - Upkeep Cost: +12% daily OpEx scaling per tier\n  - Build Cost: +70% installation CapEx per tier\n  - Build Time: Slot × Tier construction days',
+          '• General technology research is owned and funded by corporations. Independent characters can read the approved catalogue, but cannot start or fund a project until they join a corporation.\n\n• Choose and fund a capability that improves business outcomes. A completed capability can be activated with a subscription.\n\n• Building-tier research remains a separate corporation-owned path and uses the same corporate treasury.\n\n• Each project displays its backend-defined cost, duration, prerequisites, effects, and rules version.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2449,7 +2521,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                           border: Border.all(color: Colors.white12),
                         ),
                         child: Text(
-                          'Funding: ${formatWholeNumber(budget)} C · Compute reserve: ${formatWholeNumber(computeReserve)} · ${isComplete ? 'Ready to deploy' : '${(100 - progress).toStringAsFixed(0)}% remaining'}',
+                          'Funding: ${budget == null ? 'Not published' : '${formatWholeNumber(budget)} C'} · Compute reserve: ${formatWholeNumber(computeReserve)} · ${isComplete ? 'Ready to deploy' : (projectList.isEmpty ? 'No active project' : '${(100 - progress).toStringAsFixed(0)}% remaining')}',
                           style: const TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w600,

@@ -3,7 +3,7 @@ import { createGameEvent } from './game-events-postgres.ts';
 import type { VotingMethod } from './governance-voting.ts';
 import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 
-const ACTIONS = new Set(['ORGANIZATION_BUDGET_SPEND', 'TAX_RULE', 'PUBLIC_PROJECT', 'RESEARCH_FUNDING', 'CHARTER_CHANGE', 'WORLD_CONDITION']);
+const ACTIONS = new Set(['ORGANIZATION_BUDGET_SPEND', 'TAX_RULE', 'PUBLIC_PROJECT', 'RESEARCH_FUNDING', 'CHARTER_CHANGE', 'WORLD_CONDITION', 'ORGANIZATION_TECHNOLOGY_ADOPTION']);
 const VOTING_METHODS = new Set<VotingMethod>(['ONE_HOUSE_ONE_VOTE', 'DELEGATED', 'SHARE_WEIGHTED', 'QUADRATIC_VOICE']);
 
 function object(value: unknown): Record<string, unknown> {
@@ -61,6 +61,7 @@ function validateAction(actionType: string, actionSnapshot: Record<string, unkno
   if (actionType === 'ORGANIZATION_BUDGET_SPEND' && (!actionSnapshot.budgetLineId || !actionSnapshot.amountUnits || !actionSnapshot.destinationAccountId)) throw new Error('Budget action requires a line, amount, and destination');
   if (actionType === 'TAX_RULE' && (!actionSnapshot.category || actionSnapshot.rateBps === undefined)) throw new Error('Tax action requires category and rate');
   if ((actionType === 'PUBLIC_PROJECT' || actionType === 'RESEARCH_FUNDING') && !actionSnapshot.projectId) throw new Error('Project action requires projectId');
+  if (actionType === 'ORGANIZATION_TECHNOLOGY_ADOPTION' && (!actionSnapshot.generationId || !actionSnapshot.adoptionCostUnits)) throw new Error('Technology adoption requires generationId and adoptionCostUnits');
   if (actionType === 'WORLD_CONDITION') {
     const effectType = String(actionSnapshot.effectType ?? '');
     const scopeType = String(actionSnapshot.scopeType ?? '');

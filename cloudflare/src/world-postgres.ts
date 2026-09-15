@@ -1,10 +1,17 @@
 import type { PostgresRepository } from './repository.ts';
 import { listCommunities } from './communities-postgres.ts';
 import { listWorldConditions } from './world-conditions-postgres.ts';
+import { listRankings } from './rankings-postgres.ts';
+import { listOrganizations } from './organizations-postgres.ts';
 import { generateDecisionQueue } from './decision-queue.ts';
+import { listTechnology } from './read-postgres.ts';
+import { listCorporationBuildingResearch } from './corporation-building-research-postgres.ts';
+import { assetUnitScale } from './market-model.ts';
+import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
+import { marketFeeRate } from './market-rules.ts';
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId?: string, viewerHouseId?: string): Promise<Record<string, unknown>> {
-  const [world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals] = await Promise.all([
+  const [world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
     repository.query("SELECT id, game_day, game_minute, world_seed, status FROM world_state WHERE id = 'WORLD'"),
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
     repository.query("SELECT id, house_id, display_name, age_years, standing, final_legacy, status FROM humans WHERE status = 'ACTIVE' ORDER BY id"),
@@ -38,10 +45,19 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                              c.code, c.code AS building_type, c.tier, c.economic_role,
                                              c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                                              c.service_type, c.service_capacity_units, c.slot_footprint,
-                                             c.operating_credit_units
+                                             c.operating_credit_units,
+                                             COALESCE(latest.utilization_bps, 10000) AS utilization_bps,
+                                             latest.game_day AS latest_settlement_game_day
                                         FROM buildings b
                                         JOIN owner_registry o ON o.economic_id = b.owner_economic_id
                                         JOIN building_catalog c ON c.id = b.catalog_id
+                                        LEFT JOIN LATERAL (
+                                          SELECT utilization_bps, game_day
+                                            FROM building_settlement_journals
+                                           WHERE building_id = b.id
+                                           ORDER BY game_day DESC
+                                           LIMIT 1
+                                        ) latest ON TRUE
                                        WHERE o.id = $1
                                        ORDER BY b.status, b.id`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     viewerHouseId ? repository.query(`SELECT a.account_type, asset.code, a.balance_units::TEXT AS balance_units
@@ -51,8 +67,11 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                        WHERE owner.id = $1 AND a.status = 'ACTIVE'
                                        ORDER BY asset.id, a.account_type`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     viewerHouseId ? repository.query(`SELECT r.territory_id, r.residency_class, r.status, r.effective_from_game_day,
-                                             t.name AS territory_name
-                                        FROM house_residencies r JOIN territories t ON t.id = r.territory_id
+                                             t.name AS territory_name, t.corporation_id,
+                                             i.name AS corporation_name
+                                        FROM house_residencies r
+                                        JOIN territories t ON t.id = r.territory_id
+                                        JOIN institutions i ON i.id = t.corporation_id
                                        WHERE r.house_id = $1 AND r.status = 'ACTIVE'
                                        ORDER BY r.effective_from_game_day DESC`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     viewerHouseId ? repository.query(`SELECT id, obligation_type, principal_due_units::TEXT AS principal_due_units,
@@ -66,6 +85,34 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                         FROM proposals
                        WHERE status IN ('OPEN', 'VOTING', 'PASSED')
                        ORDER BY created_game_day DESC, id LIMIT 100`),
+    listRankings(repository),
+    repository.query(`SELECT id, corporation_id, name, territory_type, status, is_primary, created_game_day
+                        FROM territories
+                       WHERE status IN ('ACTIVE', 'UNGOVERNED')
+                       ORDER BY corporation_id, is_primary DESC, id`),
+    viewerHouseId
+      ? repository.query(`SELECT c.id, i.name, c.status, c.charter_version, c.admission_policy,
+                                 c.created_game_day,
+                                 (SELECT COUNT(*)::INTEGER FROM territories t WHERE t.corporation_id = c.id AND t.status = 'ACTIVE') AS territory_count,
+                                 (SELECT COUNT(*)::INTEGER FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_count,
+                                 (SELECT t.name FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_name
+                            FROM house_affiliations ha
+                            JOIN corporations c ON c.id = ha.corporation_id
+                            JOIN institutions i ON i.id = c.id
+                           WHERE ha.house_id = $1 AND ha.status = 'ACTIVE'
+                           LIMIT 1`, [viewerHouseId])
+      : Promise.resolve({ rows: [] }),
+    listOrganizations(repository, viewerHouseId ?? ''),
+    repository.query(`SELECT id, institution_id, name, category, value_json, quorum_threshold,
+                             approval_threshold, voting_period_days, implementation_delay_days,
+                             version, status, created_by, effective_from_game_day, effective_to_game_day
+                        FROM governance_rules
+                       WHERE status IN ('active', 'superseded')
+                       ORDER BY institution_id, category, version DESC, id`),
+    repository.query(`SELECT scope, category, minimum_rate_bps, maximum_rate_bps,
+                             allowed_tax_base_definitions, beneficiary_scope, rules_version
+                        FROM tax_governance_rules
+                       ORDER BY scope, category`),
   ]);
   const latestServiceDay = serviceAssessments.rows[0]?.game_day;
   const serviceStatus = Object.fromEntries(serviceAssessments.rows.filter((row) => row.game_day === latestServiceDay).map((row) => [row.need_code, row.risk_level === 'NORMAL' ? 'normal' : row.risk_level === 'WATCH' ? 'basic' : 'critical']));
@@ -92,6 +139,63 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     return { ...condition, exposure };
   });
   const capacity = territory?.territory_id ? (await repository.query(`SELECT territory_id, active_house_count, house_capacity, population_capacity, private_slot_capacity, public_slot_capacity, private_slots_used, public_slots_used, housing_capacity, health_capacity, energy_capacity, connectivity_capacity, service_capacity FROM territory_capacity_state WHERE territory_id = $1`, [territory.territory_id])).rows[0] : null;
+  const [technology, corporationBuildingResearch, marketInstruments, marketOrders] = await Promise.all([
+    viewerId ? listTechnology(repository, viewerId) : Promise.resolve({ catalog: [], projects: [] }),
+    viewerId ? listCorporationBuildingResearch(repository, viewerId) : Promise.resolve({ corporationId: null, projects: [], unlocks: [] }),
+    repository.query(`SELECT i.id, i.symbol, i.asset_id, i.rules_version, i.genesis_reference_price_units::TEXT,
+                             s.last_clearing_price_units::TEXT, s.best_bid_units::TEXT, s.best_ask_units::TEXT,
+                             s.open_buy_units::TEXT, s.open_sell_units::TEXT, s.updated_at
+                        FROM market_instruments i
+                        LEFT JOIN market_instrument_state s ON s.instrument_id = i.id
+                       WHERE i.instrument_type = 'SPOT' AND i.status = 'ACTIVE'
+                       ORDER BY i.symbol`),
+    repository.query(`SELECT o.id, i.symbol, o.side, o.status, o.quantity_units::TEXT,
+                             o.remaining_units::TEXT, o.limit_price_units::TEXT,
+                             o.rules_version, o.good_til_game_day, o.created_at,
+                             i.asset_id
+                        FROM market_orders o
+                        JOIN market_instruments i ON i.id = o.instrument_id
+                       WHERE o.status IN ('OPEN', 'PARTIAL')
+                       ORDER BY o.created_at DESC LIMIT 500`),
+  ]);
+  const marketProducts = Object.fromEntries(marketInstruments.rows.map((row: any) => {
+    const product = String(row.symbol).replace(/^SPOT-/, '').toLowerCase();
+    const priceUnits = row.last_clearing_price_units ?? row.genesis_reference_price_units;
+    return [product, {
+      product,
+      price: priceUnits == null ? null : priceUnitsToDisplayPrice(String(priceUnits)),
+      priceAvailable: priceUnits != null,
+      bestBid: row.best_bid_units == null ? null : priceUnitsToDisplayPrice(String(row.best_bid_units)),
+      bestAsk: row.best_ask_units == null ? null : priceUnitsToDisplayPrice(String(row.best_ask_units)),
+      supply: unitsToDisplayQuantity(String(row.open_sell_units ?? '0'), assetUnitScale(Number(row.asset_id ?? 2))),
+      demand: unitsToDisplayQuantity(String(row.open_buy_units ?? '0'), assetUnitScale(Number(row.asset_id ?? 2))),
+      rulesVersion: row.rules_version,
+      updatedAt: row.updated_at,
+    }];
+  }));
+  const market = {
+    products: marketProducts,
+    orders: marketOrders.rows.map((row: any) => {
+      const quantity = unitsToDisplayQuantity(String(row.quantity_units ?? '0'), assetUnitScale(Number(row.asset_id ?? 2)));
+      const remaining = unitsToDisplayQuantity(String(row.remaining_units ?? '0'), assetUnitScale(Number(row.asset_id ?? 2)));
+      return {
+        id: row.id,
+        product: String(row.symbol).replace(/^SPOT-/, '').toLowerCase(),
+        side: String(row.side).toLowerCase(),
+        status: row.status,
+        quantity,
+        filledQuantity: quantity - remaining,
+        remainingQuantity: remaining,
+        limitPrice: priceUnitsToDisplayPrice(String(row.limit_price_units ?? '0')),
+        rulesVersion: row.rules_version,
+        goodTilGameDay: row.good_til_game_day,
+        createdAt: row.created_at,
+      };
+    }),
+    feeRate: Number(await marketFeeRate(repository, viewerId)),
+    gameDay,
+    generatedFrom: 'postgres-canonical-facts',
+  };
   const needs = serviceAssessments.rows.filter((row) => row.game_day === latestServiceDay);
   const decisionQueue = generateDecisionQueue({
     gameDay,
@@ -101,6 +205,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     territory: capacity ? { ...capacity, id: capacity.territory_id, residents: capacity.active_house_count } : undefined,
     needs,
     proposals: proposals.rows,
+    market: Object.values(marketProducts),
+    buildings: buildings.rows,
   });
   return {
     ok: true,
@@ -111,6 +217,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     resources,
     resourceFlows: {},
     institutions: institutions.rows,
+    territories: territories.rows,
+    organizations: organizations['organizations'] ?? [],
+    corporation: corporation.rows[0] ?? null,
     humans: humans.rows,
     economicAssets: assets.rows,
     communities: communities.communities,
@@ -118,11 +227,24 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     serviceNeeds: needs,
     buildings: buildings.rows,
     buildingCatalog: catalog.rows,
+    technology: { catalog: technology.catalog, projects: technology.projects },
+    corporationBuildingResearch,
+    corporateResearch: technology.projects,
+    market,
     finance: { balance: wallet?.balance_units ?? '0', obligations: obligations.rows },
+    taxRules: taxRules.rows,
     personalFinance: { balance: wallet?.balance_units ?? '0', obligations: obligations.rows },
-    membership: territory ? { territory_id: territory.territory_id, territory_name: territory.territory_name, residency_class: territory.residency_class } : null,
+    membership: territory ? {
+      territory_id: territory.territory_id,
+      territory_name: territory.territory_name,
+      residency_class: territory.residency_class,
+      corporation_id: territory.corporation_id ?? corporation.rows[0]?.id ?? null,
+      corporation_name: territory.corporation_name ?? corporation.rows[0]?.name ?? null,
+    } : null,
+    governance: { proposals: proposals.rows, rules: governanceRules.rows },
     districtZoning: capacity ?? {},
     decisionQueue,
+    rankings,
     worldConditions: exposedConditions,
   };
 }

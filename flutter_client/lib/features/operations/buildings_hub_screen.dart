@@ -217,6 +217,161 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _startCapitalProject(Map<String, dynamic> building) async {
+    final buildingId = building['id']?.toString();
+    if (buildingId == null || buildingId.isEmpty) return;
+    String? selectedGeneration;
+    String kind = 'OVERHAUL';
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('CAPITAL PROJECT'),
+          content: SizedBox(
+            width: 420,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              FutureBuilder<Map<String, dynamic>>(
+                future: const EarthApi().getBuildingCapitalOptions(buildingId: buildingId),
+                builder: (context, snapshot) {
+                  final options = snapshot.data?['options'] is List
+                      ? (snapshot.data!['options'] as List).whereType<Map>().toList()
+                      : const <Map>[];
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: LinearProgressIndicator(),
+                      ),
+                    );
+                  }
+                  if (options.isEmpty) return const SizedBox.shrink();
+                  return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('AUTHORITATIVE INVESTMENT PROJECTION', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 6),
+                        ...options.map((option) {
+                          final cost = option['creditCostUnits']?.toString() ?? '0';
+                          final payback = option['paybackGameDays'];
+                          final label = option['type']?.toString() ?? 'OPTION';
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Text(
+                              '$label · ${cost} credit units · ${payback == null ? 'no positive payback' : '$payback game days'}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              DropdownButtonFormField<String>(
+                value: kind,
+                decoration: const InputDecoration(labelText: 'Project type'),
+                items: const [
+                  DropdownMenuItem(
+                      value: 'OVERHAUL',
+                      child: Text('Overhaul · reset major rebuild age')),
+                  DropdownMenuItem(
+                      value: 'GENERATION_RETROFIT',
+                      child: Text('Technology retrofit · preserve age')),
+                ],
+                onChanged: (value) =>
+                    setDialogState(() => kind = value ?? kind),
+              ),
+              if (kind == 'GENERATION_RETROFIT') ...[
+                const SizedBox(height: 12),
+                FutureBuilder<Map<String, dynamic>>(
+                  future: const EarthApi().listEarthTechnologyGenerations(),
+                  builder: (context, snapshot) {
+                    final rows = snapshot.data?['generations'] is List
+                        ? (snapshot.data!['generations'] as List)
+                            .whereType<Map>()
+                            .toList()
+                        : const <Map>[];
+                    final eligible = rows
+                        .where((row) =>
+                            row['eligibility'] is Map &&
+                            (row['eligibility'] as Map)['eligible'] == true &&
+                            row['discovered'] == true)
+                        .toList();
+                    return DropdownButtonFormField<String>(
+                      value: eligible.any((row) =>
+                              row['id']?.toString() == selectedGeneration)
+                          ? selectedGeneration
+                          : null,
+                      decoration: const InputDecoration(
+                          labelText: 'Effective technology generation'),
+                      items: eligible
+                          .map((row) => DropdownMenuItem(
+                              value: row['id']?.toString(),
+                              child: Text('${row['name'] ?? row['id']}')))
+                          .toList(),
+                      onChanged: snapshot.connectionState ==
+                              ConnectionState.waiting
+                          ? null
+                          : (value) =>
+                              setDialogState(() => selectedGeneration = value),
+                      hint: snapshot.connectionState == ConnectionState.waiting
+                          ? const Text('Loading eligible generations…')
+                          : const Text('Select a discovered generation'),
+                    );
+                  },
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                    'Only discovered and effective generations are selectable. The server still verifies ownership, price, and settlement eligibility.',
+                    style: TextStyle(fontSize: 10)),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('CANCEL')),
+            FilledButton(
+              onPressed: kind == 'GENERATION_RETROFIT' &&
+                      (selectedGeneration == null ||
+                          selectedGeneration!.isEmpty)
+                  ? null
+                  : () => Navigator.pop(dialogContext,
+                      {'kind': kind, 'generation': selectedGeneration ?? ''}),
+              child: const Text('START'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await widget.action(() async {
+        await const EarthApi().startBuildingCapitalProject(
+          buildingId: buildingId,
+          projectKind: result['kind']!,
+          targetGenerationId: result['kind'] == 'GENERATION_RETROFIT'
+              ? result['generation']
+              : null,
+        );
+        return const EarthApi().world();
+      });
+      _showBuildingFeedback(
+          'Capital project started; completion is processed at the next settlement boundary.');
+    } catch (error) {
+      _showBuildingFeedback('Capital project unavailable: $error');
+    }
+  }
+
   Future<void> _showInfoDialog(
       BuildContext context, String title, String message) async {
     await showDialog<void>(
@@ -493,15 +648,15 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         .toList();
     final catalog = widget.state.buildingCatalog;
     final zoning = widget.state.districtZoning;
-    final rawCityId = widget.state.membership?['city_id']?.toString() ??
-        widget.state.institutions['city']?['id']?.toString() ??
-        widget.state.districtZoning['cityId']?.toString();
+    final rawCityId = widget.state.membership?['territory_id']?.toString() ??
+        // Read-only compatibility for older local snapshots; the backend V4
+        // field remains territory_id and no synthetic ID is ever generated.
+        widget.state.membership?['city_id']?.toString();
     final isIndependent =
         rawCityId == null || rawCityId.isEmpty || rawCityId == 'Independent';
-    final cityId =
-        (rawCityId == null || rawCityId.isEmpty || rawCityId == 'Independent')
-            ? 'CITY-0084'
-            : rawCityId;
+    // V4 is territory-scoped. Never invent a location identifier when the
+    // viewer has no active residency.
+    final cityId = rawCityId ?? '';
     final viewerId = widget.state.human['id']?.toString();
 
     final privateBuildings = buildings
@@ -564,7 +719,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       showHeader: false,
       infoBulletPoints: const [
         'Buildings are the productive assets of the economy: they use resources, provide services, and generate returns.',
-        'Private buildings belong to you and generate personal income. Civic buildings belong to the city and distribute surplus to all residents.',
+        'Private buildings belong to you and generate personal income. Civic buildings belong to a territory and distribute surplus according to territorial rules.',
         'Operating policy affects output and upkeep. Automatic upkeep keeps routine maintenance out of the main decision loop.',
       ],
       trailing: null,
@@ -623,7 +778,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 isIndependent ? context.warningColor : context.primaryColor,
             infoTitle: 'REAL ESTATE & INFRASTRUCTURE ARCHITECTURE',
             infoDescription:
-                '• Private Buildings: Belong to you. Their output goes to your account, while upkeep and operating costs are paid by you.\n\n• Civic Buildings: Belong to the city or are co-funded by citizens through public shares. They expand municipal capacity and services, while surplus is distributed as daily dividends.',
+                '• Private Buildings: Belong to you. Their output goes to your account, while upkeep and operating costs are paid by you.\n\n• Civic Buildings: Belong to a territory or are co-funded through public shares. They expand territorial capacity and services, while surplus is distributed according to active territorial rules.',
             title: 'BUILDINGS & REAL ESTATE',
             subtitle:
                 'Productive property assets, personal estate capacity, and municipal civic zoning across Earth',
@@ -1019,7 +1174,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     } else if (privateBuildings.isEmpty) {
       title = 'Create your first productive asset';
       message =
-          'Start with a building that matches your available Credits, Materials, and city capacity.';
+          'Start with a building that matches your available Credits, Materials, and territory capacity.';
       icon = Icons.domain_add_outlined;
       color = context.primaryColor;
     } else if (availablePrivateSlots > 0) {
@@ -1031,7 +1186,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     } else {
       title = 'Buildings are operating normally';
       message =
-          'Private capacity is full. Grow the city or improve infrastructure before expanding further.';
+          'Private capacity is full. Improve territory infrastructure before expanding further.';
       icon = Icons.check_circle_outline;
       color = context.successColor;
     }
@@ -2422,10 +2577,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final zoning = widget.state.districtZoning;
     final effAvailablePrivateSlots =
         availablePrivateSlots ?? personalAvailableSlots;
-    final availableCivicSlots = asIntOr(
-        zoning['availableCivicSlots'] ?? zoning['civicSlotsRemaining'], 999);
-    final cityId =
-        widget.state.membership?['city_id']?.toString() ?? 'CITY-0084';
+    final availableCivicSlots = asInt(zoning['public_slot_capacity']) == null
+        ? null
+        : math.max(
+            0,
+            asIntOr(zoning['public_slot_capacity'], 0) -
+                asIntOr(zoning['public_slots_used'], 0));
+    final cityId = widget.state.membership?['territory_id']?.toString() ??
+        widget.state.membership?['city_id']?.toString();
     final creditsAvailable = asDouble(widget.state.human['credits'] ??
         widget.state.finance['balance'] ??
         widget.state.personalFinance['balance']);
@@ -2731,7 +2890,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                       creditsAvailable >= creditCost) &&
                   (materialsAvailable == null || materialsAvailable >= matCost);
               final hasSlots = isCivicMunicipal
-                  ? availableCivicSlots >= footprint
+                  ? availableCivicSlots != null &&
+                      availableCivicSlots >= footprint
                   : effAvailablePrivateSlots >= footprint;
               final canBuild = canAfford && hasSlots;
 
@@ -3075,7 +3235,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                             context,
                                             buildingName: name.trim(),
                                             buildingType: bType,
-                                            cityId: cityId,
+                                            cityId: cityId ?? '',
                                             creditCost: creditCost,
                                             materialCost: matCost,
                                             footprint: footprint,
@@ -3235,7 +3395,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                                 context,
                                                 buildingName: name,
                                                 buildingType: bType,
-                                                cityId: cityId,
+                                                cityId: cityId ?? '',
                                                 creditCost: creditCost,
                                                 materialCost: matCost,
                                                 capacityCost: footprint,
@@ -3677,6 +3837,15 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     spacing: 8,
                     runSpacing: 6,
                     children: [
+                      if (isOwner && bActive)
+                        EarthButton(
+                          label: 'CAPITAL OPTIONS',
+                          icon: Icons.build_circle_outlined,
+                          variant: EarthButtonVariant.secondary,
+                          onPressed: widget.busy
+                              ? null
+                              : () => _startCapitalProject(b),
+                        ),
                       if (tier >= 4)
                         const EarthButton(
                           label: 'MAX TIER REACHED',
@@ -3706,10 +3875,15 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               : () async {
                                   EarthAudioEngine.instance.playClick();
                                   if (isCivic || isPublicInvestment) {
-                                    final cityId = b['city_id']?.toString() ??
-                                        widget.state.membership?['city_id']
+                                    final cityId = b['territory_id']
                                             ?.toString() ??
-                                        'CITY-0084';
+                                        widget.state.membership?['territory_id']
+                                            ?.toString();
+                                    if (cityId == null || cityId.isEmpty) {
+                                      _showBuildingFeedback(
+                                          'This civic asset is not assigned to a territory.');
+                                      return;
+                                    }
                                     final footprint =
                                         asIntOr(b['slot_footprint'], 1);
                                     final nextTierCatalog =
@@ -3992,7 +4166,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               Text(
                 isPrivate
                     ? 'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.'
-                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(costCredits)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for all member cities.',
+                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(costCredits)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for the corporation\'s territories.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -4688,7 +4862,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Civic and municipal facilities distribute 100% of their net operating surplus to registered city residents (70% as equal Base UBI, and 30% weighted by citizen participation). Public megaprojects offer fractional investment shares providing direct daily dividend yields.',
+            'Civic and territorial facilities distribute operating surplus according to the active territorial dividend rules. Public megaprojects may offer fractional investment shares providing direct daily dividend yields.',
             style: context.widgetFooterStyle,
           ),
           SizedBox(height: context.spacingControl),

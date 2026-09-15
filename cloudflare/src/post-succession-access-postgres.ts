@@ -9,8 +9,7 @@ export async function refreshPostSuccessionAccess(
   const result = await repository.query<{ id: string }>(
     `UPDATE organization_office_grants g
         SET status = 'EXPIRED',
-            effective_to_game_day = $1,
-            updated_at = CURRENT_TIMESTAMP
+            effective_to_game_day = $1
        FROM humans h
       WHERE g.principal_type = 'HUMAN'
         AND g.principal_id = h.id

@@ -28,7 +28,7 @@ async function billContract(repository: PostgresRepository, contractId: string, 
 
   const amount = BigInt(contract.daily_fee_units);
   if (amount <= 0n) {
-    await repository.query('UPDATE technology_license_contracts SET paid_through_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [contract.id, gameDay]);
+    await repository.query('UPDATE technology_license_contracts SET paid_through_game_day = $2 WHERE id = $1', [contract.id, gameDay]);
     return 'paid';
   }
   const payerPurpose = contract.licensee_type === 'HOUSE' ? 'WALLET' : 'OPERATIONS';
@@ -37,7 +37,7 @@ async function billContract(repository: PostgresRepository, contractId: string, 
   const recipientAccountId = await resolveEconomicAccount(repository, contract.licensor_economic_id, recipientPurpose);
   const payer = (await repository.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [payerAccountId])).rows[0];
   if (!payer || BigInt(payer.balance_units) < amount) {
-    await repository.query("UPDATE technology_license_contracts SET status = 'SUSPENDED', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [contract.id]);
+    await repository.query("UPDATE technology_license_contracts SET status = 'SUSPENDED' WHERE id = $1", [contract.id]);
     return 'suspended';
   }
   const posting = await repository.query<{ transaction_id: string; created: boolean }>(
@@ -54,7 +54,7 @@ async function billContract(repository: PostgresRepository, contractId: string, 
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (correlation_id) DO NOTHING`,
       [`LICENSE-PAYMENT-${contract.id}-${gameDay}`, contract.id, contract.licensee_economic_id, contract.licensor_economic_id, gameDay, amount.toString(), transaction.transaction_id, `license-payment:${contract.id}:${gameDay}`],
   );
-  await repository.query('UPDATE technology_license_contracts SET paid_through_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [contract.id, gameDay]);
+  await repository.query('UPDATE technology_license_contracts SET paid_through_game_day = $2 WHERE id = $1', [contract.id, gameDay]);
   return 'paid';
 }
 
@@ -66,7 +66,7 @@ export async function settleTechnologyLicenseFees(
 ): Promise<{ gameDay: number; contractsScanned: number; paid: number; suspended: number; terminated: number }> {
   const terminated = await repository.query<{ id: string }>(
     `UPDATE technology_license_contracts c
-        SET status = 'EXPIRED', effective_to_game_day = LEAST(COALESCE(c.effective_to_game_day, $1), $1), updated_at = CURRENT_TIMESTAMP
+        SET status = 'EXPIRED', effective_to_game_day = LEAST(COALESCE(c.effective_to_game_day, $1), $1)
        FROM technology_patents p
       WHERE c.patent_id = p.id AND c.status = 'ACTIVE' AND p.status <> 'ACTIVE'
       RETURNING c.id`, [gameDay]);

@@ -163,9 +163,9 @@ void main() {
     await tester.tap(aetherRow, warnIfMissed: false);
     await tester.pumpAndSettle();
 
-    // Verify universal charter principles and inline expansion reveals details
-    expect(find.text('UNIVERSAL CHARTER PRINCIPLES'), findsOneWidget);
-    expect(find.text('Corporate Tax Protection'), findsOneWidget);
+    // Verify organization charter principles and inline expansion reveals details
+    expect(find.text('ORGANIZATION CHARTER PRINCIPLES'), findsOneWidget);
+    expect(find.text('Commercial Subsidiarity'), findsOneWidget);
   });
 
   testWidgets(
@@ -211,8 +211,6 @@ void main() {
       'market': {'orders': []},
     });
 
-    bool budgetProposed = false;
-
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -220,9 +218,7 @@ void main() {
             child: InstitutionsCapacityPanel(
               state: state,
               busy: false,
-              action: (cb) async {
-                budgetProposed = true;
-              },
+              action: (cb) async {},
             ),
           ),
         ),
@@ -235,16 +231,11 @@ void main() {
     expect(find.text('200'), findsWidgets);
     expect(find.textContaining('CORPORATION: CARTHAGE DYNAMICS (CORP-001)'),
         findsNothing);
-    expect(find.text('CHANGE CITY'), findsOneWidget);
-    expect(find.text('PROPOSE BUDGET'), findsOneWidget);
-    expect(find.text('TAX CHARTER'), findsOneWidget);
+    expect(find.text('CHANGE CITY'), findsNothing);
+    expect(find.text('PROPOSE BUDGET'), findsNothing);
+    expect(find.text('TAX CHARTER'), findsNothing);
 
     await tester.pumpAndSettle();
-
-    await tester.tap(find.text('PROPOSE BUDGET'));
-    await tester.pumpAndSettle();
-
-    expect(budgetProposed, isTrue);
   });
   testWidgets('CityImpactPanel explains city pressure and service conditions',
       (tester) async {
@@ -273,10 +264,10 @@ void main() {
       ),
     ));
 
-    expect(find.text('CITY EFFECTS / LIFE & BUSINESS'), findsOneWidget);
-    expect(find.text('CITY PRESSURE'), findsOneWidget);
-    expect(find.text('CITY TAX'), findsOneWidget);
-    expect(find.text('MUNICIPAL ORDINANCES & TARIFFS'), findsOneWidget);
+    expect(find.text('TERRITORY EFFECTS / LIFE & BUSINESS'), findsOneWidget);
+    expect(find.text('TERRITORY PRESSURE'), findsOneWidget);
+    expect(find.text('TERRITORY TAX'), findsOneWidget);
+    expect(find.text('TERRITORY ORDINANCES & TARIFFS'), findsOneWidget);
     expect(find.text('Municipal Energy & Grid Tariff'), findsOneWidget);
     expect(find.text('Essential Services Minimum Standard'), findsOneWidget);
   });
@@ -346,10 +337,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('PLANETARY CORPORATIONS'), findsOneWidget);
+    expect(find.text('ORGANIZATION DIRECTORY'), findsOneWidget);
     expect(find.text('ACTIVE AFFILIATION: Carthage Dynamics'), findsOneWidget);
     expect(find.text('VIEW CONSTITUTION & TAX CHARTER'), findsOneWidget);
-    expect(find.text('ALL PLANETARY CORPORATIONS'), findsOneWidget);
+    expect(find.text('ALL ORGANIZATIONS'), findsOneWidget);
 
     expect(find.text('Carthage Dynamics'), findsWidgets);
     expect(find.textContaining('2.5%'), findsWidgets);
@@ -464,8 +455,8 @@ void main() {
     // Verify 4 Tab buttons on narrow screen
     expect(find.widgetWithText(InkWell, 'CITIZENS'), findsOneWidget);
     expect(find.widgetWithText(InkWell, 'HOUSES'), findsOneWidget);
-    expect(find.widgetWithText(InkWell, 'CORPS'), findsOneWidget);
-    expect(find.widgetWithText(InkWell, 'CITIES'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'ORGANIZATIONS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'TERRITORIES'), findsOneWidget);
 
     // Currently on Citizens tab (default)
     expect(find.text('Amara Vance'), findsOneWidget);
@@ -499,16 +490,16 @@ void main() {
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
-    // Switch to Corps tab
-    await tester.tap(find.widgetWithText(InkWell, 'CORPS'));
+    // Switch to Organizations tab
+    await tester.tap(find.widgetWithText(InkWell, 'ORGANIZATIONS'));
     await tester.pumpAndSettle();
 
     expect(find.text('Carthage Dynamics'), findsOneWidget);
     expect(find.text('56.3k Cap · 0 Biz · 142 Res'), findsOneWidget);
     expect(find.text('85'), findsOneWidget);
 
-    // Switch to Cities tab
-    await tester.tap(find.widgetWithText(InkWell, 'CITIES'));
+    // Switch to Territories tab
+    await tester.tap(find.widgetWithText(InkWell, 'TERRITORIES'));
     await tester.pumpAndSettle();
 
     expect(find.text('New Carthage'), findsOneWidget);
@@ -532,9 +523,9 @@ void main() {
     // Left Column: CITIZENS and HOUSES
     expect(find.widgetWithText(InkWell, 'CITIZENS'), findsOneWidget);
     expect(find.widgetWithText(InkWell, 'HOUSES'), findsOneWidget);
-    // Right Column: CORPS and CITIES
-    expect(find.widgetWithText(InkWell, 'CORPS'), findsOneWidget);
-    expect(find.widgetWithText(InkWell, 'CITIES'), findsOneWidget);
+    // Right Column: ORGANIZATIONS and TERRITORIES
+    expect(find.widgetWithText(InkWell, 'ORGANIZATIONS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'TERRITORIES'), findsOneWidget);
 
     // Both columns render simultaneously
     expect(find.text('Amara Vance'), findsOneWidget);

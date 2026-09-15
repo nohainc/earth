@@ -118,8 +118,7 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   Future<void> _loadProductionCatalog() async {
-    try {
-    } catch (_) {
+    try {} catch (_) {
       // The dashboard remains usable if the public catalog is temporarily unavailable.
     }
   }
@@ -171,7 +170,8 @@ class _CommandCenterState extends State<CommandCenter> {
       liveSocket = socket;
       await socket.ready;
       _markLiveConnected();
-      liveSubscription = socket.stream.map((message) => message.toString()).listen(
+      liveSubscription =
+          socket.stream.map((message) => message.toString()).listen(
         (message) {
           _resetLiveHeartbeatTimeout();
           if (message != 'pong') handleLiveMessage(message);
@@ -426,8 +426,15 @@ class _CommandCenterState extends State<CommandCenter> {
       ]);
       final latest = results[0] as List<dynamic>;
       final notificationData = results[1] as Map<String, dynamic>;
-      final ownership = latest.where((event) => event is Map<String, dynamic> && event['category'] == 'OWNERSHIP').toList();
-      final memberships = latest.where((event) => event is Map<String, dynamic> && event['category'] == 'AFFILIATION').toList();
+      final ownership = latest
+          .where((event) =>
+              event is Map<String, dynamic> && event['category'] == 'OWNERSHIP')
+          .toList();
+      final memberships = latest
+          .where((event) =>
+              event is Map<String, dynamic> &&
+              event['category'] == 'AFFILIATION')
+          .toList();
       final finData = results[2] as Map<String, dynamic>;
       final commUnread = 0;
       if (mounted) {
@@ -526,7 +533,10 @@ class _CommandCenterState extends State<CommandCenter> {
         if (mounted) setState(() => marketHistory[product] = history);
       }).catchError((_) => null);
     }
-    if (selectedSection == 'life' || selectedSection == 'command') {
+    if (selectedSection == 'life' ||
+        selectedSection == 'command' ||
+        selectedSection == 'history' ||
+        selectedSection == 'pantheon') {
       _loadPanel('pantheon', () async {
         final data = await api.pantheon();
         if (mounted) setState(() => pantheon = data);
@@ -541,11 +551,21 @@ class _CommandCenterState extends State<CommandCenter> {
     if (selectedSection == 'territory-commons') {
       _loadPanel('territory-commons', () async {
         final residency = await api.getHouseResidency();
-        final territoryId = (residency['currentTerritoryId'] ?? residency['territoryId'])?.toString();
+        final territoryId =
+            (residency['currentTerritoryId'] ?? residency['territoryId'])
+                ?.toString();
         if (territoryId == null || territoryId.isEmpty) return;
         final rights = await api.territoryRights(territoryId: territoryId);
         final commons = await api.commonsStatement(territoryId: territoryId);
-        if (mounted) setState(() => territoryCommonsData = {'residency': residency, 'rights': rights['rights'] ?? const [], 'commons': commons});
+        if (mounted) {
+          setState(() => territoryCommonsData = {
+                'residency': residency,
+                'rights': rights['rights'] ?? const [],
+                'rentPolicy': rights['rentPolicy'] ?? const {},
+                'territories': value.territories,
+                'commons': commons,
+              });
+        }
       });
     }
   }
@@ -608,7 +628,10 @@ class _CommandCenterState extends State<CommandCenter> {
       setState(() => selectedSection = section);
       final current = state;
       if (current != null &&
-          (section == 'market' || section == 'life' || section == 'mutual-credit' || section == 'territory-commons')) {
+          (section == 'market' ||
+              section == 'life' ||
+              section == 'mutual-credit' ||
+              section == 'territory-commons')) {
         unawaited(_loadSecondaryPanels(current));
       }
     }
@@ -712,135 +735,140 @@ class _CommandCenterState extends State<CommandCenter> {
                         onDayPrefetch: _onDayPrefetch,
                         onDayRollover: _onDayRollover,
                       ),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          if (!compact)
-                            Sidebar(
-                              state: current,
-                              selectedSection: selectedSection,
-                              busy: busy,
-                              unreadNotifications: unreadNotifications,
-                              unreadCommMessages: unreadCommMessages,
-                              isSlim: isMessagesMode,
-                              onLogout: () async {
-                                await api.logout();
-                                if (mounted) widget.onLogout();
-                              },
-                              onSecurity: () => showSecurityDialog(
-                                  context, api, widget.onLogout),
-                              onNavigate: (section) => _navigateToSection(
-                                context,
-                                section,
-                                closeDrawer: false,
-                              ),
-                            ),
-                          if (isMessagesMode)
-                            Expanded(
-                              child: CommLinkDialog(
-                                api: api,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            if (!compact)
+                              Sidebar(
                                 state: current,
-                                initialChannelId: selectedSection.contains(':')
-                                    ? selectedSection.substring(
-                                        selectedSection.indexOf(':') + 1)
-                                    : null,
-                                isPageMode: true,
-                                compact: compact,
+                                selectedSection: selectedSection,
+                                busy: busy,
+                                unreadNotifications: unreadNotifications,
+                                unreadCommMessages: unreadCommMessages,
+                                isSlim: isMessagesMode,
+                                onLogout: () async {
+                                  await api.logout();
+                                  if (mounted) widget.onLogout();
+                                },
+                                onSecurity: () => showSecurityDialog(
+                                    context, api, widget.onLogout),
                                 onNavigate: (section) => _navigateToSection(
                                   context,
                                   section,
                                   closeDrawer: false,
                                 ),
-                                onClose: () => _navigateToSection(
-                                  context,
-                                  _previousSection.isNotEmpty &&
-                                          _previousSection != 'messages' &&
-                                          !_previousSection
-                                              .startsWith('messages:')
-                                      ? _previousSection
-                                      : 'command',
-                                  closeDrawer: false,
-                                ),
                               ),
-                            )
-                          else
-                            Expanded(
-                              child: ListView(
-                                padding: EdgeInsets.fromLTRB(
-                                  compact ? 16 : 28,
-                                  compact ? 14 : 22,
-                                  compact ? 16 : 36,
-                                  56,
-                                ),
-                                children: [
-                                  if (error != null)
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(bottom: 16),
-                                      child: EarthAlertBanner(
-                                        message: error!,
-                                        isError: true,
-                                        onClose: () =>
-                                            setState(() => error = null),
-                                      ),
-                                    ),
-                                  if (selectedSection == 'command')
-                                    HouseOnboardingPanel(
-                                      api: api,
-                                      onNavigate: (section) =>
-                                          _navigateToSection(
-                                        context,
-                                        section,
-                                        closeDrawer: false,
-                                      ),
-                                    ),
-                                  const SizedBox(height: 8),
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(
-                                      minWidth: compact ? 320 : 860,
-                                    ),
-                                    child: Dashboard(
-                                      state: current,
-                                      selectedSection: selectedSection,
-                                      previousSection: _previousSection,
-                                      onNavigate: (section) =>
-                                          _navigateToSection(
-                                        context,
-                                        section,
-                                        closeDrawer: false,
-                                      ),
-                                      busy: busy,
-                                      events: events,
-                                      notifications: notifications,
-                                      ownershipEvents: ownershipEvents,
-                                      membershipEvents: membershipEvents,
-                                      marketHistory: marketHistory,
-                                      pantheon: pantheon,
-                                      personalFinanceData: personalFinanceData,
-                                      mutualCreditData: mutualCreditData,
-                                      territoryCommonsData: territoryCommonsData,
-                                      isLiveConnected: _isLiveConnected,
-                                      isReconnecting:
-                                          liveReconnectTimer?.isActive == true,
-                                      connectionStatus: connectionStatus,
-                                      unreadNotifications: unreadNotifications,
-                                      sectionKeys: _sectionKeys,
-                                      action: _run,
-                                      onRefreshEvents: _refreshEvents,
-                                      onMarkNotificationRead: (id) async {
-                                        await api.markNotificationRead(id);
-                                        await _refreshEvents();
-                                      },
-                                      onMarkAllNotificationsRead: () async {
-                                        await api.markAllNotificationsRead();
-                                        await _refreshEvents();
-                                      },
-                                      onLogout: widget.onLogout,
-                                    ),
+                            if (isMessagesMode)
+                              Expanded(
+                                child: CommLinkDialog(
+                                  api: api,
+                                  state: current,
+                                  initialChannelId:
+                                      selectedSection.contains(':')
+                                          ? selectedSection.substring(
+                                              selectedSection.indexOf(':') + 1)
+                                          : null,
+                                  isPageMode: true,
+                                  compact: compact,
+                                  onNavigate: (section) => _navigateToSection(
+                                    context,
+                                    section,
+                                    closeDrawer: false,
                                   ),
-                                ],
+                                  onClose: () => _navigateToSection(
+                                    context,
+                                    _previousSection.isNotEmpty &&
+                                            _previousSection != 'messages' &&
+                                            !_previousSection
+                                                .startsWith('messages:')
+                                        ? _previousSection
+                                        : 'command',
+                                    closeDrawer: false,
+                                  ),
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: ListView(
+                                  padding: EdgeInsets.fromLTRB(
+                                    compact ? 16 : 28,
+                                    compact ? 14 : 22,
+                                    compact ? 16 : 36,
+                                    56,
+                                  ),
+                                  children: [
+                                    if (error != null)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 16),
+                                        child: EarthAlertBanner(
+                                          message: error!,
+                                          isError: true,
+                                          onClose: () =>
+                                              setState(() => error = null),
+                                        ),
+                                      ),
+                                    if (selectedSection == 'command')
+                                      HouseOnboardingPanel(
+                                        api: api,
+                                        onNavigate: (section) =>
+                                            _navigateToSection(
+                                          context,
+                                          section,
+                                          closeDrawer: false,
+                                        ),
+                                      ),
+                                    const SizedBox(height: 8),
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        minWidth: compact ? 320 : 860,
+                                      ),
+                                      child: Dashboard(
+                                        state: current,
+                                        selectedSection: selectedSection,
+                                        previousSection: _previousSection,
+                                        onNavigate: (section) =>
+                                            _navigateToSection(
+                                          context,
+                                          section,
+                                          closeDrawer: false,
+                                        ),
+                                        busy: busy,
+                                        events: events,
+                                        notifications: notifications,
+                                        ownershipEvents: ownershipEvents,
+                                        membershipEvents: membershipEvents,
+                                        marketHistory: marketHistory,
+                                        pantheon: pantheon,
+                                        personalFinanceData:
+                                            personalFinanceData,
+                                        mutualCreditData: mutualCreditData,
+                                        territoryCommonsData:
+                                            territoryCommonsData,
+                                        isLiveConnected: _isLiveConnected,
+                                        isReconnecting:
+                                            liveReconnectTimer?.isActive ==
+                                                true,
+                                        connectionStatus: connectionStatus,
+                                        unreadNotifications:
+                                            unreadNotifications,
+                                        sectionKeys: _sectionKeys,
+                                        action: _run,
+                                        onRefreshEvents: _refreshEvents,
+                                        onMarkNotificationRead: (id) async {
+                                          await api.markNotificationRead(id);
+                                          await _refreshEvents();
+                                        },
+                                        onMarkAllNotificationsRead: () async {
+                                          await api.markAllNotificationsRead();
+                                          await _refreshEvents();
+                                        },
+                                        onLogout: widget.onLogout,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       ),

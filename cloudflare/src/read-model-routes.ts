@@ -12,7 +12,7 @@ import {
 import { listEvents as listEventsPostgres, listHistory as listHistoryPostgres } from './read-models/events-read.ts';
 import { listNotifications as listNotificationsPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-models/notifications-read.ts';
 import { getDecisionQueue } from './decision-queue-postgres.ts';
-import { createGlobalProgram, fundGlobalProgram, listGlobalPrograms } from './global-programs-postgres.ts';
+import { contributeToGlobalProgram, createGlobalProgram, fundGlobalProgram, listGlobalProgramContributions, listGlobalPrograms, settleGlobalProgramFunding } from './global-programs-postgres.ts';
 import { getTechnologyGenerations } from './technology-generations-postgres.ts';
 import { contributeToPublicProject, createPublicProject, fundMatchingPool, getPublicProject, listPublicProjects } from './public-projects-postgres.ts';
 import { settlePublicProject } from './public-projects-postgres.ts';
@@ -221,12 +221,12 @@ export async function handleReadModelRoutes(
   if (url.pathname === '/api/earth/programs' && request.method === 'POST') {
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ programType?: 'TECHNOLOGY' | 'COMMONS' | 'EMERGENCY'; name?: string; description?: string; targetUnits?: string; authorizedUnits?: string; proposalId?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ programType?: 'TECHNOLOGY' | 'COMMONS' | 'EMERGENCY'; name?: string; description?: string; targetUnits?: string; authorizedUnits?: string; matchingAuthorizedUnits?: string; fundingDeadlineGameDay?: number; proposalId?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId || !parsed.value.programType || !parsed.value.name || !parsed.value.description || !parsed.value.targetUnits || !parsed.value.authorizedUnits || !parsed.value.proposalId) return Response.json({ ok: false, error: 'Program definition, proposal, and idempotency key are required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => createGlobalProgram(repository, { programType: parsed.value.programType!, name: parsed.value.name!, description: parsed.value.description!, targetUnits: parsed.value.targetUnits!, authorizedUnits: parsed.value.authorizedUnits!, proposalId: parsed.value.proposalId!, humanId: viewer.id, correlationId }));
+      const result = await withRepository(env, (repository) => createGlobalProgram(repository, { programType: parsed.value.programType!, name: parsed.value.name!, description: parsed.value.description!, targetUnits: parsed.value.targetUnits!, authorizedUnits: parsed.value.authorizedUnits!, matchingAuthorizedUnits: parsed.value.matchingAuthorizedUnits, fundingDeadlineGameDay: parsed.value.fundingDeadlineGameDay, proposalId: parsed.value.proposalId!, humanId: viewer.id, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program creation failed' }, { status: 409 }); }
@@ -244,6 +244,38 @@ export async function handleReadModelRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program funding failed' }, { status: 409 }); }
+  }
+  const programContributionMatch = url.pathname.match(/^\/api\/earth\/programs\/([^/]+)\/contributions$/);
+  if (programContributionMatch && request.method === 'POST') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ sourceAccountId?: string; amountUnits?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.sourceAccountId || !parsed.value.amountUnits) return Response.json({ ok: false, error: 'Source account, amount, and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => contributeToGlobalProgram(repository, { programId: programContributionMatch[1], houseId: viewer.houseId, sourceAccountId: parsed.value.sourceAccountId!, amountUnits: parsed.value.amountUnits!, humanId: viewer.id, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program contribution failed' }, { status: 409 }); }
+  }
+  const programContributionListMatch = url.pathname.match(/^\/api\/earth\/programs\/([^/]+)\/contributions$/);
+  if (programContributionListMatch && request.method === 'GET') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const result = await withRepository(env, (repository) => listGlobalProgramContributions(repository, programContributionListMatch[1], viewer.houseId));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json(result);
+  }
+  const programSettleMatch = url.pathname.match(/^\/api\/earth\/programs\/([^/]+)\/settle$/);
+  if (programSettleMatch && request.method === 'POST') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    try {
+      const result = await withRepository(env, async (repository) => settleGlobalProgramFunding(repository, programSettleMatch[1], Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1)));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json(result);
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program settlement failed' }, { status: 409 }); }
   }
 
   // ── World activity ───────────────────────────────────────────────────────────

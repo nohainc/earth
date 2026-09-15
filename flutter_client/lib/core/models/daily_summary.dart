@@ -137,25 +137,33 @@ class BuildingSummary {
 class GovernanceSummary {
   final int activeProposals;
   final int passedProposals24h;
-  final String cityResidency;
-  final double cityTaxRatePct;
+  final String territoryResidency;
+  final double territoryTaxRatePct;
   final List<String> recentCivicEvents;
 
   const GovernanceSummary({
     required this.activeProposals,
     required this.passedProposals24h,
-    required this.cityResidency,
-    required this.cityTaxRatePct,
+    required this.territoryResidency,
+    required this.territoryTaxRatePct,
     required this.recentCivicEvents,
   });
+
+  /// Compatibility accessors for older clients; presentation uses Territory
+  /// terminology and the canonical fields above.
+  @Deprecated('Use territoryResidency')
+  String get cityResidency => territoryResidency;
+
+  @Deprecated('Use territoryTaxRatePct')
+  double get cityTaxRatePct => territoryTaxRatePct;
 
   factory GovernanceSummary.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return const GovernanceSummary(
         activeProposals: 0,
         passedProposals24h: 0,
-        cityResidency: '',
-        cityTaxRatePct: 0.0,
+        territoryResidency: '',
+        territoryTaxRatePct: 0.0,
         recentCivicEvents: [],
       );
     }
@@ -164,8 +172,14 @@ class GovernanceSummary {
     return GovernanceSummary(
       activeProposals: _parseInt(json['activeProposals']),
       passedProposals24h: _parseInt(json['passedProposals24h']),
-      cityResidency: json['cityResidency']?.toString() ?? '',
-      cityTaxRatePct: _parseNum(json['cityTaxRatePct']),
+      territoryResidency: (json['territoryResidency'] ??
+              json['territory_residency'] ??
+              json['cityResidency'] ??
+              '')
+          .toString(),
+      territoryTaxRatePct: _parseNum(json['territoryTaxRatePct'] ??
+          json['territory_tax_rate_pct'] ??
+          json['cityTaxRatePct']),
       recentCivicEvents: rawEvents.map((e) => e.toString()).toList(),
     );
   }
@@ -262,7 +276,7 @@ class DailySummaryReport {
       financial: const FinancialSummary(totalIncome: 0, totalExpenses: 0, netProfit: 0, businessDividends: 0, marketSales: 0, buildingUpkeep: 0, civicTaxes: 0),
       marketMovements: const [],
       buildings: const BuildingSummary(activeBusinesses: 0, totalDailyOutput: 0, activeBuildings: 0),
-      governance: const GovernanceSummary(activeProposals: 0, passedProposals24h: 0, cityResidency: '', cityTaxRatePct: 0, recentCivicEvents: []),
+      governance: const GovernanceSummary(activeProposals: 0, passedProposals24h: 0, territoryResidency: '', territoryTaxRatePct: 0, recentCivicEvents: []),
       alerts: const AlertSummary(unreadNotifications: 0, unreadComms: 0, criticalAlertsCount: 0),
       highlights: const [],
     );

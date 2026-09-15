@@ -91,7 +91,11 @@ export async function settleHouseNeedsAndServices(tx: PostgresRepository, day: n
     providerMap.set(key, [...(providerMap.get(key) ?? []), adjusted]);
   }
   const remainingCapacity = new Map<string, bigint>();
-  for (const provider of providerRows.rows) remainingCapacity.set(`${provider.territory_id}:${provider.service_code}:${provider.economic_id}`, units(provider.capacity_units));
+  for (const providers of providerMap.values()) {
+    for (const provider of providers) {
+      remainingCapacity.set(`${provider.territory_id}:${provider.service_code}:${provider.economic_id}`, units(provider.capacity_units));
+    }
+  }
   let allocations = 0; let shortfalls = 0;
   for (const house of houses) {
     const residentDemand = units(house.residents);

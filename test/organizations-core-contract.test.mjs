@@ -15,6 +15,7 @@ test('generic Organizations support overlapping House membership and capability-
   assert.match(migration, /organization_memberships_active_uq/);
   assert.match(migration, /organization_capabilities/);
   assert.match(migration, /organization_membership_requests/);
+  assert.match(fs.readFileSync('db/migrations/074_organization_communication_channels.sql', 'utf8'), /scope.*organization/);
   assert.match(bridge, /organization_legacy_map/);
   assert.match(bridge, /ORG-CORP-/);
   assert.match(bridge, /ORG-COMM-/);
@@ -24,10 +25,12 @@ test('generic Organizations support overlapping House membership and capability-
   assert.match(service, /organization_capabilities/);
   assert.match(service, /Organization governance capability denied/);
   assert.match(service, /createGameEvent/);
+  assert.match(service, /channel-organization-/);
   assert.match(routes, /\/api\/organizations/);
   assert.match(registry, /service: 'createOrganization'/);
   assert.match(flutterApi, /listOrganizations/);
   assert.match(flutterApi, /createOrganization/);
   assert.match(flutterApi, /joinOrganization/);
   assert.match(flutterModel, /class EarthOrganization/);
+  assert.match(fs.readFileSync('cloudflare/src/communications-postgres.ts', 'utf8'), /ch\.scope = 'organization'/);
 });

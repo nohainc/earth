@@ -38,7 +38,7 @@ export async function getHouseEntrySupport(repository: PostgresRepository, house
            COUNT(m.id)::TEXT AS member_count
       FROM organizations o LEFT JOIN organization_memberships m ON m.organization_id = o.id AND m.status = 'ACTIVE'
      WHERE o.status = 'ACTIVE' AND o.join_policy IN ('OPEN','REQUEST')
-     GROUP BY o.id, o.name, o.archetype, o.join_policy ORDER BY member_count::INTEGER ASC, o.id LIMIT 5`);
+     GROUP BY o.id, o.name, o.archetype, o.join_policy ORDER BY COUNT(m.id) ASC, o.id LIMIT 5`);
   const markets = await repository.query(`
     SELECT i.symbol, i.asset_id, COUNT(o.id)::TEXT AS open_orders,
            MAX(o.limit_price_units)::TEXT AS top_price

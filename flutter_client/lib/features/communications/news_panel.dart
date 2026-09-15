@@ -24,7 +24,7 @@ class _NewsPanelState extends State<NewsPanel> {
   int _currentPage = 0;
   static const int _pageSize = 12;
 
-  /// Merge public events + corporate/city notifications into a unified news feed.
+  /// Merge publishable public events and corporate/territory notifications.
   List<Map<String, dynamic>> _buildNewsFeed() {
     final feed = <Map<String, dynamic>>[];
     final seenIds = <String>{};
@@ -34,9 +34,16 @@ class _NewsPanelState extends State<NewsPanel> {
       final event = Map<String, dynamic>.from(raw);
       final eventType = (event['event_type'] ?? '').toString().toLowerCase();
       final title = (event['title'] ?? '').toString().toLowerCase();
+      final eventCategory = (event['category'] ?? '').toString().toLowerCase();
       if (eventType == 'world_clock' ||
           eventType == 'scheduled_tick' ||
-          title.contains('public world announcement')) {
+          title.contains('public world announcement') ||
+          eventCategory == 'ledger' ||
+          eventCategory == 'trade' ||
+          eventCategory == 'proposal' ||
+          eventType.contains('bookkeeping') ||
+          eventType.contains('ledger') ||
+          eventType.contains('proposal')) {
         continue;
       }
       // The general activity endpoint also contains ledger, trade, and
@@ -45,17 +52,17 @@ class _NewsPanelState extends State<NewsPanel> {
           (event['details'] ?? '').toString().trim().isEmpty) {
         continue;
       }
-      final id = (event['id'] ?? event['title'] ?? '').toString();
+      final id = _stableItemId(event);
       if (id.isNotEmpty) seenIds.add(id);
       event['_source'] = 'event';
       feed.add(event);
     }
 
-    // 2. Add corporate/city notifications (avoid duplicates by id)
+    // 2. Add corporate/territory notifications (avoid duplicates by id/fingerprint)
     for (final raw in widget.notifications.whereType<Map>()) {
       final n = Map<String, dynamic>.from(raw);
       if (!isCorpOrTerritoryNotification(n)) continue;
-      final id = (n['id'] ?? '').toString();
+      final id = _stableItemId(n);
       if (id.isNotEmpty && seenIds.contains(id)) continue;
       if (id.isNotEmpty) seenIds.add(id);
 
@@ -83,6 +90,14 @@ class _NewsPanelState extends State<NewsPanel> {
     return feed;
   }
 
+  String _stableItemId(Map<String, dynamic> item) {
+    final explicit = item['id']?.toString().trim() ?? '';
+    if (explicit.isNotEmpty) return explicit;
+    return '${item['event_type'] ?? item['notification_type'] ?? ''}|'
+        '${item['title'] ?? ''}|${item['details'] ?? item['body'] ?? ''}|'
+        '${item['game_day'] ?? ''}';
+  }
+
   String _category(Map<String, dynamic> item) {
     // If it came from a notification, use the classifier
     if (item['_source'] == 'notification') {
@@ -92,8 +107,8 @@ class _NewsPanelState extends State<NewsPanel> {
     if (type.contains('corporation') || type.contains('research')) {
       return 'corporation';
     }
-    if (type.contains('city') || type.contains('civic')) {
-      return 'city';
+    if (type.contains('territory') || type.contains('city') || type.contains('civic')) {
+      return 'territory';
     }
     return 'world';
   }
@@ -102,7 +117,7 @@ class _NewsPanelState extends State<NewsPanel> {
     switch (category) {
       case 'corporation':
         return Icons.domain_outlined;
-      case 'city':
+      case 'territory':
         return Icons.location_city_outlined;
       default:
         return Icons.public_outlined;
@@ -113,7 +128,7 @@ class _NewsPanelState extends State<NewsPanel> {
     switch (category) {
       case 'corporation':
         return Colors.lightBlueAccent;
-      case 'city':
+      case 'territory':
         return Colors.amberAccent;
       default:
         return context.primaryColor;
@@ -130,7 +145,7 @@ class _NewsPanelState extends State<NewsPanel> {
     // Category counts for cockpit metrics
     final corpCount =
         allItems.where((i) => _category(i) == 'corporation').length;
-    final cityCount = allItems.where((i) => _category(i) == 'city').length;
+    final territoryCount = allItems.where((i) => _category(i) == 'territory').length;
     final worldCount = allItems.where((i) => _category(i) == 'world').length;
 
     // Pagination
@@ -147,16 +162,16 @@ class _NewsPanelState extends State<NewsPanel> {
         // ─── COCKPIT ─────────────────────────────────────────────
         EarthPageCockpit(
           tag: 'PUBLIC RECORD',
-          status: 'LIVE',
+          status: 'REFRESHED SNAPSHOT',
           statusColor: context.primaryColor,
           infoTitle: 'PLANETARY NEWS ARCHITECTURE',
           infoDescription:
-              '• News is the public record of meaningful corporation, city, and world events.\n\n'
-              '• Corporate and city notifications are merged here automatically.\n\n'
+              '• News is the public record of meaningful corporation, territory, and world events.\n\n'
+              '• Corporate and territory notifications are merged here automatically.\n\n'
               '• News is read-only; personal actions and private communication remain in their own pages.',
           title: 'NEWS',
           subtitle:
-              'Public events, corporate updates, and municipal bulletins across Earth',
+              'Public events, corporate updates, and territorial bulletins across Earth',
           metrics: [
             CockpitMetric(
               label: 'Total',
@@ -171,8 +186,8 @@ class _NewsPanelState extends State<NewsPanel> {
               color: Colors.lightBlueAccent,
             ),
             CockpitMetric(
-              label: 'City',
-              value: '$cityCount',
+              label: 'Territory',
+              value: '$territoryCount',
               icon: Icons.location_city_outlined,
               color: Colors.amberAccent,
             ),
@@ -222,11 +237,11 @@ class _NewsPanelState extends State<NewsPanel> {
                         _currentPage = 0;
                       })),
               _buildTabButton(context,
-                  title: 'CITY',
+                  title: 'TERRITORY',
                   icon: Icons.location_city_outlined,
-                  isSelected: _filter == 'city',
+                  isSelected: _filter == 'territory',
                   onTap: () => setState(() {
-                        _filter = 'city';
+                        _filter = 'territory';
                         _currentPage = 0;
                       })),
               _buildTabButton(context,

@@ -14,12 +14,12 @@ test('clean baseline Economy V2 posting is balanced and idempotent', { skip: !co
       FROM economic_accounts operations
       JOIN economic_accounts treasury ON treasury.owner_economic_id = operations.owner_economic_id
        AND treasury.asset_id = operations.asset_id
-     WHERE operations.owner_economic_id = 'ECON-OUC-001'
+       WHERE operations.owner_economic_id = 'ECON-EARTH-001'
        AND operations.asset_id = 1
        AND operations.account_type = 'OPERATIONS'
        AND treasury.account_type = 'TREASURY'
      LIMIT 1`);
-  assert.equal(accounts.rowCount, 1, 'baseline must provision OUC CREDIT accounts');
+  assert.equal(accounts.rowCount, 1, 'baseline must provision Earth CREDIT accounts');
   const { debit_id: debitId, credit_id: creditId } = accounts.rows[0];
   const correlation = `baseline-economy-test:${crypto.randomUUID()}`;
   const entries = JSON.stringify([

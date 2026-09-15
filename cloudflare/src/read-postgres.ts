@@ -99,9 +99,15 @@ export async function listPantheonOfAchievements(repository: PostgresRepository)
                        WHERE h.status = 'ACTIVE'
                        ORDER BY composite_legacy_score DESC, h.id
                        LIMIT 100`),
-    repository.query(`SELECT id, house_name, motto, dynasty_legacy, generation, status
-                        FROM houses WHERE status = 'ACTIVE'
-                       ORDER BY dynasty_legacy DESC, generation DESC, id
+    repository.query(`SELECT houses.id, houses.house_name, houses.motto, houses.dynasty_legacy, houses.generation, houses.status,
+                             (SELECT MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = houses.id) AS founded_game_day,
+                             (SELECT COUNT(*)::INTEGER FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'DECEASED') AS deceased_count,
+                             0::INTEGER AS active_member_count,
+                             TRUE AS is_extinct
+                        FROM houses WHERE status IN ('ACTIVE', 'SUSPENDED')
+                         AND EXISTS (SELECT 1 FROM humans hum WHERE hum.house_id = houses.id)
+                         AND NOT EXISTS (SELECT 1 FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'ACTIVE')
+                       ORDER BY houses.dynasty_legacy DESC, houses.generation DESC, houses.id
                        LIMIT 100`),
   ]);
   return {
@@ -109,6 +115,7 @@ export async function listPantheonOfAchievements(repository: PostgresRepository)
     livingLeaders: living.rows,
     houses: houses.rows,
     dynasticHouses: houses.rows,
+    game_day: Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id='WORLD'")).rows[0]?.game_day ?? 1),
     generatedFrom: 'postgres-canonical-facts',
   };
 }

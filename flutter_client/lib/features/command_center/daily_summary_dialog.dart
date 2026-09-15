@@ -251,10 +251,10 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
         ),
         SizedBox(height: context.spacingTopic),
         EarthSection(
-          title: 'CITY & CIVIC EFFECTS',
+          title: 'TERRITORY & CIVIC EFFECTS',
           showSurface: false,
           infoBulletPoints: const [
-            'Current residency jurisdiction, municipal taxation, and recent civic legislative resolutions.',
+            'Current territorial residency, local taxation, and recent civic legislative resolutions.',
           ],
           child: _buildCivicContent(r),
         ),
@@ -272,13 +272,13 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
       ),
       (
         'Operations',
-        '${r.buildings.activeBusinesses} businesses · ${r.buildings.activeBuildings} buildings',
+        '${r.buildings.activeBusinesses} enterprises · ${r.buildings.activeBuildings} buildings',
         Icons.business_center_outlined,
         context.primaryColor,
       ),
       if (r.governance.recentCivicEvents.isNotEmpty)
         (
-          'City and civic life',
+          'Territorial & civic life',
           r.governance.recentCivicEvents.first,
           Icons.location_city_outlined,
           context.secondaryColor,
@@ -347,7 +347,7 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
     return EarthMetricGrid(
       metrics: [
         EarthMetricTile(
-          label: 'ACTIVE BUSINESSES',
+          label: 'ACTIVE ENTERPRISES',
           value: '${r.buildings.activeBusinesses}',
           icon: Icons.storefront_outlined,
           accentColor: context.primaryColor,
@@ -382,12 +382,12 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'CIVIC RESIDENCY: ${c.cityResidency.toUpperCase()}',
+            'TERRITORIAL RESIDENCY: ${c.territoryResidency.toUpperCase()}',
             style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
           ),
           const SizedBox(height: 6),
           Text(
-            'Municipal Tax Rate: ${c.cityTaxRatePct}% • Active Senate Bills: ${c.activeProposals}',
+            'Territory Tax Rate: ${c.territoryTaxRatePct}% • Active Senate Bills: ${c.activeProposals}',
             style: context.widgetFooterStyle,
           ),
           if (c.recentCivicEvents.isNotEmpty) ...[

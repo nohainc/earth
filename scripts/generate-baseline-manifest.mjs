@@ -27,6 +27,14 @@ function splitDefinitions(source) {
 }
 
 const requiredTables = Object.fromEntries(splitDefinitions(schema));
+// The immutable baseline contains historical columns that are removed by
+// active forward migrations. They are not part of the canonical runtime
+// contract and must not reappear when the manifest is regenerated.
+for (const [table, columns] of Object.entries({
+  building_catalog: ['resource_input_units', 'resource_output_units'],
+})) {
+  if (requiredTables[table]) requiredTables[table] = requiredTables[table].filter((column) => !columns.includes(column));
+}
 const requiredUniqueConstraints = [];
 if (/CREATE TABLE economic_transactions[^;]*\bcorrelation_id\s+TEXT\s+NOT NULL\s+UNIQUE\b/i.test(schema)) {
   requiredUniqueConstraints.push(['economic_transactions', 'correlation_id']);

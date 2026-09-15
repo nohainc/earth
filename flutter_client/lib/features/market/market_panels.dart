@@ -17,7 +17,13 @@ class SuppliesTodayPanel extends StatelessWidget {
     required this.action,
   });
 
-  static const _products = ['energy', 'food', 'material', 'components', 'compute'];
+  static const _products = [
+    'energy',
+    'food',
+    'material',
+    'components',
+    'compute'
+  ];
 
   int _reserved(String product) {
     return state.marketOrders.whereType<Map>().where((order) {
@@ -92,7 +98,8 @@ class SuppliesTodayPanel extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text('$available available',
                         style: TextStyle(
-                            color: available <= 0 ? Colors.orangeAccent : inkColor,
+                            color:
+                                available <= 0 ? Colors.orangeAccent : inkColor,
                             fontSize: 11,
                             fontWeight: FontWeight.w800)),
                     Text(
@@ -108,8 +115,9 @@ class SuppliesTodayPanel extends StatelessWidget {
                     Text(
                         price == null
                             ? 'Price unavailable'
-                        : '${price.toStringAsFixed(2)} Credits / unit',
-                        style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+                            : '${price.toStringAsFixed(2)} Credits / unit',
+                        style:
+                            const TextStyle(color: mutedColor, fontSize: 9.5)),
                   ])),
             ]),
             const SizedBox(height: 4),
@@ -131,7 +139,8 @@ class SuppliesTodayPanel extends StatelessWidget {
                   minimumSize: const Size(0, 22),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: Text(available <= 0 ? 'BUY' : 'TRADE', style: const TextStyle(fontSize: 9)),
+                child: Text(available <= 0 ? 'BUY' : 'TRADE',
+                    style: const TextStyle(fontSize: 9)),
               ),
             ),
           ],
@@ -180,7 +189,8 @@ class SuppliesTodayPanel extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _overviewMetric('MARKET HEALTH', marketStatus),
-              _overviewMetric('CITY DEMAND', '$buildingCount buildings active'),
+              _overviewMetric(
+                  'TERRITORY DEMAND', '$buildingCount buildings active'),
               _overviewMetric('OPEN ORDERS', '$activeOrders'),
             ],
           ),
@@ -193,15 +203,13 @@ class SuppliesTodayPanel extends StatelessWidget {
                     : 'Watch closely: ${watchlist.map((p) => CommodityMeta.forProduct(p).name).join(' · ')} may run low soon.')
                 : 'Needs attention: ${shortages.map((p) => CommodityMeta.forProduct(p).name).join(' · ')}',
             style: TextStyle(
-                color:
-                    shortages.isEmpty && watchlist.isEmpty
-                        ? Colors.tealAccent
-                        : Colors.orangeAccent,
+                color: shortages.isEmpty && watchlist.isEmpty
+                    ? Colors.tealAccent
+                    : Colors.orangeAccent,
                 fontSize: 12,
                 fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        const Text(
-            'Reserved stock is excluded from available quantities.',
+        const Text('Reserved stock is excluded from available quantities.',
             style: TextStyle(color: mutedColor, fontSize: 10.5)),
         const SizedBox(height: 12),
         Wrap(spacing: 10, runSpacing: 10, children: cards),
@@ -258,7 +266,8 @@ class _MarketWorkspaceState extends State<MarketWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    final activeOrders = widget.state.marketOrders.whereType<Map>().where((order) {
+    final activeOrders =
+        widget.state.marketOrders.whereType<Map>().where((order) {
       final status = order['status']?.toString().toLowerCase();
       return status == 'open' || status == 'partial';
     }).length;
@@ -554,7 +563,7 @@ Future<void> showPlaceOrderDialog(
   String side = initialSide;
   final qtyController = TextEditingController(text: '10');
   final priceController = TextEditingController(
-      text: initialPrice > 0 ? initialPrice.toStringAsFixed(2) : '50.00');
+      text: initialPrice > 0 ? initialPrice.toStringAsFixed(2) : '');
 
   await showDialog<void>(
     context: context,
@@ -842,8 +851,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final firstKey = widget.state.market.keys.firstOrNull ?? 'material';
     _selectedCommodity = firstKey;
     final productData = widget.state.market[firstKey] as Map<String, dynamic>?;
-    final price = asDouble(productData?['price']) ?? 50.0;
-    final pStr = price.toStringAsFixed(2);
+    final price = asDouble(productData?['price']);
+    final pStr = price?.toStringAsFixed(2) ?? '';
     _buyPrice = pStr;
     _sellPrice = pStr;
     _priceController.text = pStr;
@@ -853,8 +862,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     setState(() {
       _selectedCommodity = key;
       final productData = widget.state.market[key] as Map<String, dynamic>?;
-      final price = asDouble(productData?['price']) ?? 50.0;
-      final pStr = price.toStringAsFixed(2);
+      final price = asDouble(productData?['price']);
+      final pStr = price?.toStringAsFixed(2) ?? '';
       _buyPrice = pStr;
       _sellPrice = pStr;
       _priceController.text = pStr;
@@ -905,17 +914,24 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('${side.toUpperCase()} ${CommodityMeta.forProduct(product).name}',
+        title: Text(
+            '${side.toUpperCase()} ${CommodityMeta.forProduct(product).name}',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Orders are evaluated at the next market clearing and may fill partially.', style: TextStyle(fontSize: 12, color: mutedColor)),
+            const Text(
+                'Orders are evaluated at the next market clearing and may fill partially.',
+                style: TextStyle(fontSize: 12, color: mutedColor)),
             const SizedBox(height: 12),
-            Text('Quantity: $quantity units', style: const TextStyle(fontSize: 12)),
-            Text('Limit price: ${limitPrice.toStringAsFixed(2)} Credits / unit', style: const TextStyle(fontSize: 12)),
-            if (side == 'buy') Text('Fee: ${fee.toStringAsFixed(2)} Credits', style: const TextStyle(fontSize: 12, color: mutedColor)),
+            Text('Quantity: $quantity units',
+                style: const TextStyle(fontSize: 12)),
+            Text('Limit price: ${limitPrice.toStringAsFixed(2)} Credits / unit',
+                style: const TextStyle(fontSize: 12)),
+            if (side == 'buy')
+              Text('Fee: ${fee.toStringAsFixed(2)} Credits',
+                  style: const TextStyle(fontSize: 12, color: mutedColor)),
             const SizedBox(height: 6),
             Text(
               side == 'buy'
@@ -926,8 +942,12 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('CANCEL')),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('CONFIRM ORDER')),
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('CANCEL')),
+          FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('CONFIRM ORDER')),
         ],
       ),
     );
@@ -941,7 +961,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         ));
     if (mounted) {
       ScaffoldMessenger.of(this.context).showSnackBar(
-        SnackBar(content: Text('${side.toUpperCase()} order submitted for $quantity ${CommodityMeta.forProduct(product).name.toLowerCase()} units.')),
+        SnackBar(
+            content: Text(
+                '${side.toUpperCase()} order submitted for $quantity ${CommodityMeta.forProduct(product).name.toLowerCase()} units.')),
       );
     }
   }
@@ -952,7 +974,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final productData =
         (widget.state.market[_selectedCommodity] as Map<String, dynamic>?) ??
             {};
-    final currentPrice = asDouble(productData['price']) ?? 50.0;
+    final currentPrice = asDouble(productData['price']);
+    final chartPrice = currentPrice ?? 0.0;
     final supply = asInt(productData['supply']) ?? 0;
     final demand = asInt(productData['demand']) ?? 0;
     final history = widget.priceHistory[_selectedCommodity];
@@ -971,11 +994,11 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
 
     double minPrice = prices.isNotEmpty
         ? prices.reduce((a, b) => a < b ? a : b)
-        : currentPrice * 0.9;
+        : (chartPrice > 0 ? chartPrice * 0.9 : 0.0);
     double maxPrice = prices.isNotEmpty
         ? prices.reduce((a, b) => a > b ? a : b)
-        : currentPrice * 1.1;
-    if (minPrice == maxPrice) {
+        : (chartPrice > 0 ? chartPrice * 1.1 : 1.0);
+    if (minPrice == maxPrice && maxPrice > 0) {
       minPrice *= 0.95;
       maxPrice *= 1.05;
     }
@@ -995,7 +1018,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             .floor()
         : 0;
     final reservedSellUnits = _reservedSellUnits(_selectedCommodity);
-    final maxSellableUnits = (userStock - reservedSellUnits).clamp(0, userStock);
+    final maxSellableUnits =
+        (userStock - reservedSellUnits).clamp(0, userStock);
 
     final isBuy = _orderSide == 'buy';
     final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
@@ -1074,8 +1098,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       SizedBox(height: 2),
                       Text(
                         'Orders may fill fully, partially, or later at the clearing price.',
-                        style:
-                            TextStyle(fontSize: 9.5, color: mutedColor),
+                        style: TextStyle(fontSize: 9.5, color: mutedColor),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -1290,11 +1313,14 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                           const EdgeInsets.symmetric(
                                               horizontal: 10, vertical: 10),
                                       suffixIcon: TextButton(
-                                        onPressed: () {
-                                          _priceController.text =
-                                              currentPrice.toStringAsFixed(2);
-                                          _refreshOrderTotals();
-                                        },
+                                        onPressed: currentPrice == null
+                                            ? null
+                                            : () {
+                                                _priceController.text =
+                                                    currentPrice
+                                                        .toStringAsFixed(2);
+                                                _refreshOrderTotals();
+                                              },
                                         child: const Text('SPOT'),
                                       ),
                                     ),
@@ -1321,7 +1347,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               isBuy
                                   ? 'Maximum affordable: $maxAffordableUnits units · Balance: ${userCredits.toStringAsFixed(2)} C'
                                   : 'Sellable: $maxSellableUnits units · Reserved: $reservedSellUnits units',
-                              style: const TextStyle(fontSize: 10, color: mutedColor),
+                              style: const TextStyle(
+                                  fontSize: 10, color: mutedColor),
                             ),
                             if ((isBuy && qty > maxAffordableUnits) ||
                                 (!isBuy && qty > maxSellableUnits)) ...[
@@ -1330,7 +1357,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 isBuy
                                     ? 'Reduce quantity or price to fit your available Credits.'
                                     : 'Some inventory is already reserved by another sell order.',
-                                style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                                style: const TextStyle(
+                                    fontSize: 10, color: Colors.orangeAccent),
                               ),
                             ],
                             const SizedBox(height: 12),
@@ -1456,7 +1484,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                 final demand = asInt(data['demand']) ?? 0;
                 final ownedUnits = asInt(widget.state.resources[key]) ?? 0;
                 final reservedUnits = _reservedSellUnits(key);
-                final availableUnits = (ownedUnits - reservedUnits).clamp(0, ownedUnits);
+                final availableUnits =
+                    (ownedUnits - reservedUnits).clamp(0, ownedUnits);
                 final selected = key == _selectedCommodity;
                 final pressure = _marketPressure(supply, demand);
                 final last = indexed.$1 == entries.length - 1;
@@ -1982,11 +2011,13 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                                 horizontal: 10, vertical: 2),
                           ),
                           onPressed: () async {
-                            await widget.action(() => const EarthApi().cancelOrder(id));
+                            await widget
+                                .action(() => const EarthApi().cancelOrder(id));
                             if (mounted) {
                               ScaffoldMessenger.of(this.context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Order cancelled and reserved assets released.'),
+                                  content: Text(
+                                      'Order cancelled and reserved assets released.'),
                                 ),
                               );
                             }

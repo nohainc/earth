@@ -18,6 +18,9 @@ changes and have certification coverage.
 - V4-020 fixed-point arithmetic is applied to building settlement: catalog
   flows, proportional utilization, and private/public operating expenses stay
   in integer units end to end.
+- V4-020 arithmetic is now centralized in `cloudflare/src/units.ts`; money and
+  market display conversions share bigint parsing, formatting, and explicit
+  signed half-up rounding rules, with safe-integer boundary certification.
 - V4-030 daily House statements now persist opening/closing assets, physical
   production and consumption, market activity, obligations, and settlement
   exceptions from PostgreSQL canonical facts after the end-of-day barrier.
@@ -41,6 +44,46 @@ changes and have certification coverage.
   exposed through the canonical resource metadata endpoint. Food now applies
   bounded integer-unit decay through an owner-sharded end-of-day sink phase;
   each loss is ledger-visible and correlation-idempotent.
+- Phase 1 runtime compatibility now covers the previously failing Finance,
+  Banking, Communications, and World read paths. Removed owner-resolution and
+  city-schema dependencies were replaced with canonical V4 joins, building
+  research now derives unlocks from completed research projects, and the
+  repository serializes composed PostgreSQL reads over one client. Migration
+  073 provisions the public-infrastructure settlement counterparty. Local
+  endpoint/read-model smoke checks and PostgreSQL dependency certification pass.
+- Phase 3 core daily economy is wired through the resumable settlement engine:
+  life/FOOD demand, building production and operating costs, construction,
+  leases, taxes, banking risk, services, resource decay, research/program
+  progress, lifecycle, projections, rankings, and daily statements all have
+  non-placeholder required handlers. Deferred mechanics remain explicitly
+  marked deferred. Local settlement reports all 26 required work units
+  complete, and one-year deterministic economy simulations preserve invariants.
+  The dedicated `test:v4-core-economy` gate covers daily statements, required
+  phase wiring, no-op detection, scheduler integration, and long-horizon
+  deterministic simulations.
+- Phase 4 decision-first gameplay now derives Command Center decisions from
+  canonical market order-book pressure, latest building utilization journals,
+  service needs, governance proposals, succession, research, and financial
+  obligations. The dedicated queue and world snapshot use the same normalized
+  proposal/status semantics, so shortage and under-utilization actions remain
+  visible across both entry points.
+- Phase 5 building investment now exposes authoritative capital options with
+  fixed-unit costs, resource-valued daily gross/operating/net projections, and
+  payback estimates for continuation, overhaul, tier upgrade, and generation
+  retrofit. The building investment dialog reads these server projections;
+  construction, upgrade, capital-project, operating-mode, slot-capacity, and
+  decommissioning actions remain server-authorized and settlement-bound.
+- Phase 6 Organization foundation now supports overlapping House memberships,
+  generic archetypes, admission policies, capability-gated membership
+  decisions, Organization charters/offices/authority, and Corporation/Community
+  legacy mappings. Organization-scoped communication channels are provisioned
+  for new and bridged Organizations and are visible only to active members.
+- Phase 7 residency and Territory decoupling now treats primary residence as an
+  independent House record, keeps Territory governance explicit, allows private
+  House assets and construction rights outside the resident Territory's legacy
+  Corporation, preserves remote buildings during relocation, and makes the
+  legacy Territory Corporation pointer nullable for ungoverned or future
+  Organization-governed Territories.
 
 ## Settlement classification
 
@@ -62,8 +105,8 @@ still requires a live PostgreSQL instance with migration 015 applied.
 
 V4-040 still requires live PostgreSQL allocation/replay certification and the
 Flutter Life & Services presentation before it can be considered complete.
-V4-050 still requires endpoint integration certification and a richer client
-presentation. V4-070 still requires a live first-30-day end-to-end scenario.
+V4-050 still requires a broader endpoint integration certification. V4-070 still
+requires a live first-30-day end-to-end scenario.
 V4-080 flow-capacity settlement remains gated on simulation evidence. Later V4 epics remain
 unimplemented and must not be presented as complete.
 V4-090 now records canonical building family and tier-formula metadata and
@@ -289,7 +332,7 @@ unallocated demand without inventing client-side service state.
 
 - Focused V4 regression and mobility/resolution checks: passing.
 - API contract generation and schema-contract check: passing.
-- Migration order: 57 contiguous active migrations. Corporation dynamics now writes a replay-safe daily operating snapshot derived from canonical territories, affiliations, buildings, service allocations, research projects, and organization financial state; it does not mutate balances or create a competing ledger authority. Institution financial snapshots are recomputed set-wise at day close from Economy V2 balances, ledger flows, budget authority, and obligations. Patent grants and public-domain transitions now run as a required database-authoritative settlement step.
+- Migration order: 72 contiguous active migrations. Corporation dynamics now writes a replay-safe daily operating snapshot derived from canonical territories, affiliations, buildings, service allocations, research projects, and organization financial state; it does not mutate balances or create a competing ledger authority. Institution financial snapshots are recomputed set-wise at day close from Economy V2 balances, ledger flows, budget authority, and obligations. Patent grants and public-domain transitions now run as a required database-authoritative settlement step.
 - Baseline freeze checksum: passing.
 - Live PostgreSQL replay/concurrency certification and Flutter SDK tests remain
   environment-gated; the installed Flutter toolchain cannot write its protected

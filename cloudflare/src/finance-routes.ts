@@ -7,7 +7,7 @@ import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './glob
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { getFinancialQuote } from './financial-quotes.ts';
 import { getHouseFinancialProjection, getInstitutionFinancialProjection } from './financial-projections.ts';
-import { addBankLoanGuarantee, getBankLoanQuote, getBankRiskProjection, originateBankLoan, repayBankLoan } from './banking-postgres.ts';
+import { addBankLoanGuarantee, getBankLoanQuote, getBankRiskProjection, listBankLoans, originateBankLoan, repayBankLoan } from './banking-postgres.ts';
 import { createOrganizationResolutionCase, getOrganizationFinancialState } from './organization-stress-postgres.ts';
 import { getTaxStatement } from './tax-statement-postgres.ts';
 
@@ -74,7 +74,8 @@ export async function handleFinanceRoutes(
                            WHERE e.account_id IN (SELECT a.id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1)
                            ORDER BY t.id DESC LIMIT 100`, [viewer.house_id]),
       ]);
-      return { accounts: accounts.rows, summary: null, state: null, obligations: [], deposits: deposits.rows, transactions: entries.rows };
+      const projection = await getHouseFinancialProjection(repository, viewer.house_id);
+      return { accounts: accounts.rows, summary: projection, state: null, obligations: [], deposits: deposits.rows, transactions: entries.rows };
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -127,6 +128,10 @@ export async function handleFinanceRoutes(
   if (url.pathname === '/api/finance/bank/deposits' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => listBankDeposits(repository, viewer.id));
     return Response.json({ ...(result ?? { deposits: [] }), persistence: 'planetscale-postgres' });
+  }
+  if (url.pathname === '/api/finance/bank/loans' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => listBankLoans(repository, viewer.id));
+    return Response.json({ ...(result ?? { loans: [] }), persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/finance/bank/loan-quote' && request.method === 'GET') {
     const requestedUnits = url.searchParams.get('requestedUnits')?.trim() ?? '';
@@ -281,16 +286,16 @@ export async function handleFinanceRoutes(
       ),
     ))?.rows[0];
     const activeHumans = Number(liquidity?.active_humans ?? 0);
-    const supply = Number(liquidity?.money_supply ?? 0);
-    const livingCostIndex = Number(liquidity?.living_cost_index ?? 1);
-    const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
+    const supply = BigInt(String(liquidity?.money_supply ?? '0'));
+    const target = BigInt(activeHumans) * 100n;
+    const low = target * 80n / 100n;
+    const high = target * 120n / 100n;
     return Response.json({
       activeHumans,
-      moneySupply: supply,
-      livingCostIndex,
-      target,
-      corridor: { low: target * 0.8, high: target * 1.2 },
-      status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor',
+      moneySupplyUnits: supply.toString(),
+      targetUnits: target.toString(),
+      corridor: { lowUnits: low.toString(), highUnits: high.toString() },
+      status: supply < low ? 'below-corridor' : supply > high ? 'above-corridor' : 'inside-corridor',
       persistence: 'planetscale-postgres',
     });
   }

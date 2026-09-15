@@ -33,6 +33,15 @@ extension EarthApiRealEstate on EarthApi {
     final response = await _request('/api/real-estate/buildings/$buildingId/capital-options');
     return Map<String, dynamic>.from(response as Map);
   }
+
+  Future<Map<String, dynamic>> startBuildingCapitalProject({required String buildingId, required String projectKind, String? targetGenerationId}) async {
+    final response = await _request('/api/real-estate/buildings/$buildingId/capital-projects', method: 'POST', body: {
+      'projectKind': projectKind,
+      if (targetGenerationId != null) 'targetGenerationId': targetGenerationId,
+      'correlationId': newClientCorrelationId('CAPITAL-PROJECT'),
+    });
+    return Map<String, dynamic>.from(response as Map);
+  }
   Future<EarthState> purchaseBuilding({
     required String buildingType,
     required String name,

@@ -98,13 +98,15 @@ export async function getConstructionQuote(
       `SELECT h.house_id, o.economic_id FROM humans h JOIN owner_registry o ON o.id = h.house_id AND o.owner_type = 'HOUSE'
         WHERE h.id = $1 AND h.status = 'ACTIVE'`, [input.ownerId])).rows[0];
     if (!owner) throw new Error('House economic owner not found');
-    const membership = (await tx.query("SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id])).rows[0];
-    if (!membership) throw new Error('House must belong to the Territory Corporation');
     const catalog = (await tx.query<{ id: string; code: string; ownership_scope: 'PRIVATE' | 'PUBLIC'; construction_credit_units: string; construction_minutes: number }>(
       `SELECT id, code, ownership_scope, construction_credit_units, construction_minutes FROM building_catalog
         WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) LIMIT 1`, [input.buildingType])).rows[0];
     if (!catalog) throw new Error('Unknown building blueprint');
     const isPublic = catalog.ownership_scope === 'PUBLIC';
+    if (isPublic) {
+      const membership = (await tx.query("SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id])).rows[0];
+      if (!membership) throw new Error('House must belong to the governing Organization for public construction');
+    }
     const economicOwner = isPublic ? (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [territory.corporation_id])).rows[0]?.economic_id : owner.economic_id;
     if (!economicOwner) throw new Error(`${isPublic ? 'Corporation' : 'House'} economic owner not found`);
     const credit = (await tx.query<{ balance_units: string }>(
@@ -138,16 +140,18 @@ export async function purchaseBuildingInTerritory(
         WHERE h.id = $1 AND h.status = 'ACTIVE'`, [input.ownerId],
     )).rows[0];
     if (!owner) throw new Error('House economic owner not found');
-    const membership = (await tx.query(
-      "SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id],
-    )).rows[0];
-    if (!membership) throw new Error('House must belong to the Territory Corporation');
     const catalog = (await tx.query<{ id: string; code: string; ownership_scope: 'PRIVATE' | 'PUBLIC'; construction_credit_units: string; construction_minutes: number; slot_footprint: number; service_type: string | null }>(
       `SELECT id, code, ownership_scope, construction_credit_units, construction_minutes, slot_footprint, service_type FROM building_catalog
         WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) LIMIT 1`, [input.buildingType],
     )).rows[0];
     if (!catalog) throw new Error('Unknown building blueprint');
     const isPublic = catalog.ownership_scope === 'PUBLIC';
+    if (isPublic) {
+      const membership = (await tx.query(
+        "SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id],
+      )).rows[0];
+      if (!membership) throw new Error('House must belong to the governing Organization for public construction');
+    }
     const ownerEconomicId = isPublic
       ? (await tx.query<{ economic_id: string }>(
         `SELECT o.economic_id FROM owner_registry o

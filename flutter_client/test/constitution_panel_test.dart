@@ -21,10 +21,14 @@ void main() {
 
     // 1. Core Header & Invariants Metrics
     expect(find.text('PLANETARY CONSTITUTION'), findsOneWidget);
-    expect(find.text('EARTH'), findsOneWidget);
-    expect(find.text('CORPORATION'), findsOneWidget);
-    expect(find.text('CITY'), findsOneWidget);
+    expect(find.text('EARTH'), findsWidgets);
+    expect(find.text('ORGANIZATION'), findsWidgets);
+    expect(find.text('TERRITORY'), findsWidgets);
 
-    expect(find.textContaining('Constitutional rules are unavailable'), findsOneWidget);
+    // 2. Canonical Articles & Search
+    expect(find.text('Authoritative World Time'), findsOneWidget);
+    expect(find.text('Sole Monetary Authority'), findsOneWidget);
+    expect(find.text('House Continuity Invariant'), findsOneWidget);
+    expect(find.text('Constitutional Amendment Supermajority'), findsOneWidget);
   });
 }

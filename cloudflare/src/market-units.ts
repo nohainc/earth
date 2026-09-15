@@ -1,26 +1,15 @@
+import { formatFixedUnits, parseFixedUnits, roundDivide } from './units.ts';
+
 const QUANTITY_SCALE = 1_000_000n;
 const PRICE_SCALE = 100n;
 const RATE_SCALE = 1_000_000n;
 
-function fixedParts(value: unknown, decimals: number): { negative: boolean; whole: bigint; fraction: string } {
-  const text = typeof value === 'number' ? (Number.isFinite(value) ? String(value) : '') : String(value ?? '').trim();
-  const match = text.match(/^(−|-)?(\d+)(?:\.(\d+))?$/);
-  if (!match || (match[3]?.length ?? 0) > decimals) throw new Error(`Invalid decimal value; expected at most ${decimals} fractional digits`);
-  return { negative: match[1] === '-' || match[1] === '−', whole: BigInt(match[2]), fraction: match[3] ?? '' };
-}
-
 function toUnits(value: unknown, scale: bigint, decimals: number): bigint {
-  const parts = fixedParts(value, decimals);
-  const units = parts.whole * scale + BigInt(parts.fraction.padEnd(decimals, '0'));
-  return parts.negative ? -units : units;
+  return parseFixedUnits(value, scale, decimals);
 }
 
 function fromUnits(units: bigint, scale: bigint, decimals: number): string {
-  const negative = units < 0n;
-  const absolute = negative ? -units : units;
-  const whole = absolute / scale;
-  const fraction = String(absolute % scale).padStart(decimals, '0');
-  return `${negative ? '-' : ''}${whole}.${fraction}`;
+  return formatFixedUnits(units, scale, decimals);
 }
 
 export function displayQuantityToUnits(value: unknown): bigint {
@@ -44,7 +33,7 @@ export function priceUnitsToDisplayPrice(units: bigint | string | number): strin
 }
 
 function roundedDivide(numerator: bigint, denominator: bigint): bigint {
-  return (numerator + denominator / 2n) / denominator;
+  return roundDivide(numerator, denominator);
 }
 
 export function calculateQuoteUnits(quantityUnits: bigint, priceUnits: bigint): bigint {

@@ -9,6 +9,7 @@ import '../../shared/design_system/design_system.dart';
 import '../finance/personal_finance_panel.dart';
 import '../governance/governance_panels.dart';
 import '../institutions/institutions_panels.dart';
+import '../institutions/organization_directory_panel.dart';
 import '../lifecycle/lifecycle_panels.dart';
 import '../market/market_panels.dart';
 import '../operations/technology_panel.dart';
@@ -31,39 +32,45 @@ import 'quick_actions_panel.dart';
 import 'service_risk_panel.dart';
 import 'command_executive_quadrant.dart';
 import '../world/world_conditions_panel.dart';
+import '../world/world_programs_panel.dart';
+import '../world/public_projects_panel.dart';
 import '../institutions/mutual_credit_panel.dart';
 import '../institutions/territory_commons_panel.dart';
+import '../institutions/territory_overview_panel.dart';
+import '../house/house_policy_panel.dart';
 
 String dashboardSectionTitle(String section, [EarthState? state]) =>
     switch (section) {
-      'account' => 'ACCOUNT SETTINGS',
-      'command' => 'COMMAND CENTER',
+      'account' => 'ACCOUNT',
+      'command' => 'COMMAND',
       'business' => 'BUSINESS',
       'market' => 'MARKET',
-      'net_worth' => 'NET WORTH ANALYTICS',
-      'briefing' => 'EXECUTIVE BRIEFING',
+      'net_worth' => 'NET WORTH',
+      'briefing' => 'BRIEFING',
       'messages' => 'MESSAGES',
       String s when s.startsWith('messages:') => 'MESSAGES',
       'notifications' => 'NOTIFICATIONS',
-      'buildings' => 'BUILDINGS & URBAN INFRASTRUCTURE',
-      'real_estate' => 'BUILDINGS & DISTRICT',
-      'civic' => 'PUBLIC',
-      'corporations' => 'CORPORATIONS',
-      'corporation' => 'CORPORATION',
-      'my-corporation' => 'MY CORPORATION',
-      'city' => 'MY CITY',
-      String s when s.startsWith('my-community') => 'MY COMMUNITY',
+      'buildings' => 'ASSETS',
+      'real_estate' => 'ASSETS',
+      'civic' => 'GOVERNANCE',
+      'corporations' => 'DIRECTORY',
+      'directory' => 'DIRECTORY',
+      'corporation' => 'ORGANIZATION',
+      'my-corporation' => 'ORGANIZATION',
+      'city' => 'TERRITORY',
+      String s when s.startsWith('my-community') => 'COMMUNITY',
       'communities' => 'COMMUNITIES',
       'news' => 'NEWS',
       'house' => 'HOUSE',
-      'dynasty' => 'HOUSE',
-      'technology' => 'TECHNOLOGY',
+      'dynasty' => 'DYNASTY',
+      'technology' => 'RESEARCH',
       'public-finance' => 'PUBLIC FINANCE',
-      'civic-rankings' => 'CIVIC RANKINGS',
+      'civic-rankings' => 'RANKINGS',
       'history' => 'MEMORIAL',
       'world' => 'WORLD',
-      'mutual-credit' => 'MUTUAL CREDIT EXPERIMENT',
-      'territory-commons' => 'TERRITORY COMMONS',
+      'public-projects' => 'PUBLIC PROJECTS',
+      'mutual-credit' => 'MUTUAL CREDIT',
+      'territory-commons' => 'TERRITORIES',
       'memorial' => 'MEMORIAL',
       'life' => () {
           if (state == null) return 'LIFE';
@@ -77,8 +84,8 @@ String dashboardSectionTitle(String section, [EarthState? state]) =>
       'constitution' => 'CONSTITUTION',
       'contracts' => 'CONTRACTS',
       'finance' => 'FINANCE',
-      'activity' => 'ACTIVITY & EVENTS',
-      _ => 'COMMAND CENTER',
+      'activity' => 'ACTIVITY',
+      _ => 'COMMAND',
     };
 
 class Dashboard extends StatelessWidget {
@@ -315,19 +322,7 @@ class Dashboard extends StatelessWidget {
               );
             },
           ),
-          if (state.human['politicalMaturity'] == false)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(
-                'POLITICAL MATURITY · AVAILABLE FROM GAME DAY ${state.human['politicalEligibilityGameDay']}',
-                style: const TextStyle(
-                  color: Colors.orange,
-                  fontSize: 10,
-                  letterSpacing: .7,
-                ),
-              ),
-            ),
-          const SizedBox(height: 34),
+          const SizedBox(height: 28),
         ],
         ..._selectedPanels(),
       ],
@@ -496,9 +491,31 @@ class Dashboard extends StatelessWidget {
             showSelection: false,
           ),
         ];
+      case 'organizations':
+        return [
+          OrganizationDirectoryPanel(
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+        ];
       case 'territories':
         return [
-          CorporationOverviewPanel(state: state, busy: busy, action: action),
+          TerritoryOverviewPanel(
+            state: state,
+            commonsData: territoryCommonsData,
+            onNavigate: onNavigate,
+          ),
+        ];
+      case 'contracts':
+        return [
+          OrganizationContractsPanel(
+            organizationId: state.membership?['corporation_id']?.toString() ??
+                state.membership?['organization_id']?.toString() ??
+                '',
+            api: const EarthApi(),
+            onRefresh: () => action(() => const EarthApi().world()),
+          )
         ];
       case 'buildings':
       case 'real_estate':
@@ -546,6 +563,17 @@ class Dashboard extends StatelessWidget {
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
       case 'world':
         return [WorldConditionsPanel(state: state)];
+      case 'programs':
+        return [const WorldProgramsPanel()];
+      case 'public-projects':
+        return [
+          PublicProjectsPanel(
+            state: state,
+            personalFinanceData: personalFinanceData,
+            busy: busy,
+            action: action,
+          ),
+        ];
       case 'mutual-credit':
         return [MutualCreditPanel(data: mutualCreditData)];
       case 'territory-commons':
@@ -886,6 +914,10 @@ class Dashboard extends StatelessWidget {
               );
             },
           ),
+        ];
+      case 'policies':
+        return [
+          HousePolicyPanel(state: state, busy: busy, action: action),
         ];
       case 'command':
       default:

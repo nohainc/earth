@@ -45,6 +45,11 @@ function bindPlaceholders(sql: string): string {
 
 export class PostgresRepository {
   private readonly client: Client;
+  // A repository owns one PostgreSQL client.  PostgreSQL clients do not
+  // support concurrent in-flight queries, while read models commonly use
+  // Promise.all for composition.  Serialize repository queries here so a
+  // composed read cannot interleave protocol messages or transaction state.
+  private queryTail: Promise<void> = Promise.resolve();
 
   constructor(client: Client) {
     this.client = client;
@@ -52,15 +57,19 @@ export class PostgresRepository {
 
   async query<Row extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []): Promise<QueryResult<Row>> {
     const boundSql = bindPlaceholders(sql);
-    try {
-      return await this.client.query<Row>(boundSql, params);
-    } catch (error) {
-      // Keep production diagnostics useful without logging parameter values.
-      if (error instanceof Error && !error.message.includes('[postgres query:')) {
-        error.message = `${error.message} [postgres query: ${boundSql.slice(0, 240)}]`;
+    const run = this.queryTail.then(async () => {
+      try {
+        return await this.client.query<Row>(boundSql, params);
+      } catch (error) {
+        // Keep production diagnostics useful without logging parameter values.
+        if (error instanceof Error && !error.message.includes('[postgres query:')) {
+          error.message = `${error.message} [postgres query: ${boundSql.slice(0, 240)}]`;
+        }
+        throw error;
       }
-      throw error;
-    }
+    });
+    this.queryTail = run.then(() => undefined, () => undefined);
+    return run;
   }
 
   async transaction<T>(work: (repository: PostgresRepository) => Promise<T>): Promise<T> {
