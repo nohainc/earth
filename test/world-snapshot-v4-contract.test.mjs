@@ -30,3 +30,12 @@ test('world snapshot restricts open-order details to the authenticated House', a
   assert.match(orderQuery, /owner_registry/);
   assert.match(orderQuery, /\$1::TEXT IS NOT NULL/);
 });
+
+test('world snapshot keeps residency independent from Territory governance', async () => {
+  const source = (await import('node:fs/promises')).readFile;
+  const world = await source('cloudflare/src/world-postgres.ts', 'utf8');
+  const residencyQuery = world.slice(world.indexOf('SELECT r.territory_id'), world.indexOf('SELECT r.territory_id') + 900);
+  assert.match(residencyQuery, /LEFT JOIN territory_governance/);
+  assert.match(residencyQuery, /COALESCE\(g\.governing_institution_id, t\.corporation_id\)/);
+  assert.match(residencyQuery, /LEFT JOIN institutions/);
+});
