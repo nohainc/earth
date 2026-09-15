@@ -17,7 +17,6 @@ void main() {
                 (fn) async {
                   actionTriggered = true;
                 },
-                city: true,
               ),
               child: const Text('Open Dialog'),
             ),
@@ -29,7 +28,7 @@ void main() {
     await tester.tap(find.text('Open Dialog'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Form a City'), findsOneWidget);
+    expect(find.text('Form a Corporation'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
 
     await tester.tap(find.text('Cancel'));

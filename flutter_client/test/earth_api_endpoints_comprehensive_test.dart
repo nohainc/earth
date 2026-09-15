@@ -107,10 +107,10 @@ void main() {
     await api.setCommunityMemberRole(
         communityId: 'COM-1', targetHouseId: 'HOUSE-2', role: 'MEMBER');
     await api.disbandCommunity('COM-1');
-    await api.createCity('New Kyoto', 'COM-1');
-    await api.setCityBudget('energy');
-    await api.setCityTaxCharter(incomeTaxBps: 300, salesTaxBps: 200);
-    await api.createCorporation('Aether Dyn', 'CITY-1');
+    await api.listOrganizations();
+    await api.listCorporations();
+    await api.getHouseResidency();
+    await api.moveHouseResidence(territoryId: 'T-1');
     await api.joinCorporation();
     await api.leaveCorporation();
 
@@ -120,7 +120,7 @@ void main() {
     expect(recordedCalls.contains('POST /api/communities'), true);
     expect(recordedCalls.contains('PATCH /api/communities/COM-1'), true);
     expect(recordedCalls.contains('DELETE /api/communities/COM-1'), true);
-    expect(recordedCalls.contains('POST /api/cities'), true);
+    expect(recordedCalls.contains('GET /api/organizations'), true);
   });
 
   test(

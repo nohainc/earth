@@ -266,7 +266,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           return Padding(
                             padding: const EdgeInsets.only(top: 3),
                             child: Text(
-                              '$label · ${cost} credit units · ${payback == null ? 'no positive payback' : '$payback game days'}',
+                              '$label · $cost credit units · ${payback == null ? 'no positive payback' : '$payback game days'}',
                               style: const TextStyle(fontSize: 11),
                             ),
                           );

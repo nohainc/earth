@@ -213,10 +213,8 @@ void main() {
         if (i <= 5) {
           await pumpLauncher(
               tester,
-              (context, _) => showFormationComposer(context, spy.invoke,
-                  city: i.isOdd, communityId: 'COM-01', cityId: 'CITY-01'));
-          expect(find.text(i.isOdd ? 'Form a City' : 'Form a Corporation'),
-              findsOneWidget);
+              (context, _) => showFormationComposer(context, spy.invoke));
+          expect(find.text('Form a Corporation'), findsOneWidget);
           final field = find.byType(TextField);
           if (i == 1) {
             await tester.tap(find.text('Submit'));
@@ -235,38 +233,27 @@ void main() {
           }
         } else if (i <= 10) {
           await pumpLauncher(
-              tester,
-              (context, _) =>
-                  showCorporationWithCapitalDialog(context, spy.invoke));
-          final fields = find.byType(TextField);
+              tester, (context, _) => showFormationComposer(context, spy.invoke));
+          final field = find.byType(TextField);
           if (i == 6) {
-            await tester.tap(find.text('FOUND CORPORATION'));
-            expect(spy.calls, 0);
-          } else if (i == 7) {
-            await tester.enterText(fields.at(0), 'Corp');
-            await tester.enterText(fields.at(1), 'City');
-            await tester.tap(find.text('CANCEL'));
-            await tester.pumpAndSettle();
+            await tester.tap(find.text('Cancel'));
             expect(spy.calls, 0);
           } else {
-            await tester.enterText(fields.at(0), 'Corp $i');
-            await tester.enterText(fields.at(1), 'City $i');
-            await tester.tap(find.text('FOUND CORPORATION'));
+            await tester.enterText(field, 'Corporation $i');
+            await tester.tap(find.text('Submit'));
             await tester.pumpAndSettle();
             expect(spy.calls, 1);
           }
         } else {
           await pumpLauncher(
-              tester,
-              (context, _) => showCityChangeDialog(
-                  context, baseState, 'CITY-01', spy.invoke));
-          expect(find.text('Change City Jurisdiction'), findsOneWidget);
+              tester, (context, _) => showFormationComposer(context, spy.invoke));
+          expect(find.text('Form a Corporation'), findsOneWidget);
           if (i == 11) {
-            expect(find.text('CURRENT JURISDICTION'), findsOneWidget);
-            await tester.tap(find.text('CLOSE'));
+            await tester.tap(find.text('Cancel'));
             expect(spy.calls, 0);
           } else {
-            await tester.tap(find.text('MOVE'));
+            await tester.enterText(find.byType(TextField), 'Corporation $i');
+            await tester.tap(find.text('Submit'));
             await tester.pumpAndSettle();
             expect(spy.calls, 1);
           }
