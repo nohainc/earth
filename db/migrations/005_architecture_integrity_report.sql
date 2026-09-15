@@ -12,6 +12,27 @@ CREATE TABLE IF NOT EXISTS economic_account_policies (
   PRIMARY KEY (owner_type, account_type, allowed_asset_kind)
 );
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'economic_account_types' AND column_name = 'asset_kind'
+  ) THEN
+    INSERT INTO economic_account_types (code, asset_kind, is_escrow) VALUES
+      ('WALLET', 'CREDIT', FALSE), ('TREASURY', 'CREDIT', FALSE),
+      ('OPERATIONS', 'CREDIT', FALSE), ('RESERVE', 'CREDIT', FALSE),
+      ('INVENTORY', 'RESOURCE', FALSE), ('MARKET_ESCROW', 'ANY', TRUE),
+      ('SYSTEM_ACCOUNT', 'ANY', FALSE)
+    ON CONFLICT (code) DO NOTHING;
+  ELSE
+    INSERT INTO economic_account_types (code) VALUES
+      ('WALLET'), ('TREASURY'), ('OPERATIONS'), ('RESERVE'),
+      ('INVENTORY'), ('MARKET_ESCROW'), ('SYSTEM_ACCOUNT')
+    ON CONFLICT (code) DO NOTHING;
+  END IF;
+END;
+$$;
+
 CREATE TABLE IF NOT EXISTS economic_transaction_kinds (
   code TEXT PRIMARY KEY,
   semantic_class TEXT NOT NULL,
