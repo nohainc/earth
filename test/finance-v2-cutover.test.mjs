@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 test('finance compatibility reads use House and V2 contract tables', () => {
@@ -13,4 +14,14 @@ test('finance compatibility reads use House and V2 contract tables', () => {
   assert.match(routes, /FROM bank_deposits/);
   assert.match(routes, /FROM tax_rule_versions/);
   assert.match(routes, /FROM tax_obligations/);
+});
+
+test('finance cutover verifier follows the current module layout', () => {
+  const output = execFileSync(process.execPath, ['scripts/verify-finance-v2-cutover.mjs'], { encoding: 'utf8' });
+  const result = JSON.parse(output);
+  assert.equal(result.ready, true);
+  assert.ok(result.scanned.includes('finance-routes.ts'));
+  assert.ok(result.scanned.includes('financial-postgres.ts'));
+  assert.ok(result.skippedObsoleteCandidates.includes('finance-postgres.ts'));
+  assert.ok(result.skippedObsoleteCandidates.includes('civic-dividend-engine.ts'));
 });
