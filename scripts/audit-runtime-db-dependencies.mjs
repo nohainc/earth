@@ -5,6 +5,7 @@ const root = path.resolve(new URL('..', import.meta.url).pathname);
 const sourceRoots = [path.join(root, 'cloudflare/src'), path.join(root, 'scripts')];
 const manifestPath = path.join(root, 'db/schema-manifest.json');
 const baselinePath = path.join(root, 'db/baseline/01_schema.sql');
+const migrationsPath = path.join(root, 'db/migrations');
 
 const legacy = new Set([
   'account_balances', 'resource_balances', 'ledger_entries', 'resource_ledger_entries',
@@ -94,7 +95,7 @@ function extractRefs(file, source, refs) {
 }
 
 function baselineTables(schema) {
-  return new Set([...schema.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)].map((m) => m[1].toLowerCase()));
+  return new Set([...schema.matchAll(/CREATE\s+(?:TABLE|(?:OR\s+REPLACE\s+)?VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)].map((m) => m[1].toLowerCase()));
 }
 
 function baselineFunctions(schema, functions) {
@@ -121,13 +122,13 @@ function markdown(rows, manifest, baseline) {
     '## Summary',
     '',
     `- Runtime references found: ${rows.length}`,
-    `- Baseline tables: ${baseline.tables.size}`,
-    `- Baseline functions: ${baseline.functions.size}`,
+    `- Active schema tables (baseline + forward migrations): ${baseline.tables.size}`,
+    `- Active schema functions (baseline + forward migrations): ${baseline.functions.size}`,
     `- Decisions: ${Object.entries(counts).map(([k, v]) => `${k} (${v})`).join(', ')}`,
     '',
     '## Reconciliation table',
     '',
-    '| Runtime dependency | Kind | Evidence | Baseline | Manifest | Decision | Target |',
+    '| Runtime dependency | Kind | Evidence | Active schema | Manifest | Decision | Target |',
     '| --- | --- | --- | --- | --- | --- | --- |',
   ];
   for (const row of rows) {
@@ -156,7 +157,13 @@ function markdown(rows, manifest, baseline) {
 }
 
 const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
-const schema = await fs.readFile(baselinePath, 'utf8');
+const baselineSchema = await fs.readFile(baselinePath, 'utf8');
+const migrationFiles = (await fs.readdir(migrationsPath))
+  .filter((name) => /^\d+_.*\.sql$/.test(name))
+  .sort()
+  .map((name) => path.join(migrationsPath, name));
+const migrationSchema = (await Promise.all(migrationFiles.map((file) => fs.readFile(file, 'utf8')))).join('\n');
+const schema = `${baselineSchema}\n${migrationSchema}`;
 const functionsPath = path.join(root, 'db/baseline/02_functions.sql');
 const functions = await fs.readFile(functionsPath, 'utf8').catch(() => '');
 const refs = new Map();
