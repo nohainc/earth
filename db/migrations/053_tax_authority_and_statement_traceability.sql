@@ -17,8 +17,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS tax_authorities_current_idx
   ON tax_authorities (authority_type, COALESCE(territory_id, 'EARTH'))
   WHERE status = 'ACTIVE' AND effective_to_game_day IS NULL;
 
+-- Older baselines named the EARTH treasury OUC. Resolve the beneficiary from
+-- the existing owner registry instead of inventing a second economic owner.
 INSERT INTO tax_authorities (id, authority_type, beneficiary_economic_id, effective_from_game_day, correlation_id)
-VALUES ('TAX-AUTH-EARTH', 'EARTH', 'ECON-EARTH-001', 1, 'tax-authority-backfill:earth')
+SELECT 'TAX-AUTH-EARTH', 'EARTH', COALESCE(
+  (SELECT economic_id FROM owner_registry WHERE economic_id = 'ECON-EARTH-001'),
+  (SELECT economic_id FROM owner_registry WHERE economic_id = 'ECON-OUC-001')
+), 1, 'tax-authority-backfill:earth'
+WHERE EXISTS (
+  SELECT 1 FROM owner_registry
+   WHERE economic_id IN ('ECON-EARTH-001', 'ECON-OUC-001')
+)
 ON CONFLICT (id) DO NOTHING;
 
 ALTER TABLE tax_rule_versions ADD COLUMN IF NOT EXISTS authority_type TEXT NOT NULL DEFAULT 'EARTH'
