@@ -7,6 +7,7 @@ type CorporationTaxRow = {
   tax_charter_version: number;
 };
 
+// @mutation-boundary caller-owned-transaction: invoked by the daily settlement transaction.
 /** Assess and collect the Corporation's own income tax from its realized V4 operating result. */
 export async function settleCorporationIncomeTax(
   tx: PostgresRepository,
