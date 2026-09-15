@@ -8,6 +8,7 @@ This index defines authoritative V4 architectural specifications and documents t
 |---|---|---|
 | `CONSTITUTION.md` | CANONICAL | Permanent rules of the world and subsidiarity hierarchy |
 | `V4_DOMAIN_MODEL.md` | CANONICAL | Frozen V4 meanings: House, Human, Territory, Organization, CREDIT, Voice |
+| `V4_TARGET_ARCHITECTURE.md` | CANONICAL | Frozen authority, settlement, economy, and product boundaries |
 | `V4_IMPLEMENTATION_STATUS.md` | CANONICAL | Evidence-based implementation status across settlement and features |
 | `GAME_ECONOMY_SPEC.md` | CANONICAL | Shared formulas, units, timing, and economic semantics |
 | `BUILDING_ECONOMY_CONTRACT.md` | CANONICAL | Building accounting, fixed-point formulas, and settlement contract |

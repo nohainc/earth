@@ -17,7 +17,7 @@ test('domain boundary types keep authority, actor, payer, owner, location, and s
 
 test('schema prevents geographic and representative objects from becoming economic principals', () => {
   const schema = read('db/baseline/01_schema.sql');
-  assert.match(schema, /owner_type TEXT NOT NULL CHECK \(owner_type IN \('EARTH','CORPORATION','HOUSE','BANK','SYSTEM'\)\)/);
+  assert.match(schema, /owner_type TEXT NOT NULL CHECK \(owner_type IN \('EARTH','CORPORATION','HOUSE','BANK','SYSTEM','ORGANIZATION'\)\)/);
   assert.doesNotMatch(schema, /owner_type[^\n]*\bTERRITORY\b/i);
   assert.doesNotMatch(schema, /owner_type[^\n]*\bBUILDING\b/i);
   assert.doesNotMatch(schema, /owner_type[^\n]*\bHUMAN\b/i);
