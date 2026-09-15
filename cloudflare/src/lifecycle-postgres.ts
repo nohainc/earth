@@ -67,7 +67,7 @@ export async function getSuccessor(repository: PostgresRepository, humanId: stri
 
 export async function getLifeStatus(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const [human, succession, events] = await Promise.all([
-    repository.query('SELECT id, display_name, age_years, life_status, death_game_day, standing, legacy FROM humans WHERE id = $1', [humanId]),
+    repository.query('SELECT id, display_name, age_years, status AS life_status, death_game_day, standing, final_legacy AS legacy FROM humans WHERE id = $1', [humanId]),
     repository.query('SELECT * FROM house_succession_plans WHERE house_id = (SELECT house_id FROM humans WHERE id = $1)', [humanId]),
     repository.query("SELECT * FROM game_events WHERE actor_human_id = $1 AND category = 'LIFECYCLE' ORDER BY game_day DESC, game_minute DESC NULLS LAST LIMIT 20", [humanId]),
   ]);

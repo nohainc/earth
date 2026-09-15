@@ -17,5 +17,7 @@ test('neutral social directory only queries active people and entities', async (
   assert.deepEqual(directory, { humans: [], businesses: [], cities: [], corporations: [], communities: [] });
   assert.equal(calls.length, 4);
   assert.ok(calls.every(({ sql }) => !/social_initiatives|social_relationships|social_initiative_members/i.test(sql)));
-  assert.match(calls[0].sql, /h\.life_status = 'active'/);
+  assert.match(calls[0].sql, /h\.status = 'ACTIVE'/);
+  assert.match(calls[0].sql, /house_residencies/);
+  assert.match(calls[2].sql, /organization_memberships/);
 });
