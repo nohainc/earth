@@ -1,5 +1,99 @@
 -- EARTH ACTIVE MIGRATION: architecture and economic integrity checks
 
+-- Bridge the pre-V4 schema before installing integrity functions. These
+-- objects already exist on a fresh V4 baseline; IF NOT EXISTS keeps this
+-- migration idempotent while allowing legacy production databases to move
+-- forward without rewriting their applied migration history.
+CREATE TABLE IF NOT EXISTS economic_account_policies (
+  owner_type TEXT NOT NULL,
+  account_type TEXT NOT NULL REFERENCES economic_account_types(code),
+  allowed_asset_kind TEXT NOT NULL CHECK (allowed_asset_kind IN ('CREDIT', 'RESOURCE', 'ANY')),
+  player_visible BOOLEAN NOT NULL DEFAULT TRUE,
+  PRIMARY KEY (owner_type, account_type, allowed_asset_kind)
+);
+
+CREATE TABLE IF NOT EXISTS economic_transaction_kinds (
+  code TEXT PRIMARY KEY,
+  semantic_class TEXT NOT NULL,
+  asset_kind TEXT NOT NULL,
+  description TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS economic_source_types (
+  code TEXT PRIMARY KEY,
+  source_class TEXT NOT NULL,
+  description TEXT NOT NULL
+);
+
+INSERT INTO economic_transaction_kinds (code, semantic_class, asset_kind, description) VALUES
+  ('ASSET_TRANSFER', 'ASSET_TRANSFER', 'ANY', 'Balanced movement of an existing asset between accounts'),
+  ('CREDIT_ISSUANCE', 'CREDIT_ISSUANCE', 'CREDIT', 'Creation of CREDIT outside existing account balances'),
+  ('CREDIT_RETIREMENT', 'CREDIT_RETIREMENT', 'CREDIT', 'Destruction of CREDIT outside existing account balances'),
+  ('RESOURCE_PRODUCTION', 'RESOURCE_PRODUCTION', 'RESOURCE', 'Production of a resource into an economic owner inventory'),
+  ('RESOURCE_CONSUMPTION', 'RESOURCE_CONSUMPTION', 'RESOURCE', 'Consumption of a resource from an economic owner inventory'),
+  ('SETTLEMENT', 'ASSET_TRANSFER', 'ANY', 'Balanced settlement posting'),
+  ('MARKET_TRADE', 'ASSET_TRANSFER', 'ANY', 'Balanced market settlement'),
+  ('BUILDING_CONSTRUCTION', 'ASSET_TRANSFER', 'ANY', 'Balanced construction payment'),
+  ('RESEARCH_FUNDING', 'ASSET_TRANSFER', 'CREDIT', 'Balanced research funding'),
+  ('SUCCESSION_COST', 'ASSET_TRANSFER', 'CREDIT', 'Balanced House succession cost')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO economic_source_types (code, source_class, description) VALUES
+  ('SYSTEM_ISSUANCE', 'SYSTEM', 'System-authorized asset issuance'),
+  ('SYSTEM_PRODUCTION', 'SYSTEM', 'System resource production sink/source'),
+  ('SYSTEM_CONSUMPTION', 'SYSTEM', 'System resource consumption sink/source'),
+  ('HOUSE', 'ACTOR', 'House economic action'),
+  ('CORPORATION', 'ACTOR', 'Corporation economic action'),
+  ('MARKET', 'MARKET', 'Market clearing action'),
+  ('INTERACTIVE', 'INTERACTIVE', 'Interactive user action'),
+  ('SETTLEMENT', 'SETTLEMENT', 'Daily settlement action')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO economic_account_policies (owner_type, account_type, allowed_asset_kind, player_visible) VALUES
+  ('HOUSE', 'WALLET', 'CREDIT', TRUE),
+  ('HOUSE', 'INVENTORY', 'RESOURCE', TRUE),
+  ('HOUSE', 'MARKET_ESCROW', 'ANY', TRUE),
+  ('CORPORATION', 'TREASURY', 'CREDIT', TRUE),
+  ('CORPORATION', 'OPERATIONS', 'CREDIT', TRUE),
+  ('CORPORATION', 'RESERVE', 'CREDIT', TRUE),
+  ('SYSTEM', 'SYSTEM_ACCOUNT', 'ANY', FALSE)
+ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS territories (
+  id TEXT PRIMARY KEY,
+  corporation_id TEXT NOT NULL REFERENCES corporations(id),
+  name TEXT NOT NULL,
+  territory_type TEXT NOT NULL DEFAULT 'PRIMARY',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+  created_game_day BIGINT NOT NULL DEFAULT 1,
+  UNIQUE (id, corporation_id)
+);
+
+ALTER TABLE buildings ADD COLUMN IF NOT EXISTS territory_id TEXT;
+ALTER TABLE house_affiliations ADD COLUMN IF NOT EXISTS primary_territory_id TEXT;
+
+DO $$
+BEGIN
+  IF to_regclass('cities') IS NOT NULL THEN
+    INSERT INTO territories (id, corporation_id, name, created_game_day)
+    SELECT c.id, c.corporation_id, i.name, 1
+      FROM cities c
+      JOIN institutions i ON i.id = c.id
+     WHERE c.corporation_id IS NOT NULL
+    ON CONFLICT (id, corporation_id) DO NOTHING;
+
+    UPDATE buildings b
+       SET territory_id = b.city_id
+     WHERE b.territory_id IS NULL AND b.city_id IS NOT NULL;
+
+    UPDATE house_affiliations ha
+       SET primary_territory_id = ha.city_id
+     WHERE ha.primary_territory_id IS NULL AND ha.city_id IS NOT NULL;
+  END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION earth_post_transaction(
   p_correlation_id TEXT, p_game_day BIGINT, p_game_minute INTEGER,
   p_transaction_kind TEXT, p_source_type TEXT, p_source_id TEXT,
