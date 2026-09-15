@@ -39,7 +39,10 @@ export async function subscribeToAssetOwnership(repository: PostgresRepository, 
     if (!posted.rows[0]?.created) return { ok: true, alreadyProcessed: true, correlationId: input.correlationId };
     const eventId = `CAP-${input.correlationId}`;
     await tx.query(`INSERT INTO capitalization_events (id, asset_type, asset_id, organization_id, investor_type, investor_id, units, price_units, ownership_class, economic_transaction_id, game_day, correlation_id) VALUES ($1,'BUILDING',$2,$3,$4,$5,$6,$7,'COMMON',$8,$9,$10)`, [eventId, input.assetId, input.organizationId, input.investorType, input.investorId, units.toString(), price.toString(), posted.rows[0].transaction_id, day, input.correlationId]);
-    await tx.query(`UPDATE asset_ownership_positions SET status = 'SUPERSEDED', effective_to_game_day = $2 WHERE id = $1`, [legalPosition.id, day]);
+    // Subscriptions are next-day effective. Keep the legal position active
+    // through today's close so distributions and settlement never observe a
+    // transient zero-owner cap table.
+    await tx.query(`UPDATE asset_ownership_positions SET effective_to_game_day = $2 WHERE id = $1`, [legalPosition.id, day]);
     const remainingOwnerUnits = BigInt(legalPosition.units) - units;
     if (remainingOwnerUnits > 0n) await tx.query(`INSERT INTO asset_ownership_positions (id, asset_type, asset_id, holder_type, holder_id, units, effective_from_game_day, correlation_id) VALUES ($1,'BUILDING',$2,'ORGANIZATION',$3,$4,$5,$6)`, [`OWN-${input.assetId}-ORGANIZATION-${input.organizationId}-${input.correlationId}`, input.assetId, input.organizationId, remainingOwnerUnits.toString(), day + 1, `${input.correlationId}:dilution`]);
     await tx.query(`INSERT INTO asset_ownership_positions (id, asset_type, asset_id, holder_type, holder_id, units, effective_from_game_day, correlation_id) VALUES ($1,'BUILDING',$2,$3,$4,$5,$6,$7)`, [`OWN-${input.assetId}-${input.investorType}-${input.investorId}-${input.correlationId}`, input.assetId, input.investorType, input.investorId, units.toString(), day + 1, `${input.correlationId}:position`]);
