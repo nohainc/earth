@@ -16,6 +16,8 @@ const migrationDirectory = new URL('../db/migrations/', import.meta.url);
 // hard failure; this is not a repair or checksum rewrite mechanism.
 const approvedHistoricalChecksums = new Map([
   ['001_baseline.sql', new Set([
+    'e2cfdb721f8367ce49a56c6679cdea63ce384b95ecf866923c499d804c0102a6',
+    '7257e134835aced183eb02afbb82780c29170cbb0fded680f908e88001e2de57',
     'c4946ae53bbd774353c16533b2f27b6077ed3f5c8f91d22d23201b55fa14c857',
   ])],
 ]);
