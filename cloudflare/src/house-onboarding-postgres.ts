@@ -12,28 +12,81 @@ export const ONBOARDING_MILESTONES = [
 
 type ProgressRow = { house_id: string; onboarding_version: string; status: 'ACTIVE' | 'COMPLETED' | 'SKIPPED'; completed_milestones: string[]; completed_game_day: string | null };
 
+const ACTION_ROUTES: Record<string, string> = {
+  review_house_assets: '/app/house',
+  inspect_territory: '/app/territory',
+  set_operating_policy: '/app/house/policy',
+  start_first_producer: '/app/operations',
+  place_first_market_order: '/app/market',
+  discover_organization: '/app/organizations',
+};
+
 function nextMilestone(completed: Set<string>): typeof ONBOARDING_MILESTONES[number] | null {
   return ONBOARDING_MILESTONES.find((milestone) => !completed.has(milestone.code)) ?? null;
 }
 
 export async function getHouseOnboarding(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
-  const [progress, world, assets, buildings, orders] = await Promise.all([
+  const [progress, world, assets, credit, buildings, orders, residence, territory] = await Promise.all([
     repository.query<ProgressRow>('SELECT house_id, onboarding_version, status, completed_milestones, completed_game_day FROM house_onboarding_progress WHERE house_id = $1', [houseId]),
     repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"),
     repository.query<{ code: string; balance_units: string }>(`SELECT asset.code, COALESCE(account.balance_units, 0)::TEXT AS balance_units
       FROM economic_assets asset LEFT JOIN owner_registry owner ON owner.id = $1 AND owner.owner_type = 'HOUSE'
       LEFT JOIN economic_accounts account ON account.owner_economic_id = owner.economic_id AND account.asset_id = asset.id AND account.account_type = 'INVENTORY' AND account.status = 'ACTIVE'
       WHERE asset.asset_kind = 'RESOURCE' ORDER BY asset.id`, [houseId]),
+    repository.query<{ balance_units: string }>(`SELECT COALESCE(account.balance_units, 0)::TEXT AS balance_units
+      FROM economic_assets asset LEFT JOIN owner_registry owner ON owner.id = $1 AND owner.owner_type = 'HOUSE'
+      LEFT JOIN economic_accounts account ON account.owner_economic_id = owner.economic_id AND account.asset_id = asset.id AND account.account_type = 'WALLET' AND account.status = 'ACTIVE'
+      WHERE asset.code = 'CREDIT'`, [houseId]),
     repository.query<{ count: string }>(`SELECT COUNT(*)::TEXT AS count FROM buildings WHERE owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1) AND status IN ('ACTIVE','UNDER_CONSTRUCTION')`, [houseId]),
     repository.query<{ count: string }>(`SELECT COUNT(*)::TEXT AS count FROM market_orders WHERE owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1)`, [houseId]),
+    repository.query<{ territory_id: string; territory_name: string; active_house_count: string; house_capacity: string }>(`SELECT r.territory_id, t.name AS territory_name,
+             COALESCE(capacity.active_house_count, 0)::TEXT AS active_house_count,
+             COALESCE(capacity.house_capacity, 0)::TEXT AS house_capacity
+        FROM house_residencies r
+        JOIN territories t ON t.id = r.territory_id
+        LEFT JOIN LATERAL (
+          SELECT active_house_count, house_capacity
+            FROM territory_capacity_state
+           WHERE territory_id = r.territory_id
+           ORDER BY game_day DESC
+           LIMIT 1
+        ) capacity ON TRUE
+       WHERE r.house_id = $1 AND r.residency_class = 'PRIMARY' AND r.status = 'ACTIVE'
+       ORDER BY r.effective_from_game_day DESC LIMIT 1`, [houseId]),
   ]);
   const row = progress.rows[0] ?? { house_id: houseId, onboarding_version: 'onboarding-v4-1', status: 'ACTIVE', completed_milestones: [], completed_game_day: null };
   const completed = new Set(Array.isArray(row.completed_milestones) ? row.completed_milestones : []);
+  const next = nextMilestone(completed);
+  const residenceRow = territory.rows[0];
+  const capacityAvailable = residenceRow
+    ? Math.max(0, Number(residenceRow.house_capacity) - Number(residenceRow.active_house_count))
+    : null;
+  const recommendation = next
+    ? {
+        milestone: next.code,
+        actionRoute: ACTION_ROUTES[next.code],
+        reason: next.code === 'inspect_territory' && capacityAvailable !== null
+          ? `${residenceRow.territory_name} has ${capacityAvailable} reported House slot${capacityAvailable === 1 ? '' : 's'} available.`
+          : next.description,
+      }
+    : null;
   return {
     status: row.status, version: row.onboarding_version,
     currentGameDay: Number(world.rows[0]?.game_day ?? 1), completedMilestones: [...completed],
-    milestones: ONBOARDING_MILESTONES, recommendedNext: nextMilestone(completed),
-    facts: { resourceBalances: assets.rows, buildingCount: Number(buildings.rows[0]?.count ?? 0), marketOrderCount: Number(orders.rows[0]?.count ?? 0) },
+    milestones: ONBOARDING_MILESTONES, recommendedNext: next, recommendation,
+    facts: {
+      creditBalanceUnits: credit.rows[0]?.balance_units ?? '0',
+      resourceBalances: assets.rows,
+      buildingCount: Number(buildings.rows[0]?.count ?? 0),
+      marketOrderCount: Number(orders.rows[0]?.count ?? 0),
+      residence: residenceRow ? {
+        territoryId: residenceRow.territory_id,
+        territoryName: residenceRow.territory_name,
+        activeHouseCount: Number(residenceRow.active_house_count),
+        houseCapacity: Number(residenceRow.house_capacity),
+        capacityAvailable,
+      } : null,
+    },
     generatedFrom: 'postgres-canonical-facts',
   };
 }
