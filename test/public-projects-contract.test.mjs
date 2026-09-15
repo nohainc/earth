@@ -16,6 +16,8 @@ test('public projects use escrow, proposal authority, and replay-safe matching f
   const funds = await readFile(new URL('../db/migrations/041_public_project_matching_funding.sql', import.meta.url), 'utf8');
   assert.match(source, /public_project_matching_funds/);
   assert.match(source, /earth_post_transaction/);
+  assert.match(source, /const spentMatch = funded \? match : 0n/);
+  assert.match(source, /matching_pool_spent_units = matching_pool_spent_units \+ \$2/);
   assert.match(migration, /public_project_contributions/);
   assert.match(funds, /correlation_id TEXT NOT NULL UNIQUE/);
 });
