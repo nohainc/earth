@@ -1,5 +1,16 @@
 -- EARTH ACTIVE MIGRATION: map legacy Corporation and Community identities into Organizations
 
+-- Pre-V4 Corporation and House affiliation rows are still valid economic
+-- history, but they lack the fields needed for the Organization bridge.
+ALTER TABLE corporations
+  ADD COLUMN IF NOT EXISTS admission_policy TEXT NOT NULL DEFAULT 'OPEN';
+ALTER TABLE corporations
+  ADD COLUMN IF NOT EXISTS created_game_day BIGINT NOT NULL DEFAULT 1;
+ALTER TABLE house_affiliations
+  ADD COLUMN IF NOT EXISTS id BIGSERIAL;
+ALTER TABLE house_affiliations
+  ADD COLUMN IF NOT EXISTS left_game_day BIGINT;
+
 CREATE TABLE IF NOT EXISTS organization_legacy_map (
   legacy_type TEXT NOT NULL CHECK (legacy_type IN ('CORPORATION', 'COMMUNITY')),
   legacy_id TEXT NOT NULL,
