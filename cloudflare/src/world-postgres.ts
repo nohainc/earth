@@ -156,7 +156,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                         FROM market_orders o
                         JOIN market_instruments i ON i.id = o.instrument_id
                        WHERE o.status IN ('OPEN', 'PARTIAL')
-                       ORDER BY o.created_at DESC LIMIT 500`),
+                         AND ($1::TEXT IS NOT NULL AND o.owner_economic_id =
+                              (SELECT economic_id FROM owner_registry WHERE id = $1))
+                       ORDER BY o.created_at DESC LIMIT 500`, [viewerHouseId]),
   ]);
   const marketProducts = Object.fromEntries(marketInstruments.rows.map((row: any) => {
     const product = String(row.symbol).replace(/^SPOT-/, '').toLowerCase();

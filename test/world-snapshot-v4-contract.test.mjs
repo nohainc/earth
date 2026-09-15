@@ -21,3 +21,12 @@ test('the canonical world payload contains the V4 client gameplay read model', a
   assert.deepEqual(snapshot.finance, { balance: '0', obligations: [] });
   assert.ok(Array.isArray(snapshot.decisionQueue));
 });
+
+test('world snapshot restricts open-order details to the authenticated House', async () => {
+  const source = (await import('node:fs/promises')).readFile;
+  const world = await source('cloudflare/src/world-postgres.ts', 'utf8');
+  const orderQuery = world.slice(world.indexOf('SELECT o.id, i.symbol'), world.indexOf('SELECT o.id, i.symbol') + 900);
+  assert.match(orderQuery, /o\.owner_economic_id/);
+  assert.match(orderQuery, /owner_registry/);
+  assert.match(orderQuery, /\$1::TEXT IS NOT NULL/);
+});
