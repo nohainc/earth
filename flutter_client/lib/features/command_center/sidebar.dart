@@ -86,6 +86,9 @@ class _SidebarState extends State<Sidebar> {
         'civic-rankings',
         'pantheon',
         'history',
+        'world',
+        'mutual-credit',
+        'territory-commons',
         'constitution'
       ],
     ];
@@ -280,6 +283,24 @@ class _SidebarState extends State<Sidebar> {
             'history',
             'Memorial',
             Icons.account_balance_outlined,
+            null,
+          ),
+          (
+            'world',
+            'World Conditions',
+            Icons.public_outlined,
+            null,
+          ),
+          (
+            'mutual-credit',
+            'Mutual Credit (Experimental)',
+            Icons.account_balance_wallet_outlined,
+            null,
+          ),
+          (
+            'territory-commons',
+            'Territory Commons',
+            Icons.park_outlined,
             null,
           ),
         ]

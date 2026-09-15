@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 14,
+  "migrationVersion": 59,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -200,9 +200,7 @@
     "economic_assets": [
       "id",
       "code",
-      "asset_kind",
-      "unit_scale",
-      "display_decimals"
+      "asset_kind"
     ],
     "owner_registry": [
       "id",
@@ -272,52 +270,12 @@
       "construction_credit_units",
       "construction_minutes",
       "operating_credit_units",
+      "resource_input_units",
+      "resource_output_units",
       "service_type",
       "service_capacity_units",
       "slot_footprint",
       "definition_version"
-    ],
-    "building_catalog_resource_flows": [
-      "catalog_id",
-      "asset_id",
-      "construction_units",
-      "operating_input_units",
-      "operating_output_units"
-    ],
-    "personal_life_maintenance": [
-      "id",
-      "human_id",
-      "house_id",
-      "game_day",
-      "food_required_units",
-      "food_consumed_units",
-      "food_shortfall_units",
-      "status",
-      "shortfall_notes",
-      "created_at"
-    ],
-    "building_settlement_journals": [
-      "id",
-      "building_id",
-      "house_economic_id",
-      "game_day",
-      "utilization_bps",
-      "input_units",
-      "output_units",
-      "operating_credit_units",
-      "status",
-      "limiting_resources",
-      "shortage_units",
-      "created_at"
-    ],
-    "global_resource_daily_state": [
-      "game_day", "asset_id", "opening_balance_units", "production_units", "consumption_units", "transfer_in_units", "transfer_out_units", "closing_balance_units", "market_volume_units", "average_price_units", "shortage_units", "created_at"
-    ],
-    "house_resource_daily_flow": [
-      "house_economic_id", "game_day", "asset_id", "opening_balance_units", "production_units", "consumption_units", "transfer_in_units", "transfer_out_units", "closing_balance_units", "net_flow_units", "shortage_units", "is_limiting_resource", "created_at"
-    ],
-    "financial_obligations": [
-      "id", "debtor_economic_id", "creditor_economic_id", "obligation_type", "source_id", "principal_due_units", "interest_due_units", "paid_units", "debtor_account_purpose", "creditor_account_purpose", "due_game_day", "priority_class", "rule_version", "status", "created_game_day", "payment_transaction_id", "correlation_id", "cancelled_game_day", "created_at", "updated_at"
     ],
     "buildings": [
       "id",
@@ -341,7 +299,6 @@
       "quote_asset_id",
       "lot_size_units",
       "price_tick_units",
-      "genesis_reference_price_units",
       "rules_version",
       "status"
     ],
@@ -544,6 +501,28 @@
       "game_day",
       "status",
       "payment_transaction_id"
+    ],
+    "financial_obligations": [
+      "id",
+      "debtor_economic_id",
+      "creditor_economic_id",
+      "obligation_type",
+      "source_id",
+      "principal_due_units",
+      "interest_due_units",
+      "paid_units",
+      "debtor_account_purpose",
+      "creditor_account_purpose",
+      "due_game_day",
+      "priority_class",
+      "rule_version",
+      "status",
+      "created_game_day",
+      "payment_transaction_id",
+      "correlation_id",
+      "cancelled_game_day",
+      "created_at",
+      "updated_at"
     ],
     "fiscal_periods": [
       "id",
@@ -748,9 +727,118 @@
       "error_message",
       "created_at",
       "updated_at"
+    ],
+    "daily_settlement_phase_runs": [
+      "id",
+      "game_day",
+      "phase_id",
+      "phase_order",
+      "shard",
+      "status",
+      "correlation_id",
+      "attempt_count",
+      "lease_owner",
+      "lease_expires_at",
+      "started_at",
+      "completed_at",
+      "error_message",
+      "result",
+      "created_at",
+      "updated_at"
+    ],
+    "house_daily_statements": [
+      "house_id",
+      "game_day",
+      "opening_assets",
+      "closing_assets",
+      "production",
+      "consumption",
+      "market_activity",
+      "obligations",
+      "exceptions",
+      "net_credit_units",
+      "created_at",
+      "updated_at"
+    ],
+    "need_rules": [
+      "need_code",
+      "service_type_code",
+      "demand_units_per_human",
+      "critical_threshold_bps",
+      "rules_version",
+      "status"
+    ],
+    "service_types": [
+      "code",
+      "payer_scope",
+      "daily_price_units",
+      "allocation_priority",
+      "rules_version",
+      "status"
+    ],
+    "house_need_assessments": [
+      "house_id",
+      "game_day",
+      "need_code",
+      "demand_units",
+      "available_units",
+      "allocated_units",
+      "shortfall_units",
+      "risk_level",
+      "rules_version",
+      "created_at",
+      "updated_at"
+    ],
+    "service_allocations": [
+      "id",
+      "house_id",
+      "territory_id",
+      "service_code",
+      "provider_economic_id",
+      "payer_economic_id",
+      "game_day",
+      "capacity_units",
+      "allocated_units",
+      "price_units",
+      "economic_transaction_id",
+      "correlation_id",
+      "created_at"
+    ],
+    "house_operating_policies": [
+      "id",
+      "house_id",
+      "policy_type",
+      "version",
+      "effective_from_game_day",
+      "status",
+      "operating_mode",
+      "daily_spend_cap_units",
+      "reserve_floor_units",
+      "max_input_price_units",
+      "min_sale_price_units",
+      "procurement_quantity_units",
+      "rules_version",
+      "correlation_id",
+      "created_at",
+      "updated_at"
+    ],
+    "policy_execution_log": [
+      "id",
+      "policy_id",
+      "house_id",
+      "game_day",
+      "action_type",
+      "action_correlation_id",
+      "decision",
+      "created_at"
     ]
   },
-  "requiredUniqueConstraints": [],
+  "requiredUniqueConstraints": [
+    [
+      "economic_transactions",
+      "correlation_id"
+    ]
+  ],
   "requiredIndexes": [
     "territories_one_active_primary_idx",
     "house_affiliations_one_active_idx",
@@ -770,15 +858,22 @@
     "technology_patents_owner_idx",
     "technology_license_contracts_licensee_idx",
     "technology_license_contracts_patent_idx",
+    "daily_settlement_phase_runs_claim_idx",
+    "daily_settlement_phase_runs_failures_idx",
+    "house_daily_statements_day_idx",
+    "house_need_assessments_day_idx",
+    "service_allocations_provider_day_idx",
+    "house_operating_policies_active_idx",
+    "policy_execution_log_house_day_idx",
     "economic_entries_transaction_idx",
     "auth_email_deliveries_correlation_uq",
     "auth_email_deliveries_account_idx",
     "market_orders_open_idx",
     "market_fills_orders_idx",
     "tax_obligations_taxpayer_idx",
+    "financial_obligations_debtor_status_idx",
+    "financial_obligations_creditor_idx",
     "outbox_pending_idx"
-    ,"financial_obligations_debtor_status_idx"
-    ,"financial_obligations_creditor_idx"
   ],
   "requiredFunctions": [
     "earth_validate_economic_account_capability",
@@ -788,6 +883,10 @@
     "earth_provision_earth_economy",
     "earth_provision_bank_economy",
     "earth_settlement_watermark",
+    "earth_claim_settlement_day",
+    "earth_heartbeat_settlement_day",
+    "earth_complete_settlement_day",
+    "earth_fail_settlement_day",
     "earth_begin_economic_transaction",
     "earth_post_transaction",
     "earth_issue_starter_package",
@@ -800,7 +899,6 @@
     "earth_refresh_territory_capacity",
     "earth_validate_building_ownership",
     "earth_integrity_report",
-    "earth_resource_economic_integrity_report",
     "earth_market_integrity_report",
     "earth_create_tax_rule_version",
     "earth_technology_is_patentable",
@@ -809,6 +907,7 @@
     "earth_assert_technology_prerequisites_met",
     "earth_grant_corporation_technology_access",
     "earth_grant_completed_technology_patents",
-    "earth_finalize_technology_public_domain"
+    "earth_finalize_technology_public_domain",
+    "earth_refresh_house_daily_statements"
   ]
 }

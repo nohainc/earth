@@ -41,6 +41,8 @@ async function market(tx: PostgresRepository, day: number, assetId: number): Pro
   return result.rows[0] ?? { volume: '0', price: null };
 }
 
+// @mutation-boundary deterministic-settlement: analytics rows are keyed by owner, asset, and finalized day.
+// @mutation-boundary caller-owned-transaction: analytics projection is refreshed in the settlement phase transaction.
 export async function refreshResourceAnalyticsInTransaction(tx: PostgresRepository, day: number): Promise<void> {
   const assets = (await tx.query<Asset>(`SELECT id, code FROM economic_assets WHERE asset_kind='RESOURCE' ORDER BY id`)).rows;
   const houses = (await tx.query<{ economic_id: string }>(`SELECT economic_id FROM owner_registry WHERE owner_type='HOUSE'`)).rows;

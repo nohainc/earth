@@ -12,6 +12,7 @@ import {
   updateRulePostgres,
 } from './governance-postgres.ts';
 import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
+import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVotingSettings, resolveGovernanceProposalV4, setOrganizationVotingSettings } from './governance-v4-postgres.ts';
 
 export async function handleGovernanceRoutes(
   request: Request,
@@ -25,6 +26,55 @@ export async function handleGovernanceRoutes(
     ));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ rules: result.rows, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/api/governance/v4/proposals' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ subjectType?: 'EARTH' | 'ORGANIZATION'; subjectId?: string | null; title?: string; body?: string; actionType?: string; actionSnapshot?: Record<string, unknown>; ruleSnapshot?: Record<string, unknown>; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.title || !parsed.value.actionType || !parsed.value.actionSnapshot) return Response.json({ ok: false, error: 'Subject, title, action, snapshot, and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => createGovernanceProposalV4(repository, { humanId: viewer.id, subjectType: parsed.value.subjectType ?? 'EARTH', subjectId: parsed.value.subjectId ?? null, title: parsed.value.title!, body: parsed.value.body, actionType: parsed.value.actionType!, actionSnapshot: parsed.value.actionSnapshot!, ruleSnapshot: parsed.value.ruleSnapshot, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V4 proposal creation failed' }, { status: 409 }); }
+  }
+  const methodMatch = url.pathname.match(/^\/api\/governance\/v4\/organizations\/([^/]+)\/method$/);
+  if (methodMatch && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => getOrganizationVotingSettings(repository, methodMatch[1]));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
+  if (methodMatch && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ votingMethod?: 'ONE_HOUSE_ONE_VOTE' | 'DELEGATED' | 'SHARE_WEIGHTED' | 'QUADRATIC_VOICE'; voiceCycleDays?: number; voicePerCycle?: number; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.votingMethod) return Response.json({ ok: false, error: 'Voting method and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => setOrganizationVotingSettings(repository, { organizationId: methodMatch[1], humanId: viewer.id, votingMethod: parsed.value.votingMethod!, voiceCycleDays: parsed.value.voiceCycleDays, voicePerCycle: parsed.value.voicePerCycle, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Voting method update failed' }, { status: 409 }); }
+  }
+  const v4VoteMatch = url.pathname.match(/^\/api\/governance\/v4\/proposals\/([^/]+)\/vote$/);
+  if (v4VoteMatch && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ choice?: 'SUPPORT' | 'OPPOSE' | 'ABSTAIN'; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.choice || !['SUPPORT', 'OPPOSE', 'ABSTAIN'].includes(parsed.value.choice)) return Response.json({ ok: false, error: 'Valid choice and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => castGovernanceVoteV4(repository, { proposalId: v4VoteMatch[1], humanId: viewer.id, choice: parsed.value.choice!, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V4 ballot failed' }, { status: 409 }); }
+  }
+  const v4ResolveMatch = url.pathname.match(/^\/api\/governance\/v4\/proposals\/([^/]+)\/resolve$/);
+  if (v4ResolveMatch && request.method === 'POST') {
+    try {
+      const result = await withRepository(env, (repository) => resolveGovernanceProposalV4(repository, v4ResolveMatch[1]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V4 proposal resolution failed' }, { status: 409 }); }
   }
 
   if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {

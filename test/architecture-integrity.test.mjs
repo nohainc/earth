@@ -115,7 +115,7 @@ test('private production is House-batched, proportional, and owner-sharded', () 
   assert.match(engine, /building_settlement_journals/);
   assert.match(engine, /hashtextextended/);
   const phases = read('cloudflare/src/daily-settlement-phases.ts');
-  assert.match(phases, /id: 'building_settlement', order: 75, shardMode: 'owner-shards'/);
+  assert.match(phases, /required\('building_settlement', 75, 'owner-shards'/);
 });
 
 test('market state exposes auction signals and a non-guaranteed genesis reference', () => {

@@ -53,7 +53,7 @@ class GlobalRankingsDialog extends StatefulWidget {
 
 class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
   late RankingCategory _selectedCategory;
-  String _selectedMetric = 'composite';
+  String _selectedMetric = 'WEALTH';
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -141,7 +141,13 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
 
       case RankingCategory.houses:
         final raw = (_rankingsData!['houses'] ?? _rankingsData!['dynasticHouses']) as List<dynamic>? ?? const [];
-        return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (raw.isNotEmpty) return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        final metrics = _rankingsData!['metrics'] as Map<String, dynamic>?;
+        final selected = metrics?[_selectedMetric] as List<dynamic>? ?? const [];
+        return selected.map((e) {
+          final row = Map<String, dynamic>.from(e as Map);
+          return {'rank': row['rank'], 'id': row['subject_id'], 'house_name': row['subject_name'], 'metric_value': row['metric_value'], 'house_score': row['metric_value']};
+        }).toList();
 
       case RankingCategory.technologies:
         final raw = _rankingsData!['technologies'] as List<dynamic>? ?? const [];
@@ -490,7 +496,7 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
                   if (val) {
                     setState(() {
                       _selectedCategory = cat;
-                      _selectedMetric = 'composite';
+                      _selectedMetric = cat == RankingCategory.houses ? 'WEALTH' : 'composite';
                     });
                     _fetchRankings();
                   }
@@ -547,6 +553,31 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
               ),
             ),
           ),
+          if (_selectedCategory == RankingCategory.houses) ...[
+            const SizedBox(width: 8),
+            DropdownButton<String>(
+              key: const Key('ranking-dimension-selector'),
+              value: _selectedMetric,
+              dropdownColor: EarthColors.cardSurface,
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+              underline: const SizedBox.shrink(),
+              items: const [
+                DropdownMenuItem(value: 'WEALTH', child: Text('WEALTH')),
+                DropdownMenuItem(value: 'PRODUCTIVE_CAPACITY', child: Text('CAPACITY')),
+                DropdownMenuItem(value: 'LEGACY', child: Text('LEGACY')),
+                DropdownMenuItem(value: 'TECHNOLOGY', child: Text('TECH')),
+                DropdownMenuItem(value: 'PUBLIC_GOODS', child: Text('PUBLIC GOODS')),
+                DropdownMenuItem(value: 'ORGANIZATION_SCALE', child: Text('ORGANIZATION')),
+                DropdownMenuItem(value: 'TERRITORY_QUALITY', child: Text('TERRITORY')),
+                DropdownMenuItem(value: 'MARKET_ROLE', child: Text('MARKET')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _selectedMetric = value);
+                _fetchRankings();
+              },
+            ),
+          ],
           const SizedBox(width: 8),
           IconButton.filledTonal(
             icon: const Icon(Icons.refresh, size: 16),

@@ -1,6 +1,38 @@
 part of 'earth_api.dart';
 
 extension EarthApiRealEstate on EarthApi {
+  Future<Map<String, dynamic>> territoryRights({required String territoryId}) async {
+    final response = await _request('/api/territories/${Uri.encodeComponent(territoryId)}/rights');
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> commonsStatement({required String territoryId}) async {
+    final response = await _request('/api/territories/${Uri.encodeComponent(territoryId)}/commons');
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> acquireTerritoryRight({required String territoryId, String slotQuantity = '1', int termDays = 30}) async {
+    final response = await _request('/api/real-estate/rights', method: 'POST', body: {
+      'territoryId': territoryId,
+      'slotClass': 'PRIVATE',
+      'slotQuantity': slotQuantity,
+      'termDays': termDays,
+      'correlationId': newClientCorrelationId('ACQUIRE-RIGHT'),
+    });
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> releaseTerritoryRight({required String rightId}) async {
+    final response = await _request('/api/real-estate/rights/${Uri.encodeComponent(rightId)}/release', method: 'POST', body: {
+      'correlationId': newClientCorrelationId('RELEASE-RIGHT'),
+    });
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> getBuildingCapitalOptions({required String buildingId}) async {
+    final response = await _request('/api/real-estate/buildings/$buildingId/capital-options');
+    return Map<String, dynamic>.from(response as Map);
+  }
   Future<EarthState> purchaseBuilding({
     required String buildingType,
     required String name,
@@ -29,17 +61,6 @@ extension EarthApiRealEstate on EarthApi {
         'buildingId': buildingId,
         'correlationId': newClientCorrelationId('UPGRADE-BLD'),
       },
-    );
-    return EarthState(res as Map<String, dynamic>);
-  }
-
-  Future<EarthState> completeBuildingConstruction({
-    required String buildingId,
-  }) async {
-    final res = await _request(
-      '/api/real-estate/complete-construction',
-      method: 'POST',
-      body: {'buildingId': buildingId},
     );
     return EarthState(res as Map<String, dynamic>);
   }

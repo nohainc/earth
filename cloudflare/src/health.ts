@@ -119,8 +119,8 @@ export async function healthResponse(request: Request, env: Env, options: { read
                active.current_phase,
                active.lease_owner,
                active.lease_heartbeat_at::text,
-               0::text AS phase_completed,
-               0::text AS phase_total,
+               COALESCE(work.completed, 0)::text AS phase_completed,
+               COALESCE(work.total, 0)::text AS phase_total,
                (SELECT COUNT(*) FROM daily_settlement_runs r WHERE r.status = 'failed')::text AS failed_runs,
                (SELECT COALESCE(SUM(attempt_count), 0) FROM daily_settlement_runs)::text AS retry_count
         FROM daily_settlement_control control CROSS JOIN clock
@@ -129,6 +129,10 @@ export async function healthResponse(request: Request, env: Env, options: { read
                              FROM daily_settlement_runs r
                             WHERE r.status = 'running'
                             ORDER BY r.game_day DESC LIMIT 1) active ON TRUE
+        LEFT JOIN LATERAL (SELECT COUNT(*) FILTER (WHERE p.status = 'completed') AS completed,
+                                  COUNT(*) AS total
+                             FROM daily_settlement_phase_runs p
+                            WHERE p.game_day = active.game_day) work ON TRUE
         WHERE control.id = 'WORLD'
       `),
       Promise.all([

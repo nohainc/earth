@@ -69,6 +69,9 @@ function serializeOrder(row: Record<string, unknown>, baseAssetId = Number(row.b
     remainingQuantity: numberUnits(remaining, assetUnitScale(baseAssetId)),
     limitPrice: priceUnitsToDisplayPrice(String(row.limit_price_units ?? 0)),
     rulesVersion: row.rules_version,
+    sourceType: row.source_type ?? 'MANUAL',
+    policyId: row.policy_id ?? null,
+    goodTilGameDay: row.good_til_game_day ?? null,
     createdAt: row.created_at,
   };
 }
@@ -115,6 +118,38 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
       id: row.id, gameDay: row.game_day, gameMinute: row.game_minute, status: row.status,
       fillCount: row.fill_count, volume: numberUnits(row.volume_units, baseScale), economicTransactionId: row.economic_transaction_id,
     })) };
+  }
+
+  if (resource === 'projection') {
+    const [state, stats] = await Promise.all([
+      repository.query<Record<string, unknown>>(
+        `SELECT last_clearing_price_units::TEXT, best_bid_units::TEXT, best_ask_units::TEXT,
+                open_buy_units::TEXT, open_sell_units::TEXT, rolling_volume_units::TEXT
+           FROM market_instrument_state WHERE instrument_id = $1`, [instrument.id]),
+      repository.query<Record<string, unknown>>(
+        `WITH recent AS (
+          SELECT price_units::NUMERIC AS price_units, quantity_units::NUMERIC AS quantity_units
+            FROM market_fills
+           WHERE instrument_id = $1 AND batch_id IN (SELECT id FROM market_batches WHERE game_day >= (SELECT game_day - 7 FROM world_state WHERE id = 'WORLD'))
+        )
+        SELECT COUNT(*)::INTEGER AS fill_count,
+               COALESCE(SUM(quantity_units), 0)::TEXT AS volume_units,
+               COALESCE(SUM(price_units * quantity_units) / NULLIF(SUM(quantity_units), 0), 0)::TEXT AS vwap_units,
+               COALESCE(STDDEV_POP(price_units), 0)::TEXT AS volatility_units
+          FROM recent`, [instrument.id]),
+    ]);
+    const current = state.rows[0] ?? {};
+    const bestBid = current.best_bid_units === null || current.best_bid_units === undefined ? null : BigInt(String(current.best_bid_units));
+    const bestAsk = current.best_ask_units === null || current.best_ask_units === undefined ? null : BigInt(String(current.best_ask_units));
+    return {
+      instrument: instrumentPayload(instrument),
+      state: current,
+      projection: {
+        spreadUnits: bestBid !== null && bestAsk !== null && bestAsk >= bestBid ? (bestAsk - bestBid).toString() : null,
+        sevenDay: stats.rows[0] ?? { fill_count: 0, volume_units: '0', vwap_units: '0', volatility_units: '0' },
+        generatedFrom: 'postgres-canonical-facts',
+      },
+    };
   }
 
   if (resource === 'fills') {

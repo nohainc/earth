@@ -7,6 +7,9 @@ import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './glob
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { getFinancialQuote } from './financial-quotes.ts';
 import { getHouseFinancialProjection, getInstitutionFinancialProjection } from './financial-projections.ts';
+import { addBankLoanGuarantee, getBankLoanQuote, getBankRiskProjection, originateBankLoan, repayBankLoan } from './banking-postgres.ts';
+import { createOrganizationResolutionCase, getOrganizationFinancialState } from './organization-stress-postgres.ts';
+import { getTaxStatement } from './tax-statement-postgres.ts';
 
 export async function handleFinanceRoutes(
   request: Request,
@@ -15,6 +18,13 @@ export async function handleFinanceRoutes(
   viewer: { id: string; house_id: string },
   sensitiveActionAllowed: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
+  if (url.pathname === '/api/finance/tax-statement' && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => getTaxStatement(repository, viewer.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Tax statement unavailable' }, { status: 400 }); }
+  }
   if (url.pathname === '/api/finance/projection' && request.method === 'GET') {
     const scope = url.searchParams.get('scope')?.trim().toUpperCase() ?? 'HOUSE';
     try {
@@ -88,6 +98,11 @@ export async function handleFinanceRoutes(
     });
     return Response.json({ ...(result ?? {}), persistence: 'planetscale-postgres' });
   }
+  if (url.pathname === '/api/finance/bank/risk' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => getBankRiskProjection(repository));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
   if (url.pathname.startsWith('/api/finance/institutions/') && request.method === 'GET') {
     const institutionId = url.pathname.split('/').pop() ?? '';
     const result = await withRepository(env, async (repository) => {
@@ -99,7 +114,7 @@ export async function handleFinanceRoutes(
                            ORDER BY a.account_type`, [institutionId]),
         repository.query('SELECT * FROM financial_states WHERE institution_id = $1', [institutionId]),
         repository.query(`SELECT f.* FROM financial_obligations f JOIN owner_registry o ON o.economic_id = f.debtor_economic_id WHERE o.id = $1`, [institutionId]),
-        repository.query('SELECT * FROM institution_financial_projections WHERE institution_id = $1', [institutionId]),
+        getInstitutionFinancialProjection(repository, institutionId),
       ]);
       return { institutionId, accounts: accounts.rows, state: state.rows[0] ?? null, financialProjection: financialProjection.rows[0] ?? null, obligations: obligations.rows };
     });
@@ -112,6 +127,59 @@ export async function handleFinanceRoutes(
   if (url.pathname === '/api/finance/bank/deposits' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => listBankDeposits(repository, viewer.id));
     return Response.json({ ...(result ?? { deposits: [] }), persistence: 'planetscale-postgres' });
+  }
+  if (url.pathname === '/api/finance/bank/loan-quote' && request.method === 'GET') {
+    const requestedUnits = url.searchParams.get('requestedUnits')?.trim() ?? '';
+    const termDays = Number(url.searchParams.get('termDays') ?? 30);
+    if (!/^\d+$/.test(requestedUnits) || !Number.isInteger(termDays) || termDays <= 0) return Response.json({ ok: false, error: 'requestedUnits and positive termDays are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => getBankLoanQuote(repository, { humanId: viewer.id, requestedUnits: BigInt(requestedUnits), termDays }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan quote unavailable' }, { status: 400 }); }
+  }
+  if (url.pathname === '/api/finance/bank/loan' && request.method === 'POST') {
+    if (!featureEnabled(env, 'bankLoans')) return featureDisabledResponse('bankLoans');
+    const parsed = await parseJsonBody<{ requestedUnits?: string; termDays?: number; amountUnits?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const requestedUnits = parsed.value.requestedUnits?.trim() ?? '';
+    const termDays = Number(parsed.value.termDays ?? 30);
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!/^\d+$/.test(requestedUnits) || !Number.isInteger(termDays) || termDays <= 0 || !correlationId) return Response.json({ ok: false, error: 'requestedUnits, positive termDays, and correlation ID are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => originateBankLoan(repository, { humanId: viewer.id, requestedUnits: BigInt(requestedUnits), termDays, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan origination failed' }, { status: 409 }); }
+  }
+  const bankLoanRepayMatch = url.pathname.match(/^\/api\/finance\/bank\/loan\/([^/]+)\/repay$/);
+  if (bankLoanRepayMatch && request.method === 'POST') {
+    if (!featureEnabled(env, 'bankLoans')) return featureDisabledResponse('bankLoans');
+    const parsed = await parseJsonBody<{ amountUnits?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId) return Response.json({ ok: false, error: 'Correlation ID is required' }, { status: 400 });
+    try {
+      const amountUnits = parsed.value.amountUnits?.trim();
+      if (amountUnits !== undefined && !/^\d+$/.test(amountUnits)) return Response.json({ ok: false, error: 'amountUnits must be a non-negative integer' }, { status: 400 });
+      const result = await withRepository(env, (repository) => repayBankLoan(repository, { humanId: viewer.id, loanId: bankLoanRepayMatch[1], amountUnits: amountUnits === undefined ? undefined : BigInt(amountUnits), correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan repayment failed' }, { status: 409 }); }
+  }
+  const bankLoanGuaranteeMatch = url.pathname.match(/^\/api\/finance\/bank\/loan\/([^/]+)\/guarantee$/);
+  if (bankLoanGuaranteeMatch && request.method === 'POST') {
+    if (!featureEnabled(env, 'bankLoans')) return featureDisabledResponse('bankLoans');
+    const parsed = await parseJsonBody<{ guaranteedUnits?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const guaranteedUnits = parsed.value.guaranteedUnits?.trim() ?? '';
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!/^\d+$/.test(guaranteedUnits) || !correlationId) return Response.json({ ok: false, error: 'guaranteedUnits and correlation ID are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => addBankLoanGuarantee(repository, { humanId: viewer.id, loanId: bankLoanGuaranteeMatch[1], guaranteedUnits: BigInt(guaranteedUnits), correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan guarantee failed' }, { status: 409 }); }
   }
   if (url.pathname === '/api/finance/bank/deposit' && request.method === 'POST') {
     if (!featureEnabled(env, 'bankDeposits')) return featureDisabledResponse('bankDeposits');
@@ -237,6 +305,24 @@ export async function handleFinanceRoutes(
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+  const organizationRiskMatch = url.pathname.match(/^\/api\/finance\/organizations\/([^/]+)\/risk$/);
+  if (organizationRiskMatch && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => getOrganizationFinancialState(repository, organizationRiskMatch[1]));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
+  const organizationResolutionMatch = url.pathname.match(/^\/api\/finance\/organizations\/([^/]+)\/resolution$/);
+  if (organizationResolutionMatch && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ caseType?: 'RESTRUCTURE' | 'MERGER' | 'SPLIT' | 'DISSOLUTION'; successorOrganizationId?: string; proposalId?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.caseType || !parsed.value.proposalId) return Response.json({ ok: false, error: 'caseType, proposalId, and correlation ID are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => createOrganizationResolutionCase(repository, { organizationId: organizationResolutionMatch[1], caseType: parsed.value.caseType!, successorOrganizationId: parsed.value.successorOrganizationId, proposalId: parsed.value.proposalId!, humanId: viewer.id, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Resolution case creation failed' }, { status: 409 }); }
   }
 
   if (url.pathname === '/api/finance/net-worth-history' && request.method === 'GET') {

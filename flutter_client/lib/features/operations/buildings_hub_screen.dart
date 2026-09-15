@@ -39,7 +39,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   Timer? _constructionProgressTimer;
   int _localElapsedSeconds = 0;
   int? _serverClockTotalMinutes;
-  final Set<String> _constructionCompletionRequests = <String>{};
 
   String _buildingImageAsset(String buildingType) {
     return EarthBuildingMeta.getAssetPath(buildingType);
@@ -113,34 +112,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           setState(() {
             _localElapsedSeconds++;
           });
-          _completeFinishedBuildings();
         });
       }
     } else {
       _constructionProgressTimer?.cancel();
       _constructionProgressTimer = null;
-    }
-  }
-
-  void _completeFinishedBuildings() {
-    for (final raw in widget.state.buildings) {
-      if (raw is! Map) continue;
-      final building = Map<String, dynamic>.from(raw);
-      final status = building['status']?.toString();
-      if (status != 'under_construction' && status != 'inactive') continue;
-      if (building['owner_id']?.toString() !=
-          widget.state.human['id']?.toString()) {
-        continue;
-      }
-      if (_calculateBuildingProgress(building) < 100.0) continue;
-      final id = building['id']?.toString();
-      if (id == null || !_constructionCompletionRequests.add(id)) continue;
-      widget
-          .action(() =>
-              const EarthApi().completeBuildingConstruction(buildingId: id))
-          .catchError((_) {
-        _constructionCompletionRequests.remove(id);
-      });
     }
   }
 
@@ -2480,6 +2456,21 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       return ownership == 'civic';
     }).length;
 
+    String economicRole(Map<String, dynamic> item) =>
+        (item['economic_role'] ?? item['economicRole'] ?? 'ESTATE')
+            .toString()
+            .toUpperCase();
+    final roleCounts = <String, int>{
+      for (final role in const [
+        'PRODUCER',
+        'TRANSFORMER',
+        'SERVICE',
+        'INFRASTRUCTURE',
+        'ESTATE',
+      ])
+        role: rootBlueprints.where((item) => economicRole(item) == role).length,
+    };
+
     final filteredList = rootBlueprints.where((item) {
       final ownership = item['ownership_class']?.toString() ??
           item['defaultOwnershipClass']?.toString() ??
@@ -2499,6 +2490,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       if (_catalogFilter == 'civic') {
         return ownership == 'civic';
       }
+      if (roleCounts.containsKey(_catalogFilter)) {
+        return economicRole(item) == _catalogFilter;
+      }
       return true;
     }).toList();
 
@@ -2516,6 +2510,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   label: 'PRIVATE ($privateCount)', filter: 'private'),
               _catalogFilterChip(context,
                   label: 'CIVIC ($civicCount)', filter: 'civic'),
+              ...roleCounts.entries.map((entry) => _catalogFilterChip(
+                    context,
+                    label: '${entry.key} (${entry.value})',
+                    filter: entry.key,
+                  )),
             ],
           ),
           SizedBox(height: context.spacingControl),
@@ -2539,6 +2538,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   item['defaultOwnershipClass']?.toString() ??
                   item['ownershipClass']?.toString() ??
                   'private';
+              final role = economicRole(item);
               final footprint =
                   asIntOr(item['slot_footprint'] ?? item['slotFootprint'], 1);
 
@@ -2787,6 +2787,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                           EarthBadge(
                                             label: category,
                                             variant: EarthBadgeVariant.neutral,
+                                          ),
+                                          EarthBadge(
+                                            label: role,
+                                            variant: role == 'INFRASTRUCTURE'
+                                                ? EarthBadgeVariant.warning
+                                                : EarthBadgeVariant.neutral,
                                           ),
                                         ],
                                       ),

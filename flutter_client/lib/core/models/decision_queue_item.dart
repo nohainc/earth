@@ -60,6 +60,7 @@ class DecisionQueueItem {
   IconData get categoryIcon {
     switch (category.toLowerCase()) {
       case 'business':
+      case 'organization':
         return Icons.business_center_outlined;
       case 'governance':
       case 'civic':
@@ -96,7 +97,7 @@ class DecisionQueueItem {
   factory DecisionQueueItem.fromJson(Map<String, dynamic> json) =>
       DecisionQueueItem(
         id: json['id']?.toString() ?? 'decision-generic',
-        category: json['category']?.toString() ?? 'business',
+        category: json['category']?.toString() ?? 'organization',
         title: json['title']?.toString() ?? 'Pending Decision',
         whyItMatters: json['whyItMatters']?.toString() ??
             'Action is required to maintain operational stability.',
@@ -125,21 +126,59 @@ class DecisionQueueItem {
 
     final items = <DecisionQueueItem>[];
 
-    // 1. Corporation energy & resource deficit
+    // Organization energy & resource deficit
     final rawResources = state.json['resources'];
     final resources = rawResources is Map ? rawResources : const {};
     final energy = asDoubleOr(resources['energy'], 100.0);
     final materials = asDoubleOr(
         resources['material'] ?? resources['materials'], 100.0);
-    final rawBusiness = state.json['business'];
-    final business = rawBusiness is Map ? rawBusiness : const {};
-    final profit = asDoubleOr(business['profit'], 0.0);
+    final rawOrganization = state.json['organization'] ?? state.json['business'];
+    final organization = rawOrganization is Map ? rawOrganization : const {};
+    final profit = asDoubleOr(organization['profit'], 0.0);
+
+    final rawTerritory = state.json['territory'];
+    final territory = rawTerritory is Map ? rawTerritory : const {};
+    final territoryId = territory['id']?.toString();
+    if (territoryId != null && territoryId.isNotEmpty) {
+      final residents = asDoubleOr(territory['residents'], 1.0).clamp(1.0, double.infinity);
+      final energyCapacity = asDoubleOr(territory['energy_capacity'], 0.0);
+      final healthCapacity = asDoubleOr(territory['health_capacity'], 0.0);
+      final energyRatio = energyCapacity / residents;
+      if (energyRatio < 1.0) {
+        items.add(DecisionQueueItem(
+          id: 'decision-territory-energy-$territoryId',
+          category: 'civic',
+          title: 'Your Territory needs an energy recovery plan',
+          whyItMatters: 'The local grid provides ${energyCapacity.round()} capacity for ${residents.round()} residents.',
+          deadline: 'Before the next settlement',
+          expectedImpact: 'Restore reliable local services and protect productive assets from brownouts.',
+          riskLevel: energyRatio < 0.75 ? 'critical' : 'high',
+          primaryActionLabel: 'Review Territory Capacity',
+          targetSection: 'territory',
+          urgencyScore: 85.0 + ((1.0 - energyRatio).clamp(0.0, 1.0) * 15.0),
+        ));
+      }
+      if (healthCapacity / 100.0 < 0.5) {
+        items.add(DecisionQueueItem(
+          id: 'decision-territory-health-$territoryId',
+          category: 'civic',
+          title: 'Your Territory needs a health recovery plan',
+          whyItMatters: 'Health capacity is at ${(healthCapacity / 100.0 * 100).round()}%; prolonged deficits can reduce quality of life.',
+          deadline: 'Before the next settlement',
+          expectedImpact: 'Raise health capacity and keep your household and workforce in place.',
+          riskLevel: 'critical',
+          primaryActionLabel: 'Review Territory Capacity',
+          targetSection: 'territory',
+          urgencyScore: 92.0,
+        ));
+      }
+    }
 
     if (energy <= 50) {
       items.add(DecisionQueueItem(
-        id: 'decision-corp-energy-deficit',
-        category: 'business',
-        title: 'Your corporation is losing energy',
+        id: 'decision-organization-energy-deficit',
+        category: 'organization',
+        title: 'An Organization is losing energy',
         whyItMatters:
             'Energy reserves are dangerously depleted; factory operations and machinery will freeze if energy drops to zero.',
         deadline: energy <= 20 ? 'Immediate (Next Tick)' : 'Next Game Day',
@@ -152,9 +191,9 @@ class DecisionQueueItem {
       ));
     } else if (materials < 25) {
       items.add(const DecisionQueueItem(
-        id: 'decision-corp-material-deficit',
-        category: 'business',
-        title: 'Production materials running low',
+        id: 'decision-organization-material-deficit',
+        category: 'organization',
+        title: 'Organization materials are running low',
         whyItMatters:
             'Manufacturing lines cannot fulfill output quotas without raw components and materials.',
         deadline: 'In 1 Game Day',
@@ -167,9 +206,9 @@ class DecisionQueueItem {
       ));
     } else if (profit < 0) {
       items.add(const DecisionQueueItem(
-        id: 'decision-corp-negative-cashflow',
-        category: 'business',
-        title: 'Corporation is operating at a net loss',
+        id: 'decision-organization-negative-cashflow',
+        category: 'organization',
+        title: 'Organization is operating at a net loss',
         whyItMatters:
             'Operating expenses exceed daily revenues, eroding working capital.',
         deadline: 'End of Fiscal Cycle',
@@ -196,10 +235,10 @@ class DecisionQueueItem {
         category: 'governance',
         title: 'You have an unresolved governance vote',
         whyItMatters:
-            'A municipal referendum regarding city tax charters and public services closes this cycle.',
+            'A governance proposal closes this cycle and may change shared rules or spending priorities.',
         deadline: 'Voting Closes Today',
         expectedImpact:
-            'Shape tax regulations and direct municipal infrastructure investments.',
+            'Shape the rules and shared investments that affect your House and Territory.',
         riskLevel: 'medium',
         primaryActionLabel: 'Cast Ballot',
         targetSection: 'civic',
@@ -217,7 +256,7 @@ class DecisionQueueItem {
       final c = Map<String, dynamic>.from(activeContracts.first as Map);
       items.add(DecisionQueueItem(
         id: 'decision-contract-expiring-${c['id'] ?? 'c1'}',
-        category: 'business',
+        category: 'organization',
         title: 'A contract expires in 2 days',
         whyItMatters:
             'Unfulfilled supply obligations risk penalty fees and client relationship suspension.',

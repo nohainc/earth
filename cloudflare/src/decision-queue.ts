@@ -1,5 +1,5 @@
 export type DecisionCategory =
-  | 'business'
+  | 'organization'
   | 'governance'
   | 'civic'
   | 'technology'
@@ -29,10 +29,11 @@ export interface DecisionQueueInput {
   technology?: { progress?: unknown; active_patents?: unknown; is_funding_open?: boolean };
   house?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
   dynasty?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
-  business?: { id?: string; name?: string; profit?: unknown; net_income?: unknown; condition?: unknown };
+  organization?: { id?: string; name?: string; profit?: unknown; net_income?: unknown; condition?: unknown };
   finance?: { unpaid_tax?: unknown; status?: string; debt?: unknown };
-  city?: { id?: string; residents?: unknown; housing_capacity?: unknown; energy_capacity?: unknown; connectivity_capacity?: unknown; health_capacity?: unknown };
+  territory?: { id?: string; residents?: unknown; housing_capacity?: unknown; energy_capacity?: unknown; connectivity_capacity?: unknown; health_capacity?: unknown };
   market?: Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>;
+  needs?: Array<{ need_code: string; demand_units?: unknown; allocated_units?: unknown; shortfall_units?: unknown; risk_level?: string }>;
   gameDay?: number;
 }
 
@@ -46,44 +47,64 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
   const items: DecisionQueueItem[] = [];
   const gameDay = input.gameDay ?? 0;
 
-  const city = input.city;
-  if (city?.id) {
-    const residents = Math.max(1, num(city.residents));
-    const energyRatio = num(city.energy_capacity) / residents;
-    const healthRatio = num(city.health_capacity) / 100;
+  const territory = input.territory;
+  if (territory?.id) {
+    const residents = Math.max(1, num(territory.residents));
+    const energyRatio = num(territory.energy_capacity) / residents;
+    const healthRatio = num(territory.health_capacity) / 100;
     if (energyRatio < 1) items.push({
-      id: `decision-city-energy-${city.id}`, category: 'civic',
-      title: 'Your city needs an energy recovery plan',
-      whyItMatters: `The grid provides ${Math.round(num(city.energy_capacity))} capacity for ${Math.round(residents)} residents.`,
-      deadline: 'Before the next civic cycle',
-      expectedImpact: 'Restore reliable city services and protect local production from brownouts.',
+      id: `decision-territory-energy-${territory.id}`, category: 'civic',
+      title: 'Your Territory needs an energy recovery plan',
+      whyItMatters: `The local grid provides ${Math.round(num(territory.energy_capacity))} capacity for ${Math.round(residents)} residents.`,
+      deadline: 'Before the next settlement',
+      expectedImpact: 'Restore reliable local services and protect productive assets from brownouts.',
       riskLevel: energyRatio < 0.75 ? 'critical' : 'high',
-      primaryActionLabel: 'Review City Capacity', targetSection: 'city',
+      primaryActionLabel: 'Review Territory Capacity', targetSection: 'territory',
       urgencyScore: Math.round(85 + Math.max(0, 1 - energyRatio) * 15),
     });
     if (healthRatio < 0.5) items.push({
-      id: `decision-city-health-${city.id}`, category: 'civic',
-      title: 'Your city needs a health recovery plan',
-      whyItMatters: `Health capacity is at ${Math.round(healthRatio * 100)}%; a prolonged deficit can trigger relocation pressure.`,
-      deadline: 'Before the next civic cycle',
+      id: `decision-territory-health-${territory.id}`, category: 'civic',
+      title: 'Your Territory needs a health recovery plan',
+      whyItMatters: `Health capacity is at ${Math.round(healthRatio * 100)}%; a prolonged deficit can reduce quality of life and trigger mobility pressure.`,
+      deadline: 'Before the next settlement',
       expectedImpact: 'Raise health capacity and keep your household and workforce in place.',
-      riskLevel: 'critical', primaryActionLabel: 'Review City Capacity', targetSection: 'city', urgencyScore: 92,
+      riskLevel: 'critical', primaryActionLabel: 'Review Territory Capacity', targetSection: 'territory', urgencyScore: 92,
     });
   }
 
-  // 1. Corporation Resource Deficit / Energy Drain
+  for (const need of input.needs ?? []) {
+    const shortfall = num(need.shortfall_units);
+    const level = String(need.risk_level ?? '').toLowerCase();
+    if (shortfall <= 0 && level === 'normal') continue;
+    const code = need.need_code.toUpperCase();
+    const demand = Math.max(1, num(need.demand_units));
+    const allocated = num(need.allocated_units);
+    const coverage = allocated / demand;
+    items.push({
+      id: `decision-house-service-${code.toLowerCase()}`, category: 'house',
+      title: `House ${code} access needs attention`,
+      whyItMatters: `Your House received ${Math.round(allocated)} of ${Math.round(demand)} ${code} service units in the latest settlement.`,
+      deadline: 'Before the next settlement',
+      expectedImpact: `Improve ${code.toLowerCase()} coverage and reduce pressure on House continuity.`,
+      riskLevel: level === 'critical' || coverage === 0 ? 'critical' : 'high',
+      primaryActionLabel: 'Review Life & Services', targetSection: 'services',
+      urgencyScore: Math.round(90 - Math.min(40, coverage * 40)),
+    });
+  }
+
+  // Organization resource deficit / energy drain.
   const energy = num(input.resources?.energy);
   const materials = num(input.resources?.material ?? input.resources?.materials);
-  const profit = num(input.business?.profit ?? input.business?.net_income ?? 0);
+  const profit = num(input.organization?.profit ?? input.organization?.net_income ?? 0);
 
   if (energy <= 50) {
     items.push({
-      id: 'decision-corp-energy-deficit',
-      category: 'business',
-      title: 'Your corporation is losing energy',
-      whyItMatters: 'Energy reserves are dangerously depleted; factory operations and machinery will halt if energy drops to zero.',
-      deadline: energy <= 20 ? 'Immediate (Next Tick)' : 'Next Game Day',
-      expectedImpact: 'Prevent emergency production blackout and avoid idle capacity penalties.',
+      id: 'decision-organization-energy-deficit',
+      category: 'organization',
+      title: 'An Organization is losing energy',
+      whyItMatters: 'Energy reserves are dangerously depleted; productive operations will halt if energy drops to zero.',
+      deadline: energy <= 20 ? 'Immediate' : 'Next game day',
+      expectedImpact: 'Prevent an operating blackout and avoid idle capacity penalties.',
       riskLevel: energy <= 20 ? 'critical' : 'high',
       primaryActionLabel: 'Procure Energy',
       targetSection: 'market',
@@ -91,10 +112,10 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     });
   } else if (materials < 25) {
     items.push({
-      id: 'decision-corp-material-deficit',
-      category: 'business',
-      title: 'Production materials running low',
-      whyItMatters: 'Manufacturing lines cannot fulfill output quotas without raw components and materials.',
+      id: 'decision-organization-material-deficit',
+      category: 'organization',
+      title: 'Organization materials are running low',
+      whyItMatters: 'Productive operations cannot fulfill planned output without material inputs.',
       deadline: 'In 1 Game Day',
       expectedImpact: 'Keep industrial assembly lines running at 100% capacity.',
       riskLevel: 'high',
@@ -104,9 +125,9 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     });
   } else if (profit < 0) {
     items.push({
-      id: 'decision-corp-negative-cashflow',
-      category: 'business',
-      title: 'Corporation is operating at a net loss',
+      id: 'decision-organization-negative-cashflow',
+      category: 'organization',
+      title: 'Organization is operating at a net loss',
       whyItMatters: 'Operating expenses exceed daily revenues, eroding working capital.',
       deadline: 'End of Fiscal Cycle',
       expectedImpact: 'Adjust production pricing and policy to restore positive operating margins.',
@@ -125,9 +146,9 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
       id: `decision-governance-vote-${proposal.id}`,
       category: 'governance',
       title: 'You have an unresolved governance vote',
-      whyItMatters: 'A municipal referendum regarding city tax charters and public services closes this cycle.',
+      whyItMatters: 'A governance proposal closes this cycle and may change shared rules or spending priorities.',
       deadline: 'Voting Closes Today',
-      expectedImpact: 'Shape tax regulations and direct municipal infrastructure investments.',
+      expectedImpact: 'Shape the rules and shared investments that affect your House and Territory.',
       riskLevel: 'medium',
       primaryActionLabel: 'Cast Ballot',
       targetSection: 'civic',
@@ -142,9 +163,9 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
       id: 'decision-tech-funding-available',
       category: 'technology',
       title: 'Research funding is available',
-      whyItMatters: 'Collective R&D in clean energy & automation requires capital contributions to unlock universal patents and production multipliers.',
+      whyItMatters: 'Contributions to the current research program can unlock shared technology improvements.',
       deadline: 'Current Research Cycle',
-      expectedImpact: 'Advance global tech level and secure perpetual licensing dividend rights.',
+      expectedImpact: 'Advance the technology generation and improve future productive capacity.',
       riskLevel: 'low',
       primaryActionLabel: 'Fund Research',
       targetSection: 'technology',
@@ -189,10 +210,10 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     items.push({
       id: 'decision-finance-tax-settlement',
       category: 'finance',
-      title: 'Municipal tax assessment pending settlement',
-      whyItMatters: 'Unpaid civic assessments accrue compounding penalties and risk personal financial insolvency.',
+      title: 'A financial obligation needs settlement',
+      whyItMatters: 'Unpaid obligations can accrue penalties and restrict your House from acting freely.',
       deadline: 'Fiscal Day End',
-      expectedImpact: 'Clear municipal balance and maintain pristine corporate standing.',
+      expectedImpact: 'Protect House liquidity and keep your financial standing healthy.',
       riskLevel: 'high',
       primaryActionLabel: 'Settle Tax',
       targetSection: 'finance',

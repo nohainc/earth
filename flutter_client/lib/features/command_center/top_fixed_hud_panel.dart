@@ -414,7 +414,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    'UNITED CORPORATIONS',
+                    'A LIVING WORLD',
                     style: TextStyle(
                       fontSize: isTablet ? 7.5 : 8.5,
                       fontWeight: FontWeight.w600,

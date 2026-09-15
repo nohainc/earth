@@ -11,6 +11,8 @@ test('institution budget API keeps cash and budget authority separate', () => {
   }
   assert.match(routes, /\/budget\(\?:\\\//);
   for (const endpoint of ['lines', 'commitments', 'fiscal-summary', 'financial-projection']) assert.match(routes, new RegExp(endpoint));
+  assert.doesNotMatch(api, /institution_financial_projections/);
+  assert.match(api, /getInstitutionFinancialProjection/);
 });
 
 test('commitment API uses authorization and atomic commitment functions', () => {

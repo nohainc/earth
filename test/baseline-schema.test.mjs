@@ -19,7 +19,7 @@ test('migration directory exposes the immutable baseline followed by contiguous 
     .filter((file) => /^\d+_.+\.sql$/.test(file))
     .filter((file) => fs.readFileSync(new URL(file, migrationDir), 'utf8').includes('-- EARTH ACTIVE MIGRATION:'));
   assert.equal(active[0], '001_baseline.sql');
-  assert.deepEqual(active, ['001_baseline.sql', '002_communities_v2.sql', '003_community_v2_hardening.sql', '004_public_infrastructure_credit.sql', '005_architecture_integrity_report.sql', '006_resource_flow_schema.sql', '007_core_resource_graph_t1.sql', '008_house_food_maintenance.sql', '009_private_building_settlement_journals.sql', '010_market_state_completion.sql', '011_resource_analytics_read_models.sql', '012_resource_economic_integrity.sql', '013_financial_obligations.sql', '014_construction_settlement_destination.sql']);
+  assert.deepEqual(active.map((file) => Number(file.slice(0, 3))), active.map((_, index) => index + 1));
   const migrator = fs.readFileSync(path.resolve(new URL('../scripts/migrate-postgres.mjs', import.meta.url).pathname), 'utf8');
   assert.match(migrator, /activeMigrations/);
   assert.doesNotMatch(migrator, /ALLOW_MIGRATION_REPAIR/);
@@ -60,7 +60,7 @@ test('schema V3 structurally prevents rebuilding the City hierarchy', () => {
   assert.match(schema, /CREATE UNIQUE INDEX house_affiliations_one_active_idx/);
   assert.match(schema, /CREATE UNIQUE INDEX territories_one_active_primary_idx/);
   assert.match(schema, /CHECK \(kind IN \('EARTH','CORPORATION','BANK'\)\)/);
-  assert.match(schema, /CHECK \(owner_type IN \('EARTH','CORPORATION','HOUSE','BANK','SYSTEM'\)\)/);
+  assert.match(schema, /CHECK \(owner_type IN \('EARTH','CORPORATION','HOUSE','BANK','SYSTEM','ORGANIZATION'\)\)/);
   assert.match(schema, /CHECK \(scope IN \('EARTH','CORPORATION'\)\)/);
   assert.match(schema, /CHECK \(scope IN \('global', 'corporation', 'community', 'direct'\)\)/);
 

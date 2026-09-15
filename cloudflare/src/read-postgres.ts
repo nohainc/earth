@@ -1,5 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { mapTechnologyCatalogRow } from './technology-postgres.ts';
+import { listRankings as listRankingsSnapshot } from './rankings-postgres.ts';
+import { priceUnitsToDisplayPrice } from './market-units.ts';
 
 export { listEvents } from './read-models/events-read.ts';
 export { listHistory } from './read-models/events-read.ts';
@@ -44,13 +46,7 @@ export async function listInstitutions(repository: PostgresRepository): Promise<
 export interface RankingsQueryOptions { category?: string; metric?: string; search?: string; limit?: number; offset?: number; currentHumanId?: string; }
 
 export async function listRankings(repository: PostgresRepository, options: RankingsQueryOptions = {}): Promise<Record<string, unknown>> {
-  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
-  const [corporations, territories, technologies] = await Promise.all([
-    repository.query('SELECT c.id, c.name, c.status, c.member_count, COALESCE(a.balance_units, 0)::text AS treasury FROM corporations c LEFT JOIN owner_registry o ON o.id = c.id LEFT JOIN economic_accounts a ON a.owner_economic_id = o.economic_id AND a.asset_id = 1 AND a.account_type = \'TREASURY\' AND a.status = \'ACTIVE\' ORDER BY c.id LIMIT $1', [limit]).catch(() => ({ rows: [] })),
-    repository.query('SELECT t.id, t.corporation_id, t.name, t.status, s.total_slots, s.used_slots, s.available_slots FROM territories t LEFT JOIN territory_capacity_state s ON s.territory_id = t.id ORDER BY t.id LIMIT $1', [limit]).catch(() => ({ rows: [] })),
-    repository.query('SELECT tc.id, tc.code, tc.name FROM technology_catalog tc ORDER BY tc.code LIMIT $1', [limit]).catch(() => ({ rows: [] })),
-  ]);
-  return { ok: true, corporations: corporations.rows, territories: territories.rows, rankings: [], wealth: [], technologies: technologies.rows, citizens: [], houses: [], dynasticHouses: [], generatedFrom: 'planetscale-postgres' };
+  return listRankingsSnapshot(repository, options);
 }
 
 export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
@@ -74,11 +70,93 @@ export async function listGovernanceRules(repository: PostgresRepository): Promi
 }
 
 export async function getServiceStatus(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const row = (await repository.query(`SELECT t.id, s.housing_ratio, s.energy_ratio, s.connectivity_ratio, s.health_ratio FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE' JOIN territories t ON t.corporation_id = ha.corporation_id LEFT JOIN territory_capacity_state s ON s.territory_id = t.id WHERE h.id = $1 ORDER BY t.id LIMIT 1`, [humanId])).rows[0] as any;
-  const ratios = { housing: Number(row?.housing_ratio ?? 0), utilities: Number(row?.energy_ratio ?? 0), connectivity: Number(row?.connectivity_ratio ?? 0), health: Number(row?.health_ratio ?? 0) };
-  return { territoryId: row?.id ?? null, provider: row ? 'territory-capacity' : null, ratios, status: Object.fromEntries(Object.entries(ratios).map(([key, value]) => [key, value >= 1 ? 'normal' : value >= .75 ? 'basic' : 'critical'])), essentialServicesIndex: Math.min(...Object.values(ratios)) };
+  const house = (await repository.query<{ house_id: string; territory_id: string }>(`SELECT h.house_id, r.territory_id FROM humans h JOIN house_residencies r ON r.house_id = h.house_id AND r.status = 'ACTIVE' AND r.residency_class = 'PRIMARY' WHERE h.id = $1 ORDER BY r.effective_from_game_day DESC LIMIT 1`, [humanId])).rows[0];
+  if (!house) return { territoryId: null, provider: null, ratios: { housing: 0, utilities: 0, connectivity: 0, health: 0 }, needs: [], essentialServicesIndex: 0 };
+  const assessments = (await repository.query<{ need_code: string; demand_units: string; allocated_units: string; shortfall_units: string; risk_level: string; game_day: number }>(`SELECT need_code, demand_units::TEXT, allocated_units::TEXT, shortfall_units::TEXT, risk_level, game_day FROM house_need_assessments WHERE house_id = $1 ORDER BY game_day DESC, need_code`, [house.house_id])).rows;
+  const latestDay = assessments[0]?.game_day;
+  const needs = assessments.filter((row) => row.game_day === latestDay).map((row) => {
+    const demand = Number(row.demand_units); const allocated = Number(row.allocated_units);
+    return { needCode: row.need_code, demandUnits: row.demand_units, allocatedUnits: row.allocated_units, shortfallUnits: row.shortfall_units, coverageRatio: demand > 0 ? Math.min(1, allocated / demand) : 1, risk: row.risk_level };
+  });
+  const coverage = Object.fromEntries(needs.map((need) => [need.needCode.toLowerCase(), need.coverageRatio]));
+  const ratios = { housing: Number(coverage.housing ?? 0), utilities: Number(coverage.energy ?? 0), connectivity: Number(coverage.connectivity ?? 0), health: Number(coverage.health ?? 0) };
+  return { territoryId: house.territory_id, provider: 'house-need-assessments', gameDay: latestDay ?? null, needs, ratios, status: Object.fromEntries(Object.entries(ratios).map(([key, value]) => [key, value >= 1 ? 'normal' : value >= .75 ? 'basic' : 'critical'])), essentialServicesIndex: Math.min(...Object.values(ratios)) };
 }
 
-export async function listPantheonOfAchievements(repository: PostgresRepository): Promise<Record<string, unknown>> { return { deceasedPantheon: [], livingLeaders: [], houses: [], dynasticHouses: [] }; }
-export async function listCemeteryProfiles(repository: PostgresRepository, query: { search?: string; house?: string; dynasty?: string; limit?: number }): Promise<Record<string, unknown>> { return { profiles: [] }; }
-export async function listMarketPriceHistory(repository: PostgresRepository, product: string, limitDays = 30): Promise<Record<string, unknown>> { return { product, history: [] }; }
+/** Public legacy read model. It deliberately exposes only memorial facts, never account data. */
+export async function listPantheonOfAchievements(repository: PostgresRepository): Promise<Record<string, unknown>> {
+  const [deceased, living, houses] = await Promise.all([
+    repository.query(`SELECT h.id AS human_id, h.display_name, h.house_id, d.house_name,
+                             h.death_game_day, h.final_legacy, h.standing AS final_standing
+                        FROM humans h JOIN houses d ON d.id = h.house_id
+                       WHERE h.status = 'DECEASED'
+                       ORDER BY h.final_legacy DESC, h.death_game_day ASC NULLS LAST, h.id
+                       LIMIT 100`),
+    repository.query(`SELECT h.id, h.display_name, h.house_id, d.house_name, h.age_years,
+                             h.standing, h.final_legacy AS legacy,
+                             (h.final_legacy + h.standing) AS composite_legacy_score
+                        FROM humans h JOIN houses d ON d.id = h.house_id
+                       WHERE h.status = 'ACTIVE'
+                       ORDER BY composite_legacy_score DESC, h.id
+                       LIMIT 100`),
+    repository.query(`SELECT id, house_name, motto, dynasty_legacy, generation, status
+                        FROM houses WHERE status = 'ACTIVE'
+                       ORDER BY dynasty_legacy DESC, generation DESC, id
+                       LIMIT 100`),
+  ]);
+  return {
+    deceasedPantheon: deceased.rows,
+    livingLeaders: living.rows,
+    houses: houses.rows,
+    dynasticHouses: houses.rows,
+    generatedFrom: 'postgres-canonical-facts',
+  };
+}
+
+export async function listCemeteryProfiles(
+  repository: PostgresRepository,
+  query: { search?: string; house?: string; dynasty?: string; limit?: number },
+): Promise<Record<string, unknown>> {
+  const requestedLimit = Number(query.limit ?? 50);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, Math.trunc(requestedLimit))) : 50;
+  const search = query.search?.trim() ?? '';
+  const house = query.house?.trim() ?? '';
+  const dynasty = query.dynasty?.trim() ?? '';
+  const result = await repository.query(`SELECT h.id AS human_id, h.display_name, h.house_id,
+                                                d.house_name, d.motto, d.generation,
+                                                h.birth_game_day, h.death_game_day, h.age_years,
+                                                h.final_legacy, h.standing AS final_standing,
+                                                NULL::TEXT AS successor_name
+                                           FROM humans h JOIN houses d ON d.id = h.house_id
+                                          WHERE h.status = 'DECEASED'
+                                            AND ($1 = '' OR h.display_name ILIKE '%' || $1 || '%' OR d.house_name ILIKE '%' || $1 || '%')
+                                            AND ($2 = '' OR d.house_name ILIKE '%' || $2 || '%')
+                                            AND ($3 = '' OR d.house_name ILIKE '%' || $3 || '%')
+                                          ORDER BY h.death_game_day DESC NULLS LAST, h.id
+                                          LIMIT $4`, [search, house, dynasty, limit]);
+  return { profiles: result.rows, cemetery: result.rows, generatedFrom: 'postgres-canonical-facts' };
+}
+
+export async function listMarketPriceHistory(repository: PostgresRepository, product: string, limitDays = 30): Promise<Record<string, unknown>> {
+  const normalizedProduct = product.trim().toLowerCase();
+  const requestedDays = Number(limitDays);
+  const days = Number.isFinite(requestedDays) ? Math.min(100, Math.max(1, Math.trunc(requestedDays))) : 30;
+  const result = await repository.query(`SELECT i.symbol, c.period_id, c.open_price_units::TEXT,
+                                                c.high_price_units::TEXT, c.low_price_units::TEXT,
+                                                c.close_price_units::TEXT, c.volume_units::TEXT, c.fill_count
+                                           FROM market_instruments i
+                                           JOIN market_candles c ON c.instrument_id = i.id
+                                          WHERE i.symbol = $1 AND c.interval_kind = 'daily'
+                                          ORDER BY c.period_id DESC
+                                          LIMIT $2`, [`SPOT-${normalizedProduct.toUpperCase()}`, days]);
+  const history = result.rows.map((row: any) => ({
+    periodId: row.period_id,
+    price: priceUnitsToDisplayPrice(row.close_price_units),
+    open: priceUnitsToDisplayPrice(row.open_price_units),
+    high: priceUnitsToDisplayPrice(row.high_price_units),
+    low: priceUnitsToDisplayPrice(row.low_price_units),
+    volume: String(row.volume_units ?? '0'),
+    fillCount: Number(row.fill_count ?? 0),
+  }));
+  return { product: normalizedProduct, history, generatedFrom: 'postgres-canonical-facts' };
+}

@@ -35,6 +35,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
         return widget.items
             .where((i) =>
                 i.category.toLowerCase() == 'business' ||
+                i.category.toLowerCase() == 'organization' ||
                 i.category.toLowerCase() == 'buildings' ||
                 i.category.toLowerCase() == 'market')
             .toList();
@@ -125,7 +126,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 const SizedBox(width: 6),
                 _buildFilterPill('CRITICAL', 'CRITICAL / HIGH ($criticalCount)'),
                 const SizedBox(width: 6),
-                _buildFilterPill('CORPORATION', 'CORPORATION & ASSETS'),
+              _buildFilterPill('CORPORATION', 'ORGANIZATIONS & ASSETS'),
                 const SizedBox(width: 6),
                 _buildFilterPill('CIVIC_HOUSE', 'CIVIC & HOUSE'),
               ],

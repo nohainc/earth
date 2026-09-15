@@ -130,10 +130,10 @@ CREATE TABLE governance_rules (id TEXT PRIMARY KEY, institution_id TEXT NOT NULL
 CREATE TABLE economic_policy_rules (code TEXT PRIMARY KEY, output_multiplier NUMERIC(8,4) NOT NULL CHECK (output_multiplier >= 0), cost_multiplier NUMERIC(8,4) NOT NULL CHECK (cost_multiplier >= 0), decay_multiplier NUMERIC(8,4) NOT NULL CHECK (decay_multiplier >= 0), is_selectable BOOLEAN NOT NULL DEFAULT TRUE, description TEXT NOT NULL);
 
 CREATE TABLE economic_assets (id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, asset_kind TEXT NOT NULL CHECK (asset_kind IN ('CREDIT','RESOURCE')));
-CREATE TABLE owner_registry (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL CHECK (owner_type IN ('EARTH','CORPORATION','HOUSE','BANK','SYSTEM')), economic_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE owner_registry (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL CHECK (owner_type IN ('EARTH','CORPORATION','HOUSE','BANK','SYSTEM','ORGANIZATION')), economic_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE economic_account_types (code TEXT PRIMARY KEY);
 CREATE TABLE economic_account_policies (
-  owner_type TEXT NOT NULL CHECK (owner_type IN ('EARTH','CORPORATION','HOUSE','BANK','SYSTEM')),
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('EARTH','CORPORATION','HOUSE','BANK','SYSTEM','ORGANIZATION')),
   account_type TEXT NOT NULL REFERENCES economic_account_types(code),
   allowed_asset_kind TEXT NOT NULL CHECK (allowed_asset_kind IN ('CREDIT','RESOURCE','ANY')),
   player_visible BOOLEAN NOT NULL DEFAULT TRUE,
@@ -240,6 +240,7 @@ CREATE TABLE global_bank_balance_sheet (game_day BIGINT PRIMARY KEY, reserve_uni
 CREATE TABLE tax_governance_rules (scope TEXT NOT NULL CHECK (scope IN ('EARTH','CORPORATION')), category TEXT NOT NULL, minimum_rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (minimum_rate_bps >= 0), maximum_rate_bps INTEGER NOT NULL CHECK (maximum_rate_bps >= minimum_rate_bps AND maximum_rate_bps <= 10000), allowed_tax_base_definitions JSONB NOT NULL CHECK (jsonb_typeof(allowed_tax_base_definitions) = 'array'), beneficiary_scope TEXT NOT NULL CHECK (beneficiary_scope IN ('EARTH','CORPORATION')), rules_version TEXT NOT NULL, PRIMARY KEY (scope, category));
 CREATE TABLE tax_rule_versions (id TEXT PRIMARY KEY, tax_rule_id TEXT NOT NULL, scope TEXT NOT NULL CHECK (scope IN ('EARTH','CORPORATION')), category TEXT NOT NULL, version INTEGER NOT NULL, effective_from_game_day BIGINT NOT NULL, effective_to_game_day BIGINT, rate_bps INTEGER NOT NULL CHECK (rate_bps >= 0), tax_base_definition TEXT NOT NULL, beneficiary_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), authorization_proposal_id TEXT, UNIQUE (tax_rule_id, version), CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day));
 CREATE TABLE tax_obligations (id TEXT PRIMARY KEY, taxpayer_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), beneficiary_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), tax_type TEXT NOT NULL, tax_base_units BIGINT NOT NULL CHECK (tax_base_units >= 0), amount_units BIGINT NOT NULL CHECK (amount_units >= 0), rule_version TEXT NOT NULL, game_day BIGINT NOT NULL, status TEXT NOT NULL, payment_transaction_id BIGINT REFERENCES economic_transactions(id));
+CREATE TABLE financial_obligations (id TEXT PRIMARY KEY, debtor_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), creditor_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), obligation_type TEXT NOT NULL CHECK (obligation_type IN ('TAX','ROYALTY','LICENSE_PAYMENT','LOAN_PAYMENT','SERVICE_INVOICE','FINE_FEE')), source_id TEXT, principal_due_units BIGINT NOT NULL CHECK (principal_due_units >= 0), interest_due_units BIGINT NOT NULL DEFAULT 0 CHECK (interest_due_units >= 0), paid_units BIGINT NOT NULL DEFAULT 0 CHECK (paid_units >= 0), debtor_account_purpose TEXT NOT NULL DEFAULT 'WALLET', creditor_account_purpose TEXT NOT NULL DEFAULT 'TREASURY', due_game_day BIGINT NOT NULL, priority_class INTEGER NOT NULL DEFAULT 100, rule_version TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'DUE' CHECK (status IN ('DUE','PARTIAL','PAID','ARREARS','CANCELLED')), created_game_day BIGINT NOT NULL, payment_transaction_id BIGINT REFERENCES economic_transactions(id), correlation_id TEXT NOT NULL UNIQUE, cancelled_game_day BIGINT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), CHECK (paid_units <= principal_due_units + interest_due_units), CHECK ((status = 'PAID' AND paid_units = principal_due_units + interest_due_units) OR status <> 'PAID'));
 
 CREATE TABLE fiscal_periods (id TEXT PRIMARY KEY, period_type TEXT NOT NULL, start_game_day BIGINT NOT NULL, end_game_day BIGINT NOT NULL CHECK (end_game_day >= start_game_day), status TEXT NOT NULL);
 CREATE TABLE budget_categories (id TEXT PRIMARY KEY, institution_kind TEXT NOT NULL CHECK (institution_kind = 'CORPORATION'), category_code TEXT NOT NULL, spending_class TEXT NOT NULL CHECK (spending_class IN ('MANDATORY','DISCRETIONARY')), priority INTEGER NOT NULL, UNIQUE (institution_kind, category_code));
@@ -309,12 +310,43 @@ CREATE TABLE event_outbox (id TEXT PRIMARY KEY, event_key TEXT NOT NULL UNIQUE, 
 CREATE TABLE scheduler_runs (id BIGSERIAL PRIMARY KEY, game_day BIGINT NOT NULL, phase TEXT NOT NULL, status TEXT NOT NULL, correlation_id TEXT NOT NULL UNIQUE, started_at TIMESTAMPTZ NOT NULL DEFAULT now(), completed_at TIMESTAMPTZ);
 CREATE TABLE daily_settlement_control (id TEXT PRIMARY KEY CHECK (id = 'WORLD'), status TEXT NOT NULL CHECK (status IN ('awaiting_baseline','active','paused')) DEFAULT 'awaiting_baseline', activated_at TIMESTAMPTZ, activated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE daily_settlement_runs (game_day BIGINT PRIMARY KEY CHECK (game_day >= 1), status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed','baseline','paused')), current_phase TEXT, attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0), lease_owner TEXT, lease_heartbeat_at TIMESTAMPTZ, rules_version TEXT NOT NULL DEFAULT 'daily-settlement-v1', started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ, error_message TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE daily_settlement_phase_runs (id BIGSERIAL PRIMARY KEY, game_day BIGINT NOT NULL REFERENCES daily_settlement_runs(game_day), phase_id TEXT NOT NULL, phase_order INTEGER NOT NULL CHECK (phase_order >= 0), shard INTEGER NOT NULL CHECK (shard >= 0), status TEXT NOT NULL CHECK (status IN ('pending','running','completed','failed')), correlation_id TEXT NOT NULL UNIQUE, attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0), lease_owner TEXT, lease_expires_at TIMESTAMPTZ, started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ, error_message TEXT, result JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE (game_day, phase_id, shard));
+CREATE INDEX daily_settlement_phase_runs_claim_idx ON daily_settlement_phase_runs (game_day, status, lease_expires_at, phase_order, shard);
+CREATE INDEX daily_settlement_phase_runs_failures_idx ON daily_settlement_phase_runs (game_day, status) WHERE status = 'failed';
+CREATE TABLE house_daily_statements (
+  house_id TEXT NOT NULL REFERENCES houses(id),
+  game_day BIGINT NOT NULL,
+  opening_assets JSONB NOT NULL DEFAULT '{}'::jsonb,
+  closing_assets JSONB NOT NULL DEFAULT '{}'::jsonb,
+  production JSONB NOT NULL DEFAULT '{}'::jsonb,
+  consumption JSONB NOT NULL DEFAULT '{}'::jsonb,
+  market_activity JSONB NOT NULL DEFAULT '{}'::jsonb,
+  obligations JSONB NOT NULL DEFAULT '{}'::jsonb,
+  exceptions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  net_credit_units BIGINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (house_id, game_day)
+);
+CREATE INDEX house_daily_statements_day_idx ON house_daily_statements (game_day, house_id);
+CREATE TABLE need_rules (need_code TEXT PRIMARY KEY, service_type_code TEXT NOT NULL, demand_units_per_human BIGINT NOT NULL CHECK (demand_units_per_human > 0), critical_threshold_bps INTEGER NOT NULL CHECK (critical_threshold_bps BETWEEN 0 AND 10000), rules_version TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','RETIRED')));
+CREATE TABLE service_types (code TEXT PRIMARY KEY, payer_scope TEXT NOT NULL CHECK (payer_scope IN ('HOUSE','EARTH','CORPORATION')), daily_price_units BIGINT NOT NULL CHECK (daily_price_units >= 0), allocation_priority INTEGER NOT NULL CHECK (allocation_priority >= 0), rules_version TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','RETIRED')));
+CREATE TABLE house_need_assessments (house_id TEXT NOT NULL REFERENCES houses(id), game_day BIGINT NOT NULL, need_code TEXT NOT NULL REFERENCES need_rules(need_code), demand_units BIGINT NOT NULL CHECK (demand_units >= 0), available_units BIGINT NOT NULL CHECK (available_units >= 0), allocated_units BIGINT NOT NULL CHECK (allocated_units >= 0), shortfall_units BIGINT NOT NULL CHECK (shortfall_units >= 0), risk_level TEXT NOT NULL CHECK (risk_level IN ('NORMAL','WATCH','CRITICAL')), rules_version TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (house_id, game_day, need_code), CHECK (allocated_units <= demand_units), CHECK (shortfall_units = demand_units - allocated_units));
+CREATE TABLE service_allocations (id TEXT PRIMARY KEY, house_id TEXT NOT NULL REFERENCES houses(id), territory_id TEXT NOT NULL REFERENCES territories(id), service_code TEXT NOT NULL REFERENCES service_types(code), provider_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), payer_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id), game_day BIGINT NOT NULL, capacity_units BIGINT NOT NULL CHECK (capacity_units > 0), allocated_units BIGINT NOT NULL CHECK (allocated_units > 0), price_units BIGINT NOT NULL CHECK (price_units >= 0), economic_transaction_id BIGINT REFERENCES economic_transactions(id), correlation_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE (house_id, service_code, game_day, provider_economic_id));
+CREATE INDEX house_need_assessments_day_idx ON house_need_assessments (game_day, house_id);
+CREATE INDEX service_allocations_provider_day_idx ON service_allocations (provider_economic_id, game_day);
+CREATE TABLE house_operating_policies (id TEXT PRIMARY KEY, house_id TEXT NOT NULL REFERENCES houses(id), policy_type TEXT NOT NULL CHECK (policy_type IN ('OPERATING','INVENTORY_RESERVE','MARKET_STANDING')), version INTEGER NOT NULL CHECK (version > 0), effective_from_game_day BIGINT NOT NULL CHECK (effective_from_game_day >= 1), status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','PAUSED','SUPERSEDED')), operating_mode TEXT NOT NULL DEFAULT 'BALANCED' CHECK (operating_mode IN ('CONSERVATIVE','BALANCED','GROWTH','CUSTOM')), daily_spend_cap_units BIGINT NOT NULL DEFAULT 0 CHECK (daily_spend_cap_units >= 0), reserve_floor_units JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(reserve_floor_units) = 'object'), max_input_price_units JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(max_input_price_units) = 'object'), min_sale_price_units JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(min_sale_price_units) = 'object'), procurement_quantity_units JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(procurement_quantity_units) = 'object'), rules_version TEXT NOT NULL, correlation_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE (house_id, policy_type, version));
+CREATE INDEX house_operating_policies_active_idx ON house_operating_policies (house_id, policy_type, effective_from_game_day DESC) WHERE status = 'ACTIVE';
+CREATE TABLE policy_execution_log (id BIGSERIAL PRIMARY KEY, policy_id TEXT NOT NULL REFERENCES house_operating_policies(id), house_id TEXT NOT NULL REFERENCES houses(id), game_day BIGINT NOT NULL, action_type TEXT NOT NULL, action_correlation_id TEXT NOT NULL UNIQUE, decision JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX policy_execution_log_house_day_idx ON policy_execution_log (house_id, game_day DESC);
 CREATE INDEX economic_entries_transaction_idx ON economic_entries(transaction_id);
 CREATE UNIQUE INDEX auth_email_deliveries_correlation_uq ON auth_email_deliveries(correlation_id);
 CREATE INDEX auth_email_deliveries_account_idx ON auth_email_deliveries(account_id, created_at);
 CREATE INDEX market_orders_open_idx ON market_orders(instrument_id, status, side, limit_price_units, created_at);
 CREATE INDEX market_fills_orders_idx ON market_fills(buy_order_id, sell_order_id);
 CREATE INDEX tax_obligations_taxpayer_idx ON tax_obligations(taxpayer_economic_id, status);
+CREATE INDEX financial_obligations_debtor_status_idx ON financial_obligations(debtor_economic_id, status, due_game_day);
+CREATE INDEX financial_obligations_creditor_idx ON financial_obligations(creditor_economic_id, status, due_game_day);
 CREATE INDEX outbox_pending_idx ON event_outbox(status, created_at);
 
 -- =====================================================
@@ -493,6 +525,71 @@ RETURNS BIGINT LANGUAGE SQL STABLE AS $$
   SELECT COALESCE(MAX(game_day) FILTER (WHERE status IN ('completed', 'baseline')), 0)::BIGINT
     FROM daily_settlement_runs
    WHERE game_day <= p_game_day;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_claim_settlement_day(
+  p_game_day BIGINT, p_worker_id TEXT, p_lease_seconds INTEGER DEFAULT 30
+) RETURNS BIGINT LANGUAGE plpgsql AS $$
+DECLARE v_id BIGINT;
+BEGIN
+  WITH candidate AS (
+    SELECT current.id
+      FROM daily_settlement_phase_runs current
+     WHERE current.game_day = p_game_day
+       AND (current.status = 'pending' OR (current.status = 'running' AND current.lease_expires_at < CURRENT_TIMESTAMP))
+       AND NOT EXISTS (
+         SELECT 1 FROM daily_settlement_phase_runs prior
+          WHERE prior.game_day = current.game_day AND prior.phase_order < current.phase_order AND prior.status <> 'completed'
+       )
+     ORDER BY current.phase_order, current.shard FOR UPDATE SKIP LOCKED LIMIT 1
+  )
+  UPDATE daily_settlement_phase_runs work
+     SET status = 'running', lease_owner = p_worker_id,
+         lease_expires_at = CURRENT_TIMESTAMP + (p_lease_seconds::TEXT || ' seconds')::INTERVAL,
+         attempt_count = work.attempt_count + 1,
+         started_at = COALESCE(work.started_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+    FROM candidate WHERE work.id = candidate.id
+  RETURNING work.id INTO v_id;
+  RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_heartbeat_settlement_day(
+  p_game_day BIGINT, p_worker_id TEXT, p_phase_id TEXT
+) RETURNS BOOLEAN LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE daily_settlement_runs
+     SET current_phase = p_phase_id, lease_owner = p_worker_id,
+         lease_heartbeat_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+   WHERE game_day = p_game_day AND status = 'running';
+  RETURN FOUND;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_complete_settlement_day(p_game_day BIGINT)
+RETURNS BOOLEAN LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE daily_settlement_runs
+     SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+         current_phase = NULL, lease_owner = NULL,
+         lease_heartbeat_at = NULL, updated_at = CURRENT_TIMESTAMP
+   WHERE game_day = p_game_day AND status = 'running'
+     AND NOT EXISTS (SELECT 1 FROM daily_settlement_phase_runs WHERE game_day = p_game_day AND status <> 'completed');
+  RETURN FOUND;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_fail_settlement_day(
+  p_work_id BIGINT, p_worker_id TEXT, p_error_message TEXT
+) RETURNS BOOLEAN LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE daily_settlement_phase_runs
+     SET status = CASE WHEN attempt_count >= 5 THEN 'failed' ELSE 'pending' END,
+         lease_owner = NULL, lease_expires_at = NULL,
+         error_message = LEFT(p_error_message, 1000), updated_at = CURRENT_TIMESTAMP
+   WHERE id = p_work_id AND status = 'running' AND lease_owner = p_worker_id;
+  RETURN FOUND;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION earth_begin_economic_transaction(
@@ -762,8 +859,7 @@ BEGIN
     now()
   FROM buildings b
   LEFT JOIN building_catalog_effects e ON e.catalog_id = b.catalog_id
-  WHERE b.territory_id = p_territory_id AND b.status = 'ACTIVE';
-
+  WHERE b.territory_id = p_territory_id AND b.status = 'ACTIVE'
   RETURNING * INTO result;
   RETURN result;
 END;
@@ -961,6 +1057,69 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION earth_refresh_house_daily_statements(p_game_day BIGINT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE v_count INTEGER;
+BEGIN
+  WITH owners AS (
+    SELECT h.id AS house_id, o.economic_id FROM houses h
+    JOIN owner_registry o ON o.id = h.id AND o.owner_type = 'HOUSE'
+  ), daily_delta AS (
+    SELECT o.house_id, a.asset_id, SUM(e.delta_units)::BIGINT AS delta_units
+    FROM owners o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
+    JOIN economic_entries e ON e.account_id = a.id
+    JOIN economic_transactions t ON t.id = e.transaction_id AND t.game_day = p_game_day
+    GROUP BY o.house_id, a.asset_id
+  ), balances AS (
+    SELECT o.house_id, asset.code, COALESCE(SUM(a.balance_units), 0)::BIGINT AS closing_units,
+      COALESCE(SUM(a.balance_units), 0)::BIGINT - COALESCE(SUM(d.delta_units), 0)::BIGINT AS opening_units
+    FROM owners o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id AND a.status = 'ACTIVE'
+    JOIN economic_assets asset ON asset.id = a.asset_id
+    LEFT JOIN daily_delta d ON d.house_id = o.house_id AND d.asset_id = a.asset_id
+    GROUP BY o.house_id, asset.code
+  ), balance_json AS (
+    SELECT house_id, jsonb_object_agg(code, opening_units::TEXT ORDER BY code) AS opening_assets,
+      jsonb_object_agg(code, closing_units::TEXT ORDER BY code) AS closing_assets FROM balances GROUP BY house_id
+  ), flow_json AS (
+    SELECT o.house_id,
+      COALESCE(jsonb_object_agg(asset.code, flow.produced::TEXT ORDER BY asset.code) FILTER (WHERE flow.produced > 0), '{}'::jsonb) AS production,
+      COALESCE(jsonb_object_agg(asset.code, flow.consumed::TEXT ORDER BY asset.code) FILTER (WHERE flow.consumed > 0), '{}'::jsonb) AS consumption
+    FROM owners o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
+    JOIN economic_assets asset ON asset.id = a.asset_id
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(e.delta_units) FILTER (WHERE t.transaction_kind = 'RESOURCE_PRODUCTION' AND e.delta_units > 0), 0)::BIGINT AS produced,
+        COALESCE(SUM(-e.delta_units) FILTER (WHERE t.transaction_kind = 'RESOURCE_CONSUMPTION' AND e.delta_units < 0), 0)::BIGINT AS consumed
+      FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id
+      WHERE e.account_id = a.id AND t.game_day = p_game_day
+    ) flow ON TRUE GROUP BY o.house_id
+  ), market_json AS (
+    SELECT owner.house_id, jsonb_object_agg(m.symbol, jsonb_build_object('purchases', m.purchases::TEXT, 'sales', m.sales::TEXT, 'volume', m.volume::TEXT, 'fees', m.fees::TEXT) ORDER BY m.symbol) AS market_activity
+    FROM owners owner JOIN LATERAL (
+      SELECT i.symbol, COALESCE(SUM(f.quantity_units) FILTER (WHERE f.buyer_economic_id = owner.economic_id), 0)::BIGINT AS purchases,
+        COALESCE(SUM(f.quantity_units) FILTER (WHERE f.seller_economic_id = owner.economic_id), 0)::BIGINT AS sales,
+        COALESCE(SUM(f.quantity_units), 0)::BIGINT AS volume,
+        COALESCE(SUM(f.buyer_fee_units) FILTER (WHERE f.buyer_economic_id = owner.economic_id), 0)::BIGINT + COALESCE(SUM(f.seller_fee_units) FILTER (WHERE f.seller_economic_id = owner.economic_id), 0)::BIGINT AS fees
+      FROM market_fills f JOIN market_batches b ON b.id = f.batch_id JOIN market_instruments i ON i.id = f.instrument_id
+      WHERE b.game_day = p_game_day AND (f.buyer_economic_id = owner.economic_id OR f.seller_economic_id = owner.economic_id) GROUP BY i.symbol
+    ) m ON TRUE GROUP BY owner.house_id
+  ), obligation_json AS (
+    SELECT owner.house_id, jsonb_build_object('taxes', COALESCE(SUM(o.amount_units) FILTER (WHERE o.status IN ('PAID', 'SETTLED')), 0)::TEXT, 'total', COALESCE(SUM(o.amount_units), 0)::TEXT, 'count', COUNT(*)::TEXT) AS obligations
+    FROM owners owner LEFT JOIN tax_obligations o ON o.taxpayer_economic_id = owner.economic_id AND o.game_day = p_game_day GROUP BY owner.house_id
+  ), exception_json AS (
+    SELECT h.id AS house_id, jsonb_build_object('food_shortfall_units', COALESCE(SUM(m.food_shortfall_units), 0)::TEXT, 'unfed_humans', COUNT(*) FILTER (WHERE m.status = 'UNFED')::TEXT) AS exceptions
+    FROM houses h LEFT JOIN personal_life_maintenance m ON m.house_id = h.id AND m.game_day = p_game_day GROUP BY h.id
+  ), rows_to_write AS (
+    SELECT b.house_id, p_game_day, b.opening_assets, b.closing_assets, COALESCE(f.production, '{}'::jsonb), COALESCE(f.consumption, '{}'::jsonb), COALESCE(m.market_activity, '{}'::jsonb), COALESCE(o.obligations, '{}'::jsonb), COALESCE(x.exceptions, '{}'::jsonb), COALESCE((b.closing_assets ->> 'CREDIT')::BIGINT, 0) - COALESCE((b.opening_assets ->> 'CREDIT')::BIGINT, 0)
+    FROM balance_json b LEFT JOIN flow_json f USING (house_id) LEFT JOIN market_json m USING (house_id) LEFT JOIN obligation_json o USING (house_id) LEFT JOIN exception_json x USING (house_id)
+  )
+  INSERT INTO house_daily_statements (house_id, game_day, opening_assets, closing_assets, production, consumption, market_activity, obligations, exceptions, net_credit_units)
+  SELECT * FROM rows_to_write
+  ON CONFLICT (house_id, game_day) DO UPDATE SET opening_assets = EXCLUDED.opening_assets, closing_assets = EXCLUDED.closing_assets, production = EXCLUDED.production, consumption = EXCLUDED.consumption, market_activity = EXCLUDED.market_activity, obligations = EXCLUDED.obligations, exceptions = EXCLUDED.exceptions, net_credit_units = EXCLUDED.net_credit_units, updated_at = CURRENT_TIMESTAMP;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$$;
+
 -- =====================================================
 -- SECTION 3: REFERENCE DATA
 -- =====================================================
@@ -1111,6 +1270,15 @@ VALUES
   ('TECH-RESEARCH-METHODS-V1', 'RESEARCH_CAPACITY', 'ALL', 500)
 ON CONFLICT (technology_id, effect_type, target_key) DO NOTHING;
 
+INSERT INTO service_types (code, payer_scope, daily_price_units, allocation_priority, rules_version) VALUES
+  ('HOUSING', 'HOUSE', 0, 10, 'services-v1'), ('ENERGY', 'HOUSE', 1, 20, 'services-v1'),
+  ('CONNECTIVITY', 'HOUSE', 1, 30, 'services-v1'), ('HEALTH', 'HOUSE', 1, 40, 'services-v1')
+ON CONFLICT (code) DO NOTHING;
+INSERT INTO need_rules (need_code, service_type_code, demand_units_per_human, critical_threshold_bps, rules_version) VALUES
+  ('HOUSING', 'HOUSING', 1, 7500, 'needs-v1'), ('ENERGY', 'ENERGY', 1, 7500, 'needs-v1'),
+  ('CONNECTIVITY', 'CONNECTIVITY', 1, 7500, 'needs-v1'), ('HEALTH', 'HEALTH', 1, 7500, 'needs-v1')
+ON CONFLICT (need_code) DO NOTHING;
+
 -- =====================================================
 -- SECTION 4: INITIAL WORLD
 -- =====================================================
@@ -1173,4 +1341,3 @@ VALUES
 INSERT INTO daily_settlement_control (id, status)
 VALUES ('WORLD', 'awaiting_baseline')
 ON CONFLICT (id) DO NOTHING;
-

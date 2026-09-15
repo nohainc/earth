@@ -28,7 +28,11 @@ import '../communications/comm_link_dialog.dart';
 import '../lifecycle/historical_archive_panel.dart';
 import '../governance/constitution_panel.dart';
 import 'quick_actions_panel.dart';
+import 'service_risk_panel.dart';
 import 'command_executive_quadrant.dart';
+import '../world/world_conditions_panel.dart';
+import '../institutions/mutual_credit_panel.dart';
+import '../institutions/territory_commons_panel.dart';
 
 String dashboardSectionTitle(String section, [EarthState? state]) =>
     switch (section) {
@@ -57,6 +61,9 @@ String dashboardSectionTitle(String section, [EarthState? state]) =>
       'public-finance' => 'PUBLIC FINANCE',
       'civic-rankings' => 'CIVIC RANKINGS',
       'history' => 'MEMORIAL',
+      'world' => 'WORLD',
+      'mutual-credit' => 'MUTUAL CREDIT EXPERIMENT',
+      'territory-commons' => 'TERRITORY COMMONS',
       'memorial' => 'MEMORIAL',
       'life' => () {
           if (state == null) return 'LIFE';
@@ -92,6 +99,8 @@ class Dashboard extends StatelessWidget {
   final Map<String, dynamic> marketHistory;
   final Map<String, dynamic> pantheon;
   final Map<String, dynamic> personalFinanceData;
+  final Map<String, dynamic> mutualCreditData;
+  final Map<String, dynamic> territoryCommonsData;
   final bool isLiveConnected;
   final bool isReconnecting;
   final LiveConnectionStatus? connectionStatus;
@@ -120,6 +129,8 @@ class Dashboard extends StatelessWidget {
     this.marketHistory = const {},
     this.pantheon = const {},
     this.personalFinanceData = const {},
+    this.mutualCreditData = const {},
+    this.territoryCommonsData = const {},
     this.isLiveConnected = true,
     this.isReconnecting = false,
     this.connectionStatus,
@@ -149,6 +160,8 @@ class Dashboard extends StatelessWidget {
             onNavigate: onNavigate,
           ),
           const SizedBox(height: 34),
+          ServiceRiskPanel(state: state),
+          const SizedBox(height: 18),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
@@ -531,6 +544,12 @@ class Dashboard extends StatelessWidget {
       case 'history':
       case 'pantheon':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
+      case 'world':
+        return [WorldConditionsPanel(state: state)];
+      case 'mutual-credit':
+        return [MutualCreditPanel(data: mutualCreditData)];
+      case 'territory-commons':
+        return [TerritoryCommonsPanel(data: territoryCommonsData)];
       case 'news':
         return [
           NewsPanel(

@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { applyConditionStack } from './world-conditions.ts';
 
 export type TerritoryCapacity = {
   territory_id: string;
@@ -19,13 +20,47 @@ export type TerritoryCapacity = {
 };
 
 export async function getTerritoryCapacity(repository: PostgresRepository, territoryId: string): Promise<Record<string, unknown>> {
-  const territory = await repository.query('SELECT id, corporation_id, name, territory_type, status, is_primary FROM territories WHERE id = $1', [territoryId]);
+  const territory = await repository.query(`SELECT t.id, t.corporation_id, t.name, t.territory_type, t.status, t.is_primary,
+    COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id,
+    i.name AS governing_institution_name
+    FROM territories t
+    LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE'
+    LEFT JOIN institutions i ON i.id = COALESCE(g.governing_institution_id, t.corporation_id)
+    WHERE t.id = $1`, [territoryId]);
   if (!territory.rows[0]) throw new Error('Territory not found');
   const state = await repository.query<TerritoryCapacity>('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
-  return { territory: territory.rows[0], capacity: state.rows[0] ?? null };
+  const infrastructure = await repository.query(`SELECT b.status, c.code, c.ownership_scope,
+      COUNT(*)::INTEGER AS building_count,
+      COALESCE(SUM(c.slot_footprint), 0)::BIGINT AS slot_footprint
+    FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id
+    WHERE b.territory_id = $1 AND b.status <> 'DESTROYED'
+    GROUP BY b.status, c.code, c.ownership_scope
+    ORDER BY b.status, c.code`, [territoryId]);
+  const capacity = state.rows[0] ?? null;
+  return {
+    territory: territory.rows[0],
+    capacity,
+    infrastructure: infrastructure.rows,
+    services: capacity?.service_capacity ?? {},
+    generatedFrom: 'postgres-canonical-facts',
+  };
 }
 
 type ConstructionRequirement = { code: string; asset_id: number; required_units: string; available_units: string; missing_units: string };
+
+async function effectiveConstructionMinutes(tx: PostgresRepository, day: number, territoryId: string, buildingCode: string, baseMinutes: number): Promise<{ minutes: number; modifiersBps: number[]; modifierDetails: Record<string, unknown>[] }> {
+  const conditions = await tx.query<{ scope_type: string; scope_id: string | null; effect_type: string; target_key: string; modifier_bps: number }>(`SELECT scope_type, scope_id, effect_type, target_key, modifier_bps
+    FROM world_conditions
+   WHERE effect_type IN ('CONSTRUCTION_INDEX', 'LABOR_INDEX') AND effective_from_game_day <= $1
+     AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
+     AND (scope_type = 'WORLD' OR (scope_type = 'TERRITORY' AND scope_id = $2))
+     AND (target_key = '*' OR upper(target_key) = upper($3))
+   ORDER BY scope_type, scope_id NULLS FIRST, target_key, id`, [day, territoryId, buildingCode]);
+  const modifiersBps = conditions.rows.map((condition) => Number(condition.modifier_bps));
+  const modifierDetails = conditions.rows.map((condition) => ({ effectType: condition.effect_type, scopeType: condition.scope_type, scopeId: condition.scope_id, targetKey: condition.target_key, modifierBps: Number(condition.modifier_bps) }));
+  const minutes = Number(applyConditionStack(BigInt(baseMinutes), modifiersBps));
+  return { minutes: Math.max(1, minutes), modifiersBps, modifierDetails };
+}
 
 async function loadConstructionRequirements(
   tx: PostgresRepository,
@@ -65,8 +100,8 @@ export async function getConstructionQuote(
     if (!owner) throw new Error('House economic owner not found');
     const membership = (await tx.query("SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id])).rows[0];
     if (!membership) throw new Error('House must belong to the Territory Corporation');
-    const catalog = (await tx.query<{ id: string; code: string; ownership_scope: 'PRIVATE' | 'PUBLIC'; construction_credit_units: string }>(
-      `SELECT id, code, ownership_scope, construction_credit_units FROM building_catalog
+    const catalog = (await tx.query<{ id: string; code: string; ownership_scope: 'PRIVATE' | 'PUBLIC'; construction_credit_units: string; construction_minutes: number }>(
+      `SELECT id, code, ownership_scope, construction_credit_units, construction_minutes FROM building_catalog
         WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) LIMIT 1`, [input.buildingType])).rows[0];
     if (!catalog) throw new Error('Unknown building blueprint');
     const isPublic = catalog.ownership_scope === 'PUBLIC';
@@ -75,8 +110,10 @@ export async function getConstructionQuote(
     const credit = (await tx.query<{ balance_units: string }>(
       `SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = $2 AND status = 'ACTIVE'`, [economicOwner, isPublic ? 'TREASURY' : 'WALLET'])).rows[0]?.balance_units ?? '0';
     const requirements = await loadConstructionRequirements(tx, catalog.id, economicOwner, isPublic);
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const duration = await effectiveConstructionMinutes(tx, day, input.territoryId, catalog.code, catalog.construction_minutes);
     return {
-      catalog: { id: catalog.id, code: catalog.code, ownershipScope: catalog.ownership_scope },
+      catalog: { id: catalog.id, code: catalog.code, ownershipScope: catalog.ownership_scope, constructionMinutes: catalog.construction_minutes, effectiveConstructionMinutes: duration.minutes, constructionIndexModifiersBps: duration.modifiersBps, conditionModifiers: duration.modifierDetails },
       requirements: {
         CREDIT: { required_units: catalog.construction_credit_units, available_units: credit, missing_units: (BigInt(catalog.construction_credit_units) > BigInt(credit) ? BigInt(catalog.construction_credit_units) - BigInt(credit) : 0n).toString() },
         ...Object.fromEntries(requirements.map((item) => [item.code, { required_units: item.required_units, available_units: item.available_units, missing_units: item.missing_units }])),
@@ -105,8 +142,8 @@ export async function purchaseBuildingInTerritory(
       "SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id],
     )).rows[0];
     if (!membership) throw new Error('House must belong to the Territory Corporation');
-    const catalog = (await tx.query<{ id: string; code: string; ownership_scope: 'PRIVATE' | 'PUBLIC'; construction_credit_units: string; slot_footprint: number; service_type: string | null }>(
-      `SELECT id, code, ownership_scope, construction_credit_units, slot_footprint, service_type FROM building_catalog
+    const catalog = (await tx.query<{ id: string; code: string; ownership_scope: 'PRIVATE' | 'PUBLIC'; construction_credit_units: string; construction_minutes: number; slot_footprint: number; service_type: string | null }>(
+      `SELECT id, code, ownership_scope, construction_credit_units, construction_minutes, slot_footprint, service_type FROM building_catalog
         WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) LIMIT 1`, [input.buildingType],
     )).rows[0];
     if (!catalog) throw new Error('Unknown building blueprint');
@@ -120,6 +157,22 @@ export async function purchaseBuildingInTerritory(
     if (!ownerEconomicId) throw new Error(`${isPublic ? 'Corporation' : 'House'} economic owner not found`);
     const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(world?.game_day ?? 1);
+    const duration = await effectiveConstructionMinutes(tx, gameDay, input.territoryId, catalog.code, catalog.construction_minutes);
+    const territoryRight = !isPublic
+      ? (await tx.query<{ id: string; slot_quantity: string }>(
+        `SELECT id, slot_quantity::TEXT
+           FROM territory_rights
+          WHERE territory_id = $1 AND holder_type = 'HOUSE' AND holder_id = $2
+            AND slot_class = 'PRIVATE' AND status IN ('ACTIVE','HOLDOVER')
+            AND effective_from_game_day <= $3
+            AND (effective_to_game_day IS NULL OR effective_to_game_day >= $3)
+          ORDER BY effective_to_game_day NULLS LAST, id
+          LIMIT 1 FOR UPDATE`, [input.territoryId, owner.house_id, gameDay],
+      )).rows[0]
+      : null;
+    if (!isPublic && (!territoryRight || BigInt(territoryRight.slot_quantity) < BigInt(catalog.slot_footprint))) {
+      throw new Error('An active private Territory use right with sufficient slots is required');
+    }
     await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [input.territoryId, gameDay]);
     const projection = (await tx.query<{ private_slot_capacity: string; private_slots_used: string; public_slot_capacity: string; public_slots_used: string }>(
       'SELECT private_slot_capacity, private_slots_used, public_slot_capacity, public_slots_used FROM territory_capacity_state WHERE territory_id = $1 FOR UPDATE', [input.territoryId],
@@ -171,17 +224,56 @@ export async function purchaseBuildingInTerritory(
       );
     }
     await tx.query(
-      `INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day)
-       VALUES ($1, $2, $3, $4, 'ACTIVE', $5)`, [buildingId, ownerEconomicId, input.territoryId, catalog.id, gameDay],
+      `INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day, commissioned_game_day, territory_right_id)
+       VALUES ($1, $2, $3, $4, 'UNDER_CONSTRUCTION', $5, NULL, $6)`, [buildingId, ownerEconomicId, input.territoryId, catalog.id, gameDay, territoryRight?.id ?? null],
+    );
+    const expectedCompletionGameDay = gameDay + Math.max(1, Math.ceil(duration.minutes / 1440));
+    await tx.query(
+      `INSERT INTO construction_projects
+        (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,$11)`,
+      [`PROJECT-${buildingId.slice(4)}`, buildingId, ownerEconomicId, input.territoryId, catalog.id, cost.toString(), JSON.stringify(Object.fromEntries(constructionRequirements.map((item) => [item.code, item.required_units]))), gameDay, expectedCompletionGameDay, input.correlationId, territoryRight?.id ?? null],
     );
     await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [input.territoryId, gameDay]);
     await createGameEvent(tx, {
       id: `BUILDING-ACQUIRED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_ACQUIRED', gameDay,
       actorHumanId: input.ownerId, subjectType: 'BUILDING', subjectId: buildingId,
       title: `${catalog.code} acquired in Territory`,
-      details: { buildingId, catalogId: catalog.id, territoryId: input.territoryId, ownerEconomicId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE' },
+      details: { buildingId, catalogId: catalog.id, territoryId: input.territoryId, ownerEconomicId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE', constructionIndexModifiersBps: duration.modifiersBps, conditionModifiers: duration.modifierDetails, effectiveConstructionMinutes: duration.minutes },
       correlationId: input.correlationId,
     });
-    return { ok: true, building: (await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId])).rows[0], ownerType: isPublic ? 'CORPORATION' : 'HOUSE', capacity: (await tx.query('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [input.territoryId])).rows[0], correlationId: input.correlationId };
+    return { ok: true, status: 'UNDER_CONSTRUCTION', project: (await tx.query('SELECT * FROM construction_projects WHERE building_id = $1', [buildingId])).rows[0], building: (await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId])).rows[0], ownerType: isPublic ? 'CORPORATION' : 'HOUSE', capacity: (await tx.query('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [input.territoryId])).rows[0], correlationId: input.correlationId };
+  });
+}
+
+export async function listConstructionProjects(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
+  const result = await repository.query(`SELECT p.*, b.catalog_id, c.code, b.status AS building_status
+    FROM construction_projects p JOIN buildings b ON b.id = p.building_id JOIN building_catalog c ON c.id = b.catalog_id
+    WHERE p.owner_economic_id = (SELECT o.economic_id FROM humans h JOIN owner_registry o ON o.id = h.house_id WHERE h.id = $1)
+    ORDER BY p.started_game_day DESC, p.id`, [humanId]);
+  return { projects: result.rows, generatedFrom: 'postgres-canonical-facts' };
+}
+
+export async function cancelConstructionProject(repository: PostgresRepository, humanId: string, projectId: string, correlationId: string): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const project = (await tx.query<{ id: string; building_id: string; owner_economic_id: string; credit_cost_units: string; cancellation_refund_bps: number; status: string }>(
+      `SELECT p.id, p.building_id, p.owner_economic_id, p.credit_cost_units::TEXT, p.cancellation_refund_bps, p.status
+         FROM construction_projects p JOIN humans h ON h.house_id = (SELECT id FROM owner_registry WHERE economic_id = p.owner_economic_id)
+        WHERE p.id = $1 AND h.id = $2 AND h.status = 'ACTIVE' FOR UPDATE`, [projectId, humanId],
+    )).rows[0];
+    if (!project) throw new Error('Construction project not found');
+    if (project.status !== 'IN_PROGRESS') return { ok: true, alreadyProcessed: true, status: project.status, projectId, correlationId };
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const refund = BigInt(project.credit_cost_units) * BigInt(project.cancellation_refund_bps) / 10_000n;
+    if (refund > 0n) {
+      const source = (await tx.query<{ id: string }>(`SELECT a.id::TEXT AS id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`)).rows[0];
+      const destination = (await tx.query<{ id: string }>(`SELECT a.id::TEXT AS id FROM economic_accounts a WHERE a.owner_economic_id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' LIMIT 1`, [project.owner_economic_id])).rows[0];
+      if (!source || !destination) throw new Error('Construction refund accounts are not provisioned');
+      await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','CONSTRUCTION_CANCEL', $3, 'construction-project-v1', $4::JSONB)`, [correlationId, day, projectId, JSON.stringify([{ account_id: source.id, asset_id: 1, delta_units: (-refund).toString() }, { account_id: destination.id, asset_id: 1, delta_units: refund.toString() }])]);
+    }
+    await tx.query(`UPDATE construction_projects SET status='CANCELLED', cancelled_game_day=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [projectId, day]);
+    await tx.query(`UPDATE buildings SET status='INACTIVE' WHERE id=$1`, [project.building_id]);
+    await createGameEvent(tx, { id: `PROJECT-CANCELLED-${correlationId}`, category: 'BUILDING', eventType: 'CONSTRUCTION_CANCELLED', gameDay: day, actorHumanId: humanId, subjectType: 'CONSTRUCTION_PROJECT', subjectId: projectId, title: 'Construction project cancelled', details: { projectId, refundUnits: refund.toString() }, correlationId });
+    return { ok: true, status: 'CANCELLED', projectId, refundUnits: refund.toString(), correlationId };
   });
 }

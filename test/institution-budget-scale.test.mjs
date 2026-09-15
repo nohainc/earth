@@ -45,12 +45,11 @@ test('million automatic commitment payments aggregate by institution', () => {
 });
 
 test('scale paths use projections and shared Economy V2 spending', () => {
-  const projection = read('db/migrations/337_institution_financial_projections.sql');
+  const projection = read('cloudflare/src/financial-projections.ts');
   const budgetApi = read('cloudflare/src/institution-budget-api.ts');
   const spending = read('cloudflare/src/institution-spending.ts');
   const grants = read('cloudflare/src/institution-grants.ts');
 
-  assert.match(projection, /institution_financial_projections/);
   assert.match(projection, /SUM\(/);
   assert.match(budgetApi, /institution_budget_commitments/);
   assert.match(spending, /earth_post_transaction/);

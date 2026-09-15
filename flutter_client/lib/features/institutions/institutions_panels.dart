@@ -11,6 +11,7 @@ import '../../shared/widgets/credit_income_summary_card.dart';
 import '../communications/comm_link_dialog.dart';
 import '../house/house_lineage_dialog.dart';
 import 'institutions_dialogs.dart';
+import 'organization_people_roles_panel.dart';
 
 Widget _institutionBudgetCard(
   BuildContext context, {
@@ -2788,6 +2789,8 @@ class CorporationOverviewPanel extends StatelessWidget {
           cockpit,
           const SizedBox(height: 18),
           CorporationTerritorySection(corporationId: id),
+          const SizedBox(height: 28),
+          OrganizationPeopleRolesPanel(organizationId: 'ORG-CORP-$id'),
           const SizedBox(height: 28),
           Container(
             width: double.infinity,

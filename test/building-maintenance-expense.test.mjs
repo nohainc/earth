@@ -4,15 +4,15 @@ import fs from 'node:fs';
 
 const source = fs.readFileSync('cloudflare/src/building-settlement-v2.ts', 'utf8');
 
-test('maintenance is represented by the ordinary operating expense', () => {
-  assert.match(source, /effectiveOperatingCost/);
-  assert.match(source, /daily_operating_credits/);
-  assert.match(source, /building_operating_cost/);
-  assert.doesNotMatch(source, /maintenance_debt|repair_debt|building_repair|condition|wear/);
+test('building operating expense uses the canonical integer-unit path', () => {
+  assert.match(source, /operating_credit_units/);
+  assert.match(source, /nonNegativeUnits/);
+  assert.match(source, /building-settlement-v4/);
+  assert.doesNotMatch(source, /maintenance_debt|repair_debt|building_repair|wear/);
 });
 
-test('unfunded operating requirements produce no building economic effects', () => {
-  assert.match(source, /const canOperate = Object\.entries\(upkeep\)/);
-  assert.match(source, /if \(canOperate\) \{/);
-  assert.match(source, /const opCost = canOperate \? effectiveOperatingCost : 0/);
+test('operating requirements are settled from integer resource balances', () => {
+  assert.match(source, /const utilization = utilizationFor/);
+  assert.match(source, /const credit = \(nonNegativeUnits\(building\.operating_credit_units\) \* utilization \* ageBurden\(building, day\)\) \/ 100000000n/);
+  assert.match(source, /delta: -credit/);
 });

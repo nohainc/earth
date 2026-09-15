@@ -9,6 +9,9 @@ import {
   listInstitutions,
   listRankings,
   listTechnology,
+  listPantheonOfAchievements,
+  listCemeteryProfiles,
+  listMarketPriceHistory,
 } from '../cloudflare/src/read-postgres.ts';
 
 class MockDbClient {
@@ -106,4 +109,38 @@ test('listInstitutions and listRankings return structured models', async () => {
 
   const rank = await listRankings(repo, { currentHumanId: 'H-01' });
   assert.ok(Array.isArray(rank.territories));
+});
+
+test('public memorial read models are bounded and sourced from canonical facts', async () => {
+  const client = new MockDbClient({
+    "WHERE h.status = 'DECEASED'": { rows: [{ human_id: 'H-DEAD', display_name: 'Ada', final_legacy: '20' }], rowCount: 1 },
+    "WHERE h.status = 'ACTIVE'": { rows: [{ id: 'H-LIVE', display_name: 'Bea', composite_legacy_score: '30' }], rowCount: 1 },
+    'FROM houses WHERE status': { rows: [{ id: 'HOUSE-1', house_name: 'House One' }], rowCount: 1 },
+  });
+  const repo = new PostgresRepository(client);
+  const pantheon = await listPantheonOfAchievements(repo);
+  assert.equal(pantheon.deceasedPantheon.length, 1);
+  assert.equal(pantheon.livingLeaders.length, 1);
+  assert.equal(pantheon.houses.length, 1);
+  assert.match(client.calls[0].sql, /LIMIT 100/);
+
+  const cemetery = await listCemeteryProfiles(repo, { search: 'Ada', limit: 9999 });
+  assert.equal(cemetery.cemetery.length, 1);
+  assert.equal(cemetery.profiles, cemetery.cemetery);
+  assert.equal(cemetery.cemetery[0].display_name, 'Ada');
+});
+
+test('market price history reads daily candles and clamps the requested window', async () => {
+  const client = new MockDbClient({
+    'FROM market_instruments i': {
+      rows: [{ symbol: 'SPOT-ENERGY', period_id: '42', open_price_units: '10000', high_price_units: '12000', low_price_units: '9000', close_price_units: '11000', volume_units: '5000000', fill_count: 3 }],
+      rowCount: 1,
+    },
+  });
+  const result = await listMarketPriceHistory(new PostgresRepository(client), 'ENERGY', 9999);
+  assert.equal(result.product, 'energy');
+  assert.equal(result.history.length, 1);
+  assert.equal(result.history[0].price, '110.00');
+  assert.match(client.calls[0].sql, /interval_kind = 'daily'/);
+  assert.equal(client.calls[0].params[1], 100);
 });

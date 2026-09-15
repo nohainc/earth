@@ -5,7 +5,7 @@ import path from 'node:path';
 
 test('daily settlement has one ordered canonical phase registry', () => {
   const source = fs.readFileSync(path.resolve('cloudflare/src/daily-settlement-phases.ts'), 'utf8');
-  const phases = [...source.matchAll(/id: '([^']+)', order: (\d+), shardMode: '([^']+)'/g)]
+  const phases = [...source.matchAll(/(?:required|deferred)\('([^']+)', (\d+), '([^']+)'/g)]
     .map((match) => ({ id: match[1], order: Number(match[2]), shardMode: match[3] }));
 
   assert.ok(phases.length >= 16);
@@ -38,7 +38,7 @@ test('daily settlement has one ordered canonical phase registry', () => {
 test('scheduler uses only the resumable daily engine', () => {
   const scheduler = fs.readFileSync(path.resolve('cloudflare/src/scheduler-postgres.ts'), 'utf8');
   assert.match(scheduler, /createDailySettlementPhaseRegistry/);
-  assert.match(scheduler, /for \(const phase of settlementPhases\)/);
+  assert.match(scheduler, /ensureSettlementWork\(tx, gameDay, settlementPhases/);
   assert.match(scheduler, /territoryCapacityProjections/);
   assert.match(scheduler, /corporationDynamics/);
 });

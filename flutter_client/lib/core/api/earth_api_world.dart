@@ -34,6 +34,12 @@ extension EarthApiWorld on EarthApi {
   Future<Map<String, dynamic>> pantheon() async =>
       (await _request('/api/pantheon')) as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> worldConditions({int? day}) async {
+    final suffix = day == null ? '' : '?day=$day';
+    final response = await _request('/api/world/conditions$suffix');
+    return response is Map<String, dynamic> ? response : <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> cemetery(
       {String? search, String? house, String? dynasty, int limit = 50}) async {
     final houseFilter = house?.trim() ?? dynasty?.trim();

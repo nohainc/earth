@@ -1,6 +1,6 @@
 -- EARTH ACTIVE MIGRATION: generic financial obligations
 
-CREATE TABLE financial_obligations (
+CREATE TABLE IF NOT EXISTS financial_obligations (
   id TEXT PRIMARY KEY,
   debtor_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id),
   creditor_economic_id TEXT NOT NULL REFERENCES owner_registry(economic_id),
@@ -25,5 +25,5 @@ CREATE TABLE financial_obligations (
   CHECK ((status = 'PAID' AND paid_units = principal_due_units + interest_due_units) OR status <> 'PAID')
 );
 
-CREATE INDEX financial_obligations_debtor_status_idx ON financial_obligations(debtor_economic_id, status, due_game_day);
-CREATE INDEX financial_obligations_creditor_idx ON financial_obligations(creditor_economic_id, status, due_game_day);
+CREATE INDEX IF NOT EXISTS financial_obligations_debtor_status_idx ON financial_obligations(debtor_economic_id, status, due_game_day);
+CREATE INDEX IF NOT EXISTS financial_obligations_creditor_idx ON financial_obligations(creditor_economic_id, status, due_game_day);

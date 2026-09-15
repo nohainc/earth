@@ -1,0 +1,139 @@
+import type { PostgresRepository } from './repository.ts';
+import { quoteLoan } from './banking.ts';
+
+type CreditFacts = { borrowerEconomicId: string; walletId: string; walletBalance: bigint; reserveId: string; reserveBalance: bigint; operationsId: string; cashflow: bigint; policy: any; day: number };
+
+async function creditFacts(tx: PostgresRepository, humanId: string): Promise<CreditFacts> {
+  const owner = (await tx.query<{ economic_id: string }>('SELECT earth_private_economic_owner_id($1) AS economic_id', [humanId])).rows[0];
+  const policy = (await tx.query<any>(`SELECT p.* FROM bank_credit_policies p WHERE p.bank_economic_id = 'ECON-GLOBAL-BANK-001' AND p.status = 'ACTIVE' AND p.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD') AND (p.effective_to_game_day IS NULL OR p.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD')) ORDER BY p.effective_from_game_day DESC LIMIT 1`)).rows[0];
+  const accounts = await tx.query<{ reserve_id: string; reserve_balance: string; operations_id: string; wallet_id: string; wallet_balance: string }>(`SELECT r.id::TEXT AS reserve_id, r.balance_units::TEXT AS reserve_balance, o.id::TEXT AS operations_id, w.id::TEXT AS wallet_id, w.balance_units::TEXT AS wallet_balance FROM economic_accounts r JOIN economic_accounts o ON o.owner_economic_id = r.owner_economic_id AND o.asset_id = 1 AND o.account_type = 'OPERATIONS' AND o.status = 'ACTIVE' JOIN economic_accounts w ON w.owner_economic_id = $1 AND w.asset_id = 1 AND w.account_type = 'WALLET' AND w.status = 'ACTIVE' WHERE r.owner_economic_id = 'ECON-GLOBAL-BANK-001' AND r.asset_id = 1 AND r.account_type = 'RESERVE' AND r.status = 'ACTIVE'`, [owner?.economic_id]);
+  const row = accounts.rows[0];
+  const cashflow = (await tx.query<{ units: string }>(`SELECT COALESCE(SUM(e.delta_units) FILTER (WHERE e.delta_units > 0), 0)::TEXT AS units FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id WHERE e.account_id = $1 AND t.game_day >= (SELECT game_day - 30 FROM world_state WHERE id = 'WORLD')`, [row?.wallet_id])).rows[0];
+  const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  if (!owner || !policy || !row) throw new Error('Bank credit policy or liquidity state is unavailable');
+  return { borrowerEconomicId: owner.economic_id, walletId: row.wallet_id, walletBalance: BigInt(row.wallet_balance), reserveId: row.reserve_id, reserveBalance: BigInt(row.reserve_balance), operationsId: row.operations_id, cashflow: BigInt(cashflow?.units ?? 0), policy, day };
+}
+
+function quoteFromFacts(facts: CreditFacts, requestedUnits: bigint, termDays: number) {
+  if (termDays > Number(facts.policy.max_term_days)) throw new Error('Requested loan term exceeds bank policy');
+  return quoteLoan({ requestedUnits, termDays, collateralUnits: facts.walletBalance, guaranteedUnits: 0n, borrowerCashflowUnits: facts.cashflow, availableReserveUnits: facts.reserveBalance, baseRateBps: BigInt(facts.policy.base_rate_bps), maxLoanToCollateralBps: BigInt(facts.policy.max_loan_to_collateral_bps), maxLoanToCashflowBps: BigInt(facts.policy.max_loan_to_cashflow_bps), minimumReserveRatioBps: BigInt(facts.policy.minimum_reserve_ratio_bps) });
+}
+
+export async function getBankLoanQuote(repository: PostgresRepository, input: { humanId: string; requestedUnits: bigint; termDays: number }): Promise<Record<string, unknown>> {
+  const facts = await creditFacts(repository, input.humanId);
+  const quote = quoteFromFacts(facts, input.requestedUnits, input.termDays);
+  return { quote: { ...quote, requestedUnits: input.requestedUnits.toString(), termDays: input.termDays, policyVersion: facts.policy.policy_version }, generatedFrom: 'postgres-canonical-facts' };
+}
+
+export async function originateBankLoan(repository: PostgresRepository, input: { humanId: string; requestedUnits: bigint; termDays: number; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const existing = (await tx.query<{ id: string }>('SELECT id FROM bank_loans WHERE correlation_id = $1', [input.correlationId])).rows[0];
+    if (existing) return { ok: true, alreadyProcessed: true, loanId: existing.id, correlationId: input.correlationId };
+    const facts = await creditFacts(tx, input.humanId);
+    const quote = quoteFromFacts(facts, input.requestedUnits, input.termDays);
+    if (!quote.eligible || quote.approvedUnits < input.requestedUnits) throw new Error(`Loan is not eligible: ${quote.reason}`);
+    if (facts.walletBalance < input.requestedUnits || facts.reserveBalance < input.requestedUnits) throw new Error('Cash collateral or bank reserve is insufficient');
+    const locked = await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [facts.walletId]);
+    const reserve = await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [facts.reserveId]);
+    if (BigInt(locked.rows[0]?.balance_units ?? 0) < input.requestedUnits || BigInt(reserve.rows[0]?.balance_units ?? 0) < input.requestedUnits) throw new Error('Loan facts changed; retry the quote');
+    const day = facts.day;
+    const loanId = `LOAN-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+    const posted = await tx.query<{ transaction_id: string }>('SELECT transaction_id FROM earth_post_transaction($1,$2,0,\'BANK_LOAN_ORIGINATION\',\'BANK\',\'GLOBAL-BANK\',\'bank-credit-v1\',$3::JSONB)', [input.correlationId, day, JSON.stringify([{ account_id: facts.walletId, asset_id: 1, delta_units: (-input.requestedUnits).toString() }, { account_id: facts.operationsId, asset_id: 1, delta_units: input.requestedUnits.toString() }, { account_id: facts.reserveId, asset_id: 1, delta_units: (-input.requestedUnits).toString() }, { account_id: facts.walletId, asset_id: 1, delta_units: input.requestedUnits.toString() }])]);
+    const maturity = day + input.termDays;
+    const interest = (input.requestedUnits * BigInt(quote.rateBps) * BigInt(input.termDays)) / 36500n;
+    await tx.query(`INSERT INTO bank_loans (id, borrower_economic_id, bank_economic_id, original_principal_units, outstanding_principal_units, accrued_interest_units, rate_bps, credit_limit_units, term_days, origination_game_day, maturity_game_day, next_payment_game_day, status, origination_transaction_id, correlation_id) VALUES ($1,$2,'ECON-GLOBAL-BANK-001',$3,$3,0,$4,$3,$5,$6,$7,$7,'PERFORMING',$8,$9)`, [loanId, facts.borrowerEconomicId, input.requestedUnits.toString(), quote.rateBps.toString(), input.termDays, day, maturity, posted.rows[0].transaction_id, input.correlationId]);
+    await tx.query(`INSERT INTO bank_loan_collateral (id, loan_id, owner_economic_id, collateral_type, reference_id, valuation_units, haircut_bps, pledged_game_day, correlation_id) VALUES ($1,$2,$3,'CASH',$4,$5,0,$6,$7)`, [`COLLATERAL-${loanId}`, loanId, facts.borrowerEconomicId, facts.walletId, input.requestedUnits.toString(), day, `collateral:${input.correlationId}`]);
+    await tx.query(`INSERT INTO bank_loan_schedules (id, loan_id, installment_no, due_game_day, principal_due_units, interest_due_units, correlation_id) VALUES ($1,$2,1,$3,$4,$5,$6)`, [`SCHEDULE-${loanId}`, loanId, maturity, input.requestedUnits.toString(), interest.toString(), `schedule:${input.correlationId}`]);
+    return { ok: true, loanId, principalUnits: input.requestedUnits.toString(), interestUnits: interest.toString(), rateBps: quote.rateBps.toString(), maturityGameDay: maturity, correlationId: input.correlationId };
+  });
+}
+
+export async function repayBankLoan(repository: PostgresRepository, input: { humanId: string; loanId: string; amountUnits?: bigint; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const existing = (await tx.query<{ id: string }>('SELECT id FROM bank_loan_payments WHERE correlation_id = $1', [input.correlationId])).rows[0];
+    if (existing) return { ok: true, alreadyProcessed: true, paymentId: existing.id, correlationId: input.correlationId };
+    const facts = await creditFacts(tx, input.humanId);
+    const loan = (await tx.query<any>(`SELECT l.*, s.principal_due_units::TEXT AS scheduled_principal, s.interest_due_units::TEXT AS scheduled_interest, c.valuation_units::TEXT AS collateral_units FROM bank_loans l JOIN bank_loan_schedules s ON s.loan_id = l.id AND s.status IN ('DUE','PARTIAL','ARREARS') LEFT JOIN bank_loan_collateral c ON c.loan_id = l.id AND c.status = 'PLEDGED' WHERE l.id = $1 AND l.borrower_economic_id = $2 AND l.status IN ('PERFORMING','DELINQUENT') FOR UPDATE`, [input.loanId, facts.borrowerEconomicId])).rows[0];
+    if (!loan) throw new Error('Repayable loan not found');
+    const principal = BigInt(loan.outstanding_principal_units);
+    const interestDue = BigInt(loan.accrued_interest_units) > BigInt(loan.scheduled_interest) ? BigInt(loan.accrued_interest_units) : BigInt(loan.scheduled_interest);
+    const collateral = BigInt(loan.collateral_units ?? 0);
+    const total = principal + interestDue;
+    const payment = input.amountUnits ?? total;
+    if (payment <= 0n || payment > total) throw new Error('Payment must be positive and no greater than the outstanding claim');
+    const interest = payment < interestDue ? payment : interestDue;
+    const principalPayment = payment - interest;
+    const borrowerWallet = BigInt((await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [facts.walletId])).rows[0]?.balance_units ?? 0);
+    if (borrowerWallet < payment) throw new Error('Borrower cannot pay the requested loan installment');
+    const entries: Array<{ account_id: string; asset_id: number; delta_units: string }> = [{ account_id: facts.walletId, asset_id: 1, delta_units: (-payment).toString() }, { account_id: facts.operationsId, asset_id: 1, delta_units: payment.toString() }];
+    if (principalPayment === principal && interest === interestDue && collateral > 0n) {
+      entries.push({ account_id: facts.operationsId, asset_id: 1, delta_units: (-collateral).toString() });
+      entries.push({ account_id: facts.walletId, asset_id: 1, delta_units: collateral.toString() });
+    }
+    const posted = await tx.query<{ transaction_id: string }>('SELECT transaction_id FROM earth_post_transaction($1,$2,0,\'BANK_LOAN_REPAYMENT\',\'HOUSE\',$3,\'bank-credit-v1\',$4::JSONB)', [input.correlationId, facts.day, input.humanId, JSON.stringify(entries)]);
+    const paymentId = `PAYMENT-${input.correlationId}`;
+    await tx.query(`INSERT INTO bank_loan_payments (id, loan_id, amount_units, principal_units, interest_units, payment_transaction_id, game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [paymentId, input.loanId, payment.toString(), principalPayment.toString(), interest.toString(), posted.rows[0].transaction_id, facts.day, input.correlationId]);
+    const remainingClaim = total - payment;
+    await tx.query("UPDATE bank_loan_schedules SET paid_units = LEAST(principal_due_units + interest_due_units, paid_units + $1), status = CASE WHEN paid_units + $1 >= principal_due_units + interest_due_units THEN 'PAID' ELSE 'PARTIAL' END, payment_transaction_id = $2 WHERE loan_id = $3 AND status IN ('DUE','PARTIAL','ARREARS')", [payment.toString(), posted.rows[0].transaction_id, input.loanId]);
+    if (remainingClaim === 0n) await tx.query("UPDATE bank_loan_collateral SET status = 'RELEASED', released_game_day = $1 WHERE loan_id = $2 AND status = 'PLEDGED'", [facts.day, input.loanId]);
+    await tx.query("UPDATE bank_loans SET outstanding_principal_units = outstanding_principal_units - $1, accrued_interest_units = GREATEST(0, accrued_interest_units - $2), status = CASE WHEN outstanding_principal_units - $1 = 0 AND accrued_interest_units - $2 <= 0 THEN 'PAID' WHEN status = 'DELINQUENT' THEN 'DELINQUENT' ELSE 'PERFORMING' END WHERE id = $3", [principalPayment.toString(), interest.toString(), input.loanId]);
+    return { ok: true, paymentId, loanId: input.loanId, principalUnits: principalPayment.toString(), interestUnits: interest.toString(), totalUnits: payment.toString(), remainingUnits: remainingClaim.toString(), correlationId: input.correlationId };
+  });
+}
+
+export async function addBankLoanGuarantee(repository: PostgresRepository, input: { humanId: string; loanId: string; guaranteedUnits: bigint; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const existing = (await tx.query<{ id: string }>('SELECT id FROM bank_loan_guarantees WHERE correlation_id = $1', [input.correlationId])).rows[0];
+    if (existing) return { ok: true, alreadyProcessed: true, guaranteeId: existing.id, correlationId: input.correlationId };
+    const facts = await creditFacts(tx, input.humanId);
+    const loan = (await tx.query<{ borrower_economic_id: string; status: string }>('SELECT borrower_economic_id, status FROM bank_loans WHERE id = $1 FOR UPDATE', [input.loanId])).rows[0];
+    if (!loan || loan.borrower_economic_id === facts.borrowerEconomicId || !['PERFORMING', 'DELINQUENT'].includes(loan.status) || input.guaranteedUnits <= 0n) throw new Error('Loan is not eligible for this guarantee');
+    const guaranteeId = `GUARANTEE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+    await tx.query(`INSERT INTO bank_loan_guarantees (id, loan_id, guarantor_economic_id, guaranteed_units, created_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)`, [guaranteeId, input.loanId, facts.borrowerEconomicId, input.guaranteedUnits.toString(), facts.day, input.correlationId]);
+    return { ok: true, guaranteeId, loanId: input.loanId, guaranteedUnits: input.guaranteedUnits.toString(), correlationId: input.correlationId };
+  });
+}
+
+export async function settleBankLoanRisk(tx: PostgresRepository, gameDay: number): Promise<Record<string, unknown>> {
+  const candidates = await tx.query<{ id: string }>("SELECT id FROM bank_loans WHERE status IN ('PERFORMING','DELINQUENT') AND (status = 'PERFORMING' OR delinquent_since_game_day <= $1) ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED", [gameDay]);
+  let accrued = 0;
+  let delinquent = 0;
+  let defaulted = 0;
+  for (const candidate of candidates.rows) {
+    const loan = (await tx.query<any>('SELECT * FROM bank_loans WHERE id = $1 FOR UPDATE', [candidate.id])).rows[0];
+    if (!loan || loan.status === 'PAID' || loan.status === 'CANCELLED') continue;
+    const numerator = BigInt(loan.outstanding_principal_units) * BigInt(loan.rate_bps) + BigInt(loan.interest_accrual_remainder ?? 0);
+    const dailyInterest = numerator / 36500n;
+    const remainder = numerator % 36500n;
+    await tx.query('UPDATE bank_loans SET accrued_interest_units = accrued_interest_units + $1, interest_accrual_remainder = $2 WHERE id = $3', [dailyInterest.toString(), remainder.toString(), loan.id]);
+    accrued += 1;
+    if (loan.status === 'PERFORMING' && gameDay >= Number(loan.maturity_game_day)) {
+      await tx.query("UPDATE bank_loans SET status = 'DELINQUENT', delinquent_since_game_day = $1, next_payment_game_day = $1 WHERE id = $2", [gameDay, loan.id]);
+      await tx.query(`INSERT INTO bank_loan_resolutions (id, loan_id, resolution_type, claim_units, priority_rank, game_day, details, correlation_id) VALUES ($1,$2,'DELINQUENCY',$3,1,$4,$5::JSONB,$6) ON CONFLICT (correlation_id) DO NOTHING`, [`RESOLVE-DELINQUENCY-${loan.id}-${gameDay}`, loan.id, (BigInt(loan.outstanding_principal_units) + BigInt(loan.accrued_interest_units) + dailyInterest).toString(), gameDay, JSON.stringify({ maturityGameDay: loan.maturity_game_day }), `delinquency:${loan.id}:${gameDay}`]);
+      delinquent += 1;
+    } else if (loan.status === 'DELINQUENT' && gameDay >= Number(loan.delinquent_since_game_day) + 7) {
+      await tx.query("UPDATE bank_loans SET status = 'DEFAULTED', defaulted_game_day = COALESCE(defaulted_game_day, $1) WHERE id = $2", [gameDay, loan.id]);
+      const collateral = (await tx.query<{ valuation_units: string }>("SELECT COALESCE(SUM(valuation_units), 0)::TEXT AS valuation_units FROM bank_loan_collateral WHERE loan_id = $1 AND status = 'PLEDGED'", [loan.id])).rows[0];
+      const recovered = BigInt(collateral?.valuation_units ?? 0);
+      if (recovered > 0n) {
+        const bankAccounts = await tx.query<{ operations_id: string; reserve_id: string }>("SELECT o.id::TEXT AS operations_id, r.id::TEXT AS reserve_id FROM economic_accounts o JOIN economic_accounts r ON r.owner_economic_id = o.owner_economic_id AND r.asset_id = 1 AND r.account_type = 'RESERVE' AND r.status = 'ACTIVE' WHERE o.owner_economic_id = 'ECON-GLOBAL-BANK-001' AND o.asset_id = 1 AND o.account_type = 'OPERATIONS' AND o.status = 'ACTIVE'");
+        const bank = bankAccounts.rows[0];
+        if (!bank) throw new Error('Bank reserve accounts are unavailable for liquidation');
+        await tx.query('SELECT earth_post_transaction($1,$2,0,\'BANK_COLLATERAL_LIQUIDATION\',\'BANK\',\'GLOBAL-BANK\',\'bank-credit-v1\',$3::JSONB)', [`liquidation:${loan.id}:${gameDay}`, gameDay, JSON.stringify([{ account_id: bank.operations_id, asset_id: 1, delta_units: (-recovered).toString() }, { account_id: bank.reserve_id, asset_id: 1, delta_units: recovered.toString() }])]);
+        await tx.query("UPDATE bank_loan_collateral SET status = 'LIQUIDATED', released_game_day = $1 WHERE loan_id = $2 AND status = 'PLEDGED'", [gameDay, loan.id]);
+      }
+      await tx.query(`INSERT INTO bank_loan_resolutions (id, loan_id, resolution_type, claim_units, recovered_units, priority_rank, game_day, details, correlation_id) VALUES ($1,$2,'LIQUIDATION',$3,$4,1,$5,$6::JSONB,$7) ON CONFLICT (correlation_id) DO NOTHING`, [`RESOLVE-LIQUIDATION-${loan.id}-${gameDay}`, loan.id, (BigInt(loan.outstanding_principal_units) + BigInt(loan.accrued_interest_units) + dailyInterest).toString(), recovered.toString(), gameDay, JSON.stringify({ defaultAgeDays: 7, collateralLiquidated: recovered.toString() }), `liquidation:${loan.id}:${gameDay}`]);
+      defaulted += 1;
+    }
+  }
+  return { ok: true, gameDay, accrued, delinquent, defaulted };
+}
+
+export async function getBankRiskProjection(repository: PostgresRepository): Promise<Record<string, unknown>> {
+  const result = await repository.query<any>(`SELECT (SELECT COALESCE(SUM(balance_units),0)::TEXT FROM economic_accounts WHERE owner_economic_id = 'ECON-GLOBAL-BANK-001' AND asset_id = 1 AND account_type = 'RESERVE' AND status = 'ACTIVE') AS reserve_units, (SELECT COALESCE(SUM(principal_units + accrued_interest_units),0)::TEXT FROM bank_deposits WHERE status IN ('ACTIVE','MATURED')) AS deposit_liabilities_units, (SELECT COALESCE(SUM(outstanding_principal_units + accrued_interest_units),0)::TEXT FROM bank_loans WHERE status IN ('PERFORMING','DELINQUENT','DEFAULTED')) AS loan_claims_units, (SELECT COALESCE(SUM(outstanding_principal_units),0)::TEXT FROM bank_loans WHERE status = 'PERFORMING') AS performing_loans_units, (SELECT COUNT(*)::INTEGER FROM bank_loans WHERE status = 'DEFAULTED') AS defaulted_loan_count, (SELECT COALESCE(SUM(recovered_units),0)::TEXT FROM bank_loan_resolutions WHERE resolution_type = 'LIQUIDATION') AS liquidated_recovery_units`);
+  const row = result.rows[0] ?? {};
+  const reserve = BigInt(row.reserve_units ?? 0);
+  const deposits = BigInt(row.deposit_liabilities_units ?? 0);
+  const loans = BigInt(row.loan_claims_units ?? 0);
+  return { projection: { reserveUnits: reserve.toString(), depositLiabilitiesUnits: deposits.toString(), loanClaimsUnits: loans.toString(), performingLoansUnits: String(row.performing_loans_units ?? '0'), defaultedLoanCount: Number(row.defaulted_loan_count ?? 0), liquidatedRecoveryUnits: String(row.liquidated_recovery_units ?? '0'), liquidityRatioBps: deposits > 0n ? ((reserve * 10000n) / deposits).toString() : '10000', capitalBufferUnits: (reserve + loans - deposits).toString() }, generatedFrom: 'postgres-canonical-facts' };
+}

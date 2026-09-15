@@ -18,4 +18,4 @@ const latest = versions.at(-1) ?? 0;
 if (manifest.migrationVersion !== latest) failures.push(`manifest head ${manifest.migrationVersion} != active migration head ${latest}`);
 if (manifest.baseline !== 'db/baseline/001_baseline.sql') failures.push('manifest must identify the clean baseline');
 if (failures.length) throw new Error(`Migration audit failed:\n- ${failures.join('\n- ')}`);
-console.log(JSON.stringify({ ok: true, migrationCount: activeNames.length, ignoredHistoricalFiles: names.length - activeNames.length, migrationVersion: latest }));
+console.log(JSON.stringify({ ok: true, migrationCount: activeNames.length, ignoredHistoricalFiles: names.length - activeNames.length, migrationVersion: latest, message: `canonical schema reconciled through migration ${latest}` }));

@@ -20,6 +20,8 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO humans (id,account_id,house_id,display_name,birth_game_day,age_years) VALUES ($1,$2,$3,$4,$5,31)', [humanId, accountId, houseId, `${input.personName} ${input.houseSurname}`, worldDay - 31 * 365]);
     await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
     await tx.query("INSERT INTO owner_registry (id,owner_type,economic_id) VALUES ($1,'HOUSE',$2)", [houseId, economicId]);
+    await tx.query('INSERT INTO house_onboarding_progress (house_id) VALUES ($1) ON CONFLICT (house_id) DO NOTHING', [houseId]);
+    await tx.query('INSERT INTO house_entry_support (house_id, entry_game_day, eligible_until_game_day) VALUES ($1, $2, $3) ON CONFLICT (house_id) DO NOTHING', [houseId, worldDay, worldDay + 30]);
     await tx.query('SELECT earth_provision_house_economy($1)', [economicId]);
     const assets = await tx.query<{ id: number; code: string; unit_scale: string }>('SELECT id, code, unit_scale::TEXT FROM economic_assets WHERE id BETWEEN 1 AND 6');
     const displayAmounts: Record<string, number> = {

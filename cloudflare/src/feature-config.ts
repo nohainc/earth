@@ -1,6 +1,6 @@
 /** Central production feature registry. Values are read at the boundary so
  * routes and scheduled work cannot drift into separate flag logic. */
-export type FeatureKey = 'spotMarket' | 'bankDeposits' | 'bankLoans' | 'patents' | 'technologyLicenses' | 'mortality' | 'forcedLiquidation' | 'institutionDistress' | 'communities';
+export type FeatureKey = 'spotMarket' | 'bankDeposits' | 'bankLoans' | 'mutualCredit' | 'patents' | 'technologyLicenses' | 'mortality' | 'forcedLiquidation' | 'institutionDistress' | 'communities';
 export type FeatureConfig = Record<FeatureKey, boolean>;
 export type FeatureActivationStage = 'all' | 'baseline' | 'bank_loans' | 'mortality' | 'patents' | 'technology_licensing' | 'institution_distress' | 'forced_liquidation';
 
@@ -15,13 +15,13 @@ export const FEATURE_ACTIVATION_ORDER: ReadonlyArray<{ stage: Exclude<FeatureAct
 ];
 
 const ENV_KEYS: Record<FeatureKey, string> = {
-  spotMarket: 'FEATURE_SPOT_MARKET', bankDeposits: 'FEATURE_BANK_DEPOSITS', bankLoans: 'FEATURE_BANK_LOANS',
+  spotMarket: 'FEATURE_SPOT_MARKET', bankDeposits: 'FEATURE_BANK_DEPOSITS', bankLoans: 'FEATURE_BANK_LOANS', mutualCredit: 'FEATURE_MUTUAL_CREDIT',
   patents: 'FEATURE_PATENTS', technologyLicenses: 'FEATURE_TECH_LICENSES',
   mortality: 'FEATURE_MORTALITY', forcedLiquidation: 'FEATURE_FORCED_LIQUIDATION', institutionDistress: 'FEATURE_INSTITUTION_DISTRESS', communities: 'FEATURE_COMMUNITIES',
 };
 
 const DEFAULTS: FeatureConfig = {
-  spotMarket: true, bankDeposits: true, bankLoans: true, patents: true, technologyLicenses: true,
+  spotMarket: true, bankDeposits: true, bankLoans: true, mutualCredit: false, patents: true, technologyLicenses: true,
   mortality: true, forcedLiquidation: false, institutionDistress: true, communities: true,
 };
 

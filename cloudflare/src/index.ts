@@ -5,7 +5,7 @@ import { createResearchProject as createResearchProjectPostgres, fundResearchPro
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { runSchedulerHeartbeat } from './scheduler';
 import { deliverOutbox } from './outbox-postgres';
-import { listTechnology as listTechnologyPostgres } from './read-postgres';
+import { getServiceStatus as getServiceStatusPostgres, listTechnology as listTechnologyPostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { currentHuman, currentViewer, sensitiveActionAllowed } from './auth-session';
 import { healthResponse, livenessResponse } from './health';
@@ -17,6 +17,7 @@ import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
 import { handleCommunityRoutes } from './community-routes.ts';
 import { handleInstitutionRoutes } from './institutions-routes.ts';
+import { handleOrganizationRoutes } from './organizations-routes.ts';
 import { handleGovernanceRoutes } from './governance-routes.ts';
 import { handleRealEstateRoutes } from './real-estate-routes.ts';
 import { logBackendError, logClientError, sanitizeClientContext } from './observability.ts';
@@ -124,24 +125,9 @@ export class MarketCoordinator extends DurableObject<Env> {
 async function servicesStatusFromPostgres(request: Request, env: Env): Promise<Response> {
   const viewer = await currentHuman(request, env);
   if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const result = await withRepository(env, async (repository) => {
-    const territory = await repository.query<{ id: string }>('SELECT t.id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = \'ACTIVE\' JOIN territories t ON t.corporation_id = ha.corporation_id WHERE h.id = $1 ORDER BY t.id LIMIT 1', [viewer.id]);
-    const territoryId = territory.rows[0]?.id;
-    if (!territoryId) return { territoryId: null, projection: null };
-    const projection = await repository.query('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
-    return { territoryId, projection: projection.rows[0] ?? null };
-  });
+  const result = await withRepository(env, (repository) => getServiceStatusPostgres(repository, viewer.id));
   if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-  const projection = result.projection as Record<string, number> | null;
-  const ratios = projection ? {
-    housing: Number(projection.coverage_ratio ?? 0),
-    utilities: Number(projection.energy_capacity ?? 0) / Math.max(1, Number(projection.service_demand ?? 0)),
-    connectivity: Number(projection.connectivity_capacity ?? 0) / Math.max(1, Number(projection.service_demand ?? 0)),
-    health: Number(projection.health_capacity ?? 0) / Math.max(1, Number(projection.service_demand ?? 0)),
-  } : { housing: 0, utilities: 0, connectivity: 0, health: 0 };
-  for (const key of Object.keys(ratios)) ratios[key as keyof typeof ratios] = Math.min(1, Math.max(0, ratios[key as keyof typeof ratios]));
-  const status = Object.fromEntries(Object.entries(ratios).map(([key, value]) => [key, value >= 1 ? 'normal' : value >= 0.75 ? 'basic' : 'critical']));
-  return Response.json({ territoryId: result.territoryId, provider: projection ? 'territory-capacity-projection' : null, ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)), persistence: 'planetscale-postgres' });
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
 }
 
 const worker = {
@@ -235,6 +221,12 @@ const worker = {
       const viewer = await currentViewer(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const response = await handleCommunityRoutes(request, env, url, viewer, sensitiveActionAllowed);
+      if (response) return response;
+    }
+    if (url.pathname.startsWith('/api/organizations')) {
+      const viewer = await currentViewer(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const response = await handleOrganizationRoutes(request, env, url, viewer);
       if (response) return response;
     }
     if (url.pathname.startsWith('/api/corporations')) {

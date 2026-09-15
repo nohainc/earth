@@ -44,7 +44,7 @@ class _EarthAppState extends State<EarthApp> {
   Widget build(BuildContext context) => AnimatedBuilder(
       animation: EarthThemeController.instance,
       builder: (context, _) => MaterialApp(
-        title: 'EARTH — United Corporations',
+        title: 'EARTH — A Living World',
         debugShowCheckedModeBanner: false,
         theme: createEarthTheme(EarthThemeController.instance.mode),
         home: const AuthGate(),

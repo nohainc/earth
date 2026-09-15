@@ -201,6 +201,7 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
       SELECT institution_id, 'CHALLENGE_AUTHORITY:' || role_code, $1, $2
         FROM proposal_challenge_authorities
        WHERE human_id = $1 AND status = 'active'`, [human.id, day]);
+    await tx.query("UPDATE organization_office_grants SET status = 'EXPIRED', effective_to_game_day = $2 WHERE principal_type = 'HUMAN' AND principal_id = $1 AND status = 'ACTIVE' AND effective_to_game_day IS NULL", [human.id, day]);
     await tx.query('UPDATE institutions SET administrator_human_id = NULL WHERE administrator_human_id = $1', [human.id]);
     await tx.query("UPDATE proposal_challenge_authorities SET status = 'ENDED_BY_DEATH', revoked_effective_game_day = $2 WHERE human_id = $1 AND status = 'active'", [human.id, day + 1]);
     await tx.query('UPDATE house_heirlooms SET equipped_by_human_id = NULL WHERE house_id = $1 AND equipped_by_human_id = $2', [human.house_id, human.id]);

@@ -12,92 +12,30 @@ Future<void> showBuildingAcquisitionDialog(
   String territoryId,
   int availablePrivateSlots,
 ) async {
-  final catalog = buildingCatalog.isNotEmpty
-      ? buildingCatalog.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
-      : <Map<String, dynamic>>[
-          {
-            'type': 'restaurant',
-            'name': 'Bistro & Molecular Diner',
-            'category': 'commercial',
-            'slotFootprint': 1,
-            'baseCreditCost': 8500,
-            'baseMaterialCost': 120,
-            'dailyOperatingCredits': 60,
-            'dailyInputEnergy': 0.50,
-            'dailyInputFood': 0.25,
-            'dailyOutputCredits': 620,
-            'description': 'Compact molecular dining eatery converting local energy and agro-protein into liquid credit turnover.',
-          },
-          {
-            'type': 'retail-store',
-            'name': 'Department Store & Boutique',
-            'category': 'commercial',
-            'slotFootprint': 1,
-            'baseCreditCost': 9200,
-            'baseMaterialCost': 140,
-            'dailyOperatingCredits': 80,
-            'dailyInputEnergy': 0.40,
-            'dailyInputComponents': 0.15,
-            'dailyOutputCredits': 710,
-            'description': 'Direct consumer outlet providing manufactured tools, wearables, and domestic amenities.',
-          },
-          {
-            'type': 'solar-array-complex',
-            'name': 'Solar Concentrator Array',
-            'category': 'energy',
-            'slotFootprint': 2,
-            'baseCreditCost': 10500,
-            'baseMaterialCost': 190,
-            'dailyOperatingCredits': 40,
-            'dailyInputComponents': 0.10,
-            'dailyOutputResourceType': 'energy',
-            'dailyOutputResourceAmount': 4.5,
-            'description': 'High-yield photovoltaic field harvesting solar irradiation for regional grid distribution.',
-          },
-          {
-            'type': 'vertical-farm',
-            'name': 'Aeroponic Vertical Farm',
-            'category': 'food',
-            'slotFootprint': 2,
-            'baseCreditCost': 11200,
-            'baseMaterialCost': 180,
-            'dailyOperatingCredits': 50,
-            'dailyInputEnergy': 1.20,
-            'dailyOutputResourceType': 'food',
-            'dailyOutputResourceAmount': 3.8,
-            'description': 'Multi-tiered indoor vertical farm producing organic biomass and fresh protein.',
-          },
-          {
-            'type': 'fabrication-plant',
-            'name': 'Automated CNC Fabrication Plant',
-            'category': 'manufacturing',
-            'slotFootprint': 2,
-            'baseCreditCost': 13500,
-            'baseMaterialCost': 240,
-            'dailyOperatingCredits': 120,
-            'dailyInputEnergy': 2.00,
-            'dailyInputMaterials': 1.50,
-            'dailyOutputResourceType': 'components',
-            'dailyOutputResourceAmount': 2.2,
-            'description': 'Precision robotics workshop milling raw materials into durable structural components.',
-          },
-          {
-            'type': 'server-farm',
-            'name': 'Liquid-Cooled Neural Data Center',
-            'category': 'compute',
-            'slotFootprint': 2,
-            'baseCreditCost': 14500,
-            'baseMaterialCost': 220,
-            'dailyOperatingCredits': 140,
-            'dailyInputEnergy': 3.00,
-            'dailyInputComponents': 0.20,
-            'dailyOutputResourceType': 'compute',
-            'dailyOutputResourceAmount': 5.0,
-            'description': 'High-throughput quantum compute clusters supplying synthetic intelligence workloads.',
-          },
-        ];
+  final catalog = buildingCatalog
+      .whereType<Map>()
+      .map((m) => Map<String, dynamic>.from(m))
+      .toList();
 
   final privateBlueprints = catalog.where((b) => b['ownershipClass'] != 'civic').toList();
+  if (privateBlueprints.isEmpty) {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: context.panelColor,
+        title: const Text('Construction Catalog Unavailable'),
+        content: const Text('No authoritative private building blueprints are available for this Territory right now.'),
+        actions: [
+          EarthButton(
+            label: 'CLOSE',
+            variant: EarthButtonVariant.secondary,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
   String selectedType = privateBlueprints.first['type']?.toString() ?? 'restaurant';
   final nameCtrl = TextEditingController(text: privateBlueprints.first['name']?.toString() ?? 'Facility');
 

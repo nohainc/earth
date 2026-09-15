@@ -32,8 +32,8 @@ test("Page 2: Command Center, Decision Queue & World Vitals", async (t) => {
 
   await t.test("TC-2.3: Decision Queue Prioritization & Domain Actions", async () => {
     const queue = generateDecisionQueue({
-      city: {
-        id: "CITY-0084",
+      territory: {
+        id: "T-0084",
         residents: 500,
         energy_capacity: 100,
         health_capacity: 50,
@@ -42,8 +42,8 @@ test("Page 2: Command Center, Decision Queue & World Vitals", async (t) => {
         unpaid_tax: 250.00,
         status: "overdue",
       },
-      business: {
-        id: "B-TEST-01",
+      organization: {
+        id: "ORG-TEST-01",
         condition: 45,
       },
     });

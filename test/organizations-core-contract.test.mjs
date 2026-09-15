@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+test('generic Organizations support overlapping House membership and capability-gated requests', () => {
+  const migration = fs.readFileSync('db/migrations/025_organizations_core.sql', 'utf8');
+  const bridge = fs.readFileSync('db/migrations/026_organization_legacy_bridge.sql', 'utf8');
+  const service = fs.readFileSync('cloudflare/src/organizations-postgres.ts', 'utf8');
+  const routes = fs.readFileSync('cloudflare/src/organizations-routes.ts', 'utf8');
+  const registry = fs.readFileSync('cloudflare/src/api-registry.ts', 'utf8');
+  const flutterApi = fs.readFileSync('flutter_client/lib/core/api/earth_api_organizations.dart', 'utf8');
+  const flutterModel = fs.readFileSync('flutter_client/lib/core/models/organization.dart', 'utf8');
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS organizations/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS organization_memberships/);
+  assert.match(migration, /organization_memberships_active_uq/);
+  assert.match(migration, /organization_capabilities/);
+  assert.match(migration, /organization_membership_requests/);
+  assert.match(bridge, /organization_legacy_map/);
+  assert.match(bridge, /ORG-CORP-/);
+  assert.match(bridge, /ORG-COMM-/);
+  assert.match(bridge, /organization_membership_requests/);
+  assert.match(service, /listOrganizations/);
+  assert.match(service, /organization_memberships/);
+  assert.match(service, /organization_capabilities/);
+  assert.match(service, /Organization governance capability denied/);
+  assert.match(service, /createGameEvent/);
+  assert.match(routes, /\/api\/organizations/);
+  assert.match(registry, /service: 'createOrganization'/);
+  assert.match(flutterApi, /listOrganizations/);
+  assert.match(flutterApi, /createOrganization/);
+  assert.match(flutterApi, /joinOrganization/);
+  assert.match(flutterModel, /class EarthOrganization/);
+});

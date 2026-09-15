@@ -10,7 +10,7 @@ test('tax governance defines scopes, constitutional caps, and explicit bases', (
   assert.match(schema, /CREATE TABLE tax_governance_rules/);
   assert.match(schema, /maximum_rate_bps/);
   assert.match(schema, /allowed_tax_base_definitions/);
-  for (const scope of ['OUC', 'CITY', 'CORPORATION']) assert.match(schema, new RegExp(`'${scope}'`));
+  for (const scope of ['EARTH', 'CORPORATION']) assert.match(schema, new RegExp(`'${scope}'`));
   for (const base of ['fixed_daily_obligation', 'positive_realized_daily_income', 'positive_realized_daily_taxable_profit', 'external_market_trade']) assert.match(referenceData, new RegExp(base));
 });
 

@@ -51,14 +51,19 @@ BEGIN
     RAISE EXCEPTION '% requires its dedicated system authority account', v_semantic_class;
   END IF;
 
-  FOR v_asset_id, v_asset_total IN
-    SELECT (value->>'asset_id')::INTEGER, SUM((value->>'delta_units')::BIGINT)
-      FROM jsonb_array_elements(p_entries) GROUP BY (value->>'asset_id')::INTEGER
+  FOR v_asset_id IN
+    SELECT DISTINCT (value->>'asset_id')::INTEGER
+      FROM jsonb_array_elements(p_entries)
   LOOP
+    SELECT SUM((value->>'delta_units')::BIGINT)
+      INTO v_asset_total
+      FROM jsonb_array_elements(p_entries)
+     WHERE (value->>'asset_id')::INTEGER = v_asset_id;
     IF v_semantic_class = 'ASSET_TRANSFER' AND v_asset_total <> 0 THEN RAISE EXCEPTION 'asset transfer is not balanced for asset %', v_asset_id;
     ELSIF v_semantic_class = 'CREDIT_ISSUANCE' AND v_asset_total <= 0 THEN RAISE EXCEPTION 'CREDIT issuance must create a positive CREDIT amount';
     ELSIF v_semantic_class = 'CREDIT_RETIREMENT' AND v_asset_total >= 0 THEN RAISE EXCEPTION 'CREDIT retirement must destroy a positive CREDIT amount';
     ELSIF v_semantic_class IN ('RESOURCE_PRODUCTION', 'RESOURCE_CONSUMPTION') AND v_asset_total <> 0 THEN RAISE EXCEPTION 'resource production/consumption must balance against its dedicated system account';
+    END IF;
   END LOOP;
 
   IF v_semantic_class = 'CREDIT_ISSUANCE' AND EXISTS (SELECT 1 FROM jsonb_array_elements(p_entries) WHERE (value->>'delta_units')::BIGINT <= 0) THEN RAISE EXCEPTION 'CREDIT issuance entries must all be positive'; END IF;

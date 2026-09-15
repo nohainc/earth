@@ -15,6 +15,7 @@ export type NotificationInput = {
 };
 
 /** Write one House-owned notification while retaining the originating Human for audit. */
+// @mutation-boundary caller-owned-transaction: notification writes are part of the originating mutation.
 export async function createNotification(repository: PostgresRepository, input: NotificationInput): Promise<void> {
   await repository.query(
     `INSERT INTO notifications

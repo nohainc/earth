@@ -9,7 +9,7 @@ import { clearMarketAuction } from './market-clearing-engine.ts';
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 
-type MarketOrderInput = { humanId: string; product: string; side: 'buy' | 'sell'; quantity: number; limitPrice: number; correlationId: string; instrumentId?: string };
+type MarketOrderInput = { humanId: string; product: string; side: 'buy' | 'sell'; quantity: number | string; limitPrice: number | string; correlationId: string; instrumentId?: string; sourceType?: 'MANUAL' | 'HOUSE_POLICY'; policyId?: string; policyBudgetId?: string; goodTilGameDay?: number };
 
 const assetIds: Record<string, number> = {
   food: MARKET_ASSET_IDS.FOOD,
@@ -64,9 +64,9 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
     }
     const orderId = crypto.randomUUID();
     await tx.query(
-      `INSERT INTO market_orders (id, batch_id, instrument_id, owner_economic_id, side, quantity_units, remaining_units, limit_price_units, buyer_fee_bps, status, rules_version, correlation_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'OPEN', $9, $10)`,
-      [orderId, batchId, instrument.id, owner.rows[0].economic_id, input.side.toUpperCase(), quantityUnits.toString(), limitPriceUnits.toString(), buyerFeeBps, instrument.rules_version, input.correlationId],
+      `INSERT INTO market_orders (id, batch_id, instrument_id, owner_economic_id, side, quantity_units, remaining_units, limit_price_units, buyer_fee_bps, status, rules_version, correlation_id, source_type, policy_id, policy_budget_id, good_til_game_day)
+       VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'OPEN', $9, $10, $11, $12, $13, $14)`,
+      [orderId, batchId, instrument.id, owner.rows[0].economic_id, input.side.toUpperCase(), quantityUnits.toString(), limitPriceUnits.toString(), buyerFeeBps, instrument.rules_version, input.correlationId, input.sourceType ?? 'MANUAL', input.policyId ?? null, input.policyBudgetId ?? null, input.goodTilGameDay ?? null],
     );
     await reserveForOrder(tx, { ownerId: input.humanId, assetId: input.side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.base_asset_id, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' });
     await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0));
@@ -190,5 +190,40 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
     await releaseReservation(tx, { escrowAccountId: reservation.escrow_account_id, destinationAccountId: destination, assetId: reservation.asset_id, amountUnits: BigInt(reservation.remaining_units), orderId: input.orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: 'market_order_cancellation' });
     await tx.query("UPDATE market_orders SET status = 'CANCELLED', remaining_units = 0 WHERE id = $1", [input.orderId]);
     return { ok: true, orderId: input.orderId, released: reservation.remaining_units, side: current.side };
+  });
+}
+
+/** Expire a bounded batch of standing orders before matching. Escrow is always
+ * returned through the same ledger-backed release path used by cancellation. */
+export async function expireMarketOrders(repository: PostgresRepository, gameDay: number, limit = 100): Promise<{ expired: number }> {
+  return repository.transaction(async (tx) => {
+    const orders = await tx.query<{ id: string; owner_economic_id: string; good_til_game_day: number }>(
+      `SELECT id, owner_economic_id, good_til_game_day
+         FROM market_orders
+        WHERE status IN ('OPEN', 'PARTIAL') AND good_til_game_day IS NOT NULL
+          AND good_til_game_day < $1
+        ORDER BY good_til_game_day, created_at, id
+        FOR UPDATE SKIP LOCKED LIMIT $2`, [gameDay, limit],
+    );
+    let expired = 0;
+    for (const order of orders.rows) {
+      const reservation = await getMarketReservation(tx, order.id);
+      if (reservation && BigInt(reservation.remaining_units) > 0n) {
+        const destination = await marketEconomicAccount(tx, order.owner_economic_id, reservation.asset_id);
+        if (!destination) throw new Error(`Market expiry destination is missing for order ${order.id}`);
+        await releaseReservation(tx, {
+          escrowAccountId: reservation.escrow_account_id,
+          destinationAccountId: destination,
+          assetId: reservation.asset_id,
+          amountUnits: BigInt(reservation.remaining_units),
+          orderId: order.id,
+          gameDay,
+          reason: 'market_order_expiry',
+        });
+      }
+      await tx.query("UPDATE market_orders SET status = 'CANCELLED', remaining_units = 0 WHERE id = $1 AND status IN ('OPEN', 'PARTIAL')", [order.id]);
+      expired += 1;
+    }
+    return { expired };
   });
 }

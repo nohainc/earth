@@ -11,7 +11,7 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../../shared/design_system/earth_empty_state.dart';
 import '../auth/security_dialog.dart';
-import '../onboarding/onboarding_guidance_bar.dart';
+import '../onboarding/house_onboarding_panel.dart';
 import '../../core/onboarding_controller.dart';
 import '../../core/navigation_deep_link.dart';
 import 'dashboard.dart';
@@ -55,6 +55,7 @@ class _CommandCenterState extends State<CommandCenter> {
     'life': const ValueKey('section-life'),
     'finance': const ValueKey('section-finance'),
     'activity': const ValueKey('section-activity'),
+    'world': const ValueKey('section-world'),
   };
   EarthState? state;
   String? error;
@@ -66,6 +67,8 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> marketHistory = const {};
   Map<String, dynamic> pantheon = const {};
   Map<String, dynamic> personalFinanceData = const {};
+  Map<String, dynamic> mutualCreditData = const {};
+  Map<String, dynamic> territoryCommonsData = const {};
   int unreadNotifications = 0;
   int unreadCommMessages = 0;
   String selectedSection = 'command';
@@ -529,6 +532,22 @@ class _CommandCenterState extends State<CommandCenter> {
         if (mounted) setState(() => pantheon = data);
       });
     }
+    if (selectedSection == 'mutual-credit') {
+      _loadPanel('mutual-credit', () async {
+        final data = await api.mutualCreditNetworks();
+        if (mounted) setState(() => mutualCreditData = data);
+      });
+    }
+    if (selectedSection == 'territory-commons') {
+      _loadPanel('territory-commons', () async {
+        final residency = await api.getHouseResidency();
+        final territoryId = (residency['currentTerritoryId'] ?? residency['territoryId'])?.toString();
+        if (territoryId == null || territoryId.isEmpty) return;
+        final rights = await api.territoryRights(territoryId: territoryId);
+        final commons = await api.commonsStatement(territoryId: territoryId);
+        if (mounted) setState(() => territoryCommonsData = {'residency': residency, 'rights': rights['rights'] ?? const [], 'commons': commons});
+      });
+    }
   }
 
   Future<void> _loadPanel(String panel, Future<void> Function() action) async {
@@ -588,7 +607,8 @@ class _CommandCenterState extends State<CommandCenter> {
       }
       setState(() => selectedSection = section);
       final current = state;
-      if (current != null && (section == 'market' || section == 'life')) {
+      if (current != null &&
+          (section == 'market' || section == 'life' || section == 'mutual-credit' || section == 'territory-commons')) {
         unawaited(_loadSecondaryPanels(current));
       }
     }
@@ -765,7 +785,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                       ),
                                     ),
                                   if (selectedSection == 'command')
-                                    OnboardingGuidanceBar(
+                                    HouseOnboardingPanel(
+                                      api: api,
                                       onNavigate: (section) =>
                                           _navigateToSection(
                                         context,
@@ -796,6 +817,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                       marketHistory: marketHistory,
                                       pantheon: pantheon,
                                       personalFinanceData: personalFinanceData,
+                                      mutualCreditData: mutualCreditData,
+                                      territoryCommonsData: territoryCommonsData,
                                       isLiveConnected: _isLiveConnected,
                                       isReconnecting:
                                           liveReconnectTimer?.isActive == true,

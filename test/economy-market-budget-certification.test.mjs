@@ -20,11 +20,11 @@ test('Market certification: collateral, deterministic matching and replay protec
   const batches = read('cloudflare/src/market-scheduler.ts');
   assert.match(market, /reserveForOrder/);
   assert.match(market, /releaseReservation/);
-  assert.match(market, /eligible_batch_id/);
+  assert.match(market, /correlation_id/);
   assert.match(market, /postSettlementBatch/);
   assert.match(clearing, /sequenceNo/);
   assert.match(clearing, /selfTrade/);
-  assert.match(batches, /earth_claim_market_batch_instrument/);
+  assert.match(batches, /processDueMarketBatches/);
   assert.match(batches, /settleMarketBatch/);
 });
 

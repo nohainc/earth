@@ -1,5 +1,15 @@
 import type { PostgresRepository } from './repository.ts';
 
+// @mutation-boundary deterministic-settlement: one projection row is recomputed for a finalized day.
+// @mutation-boundary caller-owned-transaction: projection refresh is a scheduler phase transaction.
+export async function refreshHouseDailyStatementsInTransaction(repository: PostgresRepository, gameDay: number): Promise<number> {
+  const result = await repository.query<{ count: number }>(
+    'SELECT earth_refresh_house_daily_statements($1) AS count',
+    [gameDay],
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 type SummaryEvent = {
   id: string;
   type: string;
@@ -24,6 +34,11 @@ function eventRows(rows: Record<string, unknown>[]): SummaryEvent[] {
   }));
 }
 
+function jsonObject(value: unknown): Record<string, string> {
+  const parsed = typeof value === 'string' ? JSON.parse(value || '{}') : value;
+  return Object.fromEntries(Object.entries((parsed ?? {}) as Record<string, unknown>).map(([key, item]) => [key, String(item)]));
+}
+
 export async function getHouseDailySummary(
   repository: PostgresRepository,
   houseId: string,
@@ -40,7 +55,11 @@ export async function getHouseDailySummary(
     throw new Error('Summary day must be a completed game day');
   }
 
-  const [cashflow, taxes, market, events, notifications] = await Promise.all([
+  const [statement, cashflow, taxes, market, events, notifications] = await Promise.all([
+    repository.query(`
+      SELECT opening_assets, closing_assets, production, consumption, market_activity,
+             obligations, exceptions, net_credit_units
+      FROM house_daily_statements WHERE house_id = $1 AND game_day = $2`, [houseId, summaryDay]),
     repository.query(`
       SELECT
         COALESCE(SUM(CASE WHEN net_units > 0 THEN net_units ELSE 0 END), 0)::text AS income,
@@ -108,6 +127,18 @@ export async function getHouseDailySummary(
   if (research.some((event) => event.type.includes('COMPLETED'))) highlights.push({ code: 'research_completed', reason: 'A research or technology completion event was recorded for this House on the summary day.' });
   if (buildings.some((event) => event.type === 'BUILDING_BECAME_INACTIVE')) highlights.push({ code: 'building_attention_required', reason: 'A building became inactive on the summary day.' });
 
+  const authoritative = statement.rows[0] as Record<string, unknown> | undefined;
+  const statementView = authoritative ? {
+    openingAssets: jsonObject(authoritative.opening_assets),
+    closingAssets: jsonObject(authoritative.closing_assets),
+    production: jsonObject(authoritative.production),
+    consumption: jsonObject(authoritative.consumption),
+    marketActivity: authoritative.market_activity ?? {},
+    obligations: authoritative.obligations ?? {},
+    exceptions: authoritative.exceptions ?? {},
+    netCreditUnits: String(authoritative.net_credit_units ?? '0'),
+  } : null;
+
   return {
     version: 1,
     currentGameDay,
@@ -120,6 +151,7 @@ export async function getHouseDailySummary(
       marketPurchases: market.rows.reduce((sum, row) => sum + units(row.purchases), 0),
       marketSales: market.rows.reduce((sum, row) => sum + units(row.sales), 0),
     },
+    statement: statementView,
     resources: { produced: [], consumed: [], traded: market.rows.map((row) => ({ commodity: row.commodity, purchases: units(row.purchases), sales: units(row.sales), volume: units(row.volume) })) },
     buildings: { completed: buildings.filter((event) => event.type.includes('COMPLETED')), upgraded: buildings.filter((event) => event.type.includes('UPGRADED')), inactive: buildings.filter((event) => event.type.includes('INACTIVE')) },
     research: { progress: research.filter((event) => !event.type.includes('COMPLETED')), completed: research.filter((event) => event.type.includes('COMPLETED')) },

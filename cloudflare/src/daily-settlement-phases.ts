@@ -13,6 +13,7 @@ export type DailySettlementPhase = {
   id: string;
   order: number;
   shardMode: DailySettlementShardMode;
+  status: 'required' | 'deferred';
   execute: (context: DailySettlementPhaseContext) => Promise<unknown>;
 };
 
@@ -25,16 +26,24 @@ export type DailySettlementPhaseHandlers = {
   basicLevy: (context: DailySettlementPhaseContext) => Promise<unknown>;
   ipLicenseBilling: (context: DailySettlementPhaseContext) => Promise<unknown>;
   buildingSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  constructionCompletion: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  territoryLeaseSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  commonsDividendSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
   corporationIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  publicTaxAssessment: (context: DailySettlementPhaseContext) => Promise<unknown>;
   globalBank: (context: DailySettlementPhaseContext) => Promise<unknown>;
   bankHealth: (context: DailySettlementPhaseContext) => Promise<unknown>;
   mandatoryBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
   scheduledBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
   territoryCapacityProjections: (context: DailySettlementPhaseContext) => Promise<unknown>;
   corporationDynamics: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  houseNeedsServices: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  perishableResourceDecay: (context: DailySettlementPhaseContext) => Promise<unknown>;
   budgetDividendEligibility: (context: DailySettlementPhaseContext) => Promise<unknown>;
   patentExpirations: (context: DailySettlementPhaseContext) => Promise<unknown>;
   researchAndProgress: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  globalPrograms: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  publicProjects: (context: DailySettlementPhaseContext) => Promise<unknown>;
   lifecycle: (context: DailySettlementPhaseContext) => Promise<unknown>;
   postSuccessionAccessRefresh: (context: DailySettlementPhaseContext) => Promise<unknown>;
   financialStates: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -44,35 +53,57 @@ export type DailySettlementPhaseHandlers = {
   endOfDaySnapshots: (context: DailySettlementPhaseContext) => Promise<unknown>;
 };
 
+const required = (
+  id: string,
+  order: number,
+  shardMode: DailySettlementShardMode,
+  execute: (context: DailySettlementPhaseContext) => Promise<unknown>,
+): DailySettlementPhase => ({ id, order, shardMode, status: 'required', execute });
+
+const deferred = (
+  id: string,
+  order: number,
+  shardMode: DailySettlementShardMode,
+  execute: (context: DailySettlementPhaseContext) => Promise<unknown>,
+): DailySettlementPhase => ({ id, order, shardMode, status: 'deferred', execute });
+
 /** The sole ordered definition of a daily settlement day close. */
 export function createDailySettlementPhaseRegistry(
   handlers: DailySettlementPhaseHandlers,
 ): readonly DailySettlementPhase[] {
   return [
-    { id: 'succession_activation', order: 5, shardMode: 'all', execute: handlers.activateSuccessors },
-    { id: 'prepare_partitions', order: 10, shardMode: 'all', execute: handlers.preparePartitions },
-    { id: 'profile_rebuild', order: 20, shardMode: 'owner-shards', execute: handlers.rebuildProfiles },
-    { id: 'profile_settlement', order: 30, shardMode: 'all', execute: handlers.profileSettlement },
-    { id: 'patent_expirations', order: 45, shardMode: 'all', execute: handlers.patentExpirations },
-    { id: 'ip_license_billing', order: 65, shardMode: 'all', execute: handlers.ipLicenseBilling },
-    { id: 'life_maintenance', order: 70, shardMode: 'all', execute: handlers.lifeMaintenance },
-    { id: 'building_settlement', order: 75, shardMode: 'owner-shards', execute: handlers.buildingSettlement },
-    { id: 'basic_levy', order: 75, shardMode: 'all', execute: handlers.basicLevy },
-    { id: 'corporation_income_tax', order: 90, shardMode: 'all', execute: handlers.corporationIncomeTax },
-    { id: 'global_bank', order: 100, shardMode: 'all', execute: handlers.globalBank },
-    { id: 'bank_health', order: 110, shardMode: 'all', execute: handlers.bankHealth },
-    { id: 'mandatory_budget_payments', order: 115, shardMode: 'all', execute: handlers.mandatoryBudgetPayments },
-    { id: 'scheduled_budget_payments', order: 116, shardMode: 'all', execute: handlers.scheduledBudgetPayments },
-    { id: 'territory_capacity_projections', order: 120, shardMode: 'all', execute: handlers.territoryCapacityProjections },
-    { id: 'corporation_dynamics', order: 125, shardMode: 'all', execute: handlers.corporationDynamics },
-    { id: 'research_and_progress', order: 126, shardMode: 'all', execute: handlers.researchAndProgress },
-    { id: 'budget_dividend_eligibility', order: 130, shardMode: 'all', execute: handlers.budgetDividendEligibility },
-    { id: 'financial_states', order: 140, shardMode: 'all', execute: handlers.financialStates },
-    { id: 'lifecycle', order: 145, shardMode: 'all', execute: handlers.lifecycle },
-    { id: 'post_succession_access_refresh', order: 150, shardMode: 'all', execute: handlers.postSuccessionAccessRefresh },
-    { id: 'institution_dissolution', order: 155, shardMode: 'all', execute: handlers.institutionDissolution },
-    { id: 'financial_projections', order: 160, shardMode: 'all', execute: handlers.financialProjections },
-    { id: 'rankings_snapshot', order: 165, shardMode: 'all', execute: handlers.rankingsSnapshot },
-    { id: 'end_of_day_snapshots', order: 170, shardMode: 'all', execute: handlers.endOfDaySnapshots },
+    required('succession_activation', 5, 'all', handlers.activateSuccessors),
+    deferred('prepare_partitions', 10, 'all', handlers.preparePartitions),
+    deferred('profile_rebuild', 20, 'owner-shards', handlers.rebuildProfiles),
+    deferred('profile_settlement', 30, 'all', handlers.profileSettlement),
+    required('patent_expirations', 45, 'all', handlers.patentExpirations),
+    required('ip_license_billing', 65, 'all', handlers.ipLicenseBilling),
+    required('life_maintenance', 70, 'all', handlers.lifeMaintenance),
+    required('construction_completion', 72, 'owner-shards', handlers.constructionCompletion),
+    required('territory_lease_settlement', 73, 'owner-shards', handlers.territoryLeaseSettlement),
+    required('commons_dividend_settlement', 74, 'all', handlers.commonsDividendSettlement),
+    required('building_settlement', 75, 'owner-shards', handlers.buildingSettlement),
+    deferred('basic_levy', 75, 'all', handlers.basicLevy),
+    deferred('corporation_income_tax', 90, 'all', handlers.corporationIncomeTax),
+    required('public_tax_assessment', 91, 'owner-shards', handlers.publicTaxAssessment),
+    deferred('global_bank', 100, 'all', handlers.globalBank),
+    required('bank_health', 110, 'all', handlers.bankHealth),
+    deferred('mandatory_budget_payments', 115, 'all', handlers.mandatoryBudgetPayments),
+    deferred('scheduled_budget_payments', 116, 'all', handlers.scheduledBudgetPayments),
+    required('territory_capacity_projections', 120, 'all', handlers.territoryCapacityProjections),
+    required('corporation_dynamics', 125, 'all', handlers.corporationDynamics),
+    required('house_needs_services', 126, 'owner-shards', handlers.houseNeedsServices),
+    required('perishable_resource_decay', 127, 'owner-shards', handlers.perishableResourceDecay),
+    required('research_and_progress', 128, 'all', handlers.researchAndProgress),
+    required('global_programs', 129, 'all', handlers.globalPrograms),
+    required('public_projects', 129, 'all', handlers.publicProjects),
+    deferred('budget_dividend_eligibility', 130, 'all', handlers.budgetDividendEligibility),
+    required('financial_states', 140, 'all', handlers.financialStates),
+    required('lifecycle', 145, 'all', handlers.lifecycle),
+    required('post_succession_access_refresh', 150, 'all', handlers.postSuccessionAccessRefresh),
+    required('institution_dissolution', 155, 'all', handlers.institutionDissolution),
+    required('financial_projections', 160, 'all', handlers.financialProjections),
+    required('rankings_snapshot', 165, 'all', handlers.rankingsSnapshot),
+    required('end_of_day_snapshots', 170, 'all', handlers.endOfDaySnapshots),
   ];
 }

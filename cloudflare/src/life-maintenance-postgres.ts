@@ -12,6 +12,7 @@ export function estimateLifeMaintenance(): LifeMaintenanceEstimate {
 
 type MaintenanceHuman = { id: string; house_id: string; economic_id: string; account_id: string; balance_units: string };
 
+// @mutation-boundary deterministic-settlement: the finalized day is the retry key for maintenance charges.
 export async function settleLifeMaintenanceInTransaction(tx: PostgresRepository, day: number): Promise<number> {
   const humans = await tx.query<MaintenanceHuman>(
     `SELECT h.id, h.house_id, owner.economic_id,

@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { settleMarketBatch } from './market-postgres.ts';
+import { expireMarketOrders, settleMarketBatch } from './market-postgres.ts';
 import { listActiveMarketInstruments } from './market-model.ts';
 import { refreshMarketCandles } from './market-candles.ts';
 import type { FeatureConfig } from './feature-config.ts';
@@ -16,6 +16,12 @@ export async function processDueMarketBatches(
 ): Promise<MarketBatchResult> {
   const startedAt = Date.now();
   const instruments = (await listActiveMarketInstruments(repository)).filter((instrument) => instrument.instrument_type === 'SPOT');
+  let expiryBudget = 100;
+  while (expiryBudget > 0 && Date.now() - startedAt < workBudgetMs) {
+    const expired = await expireMarketOrders(repository, safeProcessedGameDay, Math.min(expiryBudget, 100));
+    expiryBudget -= expired.expired;
+    if (expired.expired === 0) break;
+  }
   let batchesProcessed = 0;
   let tradesCreated = 0;
   const batches = await repository.query<{ id: string; game_day: number; status: string }>(

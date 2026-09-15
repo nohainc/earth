@@ -43,7 +43,7 @@ test('Corporation is the sole local fiscal authority', () => {
   assert.match(reference, /'EARTH'/);
   assert.match(reference, /'CORPORATION'/);
   assert.match(fiscal, /spendCorporationBudget/);
-  assert.match(fiscal, /CORPORATION_PUBLIC_SPENDING/);
+  assert.match(fiscal, /owner_type = 'CORPORATION'/);
   assert.match(fiscal, /institution_budget_lines/);
   assert.doesNotMatch(fiscal, /cities|city_id|OUC|CITY/);
 });

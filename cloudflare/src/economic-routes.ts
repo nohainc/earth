@@ -1,8 +1,14 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
 import { getGlobalResourceAnalytics, getHouseResourceAnalytics } from './resource-analytics-postgres.ts';
+import { getResourceBehaviorMetadata } from './resource-behavior-postgres.ts';
 
 export async function handleEconomicRoutes(request: Request, env: Env, url: URL, viewer: { id: string }): Promise<Response | null> {
+  if (url.pathname === '/api/economy/resources/metadata' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => getResourceBehaviorMetadata(repository));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
   if (url.pathname === '/api/economy/resources' && request.method === 'GET') {
     const days = Math.min(90, Math.max(1, Number(url.searchParams.get('days') ?? 14) || 14));
     const result = await withRepository(env, async (repository) => ({ ownerId: viewer.id, days, resources: await getHouseResourceAnalytics(repository, viewer.id, days) }));

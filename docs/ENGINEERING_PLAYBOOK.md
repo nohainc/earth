@@ -135,6 +135,13 @@ Run `npm run audit:mutation-boundaries` to verify that PostgreSQL mutation
 adapters retain transaction boundaries, visible replay/correlation handling,
 the PostgreSQL authority guard, and no legacy D1 access.
 
+Settlement helpers that deliberately receive the scheduler-owned transaction
+must carry `@mutation-boundary caller-owned-transaction`; single-statement or
+database-function transitions must carry `@mutation-boundary atomic-sql`.
+Deterministic day-close projections and settlement retries must additionally
+carry `@mutation-boundary deterministic-settlement`. These annotations are
+reviewable design contracts, not bypasses for ordinary request mutations.
+
 The authority flag is `postgres` after the completed cutover. Never switch only
 one side of a multi-command domain without recording the boundary.
 

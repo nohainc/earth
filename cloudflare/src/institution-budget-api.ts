@@ -1,29 +1,44 @@
 import type { PostgresRepository } from './repository.ts';
 import { canPerformInstitutionAction } from './institution-authorization.ts';
+import { getInstitutionFinancialProjection } from './financial-projections.ts';
 
-export async function getInstitutionBudget(repository: PostgresRepository, institutionId: string, gameDay?: number) {
-  const result = await repository.query(`
-    WITH current_period AS (
-      SELECT id FROM fiscal_periods
-      WHERE $2::BIGINT IS NOT NULL AND $2 BETWEEN start_game_day AND end_game_day
-      ORDER BY start_game_day DESC LIMIT 1
-    )
-    SELECT
-      p.institution_id, p.institution_kind, p.game_day,
-      p.cash_treasury_units, p.cash_operations_units, p.cash_reserve_units,
-      p.period_revenue_units, p.period_spending_units,
-      p.budget_authorized_units, p.budget_committed_units, p.budget_spent_units,
-      p.tax_receivable_units, p.arrears_units, p.mandatory_commitments_units,
-      p.surplus_deficit_units, p.liquidity_days, p.financial_state,
-      p.distributable_surplus_units, p.research_commitments_units,
-      p.city_support_commitments_units, p.dividend_capacity_units,
-      COALESCE(p.cash_treasury_units + p.cash_operations_units + p.cash_reserve_units, 0) AS cash_total_units,
-      COALESCE(p.budget_authorized_units - p.budget_committed_units - p.budget_spent_units, 0) AS available_authority,
-      COALESCE(p.cash_treasury_units + p.cash_operations_units + p.cash_reserve_units, 0) AS available_cash,
-      p.budget_committed_units AS committed, p.budget_spent_units AS spent
-    FROM institution_financial_projections p
-    WHERE p.institution_id = $1`, [institutionId, gameDay ?? null]);
-  return result.rows[0] ?? null;
+export async function getInstitutionBudget(repository: PostgresRepository, institutionId: string, _gameDay?: number) {
+  const projection = await getInstitutionFinancialProjection(repository, institutionId);
+  const [obligations, state] = await Promise.all([
+    repository.query<{ receivable_units: string; arrears_units: string }>(
+      `SELECT COALESCE(SUM(CASE WHEN status IN ('DUE','PARTIAL') THEN principal_due_units + interest_due_units - paid_units ELSE 0 END), 0)::TEXT AS receivable_units,
+              COALESCE(SUM(CASE WHEN status = 'ARREARS' THEN principal_due_units + interest_due_units - paid_units ELSE 0 END), 0)::TEXT AS arrears_units
+         FROM financial_obligations WHERE creditor_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1)`, [institutionId]),
+    repository.query<{ financial_state: string }>('SELECT status AS financial_state FROM organization_financial_states WHERE organization_id = $1', [institutionId]),
+  ]);
+  const budgetAuthorized = String(projection.authorizedUnits ?? '0');
+  const budgetCommitted = String(projection.committedUnits ?? '0');
+  const budgetSpent = String(projection.spentUnits ?? '0');
+  const cashTotal = [projection.treasuryUnits, projection.operationsUnits, projection.reserveUnits]
+    .reduce((sum, value) => sum + BigInt(String(value ?? '0')), 0n).toString();
+  return {
+    institution_id: institutionId,
+    institution_kind: projection.scope,
+    game_day: _gameDay ?? null,
+    cash_treasury_units: projection.treasuryUnits,
+    cash_operations_units: projection.operationsUnits,
+    cash_reserve_units: projection.reserveUnits,
+    period_revenue_units: projection.revenueUnits,
+    period_spending_units: projection.expenseUnits,
+    budget_authorized_units: budgetAuthorized,
+    budget_committed_units: budgetCommitted,
+    budget_spent_units: budgetSpent,
+    tax_receivable_units: obligations.rows[0]?.receivable_units ?? '0',
+    arrears_units: obligations.rows[0]?.arrears_units ?? '0',
+    cash_total_units: cashTotal,
+    available_authority: projection.availableUnits,
+    budget_authority_available_units: projection.availableUnits,
+    available_cash: cashTotal,
+    committed: budgetCommitted,
+    spent: budgetSpent,
+    financial_state: state.rows[0]?.financial_state ?? null,
+    generated_from: 'postgres-canonical-facts',
+  };
 }
 
 export async function listInstitutionBudgetLines(repository: PostgresRepository, institutionId: string, fiscalPeriodId?: string) {
@@ -31,7 +46,8 @@ export async function listInstitutionBudgetLines(repository: PostgresRepository,
     SELECT l.*, c.category_code, c.mandatory, c.spending_class, c.priority,
       (l.authorized_units - l.committed_units - l.spent_units) AS available_authority,
       (l.committed_units) AS committed, (l.spent_units) AS spent,
-      COALESCE((SELECT p.cash_treasury_units + p.cash_operations_units + p.cash_reserve_units FROM institution_financial_projections p WHERE p.institution_id=l.institution_id ORDER BY p.game_day DESC LIMIT 1), 0) AS available_cash
+      COALESCE((SELECT SUM(a.balance_units) FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+                 WHERE o.id = l.institution_id AND a.asset_id = 1 AND a.account_type IN ('TREASURY','OPERATIONS','RESERVE') AND a.status = 'ACTIVE'), 0) AS available_cash
     FROM institution_budget_lines l JOIN budget_categories c ON c.id = l.category_id
     WHERE l.institution_id = $1 AND ($2::BIGINT IS NULL OR l.fiscal_period_id = $2)
     ORDER BY l.fiscal_period_id DESC, c.priority, c.category_code`, [institutionId, fiscalPeriodId ?? null]);

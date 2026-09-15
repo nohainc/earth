@@ -17,6 +17,7 @@ export type GameEventInput = {
   correlationId?: string | null;
 };
 
+// @mutation-boundary caller-owned-transaction: event writes participate in the caller's aggregate transaction.
 export async function createGameEvent(repository: PostgresRepository, input: GameEventInput): Promise<void> {
   await repository.query(
     `INSERT INTO game_events

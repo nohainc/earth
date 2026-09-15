@@ -27,7 +27,16 @@ function createCohorts(houses, specialization, random) {
     for (let i = 0; i < houses; i += 1) counts[names[Math.floor(random() * names.length)]] += 1;
   } else counts[specialization] = houses;
   return Object.entries(counts).filter(([, count]) => count > 0).map(([name, count]) => ({
-    name, houses: count, buildings: 0, inventory: { ...emptyResources(), ...STARTER }, credits: count * STARTER.CREDIT,
+    name,
+    houses: count,
+    buildings: 0,
+    inventory: Object.fromEntries(RESOURCE_CODES.map((code) => [code, (STARTER[code] ?? 0) * count])),
+    credits: count * STARTER.CREDIT,
+    // The lab models a bounded House liquidity facility separately from the
+    // base money supply. It permits temporary negative positions while
+    // preserving a hard per-cohort limit for risk telemetry.
+    creditLimit: count * STARTER.CREDIT * 2,
+    foodShortageStreak: 0,
   }));
 }
 
@@ -61,6 +70,7 @@ export function runResourceEconomySimulation({ houses = 100, days = 365, seed = 
     }
     const constructionMultiplier = rules.construction && day >= rules.boomStart && day <= rules.boomEnd ? rules.construction : 1;
     let dayShortage = 0;
+    const marketNeeds = [];
     for (const cohort of cohorts) {
       const specializationList = SPECIALIZATIONS[cohort.name];
       const catalog = RESOURCE_FLOW_DEFINITIONS[specializationList[(day + Math.floor(random() * specializationList.length)) % specializationList.length]];
@@ -83,10 +93,63 @@ export function runResourceEconomySimulation({ houses = 100, days = 365, seed = 
         const output = catalog.outputs[code] ? Math.floor(catalog.outputs[code] * scale * utilization) : 0;
         cohort.inventory[code] += output; totals.production[code] += output;
       }
-      // FOOD is a life-maintenance sink and is settled before production.
+      // FOOD is a life-maintenance sink. Procurement is resolved before the
+      // mortality check below, matching the bounded day-close ordering in the
+      // authoritative settlement path.
       cohort.inventory.FOOD = Math.max(0, cohort.inventory.FOOD);
-      if (cohort.inventory.FOOD === 0 && cohort.houses > 0) { survived -= Math.min(cohort.houses, Math.ceil(cohort.houses * 0.01)); cohort.houses = Math.max(0, cohort.houses - Math.ceil(cohort.houses * 0.01)); }
-      for (const code of RESOURCE_CODES) { const need = Math.max(1, demand[code]); const gap = Math.max(0, need - cohort.inventory[code]); if (gap > 0 && cohort.credits >= prices[code] * gap) { cohort.credits -= prices[code] * gap; cohort.inventory[code] += gap; trades += 1; } }
+      marketNeeds.push({ cohort, deficits: Object.fromEntries(RESOURCE_CODES.map((code) => [code, Math.max(0, demand[code] - cohort.inventory[code])])) });
+    }
+    // Clear source-backed market trade before applying mortality. The market
+    // is pooled at this boundary (rather than matched cohort-by-cohort), so
+    // sufficient world inventory cannot be stranded behind an unlucky
+    // specialization partition. Credits still move from buyers to sellers;
+    // this is not an issuance path.
+    const marketPriority = ['FOOD', ...RESOURCE_CODES.filter((code) => code !== 'FOOD')];
+    for (const code of marketPriority) {
+      const startingInventory = marketNeeds.map(({ cohort }) => cohort.inventory[code]);
+      const reserve = code === 'FOOD' ? marketNeeds.reduce((sum, { cohort }) => sum + cohort.houses * 2, 0) : 0;
+      let available = Math.max(0, startingInventory.reduce((sum, value) => sum + value, 0) - reserve);
+      const allocations = marketNeeds.map(() => 0);
+      for (let index = 0; index < marketNeeds.length && available > 0; index += 1) {
+        const receiver = marketNeeds[index];
+        const affordable = Math.floor((receiver.cohort.credits + receiver.cohort.creditLimit) / prices[code]);
+        const amount = Math.min(receiver.deficits[code], available, affordable);
+        if (amount <= 0) continue;
+        allocations[index] = amount;
+        available -= amount;
+      }
+      const totalAllocated = allocations.reduce((sum, value) => sum + value, 0);
+      if (totalAllocated <= 0) continue;
+      let remainingToSell = totalAllocated;
+      for (let index = 0; index < marketNeeds.length; index += 1) {
+        const sellable = Math.max(0, startingInventory[index] - (code === 'FOOD' ? marketNeeds[index].cohort.houses * 2 : 0));
+        const sold = Math.min(sellable, remainingToSell);
+        if (sold <= 0) continue;
+        marketNeeds[index].cohort.inventory[code] -= sold;
+        marketNeeds[index].cohort.credits += prices[code] * sold;
+        remainingToSell -= sold;
+      }
+      for (let index = 0; index < marketNeeds.length; index += 1) {
+        const amount = allocations[index];
+        if (amount <= 0) continue;
+        marketNeeds[index].cohort.inventory[code] += amount;
+        marketNeeds[index].cohort.credits -= prices[code] * amount;
+        totals.shortage[code] = Math.max(0, totals.shortage[code] - amount);
+        dayShortage = Math.max(0, dayShortage - amount);
+        trades += 1;
+      }
+    }
+    for (const { cohort } of marketNeeds) {
+      if (cohort.inventory.FOOD === 0 && cohort.houses > 0) cohort.foodShortageStreak += 1;
+      else cohort.foodShortageStreak = 0;
+      // A single unsettled day is a service-risk signal, not immediate
+      // mortality. Persistent food failure for three consecutive days causes
+      // a bounded one-percent population loss.
+      if (cohort.foodShortageStreak >= 3 && cohort.houses > 0) {
+        survived -= Math.min(cohort.houses, Math.ceil(cohort.houses * 0.01));
+        cohort.houses = Math.max(0, cohort.houses - Math.ceil(cohort.houses * 0.01));
+        cohort.foodShortageStreak = 0;
+      }
     }
     for (const code of RESOURCE_CODES) {
       const pressure = totals.production[code] / Math.max(1, totals.consumption[code] + totals.shortage[code]);
@@ -100,8 +163,21 @@ export function runResourceEconomySimulation({ houses = 100, days = 365, seed = 
   const averageUtilization = Object.fromEntries(RESOURCE_CODES.map((code) => [code, utilizationSamples[code] / days / Math.max(1, cohorts.length)]));
   const averagePrices = Object.fromEntries(RESOURCE_CODES.map((code) => [code, priceSamples[code] / days]));
   const wealth = cohorts.map((cohort) => cohort.credits + RESOURCE_CODES.reduce((sum, code) => sum + cohort.inventory[code] * prices[code], 0));
+  const creditExposure = cohorts.reduce((sum, cohort) => sum + Math.max(0, -cohort.credits), 0);
   const meanWealth = wealth.reduce((sum, value) => sum + value, 0) / Math.max(1, wealth.length);
-  return { houses, arrivals, survivingHouses: survived, days, years: days / 365, seed, specialization, scenario, production: totals.production, consumption: totals.consumption, inventoryGrowth: totals.inventoryGrowth, shortage: totals.shortage, shortageFrequency: shortageDays / days, averagePrices, closingPrices: prices, averageUtilization, constructionStarted, trades, wealth: { mean: meanWealth, maxToMean: Math.max(...wealth, 0) / Math.max(1, meanWealth) } };
+  const result = { houses, arrivals, survivingHouses: survived, days, years: days / 365, seed, specialization, scenario, production: totals.production, consumption: totals.consumption, inventoryGrowth: totals.inventoryGrowth, shortage: totals.shortage, shortageFrequency: shortageDays / days, averagePrices, closingPrices: prices, averageUtilization, constructionStarted, trades, creditExposure, wealth: { mean: meanWealth, maxToMean: Math.max(...wealth, 0) / Math.max(1, meanWealth) } };
+  // Imported lazily to keep the simulator usable as a standalone deterministic
+  // primitive without introducing a circular dependency.
+  const survivalRate = houses > 0 ? survived / houses : 0;
+  const utilizationValues = Object.values(averageUtilization).map(Number);
+  result.health = {
+    status: survivalRate >= .90 && result.shortageFrequency <= .25 && result.wealth.maxToMean <= 8 && creditExposure / Math.max(1, houses * STARTER.CREDIT) <= .75 ? 'HEALTHY' : 'REVIEW',
+    survivalRate,
+    meanUtilization: utilizationValues.reduce((sum, value) => sum + value, 0) / Math.max(1, utilizationValues.length),
+    creditExposureRatio: creditExposure / Math.max(1, houses * STARTER.CREDIT),
+    targets: { survivalFloor: .90, shortageFrequencyCeiling: .25, wealthConcentrationCeiling: 8, creditExposureToSupplyCeiling: .75 },
+  };
+  return result;
 }
 
 export const RESOURCE_SIMULATION_SCENARIOS = Object.keys(SCENARIOS);

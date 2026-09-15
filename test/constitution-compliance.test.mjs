@@ -17,8 +17,8 @@ test('constitutional compliance guard: Economy V2 is the authority in V2 mutatio
   }
   const building = read('cloudflare/src/building-settlement-v2.ts');
   assert.doesNotMatch(building, /output_credits|resource_output_type\s*===?\s*['"]credits['"]/i);
-  assert.match(building, /building_output_issuance/);
-  assert.match(building, /building_output/);
+  assert.match(building, /RESOURCE_PRODUCTION/);
+  assert.match(building, /building-settlement-v4/);
 });
 
 test('constitutional compliance guard: economic periods and tax changes are daily/prospective', () => {
