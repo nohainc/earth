@@ -1,5 +1,25 @@
 -- EARTH ACTIVE MIGRATION: public infrastructure is CREDIT-only
 
+-- Legacy databases created from the pre-V4 baseline do not yet have the
+-- catalog ownership discriminator. This migration is the first forward step
+-- that needs it, so add the canonical default before touching public rows.
+ALTER TABLE building_catalog
+  ADD COLUMN IF NOT EXISTS ownership_scope TEXT NOT NULL DEFAULT 'PRIVATE';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'building_catalog'::regclass
+       AND pg_get_constraintdef(oid) LIKE '%ownership_scope%'
+  ) THEN
+    ALTER TABLE building_catalog
+      ADD CONSTRAINT building_catalog_ownership_scope_ck
+      CHECK (ownership_scope IN ('PRIVATE', 'PUBLIC'));
+  END IF;
+END;
+$$;
+
 UPDATE building_catalog
 SET resource_input_units = '{}'::jsonb,
     resource_output_units = '{}'::jsonb,
