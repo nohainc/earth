@@ -30,7 +30,7 @@ test('database baseline and schema manifest are internally consistent', () => {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   assert.equal(manifest.migrationVersion, files.length);
   assert.equal(manifest.baseline, 'db/baseline/001_baseline.sql');
-  for (const table of ['owner_registry', 'economic_accounts', 'building_catalog', 'building_catalog_resource_flows', 'market_instruments', 'tax_rule_versions', 'technology_catalog']) {
+  for (const table of ['owner_registry', 'economic_accounts', 'building_catalog', 'building_catalog_effects', 'market_instruments', 'tax_rule_versions', 'technology_catalog']) {
     assert.ok(manifest.requiredTables[table], `${table} must be in the manifest`);
   }
 

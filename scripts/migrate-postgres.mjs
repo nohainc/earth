@@ -9,6 +9,16 @@ if (!connectionString) {
 }
 
 const migrationDirectory = new URL('../db/migrations/', import.meta.url);
+// Migration 001 was regenerated during the V4 baseline consolidation after
+// some environments had already applied the preceding clean baseline. Keep
+// that one known historical fingerprint readable so those environments can
+// advance through the forward migrations. Unknown checksum drift remains a
+// hard failure; this is not a repair or checksum rewrite mechanism.
+const approvedHistoricalChecksums = new Map([
+  ['001_baseline.sql', new Set([
+    'c4946ae53bbd774353c16533b2f27b6077ed3f5c8f91d22d23201b55fa14c857',
+  ])],
+]);
 const names = (await readdir(migrationDirectory))
   .filter((name) => /^\d+_.+\.sql$/.test(name))
   .sort((a, b) => Number(a.match(/^\d+/)[0]) - Number(b.match(/^\d+/)[0]));
@@ -67,8 +77,15 @@ try {
     const checksum = createHash('sha256').update(sql).digest('hex');
     const existing = await client.query('select name, checksum from earth_schema_migrations where version = $1', [version]);
     if (existing.rowCount) {
-      if (existing.rows[0].name !== name || existing.rows[0].checksum !== checksum) {
+      const appliedName = existing.rows[0].name;
+      const appliedChecksum = existing.rows[0].checksum;
+      const isApprovedHistoricalBaseline = appliedName === name
+        && approvedHistoricalChecksums.get(name)?.has(appliedChecksum);
+      if (appliedName !== name || (appliedChecksum !== checksum && !isApprovedHistoricalBaseline)) {
         throw new Error(`Migration ${name} differs from the applied checksum; applied migrations are immutable, create a new forward migration`);
+      }
+      if (isApprovedHistoricalBaseline && appliedChecksum !== checksum) {
+        console.warn(`Accepted approved historical checksum for ${name}; preserving the applied migration record and continuing forward`);
       }
       continue;
     }
