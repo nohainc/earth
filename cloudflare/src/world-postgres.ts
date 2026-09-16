@@ -6,7 +6,7 @@ import { listOrganizations } from './organizations-postgres.ts';
 import { generateDecisionQueue } from './decision-queue.ts';
 import { listTechnology } from './read-postgres.ts';
 import { listCorporationBuildingResearch } from './corporation-building-research-postgres.ts';
-import { assetUnitScale } from './market-model.ts';
+import { assetUnitScale, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { marketFeeRate } from './market-rules.ts';
 
@@ -192,9 +192,12 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     repository.query(`SELECT o.id, i.symbol, o.side, o.status, o.quantity_units::TEXT,
                              o.remaining_units::TEXT, o.limit_price_units::TEXT,
                              o.rules_version, o.good_til_game_day, o.created_at,
-                             i.asset_id
+                             i.asset_id,
+                             COALESCE(r.remaining_units, 0)::TEXT AS reserved_credit_units
                         FROM market_orders o
                         JOIN market_instruments i ON i.id = o.instrument_id
+                        LEFT JOIN market_order_reservations r
+                          ON r.order_id = o.id AND r.asset_id = 1 AND r.status = 'ACTIVE'
                        WHERE o.status IN ('OPEN', 'PARTIAL')
                          AND ($1::TEXT IS NOT NULL AND o.owner_economic_id =
                               (SELECT economic_id FROM owner_registry WHERE id = $1))
@@ -232,9 +235,13 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
         rulesVersion: row.rules_version,
         goodTilGameDay: row.good_til_game_day,
         createdAt: row.created_at,
+        reservedCredits: row.side === 'BUY' ? priceUnitsToDisplayPrice(String(row.reserved_credit_units ?? '0')) : 0,
       };
     }),
     feeRate: Number(await marketFeeRate(repository, viewerId)),
+    reservedCredits: marketOrders.rows.reduce((sum: number, row: any) => sum + (row.side === 'BUY' ? Number(priceUnitsToDisplayPrice(String(row.reserved_credit_units ?? '0'))) : 0), 0),
+    clearingIntervalMinutes: MARKET_BATCH_GAME_MINUTES,
+    nextClearingGameMinute: gameMinute + (MARKET_BATCH_GAME_MINUTES - (gameMinute % MARKET_BATCH_GAME_MINUTES)),
     gameDay,
     generatedFrom: 'postgres-canonical-facts',
   };

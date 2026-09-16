@@ -40,6 +40,12 @@ class SuppliesTodayPanel extends StatelessWidget {
             (asInt(order['filled_quantity'] ?? order['filled']) ?? 0));
   }
 
+  int _stock(String product) {
+    final value = state.resources[product] ??
+        (product == 'material' ? state.resources['materials'] : null);
+    return asInt(value) ?? 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final shortages = <String>[];
@@ -55,7 +61,7 @@ class SuppliesTodayPanel extends StatelessWidget {
     }
 
     for (final product in _products) {
-      final quantity = asInt(state.resources[product]) ?? 0;
+      final quantity = _stock(product);
       final reserved = _reserved(product);
       final available = quantity - reserved;
       final net = netFlow(product);
@@ -63,8 +69,9 @@ class SuppliesTodayPanel extends StatelessWidget {
           ? Map<String, dynamic>.from(state.market[product] as Map)
           : const <String, dynamic>{};
       final price = asDouble(market['price']);
-      if (available <= 0) shortages.add(product);
-      if (available > 0 && net < 0 && available / net.abs() <= 3) {
+      final lowStock = net < 0 && available / net.abs() <= 3;
+      if (available <= 0 && net < 0) shortages.add(product);
+      if (available > 0 && lowStock) {
         watchlist.add(product);
       }
       final meta = CommodityMeta.forProduct(product);
@@ -132,14 +139,14 @@ class SuppliesTodayPanel extends StatelessWidget {
                           initialProduct: product,
                           initialPrice: price,
                           feeRate: state.marketFeeRate,
-                          initialSide: available <= 0 ? 'buy' : 'sell',
+                          initialSide: net < 0 && lowStock ? 'buy' : 'sell',
                         ),
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
                   minimumSize: const Size(0, 22),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: Text(available <= 0 ? 'BUY' : 'TRADE',
+                child: Text(net < 0 && lowStock ? 'BUY' : 'TRADE',
                     style: const TextStyle(fontSize: 9)),
               ),
             ),
@@ -152,20 +159,21 @@ class SuppliesTodayPanel extends StatelessWidget {
             ? Map<String, dynamic>.from(entry.value as Map)
             : const <String, dynamic>{})
         .toList();
-    final totalSupply = marketEntries.fold<int>(
-        0, (sum, item) => sum + (asInt(item['supply']) ?? 0));
-    final totalDemand = marketEntries.fold<int>(
-        0, (sum, item) => sum + (asInt(item['demand']) ?? 0));
-    final marketStatus = totalDemand > totalSupply * 1.15
-        ? 'Demand is running ahead of supply'
-        : totalSupply > totalDemand * 1.15
-            ? 'Supply is currently comfortable'
-            : 'Supply and demand are broadly balanced';
+    final marketStatus = marketEntries.map((item) {
+      final product = item['product']?.toString() ?? 'resource';
+      final supply = asInt(item['supply']) ?? 0;
+      final demand = asInt(item['demand']) ?? 0;
+      final condition = demand > supply * 1.15
+          ? 'DEMAND HEAVY'
+          : supply > demand * 1.15
+              ? 'SUPPLY HEAVY'
+              : 'BALANCED';
+      return '${CommodityMeta.forProduct(product).name}: $condition';
+    }).join(' · ');
     final activeOrders = state.marketOrders.whereType<Map>().where((order) {
       final status = order['status']?.toString().toLowerCase();
       return status == 'open' || status == 'partial';
     }).length;
-    final buildingCount = state.buildings.length;
     return EarthPanel(
       title: 'STOCK & SHORTAGES',
       showSurface: false,
@@ -188,9 +196,12 @@ class SuppliesTodayPanel extends StatelessWidget {
             runSpacing: 10,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _overviewMetric('MARKET HEALTH', marketStatus),
+              _overviewMetric('MARKET CONDITIONS', marketStatus),
               _overviewMetric(
-                  'TERRITORY DEMAND', '$buildingCount buildings active'),
+                  'HOUSE FLOW',
+                  watchlist.isEmpty
+                      ? 'No low-runway resources'
+                      : '${watchlist.length} need attention'),
               _overviewMetric('OPEN ORDERS', '$activeOrders'),
             ],
           ),
@@ -278,10 +289,10 @@ class _MarketWorkspaceState extends State<MarketWorkspace> {
       statusColor: context.primaryColor,
       infoTitle: 'PLANETARY COMMODITY EXCHANGE ARCHITECTURE',
       infoDescription:
-          '• Spot Commodity Exchange: Central clearing house for planetary resources (Energy, Food, Materials, Components, Compute).\n\n• Exchange Transaction Fee: Standard clearance and order matching fee rate applied on executed trade volumes.\n\n• Supply Contracts & Order Telemetry: Active limit orders and forward supply agreements protecting against macroeconomic volatility.',
+          '• Batch-clearing commodity exchange for planetary resources (Energy, Food, Materials, Components, Compute).\n\n• Exchange Transaction Fee: Standard clearance and order matching fee rate applied on executed trade volumes.\n\n• Supply Contracts & Order Telemetry: Active limit orders and forward supply agreements protecting against macroeconomic volatility.',
       title: 'COMMODITY EXCHANGE',
       subtitle:
-          'Spot commodity order books, real-time supply flows, and trade clearance across Earth',
+          'Batch-clearing commodity order books, resource flows, and trade settlement across Earth',
       metrics: [
         CockpitMetric(
           label: 'Trading Fee',
@@ -806,26 +817,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         _sellPrice = _priceController.text;
       }
     });
-    _qtyFocusNode.addListener(_refreshOrderTotalsOnFocusLoss);
-    _priceFocusNode.addListener(_refreshOrderTotalsOnFocusLoss);
-  }
-
-  void _refreshOrderTotalsOnFocusLoss() {
-    if (!_qtyFocusNode.hasFocus || !_priceFocusNode.hasFocus) {
-      _capBuyQuantityToBudget();
-      if (mounted) setState(() {});
-    }
-  }
-
-  void _capBuyQuantityToBudget() {
-    if (_orderSide != 'buy') return;
-    final limitPrice = double.tryParse(_priceController.text.trim()) ?? 0;
-    final quantity = int.tryParse(_qtyController.text.trim()) ?? 0;
-    if (limitPrice <= 0 || quantity <= 0) return;
-    final credits = asDouble(widget.state.human['credits']) ?? 0;
-    final maximum =
-        (credits / (limitPrice * (1 + widget.state.marketFeeRate))).floor();
-    if (quantity > maximum) _qtyController.text = maximum.toString();
   }
 
   int _reservedSellUnits(String product) {
@@ -843,7 +834,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   }
 
   void _refreshOrderTotals() {
-    _capBuyQuantityToBudget();
     if (mounted) setState(() {});
   }
 
@@ -980,8 +970,10 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final demand = asInt(productData['demand']) ?? 0;
     final history = widget.priceHistory[_selectedCommodity];
 
-    final userCredits = asDouble(widget.state.human['credits']) ?? 0.0;
-    final userStock = asInt(widget.state.resources[_selectedCommodity]) ?? 0;
+    final userCredits = (asDouble(widget.state.human['credits']) ?? 0.0) -
+        widget.state.marketReservedCredits;
+    final userStock = asInt(widget.state.resources[_selectedCommodity]) ??
+        (asInt(widget.state.resources['materials']) ?? 0);
 
     final historyList = (history is Map && history['history'] is List)
         ? (history['history'] as List).whereType<Map>().toList()
@@ -1004,7 +996,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     }
 
     final totalPressure = (supply + demand).clamp(1, 999999);
-    final demandPct = (demand / totalPressure).clamp(0.05, 0.95);
+    final demandPct = (demand / totalPressure).clamp(0.0, 1.0);
 
     final qty = int.tryParse(_qtyController.text.trim()) ?? 0;
     final limitPrice = double.tryParse(_priceController.text.trim()) ?? 0.0;
@@ -1030,8 +1022,17 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
 
     final currentDay = asIntOr(widget.state.clock['day'], 1);
     final currentMinute = asIntOr(widget.state.clock['minute'], 0);
-    final epochIndex = (currentDay * 6) + (currentMinute ~/ 240);
-    final minutesToNextEpoch = 240 - (currentMinute % 240);
+    final market = widget.state.json['market'] is Map
+        ? Map<String, dynamic>.from(widget.state.json['market'] as Map)
+        : const <String, dynamic>{};
+    // Legacy snapshots may not carry the server schedule yet; keep their
+    // historical display stable until the next world refresh supplies it.
+    final interval = asIntOr(market['clearingIntervalMinutes'], 240);
+    final nextMinute = asIntOr(market['nextClearingGameMinute'],
+        currentMinute + (interval - (currentMinute % interval)));
+    final epochIndex = asIntOr(
+        market['epoch'], (currentDay * 6) + (currentMinute ~/ interval));
+    final minutesToNextEpoch = (nextMinute - currentMinute).clamp(0, interval);
     final remHours = minutesToNextEpoch ~/ 60;
     final remMins = minutesToNextEpoch % 60;
     final countdownStr =
@@ -1167,9 +1168,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final demandLabel =
-                              'BUY DEMAND: $demand UNITS (${(demandPct * 100).toStringAsFixed(0)}%)';
+                              'OPEN BUY INTEREST: $demand UNITS (${(demandPct * 100).toStringAsFixed(0)}%)';
                           final supplyLabel =
-                              'SELL SUPPLY: $supply UNITS (${((1 - demandPct) * 100).toStringAsFixed(0)}%)';
+                              'OPEN SELL INTEREST: $supply UNITS (${((1 - demandPct) * 100).toStringAsFixed(0)}%)';
                           final demandText = Text(demandLabel,
                               style: const TextStyle(
                                   fontSize: 9.5,
@@ -1321,7 +1322,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                                         .toStringAsFixed(2);
                                                 _refreshOrderTotals();
                                               },
-                                        child: const Text('SPOT'),
+                                        child: const Text('LAST CLEAR'),
                                       ),
                                     ),
                                   ),
@@ -1697,7 +1698,7 @@ class MarketOrderBookPanel extends StatelessWidget {
     final book = state.marketBook;
 
     return EarthPanel(
-      title: 'ORDER BOOK',
+      title: 'PRE-CLEARING ORDER BOOK',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -1706,7 +1707,7 @@ class MarketOrderBookPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _marketTopicHeading(context, 'ORDER BOOK',
+          _marketTopicHeading(context, 'PRE-CLEARING ORDER BOOK',
               description:
                   '• Review aggregated buy bids, sell asks, order counts, and available liquidity.'),
           if (book.isEmpty)
@@ -2011,6 +2012,27 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                                 horizontal: 10, vertical: 2),
                           ),
                           onPressed: () async {
+                            final shouldCancel = await showDialog<bool>(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('CANCEL ORDER?'),
+                                content: Text(
+                                    '$product · $remaining units remaining\n\nReserved assets will be released back to your House.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext, false),
+                                    child: const Text('KEEP ORDER'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(dialogContext, true),
+                                    child: const Text('CANCEL ORDER'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (shouldCancel != true || !mounted) return;
                             await widget
                                 .action(() => const EarthApi().cancelOrder(id));
                             if (mounted) {

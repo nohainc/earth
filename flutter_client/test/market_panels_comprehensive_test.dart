@@ -4,7 +4,8 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/market/market_panels.dart';
 
 void main() {
-  testWidgets('MarketOrderBookPanel and MyMarketOrdersPanel render book depth and orders',
+  testWidgets(
+      'MarketOrderBookPanel and MyMarketOrdersPanel render book depth and orders',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -26,7 +27,12 @@ void main() {
           {'resource': 'food', 'side': 'sell', 'price': 13.0, 'quantity': 50},
         ],
         'trades': [
-          {'resource': 'food', 'price': 12.5, 'quantity': 20, 'executedAt': '10:00'},
+          {
+            'resource': 'food',
+            'price': 12.5,
+            'quantity': 20,
+            'executedAt': '10:00'
+          },
         ],
         'orders': [
           {
@@ -70,7 +76,7 @@ void main() {
       ),
     );
 
-    expect(find.text('ORDER BOOK'), findsOneWidget);
+    expect(find.text('PRE-CLEARING ORDER BOOK'), findsOneWidget);
     expect(find.text('MY ORDERS'), findsOneWidget);
     expect(find.textContaining('BUY FOOD'), findsOneWidget);
 
@@ -78,6 +84,8 @@ void main() {
     final cancelBtn = find.text('CANCEL ORDER');
     if (cancelBtn.evaluate().isNotEmpty) {
       await tester.tap(cancelBtn.first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('CANCEL ORDER').last);
       await tester.pumpAndSettle();
       expect(cancelTriggered, isTrue);
     }
