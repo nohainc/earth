@@ -271,6 +271,12 @@ void main() {
                 (fn) async {
                   started = true;
                 },
+                const [
+                  {
+                    'name': 'Solar Research',
+                    'research_credit_cost_units': 240,
+                  },
+                ],
               ),
               child: const Text('Open Research Dialog'),
             ),
@@ -285,9 +291,7 @@ void main() {
     expect(find.text('Start Research Project'), findsOneWidget);
     expect(find.text('Start'), findsOneWidget);
 
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Initial budget (minimum 240 C)'),
-        '500');
+    await tester.enterText(find.byType(TextField), '500');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Start'));

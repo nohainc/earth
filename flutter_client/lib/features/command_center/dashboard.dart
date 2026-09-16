@@ -18,19 +18,16 @@ import '../communications/news_panel.dart';
 import '../account/account_screen.dart';
 import '../activity/activity_panel.dart';
 import 'hero_card.dart';
-import 'executive_command_summary.dart';
-import 'objectives_panel.dart';
 import '../house/house_tree_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
 import 'daily_summary_dialog.dart';
 import '../../core/api/earth_api.dart';
-import '../../core/models/player_objective.dart';
 import '../communications/comm_link_dialog.dart';
 import '../lifecycle/historical_archive_panel.dart';
 import '../governance/constitution_panel.dart';
-import 'quick_actions_panel.dart';
-import 'service_risk_panel.dart';
 import 'command_executive_quadrant.dart';
+import 'decision_queue_panel.dart';
+import 'last_completed_day_strip.dart';
 import '../world/world_conditions_panel.dart';
 import '../../core/navigation_registry.dart';
 import '../world/initiatives_panel.dart';
@@ -58,6 +55,7 @@ class Dashboard extends StatelessWidget {
   final bool newsHasMore;
   final VoidCallback? onLoadEarlierNews;
   final List<dynamic> notifications;
+  final List<dynamic> decisionQueue;
   final List<dynamic> ownershipEvents;
   final List<dynamic> membershipEvents;
   final Map<String, dynamic> marketHistory;
@@ -92,6 +90,7 @@ class Dashboard extends StatelessWidget {
     this.newsHasMore = false,
     this.onLoadEarlierNews,
     required this.notifications,
+    this.decisionQueue = const [],
     required this.ownershipEvents,
     required this.membershipEvents,
     this.marketHistory = const {},
@@ -117,8 +116,6 @@ class Dashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final decisions = DecisionQueueItem.synthesizeFromState(state);
-    final visibleDecisions = decisions.take(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -128,163 +125,6 @@ class Dashboard extends StatelessWidget {
             state: state,
             onNavigate: onNavigate,
           ),
-          const SizedBox(height: 34),
-          ServiceRiskPanel(state: state),
-          const SizedBox(height: 18),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  (visibleDecisions.isNotEmpty
-                          ? visibleDecisions.first.riskColor
-                          : cyanAccentColor)
-                      .withValues(alpha: .16),
-                  surfaceColor.withValues(alpha: .78),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: (visibleDecisions.isNotEmpty
-                          ? visibleDecisions.first.riskColor
-                          : cyanAccentColor)
-                      .withValues(alpha: .35)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      visibleDecisions.isNotEmpty
-                          ? Icons.priority_high_rounded
-                          : Icons.check_circle_outline,
-                      color: visibleDecisions.isNotEmpty
-                          ? visibleDecisions.first.riskColor
-                          : cyanAccentColor,
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text('TODAY\'S MANAGEMENT FOCUS',
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1,
-                              color: mutedColor)),
-                    ),
-                    Text(
-                      visibleDecisions.isEmpty
-                          ? 'NO OPEN DECISIONS'
-                          : '${visibleDecisions.length} ${visibleDecisions.length == 1 ? 'PRIORITY' : 'PRIORITIES'}',
-                      style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: mutedColor),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                if (visibleDecisions.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 36, bottom: 8),
-                    child: Text(
-                      'Operations are stable. Choose the next investment in people, capacity, or research.',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  )
-                else
-                  ...visibleDecisions
-                      .map((decision) => _focusDecisionRow(decision)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 10),
-            child: Text(
-              'CURRENT OPERATIONS',
-              style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w700,
-                color: mutedColor,
-              ),
-            ),
-          ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final availableWidth = constraints.maxWidth;
-              final numCols = availableWidth >= 1200
-                  ? 6
-                  : availableWidth >= 600
-                      ? 3
-                      : 2;
-              final itemWidth = (availableWidth - (numCols - 1) * 14) / numCols;
-              final flows =
-                  (state.json['resourceFlows'] as Map<String, dynamic>?) ??
-                      const {};
-
-              final creditsFlow = flows['credits'] as Map<String, dynamic>? ??
-                  {'inflow': 1250, 'outflow': 320, 'net': 930};
-              final foodFlow = flows['food'] as Map<String, dynamic>? ??
-                  {'inflow': 16, 'outflow': 4, 'net': 12};
-              final matFlow = (flows['materials'] ?? flows['material'])
-                      as Map<String, dynamic>? ??
-                  {'inflow': 24, 'outflow': 8, 'net': 16};
-              final energyFlow = flows['energy'] as Map<String, dynamic>? ??
-                  {'inflow': 30, 'outflow': 18, 'net': 12};
-
-              return Wrap(
-                spacing: 14,
-                runSpacing: 14,
-                children: [
-                  EarthFlowMetric(
-                    width: itemWidth,
-                    icon: Icons.account_balance_wallet_outlined,
-                    label: 'CREDITS',
-                    accent: EarthResourceColors.credits,
-                    inflow: asDoubleOr(creditsFlow['inflow'], 1250),
-                    outflow: asDoubleOr(creditsFlow['outflow'], 320),
-                    net: asDoubleOr(creditsFlow['net'], 930),
-                    onTap: () => onNavigate?.call('finance'),
-                  ),
-                  EarthFlowMetric(
-                    width: itemWidth,
-                    icon: Icons.eco_outlined,
-                    label: 'FOOD',
-                    accent: EarthResourceColors.food,
-                    inflow: asDoubleOr(foodFlow['inflow'], 16),
-                    outflow: asDoubleOr(foodFlow['outflow'], 4),
-                    net: asDoubleOr(foodFlow['net'], 12),
-                    onTap: () => onNavigate?.call('market'),
-                  ),
-                  EarthFlowMetric(
-                    width: itemWidth,
-                    icon: Icons.view_in_ar_outlined,
-                    label: 'MATERIALS',
-                    accent: EarthResourceColors.materials,
-                    inflow: asDoubleOr(matFlow['inflow'], 24),
-                    outflow: asDoubleOr(matFlow['outflow'], 8),
-                    net: asDoubleOr(matFlow['net'], 16),
-                    onTap: () => onNavigate?.call('market'),
-                  ),
-                  EarthFlowMetric(
-                    width: itemWidth,
-                    icon: Icons.bolt_outlined,
-                    label: 'ENERGY',
-                    accent: EarthResourceColors.energy,
-                    inflow: asDoubleOr(energyFlow['inflow'], 30),
-                    outflow: asDoubleOr(energyFlow['outflow'], 18),
-                    net: asDoubleOr(energyFlow['net'], 12),
-                    onTap: () => onNavigate?.call('buildings'),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 28),
         ],
         ..._selectedPanels(),
       ],
@@ -818,75 +658,20 @@ class Dashboard extends StatelessWidget {
         ];
       case 'command':
       default:
-        final playerObjectives = PlayerObjective.synthesizeFromState(state);
+        final items = decisionQueue
+            .whereType<Map>()
+            .map((item) =>
+                DecisionQueueItem.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
         return [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final quadrant = CommandExecutiveQuadrant(
-                state: state,
-                onNavigate: onNavigate,
-              );
-              final summary = ExecutiveCommandSummary(
-                state: state,
-                onNavigate: onNavigate,
-                onExecuteDecision: (item) {
-                  if (onNavigate != null) {
-                    onNavigate!(item.targetSection);
-                  }
-                },
-              );
-              final objectives = ObjectivesPanel(
-                objectives: playerObjectives,
-                onNavigate: onNavigate,
-              );
-              if (constraints.maxWidth > 1000) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    quadrant,
-                    const SizedBox(height: 28),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              QuickActionsPanel(
-                                  state: state, onNavigate: onNavigate),
-                              const SizedBox(height: 28),
-                              summary,
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 56),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              objectives,
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  quadrant,
-                  const SizedBox(height: 28),
-                  QuickActionsPanel(state: state, onNavigate: onNavigate),
-                  const SizedBox(height: 28),
-                  summary,
-                  const SizedBox(height: 34),
-                  objectives,
-                ],
-              );
-            },
+          CommandExecutiveQuadrant(state: state, onNavigate: onNavigate),
+          const SizedBox(height: 24),
+          DecisionQueuePanel(
+            items: items,
+            onNavigate: onNavigate,
           ),
+          const SizedBox(height: 24),
+          LastCompletedDayStrip(onNavigate: onNavigate),
         ];
     }
   }

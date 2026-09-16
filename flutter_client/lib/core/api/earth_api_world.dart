@@ -25,6 +25,10 @@ extension EarthApiWorld on EarthApi {
   Future<Map<String, dynamic>> notifications() async =>
       (await _request('/api/notifications?limit=20')) as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> commandCenter({int limit = 20}) async =>
+      (await _request('/api/command-center?limit=$limit'))
+          as Map<String, dynamic>;
+
   Future<void> markNotificationRead(String id) async {
     await _request('/api/notifications/$id/read', method: 'POST');
   }

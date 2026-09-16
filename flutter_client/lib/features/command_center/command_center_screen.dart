@@ -64,6 +64,7 @@ class _CommandCenterState extends State<CommandCenter> {
   List<dynamic> news = const [];
   String? newsNextCursor;
   List<dynamic> notifications = const [];
+  List<dynamic> decisionQueue = const [];
   List<dynamic> ownershipEvents = const [];
   List<dynamic> membershipEvents = const [];
   Map<String, dynamic> marketHistory = const {};
@@ -424,12 +425,14 @@ class _CommandCenterState extends State<CommandCenter> {
         api.events(),
         api.news().catchError((_) => <String, dynamic>{}),
         api.notifications(),
+        api.commandCenter().catchError((_) => <String, dynamic>{}),
         api.personalFinance().catchError((_) => personalFinanceData),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
       ]);
       final latest = results[0] as List<dynamic>;
       final newsData = results[1] as Map<String, dynamic>;
       final notificationData = results[2] as Map<String, dynamic>;
+      final decisionData = results[3] as Map<String, dynamic>;
       final ownership = latest
           .where((event) =>
               event is Map<String, dynamic> && event['category'] == 'OWNERSHIP')
@@ -439,7 +442,7 @@ class _CommandCenterState extends State<CommandCenter> {
               event is Map<String, dynamic> &&
               event['category'] == 'AFFILIATION')
           .toList();
-      final finData = results[3] as Map<String, dynamic>;
+      final finData = results[4] as Map<String, dynamic>;
       final commUnread = 0;
       if (mounted) {
         setState(() {
@@ -452,6 +455,8 @@ class _CommandCenterState extends State<CommandCenter> {
           unreadCommMessages = commUnread;
           notifications =
               (notificationData['notifications'] as List<dynamic>?) ?? const [];
+          decisionQueue =
+              (decisionData['decisions'] as List<dynamic>?) ?? const [];
           unreadNotifications = asInt(notificationData['unread']) ??
               asInt(notificationData['unreadCount']) ??
               0;
@@ -861,6 +866,7 @@ class _CommandCenterState extends State<CommandCenter> {
                                             newsNextCursor!.isNotEmpty,
                                         onLoadEarlierNews: _loadEarlierNews,
                                         notifications: notifications,
+                                        decisionQueue: decisionQueue,
                                         ownershipEvents: ownershipEvents,
                                         membershipEvents: membershipEvents,
                                         marketHistory: marketHistory,

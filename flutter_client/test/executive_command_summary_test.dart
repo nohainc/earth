@@ -143,10 +143,9 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(ExecutiveCommandSummary), findsOneWidget);
-      expect(find.text('WHAT IS MY CURRENT SITUATION?'), findsOneWidget);
-      expect(find.text('WHAT CHANGED SINCE MY LAST VISIT?'), findsOneWidget);
-      expect(find.text('WHAT DECISION SHOULD I MAKE NEXT?'), findsOneWidget);
+      expect(find.text('EXECUTIVE OVERVIEW'), findsOneWidget);
+      expect(find.text('PRIORITIZED DECISION QUEUE'), findsOneWidget);
+      expect(find.text('LAST COMPLETED DAY'), findsOneWidget);
     });
   });
 }
