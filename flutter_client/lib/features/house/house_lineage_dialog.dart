@@ -361,7 +361,7 @@ class HouseLineageDialog extends StatelessWidget {
                       children: [
                         _metricChip(
                             'HISTORICAL SCORE',
-                            '${houseScore ?? '—'}',
+                            houseScore != null ? '$houseScore PTS' : '—',
                             const Color(0xffeab308),
                             Icons.emoji_events_outlined),
                         _metricChip('HOUSE LEGACY', '${legacy ?? '—'} LP',

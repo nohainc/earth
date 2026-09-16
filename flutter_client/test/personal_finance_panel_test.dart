@@ -76,7 +76,7 @@ void main() {
       ),
     ));
 
-    expect(find.text('PERSONAL FINANCE'), findsOneWidget);
+    expect(find.text('HOUSE FINANCE'), findsOneWidget);
     expect(find.text('Available Credits'), findsNothing);
     expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
     expect(find.text('Private buildings'), findsOneWidget);
@@ -84,7 +84,7 @@ void main() {
     expect(find.text('FROM PRIVATE BUILDINGS'), findsNothing);
     expect(find.text('NET CREDIT INCOME'), findsOneWidget);
     expect(find.text('Income tax 2%'), findsOneWidget);
-    expect(find.text('DAILY INCOME'), findsOneWidget);
+    expect(find.text('NEXT SETTLEMENT'), findsOneWidget);
     expect(find.text('YOUR DAILY RESULT'), findsNothing);
     expect(find.text('ON TRACK'), findsOneWidget);
     expect(find.textContaining('Protected reserve: 100 C'), findsOneWidget);
@@ -119,8 +119,8 @@ void main() {
       ),
     ));
 
-    expect(find.text('PERSONAL FINANCE'), findsOneWidget);
-    expect(find.text('DAILY INCOME'), findsOneWidget);
+    expect(find.text('HOUSE FINANCE'), findsOneWidget);
+    expect(find.text('NEXT SETTLEMENT'), findsOneWidget);
     expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
     expect(find.text('NET CREDIT INCOME'), findsOneWidget);
     expect(find.text('YOUR DAILY RESULT'), findsNothing);
@@ -186,14 +186,14 @@ void main() {
     expect(find.text('OVERVIEW'), findsOneWidget);
     expect(find.text('DEPOSIT FUNDS'), findsOneWidget);
     expect(find.text('MY DEPOSITS'), findsOneWidget);
-    expect(find.text('Liquid credits'), findsOneWidget);
-    expect(find.text('Deposited principal'), findsOneWidget);
-    expect(find.text('Accrued interest'), findsWidgets);
-    expect(find.text('Active deposits'), findsOneWidget);
+    expect(find.text('Available to spend'), findsOneWidget);
+    expect(find.text('Active principal'), findsOneWidget);
+    expect(find.textContaining('accrued interest'), findsWidgets);
+    expect(find.text('Matured awaiting withdrawal'), findsOneWidget);
 
     // Verify deposits rendered
-    expect(find.text('500 C'), findsOneWidget);
-    expect(find.text('300 C'), findsOneWidget);
+    expect(find.text('500 C'), findsWidgets);
+    expect(find.text('300 C'), findsWidgets);
     expect(find.text('Matured'), findsOneWidget);
     expect(find.text('Active'), findsOneWidget);
     expect(find.text('WITHDRAW'), findsNWidgets(2));

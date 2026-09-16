@@ -89,7 +89,7 @@ class _LastCompletedDayStripState extends State<LastCompletedDayStrip> {
                     TextButton(
                       onPressed: widget.onNavigate == null
                           ? null
-                          : () => widget.onNavigate!('daily-briefing'),
+                          : () => widget.onNavigate!('briefing'),
                       child: const Text('OPEN BRIEFING'),
                     ),
                   ],

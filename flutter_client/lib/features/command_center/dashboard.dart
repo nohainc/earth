@@ -302,6 +302,8 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case 'territories':
+      case 'territory':
+      case 'city':
         return [
           TerritoryOverviewPanel(
             state: state,

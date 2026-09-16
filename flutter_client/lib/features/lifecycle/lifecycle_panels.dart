@@ -2155,7 +2155,7 @@ class MacroLiquidityPanel extends StatelessWidget {
     final cpiStr = cpiVal == null ? 'UNAVAILABLE' : cpiVal.toStringAsFixed(1);
     final cpiDeltaStr = cpiVal == null
         ? 'Awaiting world snapshot'
-        : '${cpiVal - 100.0 >= 0 ? '+' : ''}${(cpiVal - 100.0).toStringAsFixed(1)}% vs base';
+        : '${cpiVal - 100.0 >= 0 ? '+' : ''}${(cpiVal - 100.0).toStringAsFixed(1)}% vs Base 100.0';
 
     final giniVal = asDouble(liq['gini']);
     final giniStr =
@@ -2208,9 +2208,7 @@ class MacroLiquidityPanel extends StatelessWidget {
                     child: _metricCard(
                       '30-DAY CPI',
                       cpiStr,
-                      cpiVal == null
-                          ? cpiDeltaStr
-                          : '$cpiDeltaStr vs Base 100.0',
+                      cpiDeltaStr,
                       Colors.tealAccent,
                       Icons.show_chart_outlined,
                     ),

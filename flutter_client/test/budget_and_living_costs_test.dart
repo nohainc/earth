@@ -4,6 +4,7 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/command_center/dashboard.dart';
 import 'package:earth_client/features/finance/personal_finance_panel.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
+import 'package:earth_client/features/institutions/territory_overview_panel.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 
 void main() {
@@ -64,8 +65,8 @@ void main() {
       );
 
       // Section Headings
-      expect(find.text('PERSONAL FINANCE'), findsOneWidget);
-      expect(find.text('DAILY INCOME'), findsOneWidget);
+      expect(find.text('HOUSE FINANCE'), findsOneWidget);
+      expect(find.text('NEXT SETTLEMENT'), findsOneWidget);
       expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
       expect(find.text('NET CREDIT INCOME'), findsOneWidget);
 
@@ -136,8 +137,8 @@ void main() {
       expect(find.text('HEALTHCARE'), findsOneWidget);
       expect(find.text('64%'), findsOneWidget);
 
-      // Explicit CITY BUDGET Card and Amount
-      expect(find.text('CITY BUDGET'), findsWidgets);
+      // Explicit TERRITORY BUDGET Card and Amount
+      expect(find.text('TERRITORY BUDGET'), findsWidgets);
       expect(find.text('450000 C'), findsWidgets);
       expect(
         find.textContaining('Municipal funds for civic buildings, public services, maintenance, and explicitly approved resident subsidies.'),
@@ -198,7 +199,7 @@ void main() {
       expect(find.text('CORPORATE BUDGET'), findsNWidgets(2)); // Attribute label + dedicated card header
       expect(find.text('8500000 C'), findsWidgets);
       expect(
-        find.textContaining('Separate corporate funds for research, patents, payroll, and corporate projects. This budget is not the city budget or your personal account.'),
+        find.textContaining('Corporation CREDIT accounts are separated into treasury, operating budget, and reserve.'),
         findsOneWidget,
       );
     });
@@ -263,7 +264,7 @@ void main() {
 
       // 2. Test 'city' route
       await tester.pumpWidget(buildDashboardRoute('city'));
-      expect(find.byType(InstitutionsCapacityPanel), findsOneWidget);
+      expect(find.byType(TerritoryOverviewPanel), findsOneWidget);
 
       // 3. Test 'corporation' route
       await tester.pumpWidget(buildDashboardRoute('corporation'));

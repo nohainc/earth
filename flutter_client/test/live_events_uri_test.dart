@@ -7,9 +7,9 @@ void main() {
   test('maps navigation topics to app section titles', () {
     expect(dashboardSectionTitle('market'), 'MARKET');
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
-    expect(dashboardSectionTitle('life'), 'LIFE');
+    expect(dashboardSectionTitle('life'), 'CITIZEN');
     expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
-    expect(dashboardSectionTitle('unknown'), 'COMMAND CENTER');
+    expect(dashboardSectionTitle('unknown'), 'UNKNOWN');
   });
 
   test('uses configured API origin for live events', () {

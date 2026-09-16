@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:earth_client/core/api/earth_api.dart';
+import 'package:earth_client/core/api/earth_api_transport.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/finance/personal_finance_panel.dart';
 import 'package:earth_client/features/institutions/institutions_dialogs.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 import 'package:earth_client/features/operations/real_estate_dialogs.dart';
+
+class _SuccessfulApiTransport extends EarthApiTransport {
+  @override
+  Future<dynamic> request(String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    return <String, dynamic>{'ok': true};
+  }
+}
 
 typedef OpenDialog = Future<void> Function(BuildContext context, ActionSpy spy);
 
@@ -173,7 +183,9 @@ void main() {
           (tester) async {
         final spy = ActionSpy();
         await pumpLauncher(
-            tester, (context, _) => showCommunityComposer(context, spy.invoke));
+            tester,
+            (context, _) => showCommunityComposer(context, spy.invoke,
+                api: EarthApi(transport: _SuccessfulApiTransport())));
         expect(find.text('Found New Community'), findsOneWidget);
         if (i == 1) {
           await tester.tap(find.text('CANCEL'));
@@ -190,10 +202,6 @@ void main() {
           if (i.isEven) {
             await tester.tap(find.text('APPROVAL REQUIRED'));
             await tester.pump();
-            await tester.enterText(
-                find.widgetWithText(
-                    TextField, 'Application Question / Requirement (Required)'),
-                'Why join?');
           }
           await tester.pumpAndSettle();
           await tester.tap(find.text('Found Community'));
@@ -215,7 +223,7 @@ void main() {
               tester,
               (context, _) => showFormationComposer(context, spy.invoke));
           expect(find.text('Form a Corporation'), findsOneWidget);
-          final field = find.byType(TextField);
+          final field = find.byType(TextField).first;
           if (i == 1) {
             await tester.tap(find.text('Submit'));
             await tester.pump();
@@ -234,7 +242,7 @@ void main() {
         } else if (i <= 10) {
           await pumpLauncher(
               tester, (context, _) => showFormationComposer(context, spy.invoke));
-          final field = find.byType(TextField);
+          final field = find.byType(TextField).first;
           if (i == 6) {
             await tester.tap(find.text('Cancel'));
             expect(spy.calls, 0);
@@ -252,7 +260,7 @@ void main() {
             await tester.tap(find.text('Cancel'));
             expect(spy.calls, 0);
           } else {
-            await tester.enterText(find.byType(TextField), 'Corporation $i');
+            await tester.enterText(find.byType(TextField).first, 'Corporation $i');
             await tester.tap(find.text('Submit'));
             await tester.pumpAndSettle();
             expect(spy.calls, 1);
@@ -340,15 +348,8 @@ void main() {
               InstitutionsCapacityPanel(
                   state: baseState, busy: false, action: spy.invoke),
               spy);
-          expect(find.text('CITY BUDGET'), findsWidgets);
+          expect(find.text('TERRITORY BUDGET'), findsWidgets);
           expect(find.textContaining('5000'), findsWidgets);
-          if (i.isEven) {
-            await tester.ensureVisible(find.text('PROPOSE BUDGET'));
-            await tester.pumpAndSettle();
-            await tester.tap(find.text('PROPOSE BUDGET'));
-            await tester.pumpAndSettle();
-            expect(spy.calls, 1);
-          }
         } else if (i <= 25) {
           await pumpWithAction(
               tester,

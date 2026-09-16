@@ -86,7 +86,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify all 4 core tab buttons are rendered in the single row
-    expect(find.text('LEGACY'), findsWidgets);
+    expect(find.text('LEGACY'), findsOneWidget);
     expect(find.text('WEALTH'), findsOneWidget);
     expect(find.text('BUILDINGS'), findsOneWidget);
     expect(find.text('TECHNOLOGY'), findsOneWidget);

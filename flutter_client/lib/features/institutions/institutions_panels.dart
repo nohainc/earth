@@ -1297,11 +1297,13 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
       builder: (context, constraints) {
         final canonicalMetrics =
             _canonicalMetrics(widget.state.rankings['metrics']);
-        return _buildCanonicalMetricRankings(
-            context,
-            canonicalMetrics,
-            widget.state.rankings['gameDay'],
-            widget.state.rankings['rulesVersion']);
+        if (canonicalMetrics.isNotEmpty) {
+          return _buildCanonicalMetricRankings(
+              context,
+              canonicalMetrics,
+              widget.state.rankings['gameDay'],
+              widget.state.rankings['rulesVersion']);
+        }
 
         final citizens = _citizenRows(
           widget.state.rankings['citizens'],
@@ -1792,7 +1794,33 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
           ],
         ),
         const SizedBox(height: 28),
-        if (myHouse != null || houseName != null)
+        Container(
+          margin: EdgeInsets.only(bottom: context.spacingControl),
+          decoration: BoxDecoration(
+            color: context.surfaceColor.withValues(alpha: .6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: context.subtleBorderColor),
+          ),
+          child: Row(
+            children: [
+              for (var index = 0; index < activeList.length; index++)
+                Expanded(
+                  child: _buildNarrowTabButton(
+                    context,
+                    title: activeList[index].label,
+                    icon: activeList[index].icon,
+                    isSelected: index == metricIndex,
+                    onTap: () {
+                      EarthAudioEngine.instance.playClick();
+                      setState(() => _metricTab = index);
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (myHouse != null || houseName != null) ...[
           Container(
             padding: EdgeInsets.all(context.cardPadding),
             decoration: BoxDecoration(
@@ -1827,36 +1855,11 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                 ]),
             ]),
           ),
-        if (myHouse != null) const SizedBox(height: 16),
-        Container(
-          margin: EdgeInsets.only(bottom: context.spacingControl),
-          decoration: BoxDecoration(
-            color: context.surfaceColor.withValues(alpha: .6),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: context.subtleBorderColor),
-          ),
-          child: Row(
-            children: [
-              for (var index = 0; index < activeList.length; index++)
-                Expanded(
-                  child: _buildNarrowTabButton(
-                    context,
-                    title: activeList[index].label,
-                    icon: activeList[index].icon,
-                    isSelected: index == metricIndex,
-                    onTap: () {
-                      EarthAudioEngine.instance.playClick();
-                      setState(() => _metricTab = index);
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 16),
+        ],
         EarthSection(
-          title: title.toUpperCase(),
-          showHeader: true,
+          title: '',
+          showHeader: false,
           showSurface: false,
           child: rows.isEmpty
               ? EarthEmptyState(

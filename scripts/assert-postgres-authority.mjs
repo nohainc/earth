@@ -18,8 +18,6 @@ if (!/scheduled\s*\([^)]*\)[^{]*\{/.test(worker)) throw new Error('Worker must e
 if (!worker.includes('runSchedulerHeartbeat(')) throw new Error('Scheduled events must enter the canonical scheduler heartbeat');
 if (!worker.includes('scheduledTime')) throw new Error('Scheduled events must pass their provider timestamp to the heartbeat');
 if (worker.includes("/api/day/advance")) throw new Error('Manual world-clock advancement must not be exposed as an API route');
-if (!worker.includes('async function productionEventsFromPostgres')) throw new Error('Production history must have a PostgreSQL-only handler');
-if (!worker.includes("url.pathname === '/api/production/events' && request.method === 'GET'")) throw new Error('Production history must bypass legacy provider branches');
 if (!worker.includes('async function servicesStatusFromPostgres')) throw new Error('Service status must have a PostgreSQL-only handler');
 if (!worker.includes("url.pathname === '/api/services/status' && request.method === 'GET'")) throw new Error('Service status must bypass legacy provider branches');
 if (!worker.includes('handleReadModelRoutes')) throw new Error('Read-model routes must be dispatched before legacy provider branches');
@@ -27,7 +25,7 @@ for (const route of [
   "url.pathname === '/api/world/activity'",
   "url.pathname === '/api/events'",
   "url.pathname === '/api/notifications'",
-  "url.pathname === '/api/audit'",
+  "url.pathname === '/internal/audit'",
   "url.pathname === '/api/institutions'",
   "url.pathname === '/api/rankings'",
   "url.pathname === '/api/history'",

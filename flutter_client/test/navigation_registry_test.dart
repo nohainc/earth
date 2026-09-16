@@ -7,7 +7,8 @@ void main() {
     test('normalizes canonical routes and legacy aliases', () {
       expect(NavigationRegistry.normalizeRoute('overview'), 'command');
       expect(NavigationRegistry.normalizeRoute('command'), 'command');
-      expect(NavigationRegistry.normalizeRoute('daily-briefing'), 'briefing');
+      expect(NavigationRegistry.normalizeRoute('daily-summary'), 'briefing');
+      expect(NavigationRegistry.normalizeRoute('statement'), 'briefing');
       expect(NavigationRegistry.normalizeRoute('briefing'), 'briefing');
       expect(NavigationRegistry.normalizeRoute('automation'), 'policies');
       expect(NavigationRegistry.normalizeRoute('operating-rules'), 'policies');

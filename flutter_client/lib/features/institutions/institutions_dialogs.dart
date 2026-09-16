@@ -12,75 +12,109 @@ Future<void> showFormationComposer(
   Future<void> Function(Future<EarthState> Function()) action, {
   String? territoryName,
 }) async {
-  final name = TextEditingController();
-  final territory = TextEditingController(text: territoryName ?? '');
-  try {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: context.panelColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(context.radiusPanel),
-          side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-        ),
-        title: Text(
-          'Form a Corporation',
-          style: context.topicTitleStyle.copyWith(color: context.primaryColor),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-                'Founding creates a primary Territory and makes you its first executive.',
-                style: context.widgetFooterStyle),
-            const SizedBox(height: 12),
-            TextField(
-              controller: name,
-              autofocus: true,
-              style: context.bodyStyle.copyWith(color: context.inkColor),
-              decoration: InputDecoration(
-                labelText: 'Corporation name',
-                labelStyle: context.widgetFooterStyle,
-              ),
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => _FormationComposerDialog(
+      action: action,
+      initialTerritoryName: territoryName,
+    ),
+  );
+}
+
+class _FormationComposerDialog extends StatefulWidget {
+  final Future<void> Function(Future<EarthState> Function()) action;
+  final String? initialTerritoryName;
+
+  const _FormationComposerDialog({
+    required this.action,
+    this.initialTerritoryName,
+  });
+
+  @override
+  State<_FormationComposerDialog> createState() =>
+      _FormationComposerDialogState();
+}
+
+class _FormationComposerDialogState extends State<_FormationComposerDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _territoryController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+    _territoryController =
+        TextEditingController(text: widget.initialTerritoryName ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _territoryController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: context.panelColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.radiusPanel),
+        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+      ),
+      title: Text(
+        'Form a Corporation',
+        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+              'Founding creates a primary Territory and makes you its first executive.',
+              style: context.widgetFooterStyle),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            style: context.bodyStyle.copyWith(color: context.inkColor),
+            decoration: InputDecoration(
+              labelText: 'Corporation name',
+              labelStyle: context.widgetFooterStyle,
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: territory,
-              style: context.bodyStyle.copyWith(color: context.inkColor),
-              decoration: InputDecoration(
-                labelText: 'Primary Territory name',
-                labelStyle: context.widgetFooterStyle,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('Cancel',
-                style:
-                    context.controlStyle.copyWith(color: context.mutedColor)),
           ),
-          EarthButton(
-            label: 'Submit',
-            onPressed: () async {
-              final selectedName = name.text.trim();
-              if (selectedName.length < 2) return;
-              Navigator.pop(dialogContext);
-              await action(() => const EarthApi().createCorporation(
-                    selectedName,
-                    territoryName: territory.text.trim().isEmpty
-                        ? null
-                        : territory.text.trim(),
-                  ));
-            },
+          const SizedBox(height: 10),
+          TextField(
+            controller: _territoryController,
+            style: context.bodyStyle.copyWith(color: context.inkColor),
+            decoration: InputDecoration(
+              labelText: 'Primary Territory name',
+              labelStyle: context.widgetFooterStyle,
+            ),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancel',
+              style: context.controlStyle.copyWith(color: context.mutedColor)),
+        ),
+        EarthButton(
+          label: 'Submit',
+          onPressed: () async {
+            final selectedName = _nameController.text.trim();
+            if (selectedName.length < 2) return;
+            Navigator.pop(context);
+            await widget.action(() => const EarthApi().createCorporation(
+                  selectedName,
+                  territoryName: _territoryController.text.trim().isEmpty
+                      ? null
+                      : _territoryController.text.trim(),
+                ));
+          },
+        ),
+      ],
     );
-  } finally {
-    name.dispose();
-    territory.dispose();
   }
 }
 
@@ -1433,7 +1467,9 @@ Future<void> showTaxCharterDialog(
                 BorderSide(color: context.primaryColor.withValues(alpha: .35)),
           ),
           title: Text(
-            'Set corporation tax charter',
+            corporation
+                ? 'Set corporation tax charter'
+                : 'Set city tax charter',
             style:
                 context.topicTitleStyle.copyWith(color: context.primaryColor),
           ),

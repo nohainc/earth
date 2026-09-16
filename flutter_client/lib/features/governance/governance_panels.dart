@@ -23,7 +23,14 @@ class CivicStatusPanel extends StatelessWidget {
     final territoryId = membership?['territory_id'] ??
         residency['currentTerritoryId'] ??
         residency['territoryId'] ??
-        state.house['primary_territory_id'];
+        state.house['primary_territory_id'] ??
+        (state.institutions['territory'] is Map
+            ? state.institutions['territory']['name']
+            : null) ??
+        (state.institutions['city'] is Map
+            ? state.institutions['city']['name']
+            : null) ??
+        membership?['city_id'];
     final citizenship = membership?['corporation_name']?.toString() != null
         ? 'Territory resident'
         : 'Independent citizen';
@@ -264,7 +271,8 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
   String _scopeFor(String? institutionId) {
     if (institutionId == null ||
         institutionId.isEmpty ||
-        institutionId == 'OUC-001') {
+        institutionId == 'OUC-001' ||
+        institutionId == 'WORLD') {
       return 'WORLD';
     }
     final territoryIds = widget.state.territories
@@ -272,11 +280,23 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
         .map((row) => row['id']?.toString())
         .whereType<String>()
         .toSet();
+    final cityInstId = widget.state.institutions['city'] is Map
+        ? widget.state.institutions['city']['id']?.toString()
+        : null;
+    final terrInstId = widget.state.institutions['territory'] is Map
+        ? widget.state.institutions['territory']['id']?.toString()
+        : null;
     if (territoryIds.contains(institutionId) ||
-        institutionId.toUpperCase().startsWith('TERR-')) {
+        institutionId == cityInstId ||
+        institutionId == terrInstId ||
+        institutionId.toUpperCase().startsWith('TERR-') ||
+        institutionId.toUpperCase().startsWith('CITY-')) {
       return 'TERRITORY';
     }
-    return 'UNKNOWN';
+    if (institutionId.toUpperCase().startsWith('CORP-')) {
+      return 'CORPORATION';
+    }
+    return 'TERRITORY';
   }
 
   List<Map<String, dynamic>> _proposalsForScope(String scope) {
@@ -716,7 +736,9 @@ class _ProposalCard extends StatelessWidget {
     final castCount = asIntOr(votes['cast_count'] ?? votes['voter_count'],
         supportCount + opposeCount + abstainCount);
     final eligibleCount = asIntOr(proposal['eligible_voter_count'], 0);
-    final uncastCount = math.max(0, eligibleCount - castCount);
+    final uncastCount = votes['uncast'] != null
+        ? asIntOr(votes['uncast'], 0)
+        : math.max(0, eligibleCount - castCount);
     final decisiveCount = supportCount + opposeCount;
     final turnout = eligibleCount > 0 ? castCount / eligibleCount * 100 : null;
     final approval =
@@ -893,7 +915,9 @@ class _ProposalCard extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Support $supportCount  ·  Oppose $opposeCount  ·  Abstain $abstainCount  ·  Uncast $uncastCount',
+                  votes.containsKey('abstain') || abstainCount > 0
+                      ? 'Support $supportCount  ·  Oppose $opposeCount  ·  Abstain $abstainCount  ·  Uncast $uncastCount'
+                      : 'Support $supportCount  ·  Oppose $opposeCount  ·  Uncast $uncastCount',
                   style: context.widgetTitleStyle,
                 ),
               ),
@@ -958,14 +982,14 @@ class _ProposalCard extends StatelessWidget {
           TextButton.icon(
             onPressed: proposalId.isEmpty ? null : onToggleExpand,
             icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
-            label: Text(isExpanded ? 'HIDE DETAILS' : 'REVIEW & VOTE'),
+            label: Text(isExpanded ? 'HIDE DETAILS' : 'SHOW DETAILS'),
           ),
           if (isExpanded) _buildRichDetails(context, proposal),
 
           SizedBox(height: context.spacingTitleOffset),
 
           // Voting action buttons — only visible when voting is open
-          if (isExpanded && isVotingOpen && !canVote)
+          if (isVotingOpen && !canVote)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
@@ -976,8 +1000,7 @@ class _ProposalCard extends StatelessWidget {
                     .copyWith(color: context.warningColor),
               ),
             ),
-          if (isExpanded &&
-              isVotingOpen &&
+          if (isVotingOpen &&
               canVote &&
               (myVote == null || myVote.isEmpty))
             Wrap(

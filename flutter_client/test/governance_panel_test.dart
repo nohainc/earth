@@ -63,7 +63,7 @@ void main() {
     // The new tabbed UI shows tab labels with counts
     expect(find.text('WORLD (1)'), findsOneWidget);
     expect(find.text('CORPORATION (0)'), findsOneWidget);
-    expect(find.text('CITY (0)'), findsOneWidget);
+    expect(find.text('TERRITORY (0)'), findsOneWidget);
     await tester.tap(find.text('WORLD (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Infrastructure levy adjustment'), findsOneWidget);
@@ -82,7 +82,11 @@ void main() {
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('support'));
     await tester.tap(find.text('support'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'CONFIRM VOTE'));
+    await tester.pumpAndSettle();
     expect(castChoice, 'voted');
   });
 
@@ -308,11 +312,11 @@ void main() {
       ),
     ));
 
-    // World tab shows 1 proposal, City tab shows 1
+    // World tab shows 1 proposal, Territory tab shows 1
     expect(find.text('WORLD (1)'), findsOneWidget);
-    expect(find.text('CITY (1)'), findsOneWidget);
+    expect(find.text('TERRITORY (1)'), findsOneWidget);
 
-    // Default tab (City) shows the build proposal.
+    // Default tab (Territory) shows the build proposal.
     expect(find.text('Build a civic solar plant'), findsOneWidget);
 
     // World remains available as the final tab.
@@ -320,7 +324,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Universal charter update'), findsOneWidget);
 
-    await tester.tap(find.text('CITY (1)'));
+    await tester.tap(find.text('TERRITORY (1)'));
     await tester.pumpAndSettle();
 
     // Expand the building proposal to see rich details

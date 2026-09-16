@@ -67,7 +67,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('EARTH'), findsOneWidget);
-        expect(find.text('UNITED CORPORATIONS'), findsOneWidget);
+        expect(find.text('A LIVING WORLD'), findsOneWidget);
         expect(find.text('LIVE'), findsOneWidget);
         expect(find.byType(EarthLogo), findsOneWidget);
       }

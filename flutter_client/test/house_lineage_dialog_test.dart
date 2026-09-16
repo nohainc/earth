@@ -141,13 +141,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.tap(find.text('EXTINCT HOUSES').last);
+      await tester.pumpAndSettle();
+
       expect(find.text('House of Vance (Historical)'), findsOneWidget);
       await tester.tap(find.text('House of Vance (Historical)'));
       await tester.pumpAndSettle();
 
       // Verify HouseLineageDialog opened for extinct house
       expect(find.text('HOUSE SUCCESSION & LINEAGE TREE'), findsOneWidget);
-      expect(find.text('Lineage Extinct'), findsOneWidget);
+      expect(find.text('HISTORICAL'), findsWidgets);
     });
   });
 }

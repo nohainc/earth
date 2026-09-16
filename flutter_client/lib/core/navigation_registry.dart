@@ -83,7 +83,7 @@ class NavigationRegistry {
     NavigationItem(
       id: 'briefing',
       canonicalRoute: 'briefing',
-      aliases: ['daily-briefing'],
+      aliases: ['statement', 'daily-summary'],
       group: NavigationGroup.command,
       defaultLabel: 'Daily Briefing',
       defaultPageTitle: 'DAILY BRIEFING',

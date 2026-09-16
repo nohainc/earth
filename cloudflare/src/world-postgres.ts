@@ -85,7 +85,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                        ORDER BY due_game_day, id LIMIT 100`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     repository.query(`SELECT p.*, h.display_name AS creator_name, i.name AS institution_name,
                              i.kind AS institution_kind,
-                             CASE WHEN p.institution_id = 'OUC-001' OR i.kind = 'WORLD' THEN 'WORLD'
+                             CASE WHEN i.kind = 'WORLD' THEN 'WORLD'
                                   WHEN i.kind = 'CITY' OR c.id IS NOT NULL THEN 'TERRITORY'
                                   WHEN i.kind = 'CORPORATION' THEN 'CORPORATION'
                                   ELSE 'UNKNOWN' END AS scope,
@@ -98,7 +98,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                              jsonb_build_object(
                                'canVote', CASE
                                  WHEN p.status NOT IN ('OPEN', 'VOTING') THEN FALSE
-                                 WHEN p.institution_id = 'OUC-001' OR i.kind = 'WORLD' THEN TRUE
+                                 WHEN i.kind = 'WORLD' THEN TRUE
                                  WHEN i.kind = 'CITY' OR c.id IS NOT NULL THEN EXISTS (
                                    SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id
                                     WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND (ha.primary_territory_id = p.institution_id OR ha.primary_territory_id = i.id))
