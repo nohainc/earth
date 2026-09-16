@@ -710,6 +710,8 @@ class _CommandCenterState extends State<CommandCenter> {
             : RefreshIndicator(
                 onRefresh: () async => _run(api.world),
                 child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
                   decoration: BoxDecoration(
                     color: context.canvasColor,
                     gradient: LinearGradient(
@@ -722,9 +724,39 @@ class _CommandCenterState extends State<CommandCenter> {
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      TopFixedHudPanel(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 1536),
+                      decoration: BoxDecoration(
+                        color: context.canvasColor,
+                        border: viewport.maxWidth > 1536
+                            ? Border(
+                                left: BorderSide(
+                                  color: context.primaryColor
+                                      .withValues(alpha: 0.12),
+                                  width: 1.0,
+                                ),
+                                right: BorderSide(
+                                  color: context.primaryColor
+                                      .withValues(alpha: 0.12),
+                                  width: 1.0,
+                                ),
+                              )
+                            : null,
+                        boxShadow: viewport.maxWidth > 1536
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 24,
+                                  spreadRadius: 2,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Column(
+                        children: [
+                          TopFixedHudPanel(
                         state: current,
                         notifications: notifications,
                         unreadNotifications: unreadNotifications,
@@ -909,6 +941,8 @@ class _CommandCenterState extends State<CommandCenter> {
                   ),
                 ),
               ),
+            ),
+          ),
       );
     });
   }
