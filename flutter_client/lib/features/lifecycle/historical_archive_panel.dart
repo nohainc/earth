@@ -58,14 +58,14 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
     final housesCol = _buildHousesSection(context, houses);
 
     final cockpit = EarthPageCockpit(
-      status: 'ETERNAL RECORD',
+      status: 'MEMORIAL',
       statusColor: context.goldColor,
-      infoTitle: 'MEMORIAL & PANTHEON ARCHIVE',
+      infoTitle: 'MEMORIAL ARCHIVE',
       infoDescription:
-          '• Eternal Ledger: Preserves the permanent lifetime record and achievements of deceased citizens and concluded noble houses.\n\n• Citizen Composite Score (1 : 5 : 25 ratio):\n  - Personal Legacy (25x relative weight)\n  - Civic Standing (5x relative weight)\n  - Lifespan Age (1x base weight)\n\n• House Prestige Score:\n  - House Legacy (25x) + House Standing (5x) + Ancestral Inscriptions (10x bonus) + House Lifespan (1x base)\n\n• Dynastic Extinction: Registry of inactive houses whose lineage concluded without surviving designated heirs.',
-      title: 'MEMORIAL & PANTHEON',
+          'The Memorial is a permanent record of concluded lives and extinct Houses. Every displayed fact comes from the canonical historical read model; missing facts are shown as unavailable and are never reconstructed in the client.',
+      title: 'MEMORIAL',
       subtitle:
-          'Planetary historical ledger of concluded lives and noble houses across Earth',
+          'Permanent record of concluded lives and extinct Houses across Earth',
       metrics: [
         CockpitMetric(
           label: 'Archived Citizens',
@@ -87,59 +87,37 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
       children: [
         cockpit,
         const SizedBox(height: 28),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 840;
-
-            if (wide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: deceasedCol),
-                  const SizedBox(width: 40),
-                  Expanded(child: housesCol),
-                ],
-              );
-            }
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  margin: EdgeInsets.only(bottom: context.spacingControl),
-                  decoration: BoxDecoration(
-                    color: context.surfaceColor.withValues(alpha: .6),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: context.subtleBorderColor),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildNarrowTabButton(
-                          context,
-                          title: 'CITIZENS',
-                          icon: Icons.account_box_outlined,
-                          isSelected: _selectedTab == 0,
-                          onTap: () => setState(() => _selectedTab = 0),
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildNarrowTabButton(
-                          context,
-                          title: 'HOUSES',
-                          icon: Icons.shield_outlined,
-                          isSelected: _selectedTab == 1,
-                          onTap: () => setState(() => _selectedTab = 1),
-                        ),
-                      ),
-                    ],
-                  ),
+        Container(
+          margin: EdgeInsets.only(bottom: context.spacingControl),
+          decoration: BoxDecoration(
+            color: context.surfaceColor.withValues(alpha: .6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: context.subtleBorderColor),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildNarrowTabButton(
+                  context,
+                  title: 'CITIZENS (${deceased.length})',
+                  icon: Icons.account_box_outlined,
+                  isSelected: _selectedTab == 0,
+                  onTap: () => setState(() => _selectedTab = 0),
                 ),
-                _selectedTab == 0 ? deceasedCol : housesCol,
-              ],
-            );
-          },
+              ),
+              Expanded(
+                child: _buildNarrowTabButton(
+                  context,
+                  title: 'EXTINCT HOUSES (${houses.length})',
+                  icon: Icons.shield_outlined,
+                  isSelected: _selectedTab == 1,
+                  onTap: () => setState(() => _selectedTab = 1),
+                ),
+              ),
+            ],
+          ),
         ),
+        _selectedTab == 0 ? deceasedCol : housesCol,
       ],
     );
   }
@@ -345,16 +323,9 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                   row['birth_day'] ??
                   row['birthDay'] ??
                   row['born_day'];
-              final int? birthDayNum = birthDayRaw != null
-                  ? int.tryParse(birthDayRaw.toString())
-                  : (deathDayNum != null &&
-                          (row['age_years'] != null || row['age'] != null)
-                      ? (deathDayNum -
-                              (int.parse((row['age_years'] ?? row['age'])
-                                      .toString()) *
-                                  365))
-                          .clamp(1, 9999999)
-                      : null);
+              final int? birthDayNum = birthDayRaw == null
+                  ? null
+                  : int.tryParse(birthDayRaw.toString());
 
               String? bornLabel;
               if (birthDayNum != null) {
@@ -364,12 +335,10 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
               }
 
               String? ageLabel;
-              int ageYearsNum = 0;
               if (deathDayNum != null && birthDayNum != null) {
                 final totalDays = (deathDayNum - birthDayNum).clamp(0, 9999999);
                 final ageY = totalDays ~/ 365;
                 final ageD = totalDays % 365;
-                ageYearsNum = ageY;
                 ageLabel =
                     ageD > 0 ? 'Age: $ageY yrs, $ageD days' : 'Age: $ageY yrs';
               } else if (row['age_years'] != null || row['age'] != null) {
@@ -377,7 +346,6 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                         row['age']?.toString() ??
                         '0') ??
                     0;
-                ageYearsNum = ageY;
                 ageLabel = 'Age: $ageY yrs';
               }
 
@@ -409,17 +377,16 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                   row['active_dynasty_name'] ??
                   currentHouseFromMap;
 
-              final legacy = (row['final_legacy'] ??
-                      row['legacy_points'] ??
-                      row['legacy'] ??
-                      0)
-                  .toString();
-              final legNum = int.tryParse(legacy) ?? 0;
+              final legacyValue =
+                  row['final_legacy'] ?? row['legacy_points'] ?? row['legacy'];
+              final legNum = legacyValue == null
+                  ? null
+                  : int.tryParse(legacyValue.toString());
               final standing = row['final_standing']?.toString() ??
                   row['standing']?.toString();
-              final stdNum = int.tryParse(standing ?? '0') ?? 0;
-              final compositeScore = row['composite_legacy_score'] ??
-                  (stdNum * 10 + legNum * 50 + ageYearsNum * 2);
+              final stdNum = standing == null ? null : int.tryParse(standing);
+              final historicalScore =
+                  row['historical_score'] ?? row['composite_legacy_score'];
 
               final city =
                   row['city_name']?.toString() ?? row['city']?.toString();
@@ -476,8 +443,8 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                           ),
                           SizedBox(width: context.spacingInline),
                           EarthStatusPill(
-                            label: 'SCORE',
-                            value: '$compositeScore PTS',
+                            label: 'HISTORICAL SCORE',
+                            value: historicalScore?.toString() ?? '—',
                             color: context.primaryColor,
                           ),
                         ],
@@ -506,9 +473,10 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                             _badge(context, Icons.cake_outlined, bornLabel),
                           if (ageLabel != null)
                             _badge(context, Icons.timelapse, ageLabel),
-                          _badge(context, Icons.stars_outlined,
-                              'Personal Legacy: $legNum LP'),
-                          if (stdNum > 0)
+                          if (legNum != null)
+                            _badge(context, Icons.stars_outlined,
+                                'Personal Legacy: $legNum LP'),
+                          if (stdNum != null)
                             _badge(context, Icons.shield,
                                 'Final Standing: $stdNum pts'),
                           if (city != null && city.isNotEmpty && city != '—')
@@ -657,14 +625,12 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                       row['deceased'] ??
                       '1')
                   .toString();
-              final totalLegacy = (row['total_legacy'] ??
-                      row['house_legacy'] ??
-                      row['dynasty_legacy'] ??
-                      row['peak_legacy'] ??
-                      row['legacy_points'] ??
-                      row['legacy'] ??
-                      '0')
-                  .toString();
+              final totalLegacy = row['total_legacy'] ??
+                  row['house_legacy'] ??
+                  row['dynasty_legacy'] ??
+                  row['peak_legacy'] ??
+                  row['legacy_points'] ??
+                  row['legacy'];
               final peakStanding = row['peak_standing'] ??
                   row['standing'] ??
                   row['house_standing'] ??
@@ -687,42 +653,35 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
               final foundedRaw = row['founded_game_day'] ??
                   row['birth_game_day'] ??
                   row['founded_day'] ??
-                  row['start_day'] ??
-                  1;
-              final foundedDayNum = int.tryParse(foundedRaw.toString()) ?? 1;
-              final fYear = ((foundedDayNum - 1) ~/ 365) + 1;
-              final fDay = ((foundedDayNum - 1) % 365) + 1;
-              final foundedLabel = 'Founded: Year $fYear, Day $fDay';
+                  row['start_day'];
+              final foundedDayNum = foundedRaw == null
+                  ? null
+                  : int.tryParse(foundedRaw.toString());
+              final extinctDayNum = int.tryParse(
+                  (row['extinct_game_day'] ?? row['extinction_game_day'] ?? '')
+                      .toString());
+              final foundedLabel = foundedDayNum == null
+                  ? 'Founded: UNAVAILABLE'
+                  : 'Founded: ${_formatGameDay(foundedDayNum)}';
+              final lifespanDays = row['lifespan_days'] == null
+                  ? (foundedDayNum != null && extinctDayNum != null
+                      ? (extinctDayNum - foundedDayNum).clamp(0, 9999999)
+                      : null)
+                  : int.tryParse(row['lifespan_days'].toString());
+              final ageLabel = lifespanDays == null
+                  ? 'Lifespan: UNAVAILABLE'
+                  : 'Lifespan: ${_formatDuration(lifespanDays)}';
 
-              final currentDayRaw = row['current_game_day'] ??
-                  row['game_day'] ??
-                  widget.pantheon['game_day'] ??
-                  1200;
-              final currentDayNum =
-                  int.tryParse(currentDayRaw.toString()) ?? 1200;
-              final totalDays =
-                  (currentDayNum - foundedDayNum).clamp(0, 9999999);
-              final ageY = totalDays ~/ 365;
-              final ageD = totalDays % 365;
-              final ageLabel =
-                  ageD > 0 ? 'Age: $ageY yrs, $ageD days' : 'Age: $ageY yrs';
-
-              final legacyNum = int.tryParse(totalLegacy) ?? 0;
               final standingNum = int.tryParse(peakStanding.toString()) ?? 0;
-              final genNum = int.tryParse(gen.toString()) ?? 1;
-              final ancestorsNum = int.tryParse(count) ?? 1;
-              final houseScore = row['house_score'] ??
+              final historicalScore = row['historical_score'] ??
+                  row['house_score'] ??
                   row['dynasty_score'] ??
-                  row['score'] ??
-                  (legacyNum * 50 +
-                      standingNum * 10 +
-                      ageY * 2 +
-                      ancestorsNum * 20);
+                  row['score'];
 
               final isExtinct = row['is_extinct'] == true ||
                   row['status'] == 'extinct' ||
                   row['status'] == 'deceased' ||
-                  (heir == null || heir.isEmpty || heir == '—');
+                  false;
               final statusLabel =
                   !isExtinct ? 'Active (Gen $gen)' : 'Extinct (Gen $gen)';
 
@@ -779,7 +738,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                             SizedBox(width: context.spacingInline),
                             EarthStatusPill(
                               label: 'SCORE',
-                              value: '$houseScore PTS',
+                              value: historicalScore?.toString() ?? '—',
                               color: context.primaryColor,
                             ),
                             const SizedBox(width: 6),
@@ -810,7 +769,10 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                                 founder != '—')
                               _badge(
                                   context, Icons.history, 'Founder: $founder'),
-                            if (!isExtinct && heir.isNotEmpty && heir != '—')
+                            if (!isExtinct &&
+                                heir != null &&
+                                heir.isNotEmpty &&
+                                heir != '—')
                               _badge(context, Icons.person_pin, 'Heir: $heir')
                             else if (isExtinct)
                               _badge(context, Icons.hourglass_disabled,
@@ -819,8 +781,9 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                             _badge(context, Icons.timelapse, ageLabel),
                             _badge(context, Icons.account_box_outlined,
                                 'Ancestors: $count'),
-                            _badge(context, Icons.stars_outlined,
-                                'House Legacy: $totalLegacy LP'),
+                            if (totalLegacy != null)
+                              _badge(context, Icons.stars_outlined,
+                                  'House Legacy: $totalLegacy LP'),
                             if (standingNum > 0)
                               _badge(context, Icons.shield,
                                   'House Standing: $standingNum pts'),
@@ -880,264 +843,16 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
       ),
     );
   }
-}
 
-typedef HistoricalDynastiesPanel = HistoricalHousesPanel;
-
-class HistoricalHousesPanel extends StatefulWidget {
-  final Map<String, dynamic> pantheon;
-  const HistoricalHousesPanel({super.key, required this.pantheon});
-
-  @override
-  State<HistoricalHousesPanel> createState() => _HistoricalHousesPanelState();
-}
-
-class _HistoricalHousesPanelState extends State<HistoricalHousesPanel> {
-  int _page = 0;
-  static const int _pageSize = 10;
-
-  Widget _badge(BuildContext context, IconData icon, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: context.iconSize - 2, color: context.mutedColor),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: context.widgetFooterStyle.copyWith(
-            color: context.mutedColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
+  String _formatGameDay(int day) {
+    final year = ((day - 1) ~/ 365) + 1;
+    final yearDay = ((day - 1) % 365) + 1;
+    return 'Year $year, Day $yearDay';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final rows = widget.pantheon['houses'] ??
-        widget.pantheon['dynasties'] ??
-        widget.pantheon['dynasticHouses'];
-    final houses = rows is List ? rows : const <dynamic>[];
-    final totalPages = (houses.length / _pageSize).ceil().clamp(1, 9999);
-    final currentPage = _page.clamp(0, totalPages - 1);
-    final pageItems =
-        houses.skip(currentPage * _pageSize).take(_pageSize).toList();
-
-    return EarthSection(
-      title: 'HISTORICAL HOUSES',
-      showSurface: false,
-      child: houses.isEmpty
-          ? const EarthEmptyState(
-              message: 'No historical houses recorded.',
-              icon: Icons.shield_outlined,
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ...pageItems.indexed.map((indexed) {
-                  final raw = indexed.$2;
-                  final row = raw is Map
-                      ? Map<String, dynamic>.from(raw)
-                      : const <String, dynamic>{};
-                  final houseName = (row['house_name'] ??
-                          row['dynasty_name'] ??
-                          row['name'] ??
-                          'House')
-                      .toString();
-                  final gen = row['generation'] ??
-                      row['generations'] ??
-                      row['generation_number'] ??
-                      row['gen'] ??
-                      1;
-                  final count = (row['deceased_count'] ??
-                          row['generations'] ??
-                          row['generation'] ??
-                          '1')
-                      .toString();
-                  final totalLegacy = (row['total_legacy'] ??
-                          row['house_legacy'] ??
-                          row['dynasty_legacy'] ??
-                          row['peak_legacy'] ??
-                          row['legacy_points'] ??
-                          row['legacy'] ??
-                          '0')
-                      .toString();
-                  final peakStanding = row['peak_standing'] ??
-                      row['standing'] ??
-                      row['house_standing'] ??
-                      row['dynastic_standing'] ??
-                      0;
-                  final founder = row['founder_name']?.toString() ??
-                      row['founder']?.toString() ??
-                      row['progenitor_name']?.toString();
-                  final heir =
-                      row['active_heir']?.toString() ?? row['heir']?.toString();
-
-                  final foundedRaw = row['founded_game_day'] ??
-                      row['birth_game_day'] ??
-                      row['founded_day'] ??
-                      row['start_day'] ??
-                      1;
-                  final foundedDayNum =
-                      int.tryParse(foundedRaw.toString()) ?? 1;
-                  final fYear = ((foundedDayNum - 1) ~/ 365) + 1;
-                  final fDay = ((foundedDayNum - 1) % 365) + 1;
-                  final foundedLabel = 'Founded: Year $fYear, Day $fDay';
-
-                  final currentDayRaw = row['current_game_day'] ??
-                      row['game_day'] ??
-                      widget.pantheon['game_day'] ??
-                      1200;
-                  final currentDayNum =
-                      int.tryParse(currentDayRaw.toString()) ?? 1200;
-                  final totalDays =
-                      (currentDayNum - foundedDayNum).clamp(0, 9999999);
-                  final ageY = totalDays ~/ 365;
-                  final ageD = totalDays % 365;
-                  final ageLabel = ageD > 0
-                      ? 'Age: $ageY yrs, $ageD days'
-                      : 'Age: $ageY yrs';
-
-                  final legacyNum = int.tryParse(totalLegacy) ?? 0;
-                  final standingNum =
-                      int.tryParse(peakStanding.toString()) ?? 0;
-                  final genNum = int.tryParse(gen.toString()) ?? 1;
-                  final ancestorsNum = int.tryParse(count) ?? 1;
-                  final houseScore = row['house_score'] ??
-                      row['dynasty_score'] ??
-                      row['score'] ??
-                      (legacyNum * 50 +
-                          standingNum * 10 +
-                          ageY * 2 +
-                          ancestorsNum * 20);
-
-                  final isExtinct = row['is_extinct'] == true ||
-                      row['status'] == 'extinct' ||
-                      row['status'] == 'deceased' ||
-                      (heir == null || heir.isEmpty || heir == '—');
-                  final statusLabel =
-                      !isExtinct ? 'Active (Gen $gen)' : 'Extinct (Gen $gen)';
-
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: indexed.$1 == pageItems.length - 1
-                          ? 0
-                          : context.spacingControl,
-                    ),
-                    child: Container(
-                      padding: EdgeInsets.all(context.cardPadding),
-                      decoration: BoxDecoration(
-                        color: context.surfaceColor,
-                        borderRadius: BorderRadius.circular(context.radiusCard),
-                        border: Border.all(color: context.subtleBorderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.shield_outlined,
-                                color: context.primaryColor,
-                                size: context.iconSize,
-                              ),
-                              SizedBox(width: context.spacingInline),
-                              Expanded(
-                                child: Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 6,
-                                  runSpacing: 2,
-                                  children: [
-                                    Text(
-                                      houseName,
-                                      style: context.widgetValueStyle,
-                                    ),
-                                    Text(
-                                      '· $statusLabel',
-                                      style: context.widgetValueStyle.copyWith(
-                                        color: context.mutedColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              SizedBox(width: context.spacingInline),
-                              EarthStatusPill(
-                                label: 'SCORE',
-                                value: '$houseScore PTS',
-                                color: context.primaryColor,
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: context.spacingInline),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 6,
-                            children: [
-                              if (founder != null &&
-                                  founder.isNotEmpty &&
-                                  founder != '—')
-                                _badge(context, Icons.history,
-                                    'Founder: $founder'),
-                              if (!isExtinct && heir.isNotEmpty && heir != '—')
-                                _badge(context, Icons.person_pin, 'Heir: $heir')
-                              else if (isExtinct)
-                                _badge(context, Icons.hourglass_disabled,
-                                    'Lineage: Extinct'),
-                              _badge(
-                                  context, Icons.cake_outlined, foundedLabel),
-                              _badge(context, Icons.timelapse, ageLabel),
-                              _badge(context, Icons.account_box_outlined,
-                                  'Ancestors: $count'),
-                              _badge(context, Icons.stars_outlined,
-                                  'House Legacy: $totalLegacy LP'),
-                              if (standingNum > 0)
-                                _badge(context, Icons.shield,
-                                    'House Standing: $standingNum pts'),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-                if (houses.length > _pageSize) ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'PAGE ${currentPage + 1} OF $totalPages (${houses.length} TOTAL)',
-                        style: context.captionStyle
-                            .copyWith(color: context.mutedColor),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          EarthButton(
-                            label: 'PREVIOUS',
-                            icon: Icons.chevron_left_rounded,
-                            onPressed: currentPage > 0
-                                ? () => setState(() => _page = currentPage - 1)
-                                : null,
-                          ),
-                          const SizedBox(width: 8),
-                          EarthButton(
-                            label: 'NEXT',
-                            icon: Icons.chevron_right_rounded,
-                            onPressed: currentPage < totalPages - 1
-                                ? () => setState(() => _page = currentPage + 1)
-                                : null,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-    );
+  String _formatDuration(int days) {
+    final years = days ~/ 365;
+    final remaining = days % 365;
+    return remaining == 0 ? '$years yrs' : '$years yrs, $remaining days';
   }
 }

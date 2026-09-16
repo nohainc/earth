@@ -385,7 +385,9 @@ export async function handleReadModelRoutes(
 
   if (url.pathname === '/api/pantheon' && request.method === 'GET') {
     try {
-      const result = await withRepository(env, (repository) => listPantheonOfAchievementsPostgres(repository));
+      const search = url.searchParams.get('search')?.trim();
+      const limit = Number(url.searchParams.get('limit') ?? 100);
+      const result = await withRepository(env, (repository) => listPantheonOfAchievementsPostgres(repository, { search, limit }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {

@@ -7,6 +7,7 @@ cd "${ROOT_DIR}/flutter_client"
 flutter test \
   test/account_screen_test.dart \
   test/activity_panel_test.dart \
+  test/archive_page_test.dart \
   test/buildings_hub_screen_test.dart \
   test/comm_link_dialog_test.dart \
   test/communities_panel_test.dart \

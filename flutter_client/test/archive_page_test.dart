@@ -5,80 +5,129 @@ import 'package:earth_client/features/lifecycle/historical_archive_panel.dart';
 void main() {
   const pantheon = {
     'deceasedPantheon': [
-      {'display_name': 'Founder Marcus Vance', 'death_game_day': 1200, 'final_legacy': 5400, 'house_name': 'House of Vance'},
+      {
+        'display_name': 'Founder Marcus Vance',
+        'death_game_day': 1200,
+        'final_legacy': 5400,
+        'house_name': 'House of Vance'
+      },
     ],
     'houses': [
-      {'house_name': 'House of Vance', 'deceased_count': 1, 'peak_legacy': 5400, 'is_extinct': true},
+      {
+        'house_name': 'House of Vance',
+        'deceased_count': 1,
+        'peak_legacy': 5400,
+        'is_extinct': true
+      },
     ],
   };
 
-  testWidgets('memorial page renders citizens and houses with tab switching', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
+  testWidgets('memorial page renders citizens and houses with tab switching',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+            body: HistoricalArchivePanel(
       pantheon: pantheon,
       events: [],
     ))));
     await tester.pumpAndSettle();
-    expect(find.text('MEMORIAL & PANTHEON'), findsOneWidget);
-    expect(find.widgetWithText(InkWell, 'CITIZENS'), findsOneWidget);
-    expect(find.widgetWithText(InkWell, 'HOUSES'), findsOneWidget);
+    expect(find.text('MEMORIAL'), findsWidgets);
+    expect(find.widgetWithText(InkWell, 'CITIZENS (1)'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'EXTINCT HOUSES (1)'), findsOneWidget);
     expect(find.textContaining('Founder Marcus Vance'), findsOneWidget);
 
     // Switch to Houses tab on narrow layout
-    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
+    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES (1)'));
     await tester.pumpAndSettle();
     expect(find.textContaining('House of Vance'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 
-  testWidgets('memorial page renders explicit empty states across tabs', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
+  testWidgets('memorial page renders explicit empty states across tabs',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+            body: HistoricalArchivePanel(
       pantheon: {},
       events: [],
     ))));
     await tester.pumpAndSettle();
-    expect(find.text('No citizens have entered the public archive yet.'), findsOneWidget);
+    expect(find.text('No citizens have entered the public archive yet.'),
+        findsOneWidget);
 
-    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
+    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES (0)'));
     await tester.pumpAndSettle();
-    expect(find.text('No extinct houses in the archive. All active houses continue to thrive and govern their lineages across Earth.'), findsOneWidget);
+    expect(
+        find.text(
+            'No extinct houses in the archive. All active houses continue to thrive and govern their lineages across Earth.'),
+        findsOneWidget);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 
-  testWidgets('tapping info icon on cockpit opens memorial and formula modal', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
+  testWidgets('tapping info icon on cockpit opens memorial and formula modal',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+            body: HistoricalArchivePanel(
       pantheon: pantheon,
       events: [],
     ))));
     await tester.pumpAndSettle();
 
-    final infoIcon = find.descendant(of: find.byType(HistoricalArchivePanel), matching: find.byIcon(Icons.info_outline)).first;
+    final infoIcon = find
+        .descendant(
+            of: find.byType(HistoricalArchivePanel),
+            matching: find.byIcon(Icons.info_outline))
+        .first;
     expect(infoIcon, findsOneWidget);
 
     await tester.tap(infoIcon);
     await tester.pumpAndSettle();
 
-    expect(find.text('MEMORIAL & PANTHEON ARCHIVE'), findsOneWidget);
-    expect(find.textContaining('1 : 5 : 25 ratio'), findsOneWidget);
-    expect(find.textContaining('House Prestige Score'), findsOneWidget);
+    expect(find.text('MEMORIAL ARCHIVE'), findsOneWidget);
+    expect(
+        find.textContaining('canonical historical read model'), findsOneWidget);
     expect(find.text('CLOSE'), findsOneWidget);
 
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
   });
 
-  testWidgets('searching citizens and houses filters archive lists and shows empty states', (tester) async {
+  testWidgets(
+      'searching citizens and houses filters archive lists and shows empty states',
+      (tester) async {
     const multiPantheon = {
       'deceasedPantheon': [
-        {'display_name': 'Founder Marcus Vance', 'house_name': 'House of Vance', 'death_game_day': 1200, 'final_legacy': 5400},
-        {'display_name': 'Elena Rostova', 'house_name': 'House of Rostov', 'death_game_day': 1450, 'final_legacy': 3200},
+        {
+          'display_name': 'Founder Marcus Vance',
+          'house_name': 'House of Vance',
+          'death_game_day': 1200,
+          'final_legacy': 5400
+        },
+        {
+          'display_name': 'Elena Rostova',
+          'house_name': 'House of Rostov',
+          'death_game_day': 1450,
+          'final_legacy': 3200
+        },
       ],
       'houses': [
-        {'house_name': 'House of Vance', 'is_extinct': true, 'deceased_count': 1},
-        {'house_name': 'House of Rostov', 'is_extinct': true, 'deceased_count': 1},
+        {
+          'house_name': 'House of Vance',
+          'is_extinct': true,
+          'deceased_count': 1
+        },
+        {
+          'house_name': 'House of Rostov',
+          'is_extinct': true,
+          'deceased_count': 1
+        },
       ],
     };
 
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
+    await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+            body: HistoricalArchivePanel(
       pantheon: multiPantheon,
       events: [],
     ))));
@@ -99,7 +148,8 @@ void main() {
     // Non-matching citizen search
     await tester.enterText(searchFields.first, 'Unknown Citizen XYZ');
     await tester.pumpAndSettle();
-    expect(find.text('No archived citizens match "Unknown Citizen XYZ".'), findsOneWidget);
+    expect(find.text('No archived citizens match "Unknown Citizen XYZ".'),
+        findsOneWidget);
 
     // Clear citizen search
     await tester.enterText(searchFields.first, '');
@@ -107,7 +157,7 @@ void main() {
     expect(find.textContaining('Elena Rostova'), findsOneWidget);
 
     // Switch to Houses tab
-    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
+    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES (2)'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('House of Vance'), findsWidgets);
@@ -124,6 +174,7 @@ void main() {
     // Non-matching house search
     await tester.enterText(houseSearchFields.first, 'Nonexistent House');
     await tester.pumpAndSettle();
-    expect(find.text('No recorded houses match "Nonexistent House".'), findsOneWidget);
+    expect(find.text('No recorded houses match "Nonexistent House".'),
+        findsOneWidget);
   });
 }
