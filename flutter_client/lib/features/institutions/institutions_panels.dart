@@ -292,7 +292,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     if (id == null) return;
     final policy =
         (target?['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase();
-    if (policy != 'OPEN' && policy != 'REQUEST') return;
+    if (policy != 'OPEN') return;
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -357,7 +357,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     if (_isMember || isAffiliated) return false;
     final policy =
         (row['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase();
-    return policy == 'OPEN' || policy == 'REQUEST';
+    return policy == 'OPEN';
   }
 
   Future<void> _confirmLeave(BuildContext context) async {

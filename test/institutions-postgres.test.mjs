@@ -22,3 +22,10 @@ test('Corporation lifecycle has no City formation prerequisite or compatibility 
   assert.doesNotMatch(source, /cities|city_id|capital_city|resident|30 active/i);
   assert.doesNotMatch(source, /CREATE TABLE|CREATE VIEW/);
 });
+
+test('Corporation genesis establishes a primary residency without replacing an existing one', () => {
+  const source = read('cloudflare/src/institutions-postgres.ts');
+  assert.match(source, /INSERT INTO house_residencies/);
+  assert.match(source, /residency_class, effective_from_game_day, correlation_id/);
+  assert.match(source, /ON CONFLICT DO NOTHING/);
+});

@@ -39,3 +39,10 @@ test('world snapshot keeps residency independent from Territory governance', asy
   assert.match(residencyQuery, /COALESCE\(g\.governing_institution_id, t\.corporation_id\)/);
   assert.match(residencyQuery, /LEFT JOIN institutions/);
 });
+
+test('world snapshot reports active corporation affiliation before residency-derived identity', async () => {
+  const source = (await import('node:fs/promises')).readFile;
+  const world = await source('cloudflare/src/world-postgres.ts', 'utf8');
+  assert.match(world, /membership: corporation\.rows\[0\] \?/);
+  assert.match(world, /corporation_id: corporation\.rows\[0\]\.id/);
+});

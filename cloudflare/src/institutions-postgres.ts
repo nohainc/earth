@@ -123,6 +123,14 @@ export async function createCorporation(
        VALUES ($1, $2, $3, $4, 'ACTIVE')`,
       [founder.house_id, corporationId, territoryId, gameDay],
     );
+    await tx.query(
+      `INSERT INTO house_residencies
+         (id, house_id, territory_id, residency_class, effective_from_game_day, correlation_id)
+       VALUES ($1, $2, $3, 'PRIMARY', $4, $5)
+       ON CONFLICT DO NOTHING`,
+      [`RES-${corporationId}-${founder.house_id}`, founder.house_id, territoryId, gameDay,
+       `residency:corporation-genesis:${corporationId}:${founder.house_id}`],
+    );
     await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [territoryId, gameDay]);
     await createAffiliationEvent(tx, { id: crypto.randomUUID(), humanId: input.founderId, institutionType: 'CORPORATION', institutionId: corporationId, action: 'joined', gameDay, reason: 'corporation_genesis' });
     await createNotification(tx, {

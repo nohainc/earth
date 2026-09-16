@@ -292,12 +292,18 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     finance: { balance: wallet?.balance_units ?? '0', obligations: obligations.rows },
     taxRules: taxRules.rows,
     personalFinance: { balance: wallet?.balance_units ?? '0', obligations: obligations.rows },
-    membership: territory ? {
+    membership: corporation.rows[0] ? {
+      territory_id: territory?.territory_id ?? null,
+      territory_name: territory?.territory_name ?? null,
+      residency_class: territory?.residency_class ?? null,
+      corporation_id: corporation.rows[0].id,
+      corporation_name: corporation.rows[0].name,
+    } : territory ? {
       territory_id: territory.territory_id,
       territory_name: territory.territory_name,
       residency_class: territory.residency_class,
-      corporation_id: territory.corporation_id ?? corporation.rows[0]?.id ?? null,
-      corporation_name: territory.corporation_name ?? corporation.rows[0]?.name ?? null,
+      corporation_id: territory.corporation_id ?? null,
+      corporation_name: territory.corporation_name ?? null,
     } : null,
     governance: { proposals: proposals.rows, rules: governanceRules.rows },
     districtZoning: capacity ?? {},
