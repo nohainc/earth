@@ -133,7 +133,7 @@
     "test:v4-building-investment": "node --experimental-strip-types --test test/building-age-contract.test.mjs test/building-catalog-authority.test.mjs test/building-condition-removal.test.mjs test/building-economic-role.test.mjs test/building-economy-contract.test.mjs test/building-formula-contract.test.mjs test/building-formulas.test.mjs test/building-house-continuity.test.mjs test/building-maintenance-expense.test.mjs test/building-settlement-v2.test.mjs test/construction-credit-migration.test.mjs test/construction-project-contract.test.mjs test/corporation-building-research-postgres.test.mjs test/economy-v2-building-economics.test.mjs test/private-building-house-owner.test.mjs test/territory-capacity.test.mjs test/territory-commons-flutter-contract.test.mjs test/territory-governance-contract.test.mjs test/territory-rights-contract.test.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^26.4.1",
     "c8": "^12.0.0",
     "dotenv": "^17.4.2",
