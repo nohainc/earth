@@ -46,6 +46,34 @@ extension EarthApiHouse on EarthApi {
         : <String, dynamic>{'ok': false, 'error': 'Policy could not be saved'};
   }
 
+  Future<Map<String, dynamic>> saveHouseAutomation({
+    required int effectiveFromGameDay,
+    String operatingMode = 'BALANCED',
+    String dailySpendCapUnits = '0',
+    Map<String, String> reserveFloorUnits = const {},
+    Map<String, String> maxInputPriceUnits = const {},
+    Map<String, String> minSalePriceUnits = const {},
+    Map<String, String> procurementQuantityUnits = const {},
+  }) async {
+    final response =
+        await _request('/api/house/automation', method: 'PUT', body: {
+      'effectiveFromGameDay': effectiveFromGameDay,
+      'operatingMode': operatingMode,
+      'dailySpendCapUnits': dailySpendCapUnits,
+      'reserveFloorUnits': reserveFloorUnits,
+      'maxInputPriceUnits': maxInputPriceUnits,
+      'minSalePriceUnits': minSalePriceUnits,
+      'procurementQuantityUnits': procurementQuantityUnits,
+      'correlationId': newClientCorrelationId('HOUSE-AUTOMATION'),
+    });
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{
+            'ok': false,
+            'error': 'Automation could not be saved'
+          };
+  }
+
   Future<Map<String, dynamic>> unlockHousePerk(String perkKey) async {
     final response = await _request(
       '/api/house/perks/unlock',
@@ -109,5 +137,4 @@ extension EarthApiHouse on EarthApi {
     }
     return <String, dynamic>{'ok': true};
   }
-
 }

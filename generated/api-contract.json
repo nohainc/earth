@@ -304,6 +304,14 @@
       "status": "ACTIVE"
     },
     {
+      "method": "PUT",
+      "path": "/api/house/automation",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "saveHouseAutomation",
+      "status": "ACTIVE"
+    },
+    {
       "method": "GET",
       "path": "/api/command-center",
       "owner": "ReadModelRoutes",

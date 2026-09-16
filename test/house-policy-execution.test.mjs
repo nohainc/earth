@@ -10,12 +10,21 @@ const policy = {
   procurementQuantityUnits: { FOOD: 30n }, rulesVersion: 'v1',
 };
 
-test('policy compiler bounds ordinary market actions by remaining spend', () => {
+test('policy compiler keeps quantities in resource units while respecting the spend cap', () => {
   const result = compileHousePolicy(policy, { FOOD: 0n }, 30n);
   assert.equal(result.exceptions.length, 0);
   assert.equal(result.actions[0].product, 'FOOD');
-  assert.equal(result.actions[0].quantityUnits, 10n);
+  assert.equal(result.actions[0].quantityUnits, 30n);
   assert.equal(result.actions[0].source, 'HOUSE_POLICY');
+});
+
+test('policy compiler applies the millionth-unit conversion when the cap binds', () => {
+  const result = compileHousePolicy(
+    { ...policy, procurementQuantityUnits: { FOOD: 30_000_000n } },
+    { FOOD: 0n },
+    30n,
+  );
+  assert.equal(result.actions[0].quantityUnits, 10_000_000n);
 });
 
 test('policy compiler emits an exception when an order cannot be safely priced', () => {

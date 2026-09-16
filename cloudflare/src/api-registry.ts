@@ -66,6 +66,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'GET', path: '/api/house/catch-up-targets', owner: 'HouseRoutes', auth: 'HOUSE_SELF', service: 'getHouseCatchUpTargets', status: 'ACTIVE' },
   { method: 'GET', path: '/api/house/policies', owner: 'HouseRoutes', auth: 'HOUSE_SELF', service: 'listHousePolicies', status: 'ACTIVE' },
   { method: 'POST', path: '/api/house/policies', owner: 'HouseRoutes', auth: 'HOUSE_SELF', service: 'saveHousePolicy', status: 'ACTIVE' },
+  { method: 'PUT', path: '/api/house/automation', owner: 'HouseRoutes', auth: 'HOUSE_SELF', service: 'saveHouseAutomation', status: 'ACTIVE' },
   { method: 'GET', path: '/api/command-center', owner: 'ReadModelRoutes', auth: 'HOUSE_SELF', service: 'getDecisionQueue', status: 'ACTIVE' },
   { method: 'GET', path: '/api/decisions', owner: 'ReadModelRoutes', auth: 'HOUSE_SELF', service: 'getDecisionQueue', status: 'ACTIVE' },
   { method: 'POST', path: '/api/house/{action}', owner: 'HouseRoutes', auth: 'HOUSE_SELF', service: 'houseService', status: 'ACTIVE' },

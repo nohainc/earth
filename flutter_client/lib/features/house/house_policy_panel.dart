@@ -22,27 +22,27 @@ class HousePolicyPanel extends StatefulWidget {
 }
 
 class _HousePolicyPanelState extends State<HousePolicyPanel> {
-  final _spendCap = TextEditingController(text: '0');
-  final _foodReserve = TextEditingController(text: '0');
-  final _energyReserve = TextEditingController(text: '0');
-  final _materialReserve = TextEditingController(text: '0');
-  final _componentsReserve = TextEditingController(text: '0');
-  final _computeReserve = TextEditingController(text: '0');
-  final _foodPrice = TextEditingController(text: '0');
-  final _energyPrice = TextEditingController(text: '0');
-  final _materialPrice = TextEditingController(text: '0');
-  final _componentsPrice = TextEditingController(text: '0');
-  final _computePrice = TextEditingController(text: '0');
-  final _foodSalePrice = TextEditingController(text: '0');
-  final _energySalePrice = TextEditingController(text: '0');
-  final _materialSalePrice = TextEditingController(text: '0');
-  final _componentsSalePrice = TextEditingController(text: '0');
-  final _computeSalePrice = TextEditingController(text: '0');
-  final _foodQuantity = TextEditingController(text: '0');
-  final _energyQuantity = TextEditingController(text: '0');
-  final _materialQuantity = TextEditingController(text: '0');
-  final _componentsQuantity = TextEditingController(text: '0');
-  final _computeQuantity = TextEditingController(text: '0');
+  final _spendCap = TextEditingController();
+  final _foodReserve = TextEditingController();
+  final _energyReserve = TextEditingController();
+  final _materialReserve = TextEditingController();
+  final _componentsReserve = TextEditingController();
+  final _computeReserve = TextEditingController();
+  final _foodPrice = TextEditingController();
+  final _energyPrice = TextEditingController();
+  final _materialPrice = TextEditingController();
+  final _componentsPrice = TextEditingController();
+  final _computePrice = TextEditingController();
+  final _foodSalePrice = TextEditingController();
+  final _energySalePrice = TextEditingController();
+  final _materialSalePrice = TextEditingController();
+  final _componentsSalePrice = TextEditingController();
+  final _computeSalePrice = TextEditingController();
+  final _foodQuantity = TextEditingController();
+  final _energyQuantity = TextEditingController();
+  final _materialQuantity = TextEditingController();
+  final _componentsQuantity = TextEditingController();
+  final _computeQuantity = TextEditingController();
   String _operatingMode = 'BALANCED';
   bool _loading = true;
   bool _saving = false;
@@ -100,21 +100,32 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
       if (!mounted) return;
       setState(() {
         _policies = raw is List
-            ? raw.whereType<Map>().map((v) => Map<String, dynamic>.from(v)).toList()
+            ? raw
+                .whereType<Map>()
+                .map((v) => Map<String, dynamic>.from(v))
+                .toList()
             : [];
         _loading = false;
         _error = response['ok'] == false ? response['error']?.toString() : null;
       });
       _applyActivePolicies();
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      if (mounted)
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
     }
   }
 
   void _applyActivePolicies() {
+    final currentDay = asInt(widget.state.clock['day']) ?? 0;
     Map<String, dynamic>? active(String type) {
       for (final policy in _policies) {
-        if (policy['policy_type'] == type && policy['status'] == 'ACTIVE') return policy;
+        final effectiveDay = asInt(policy['effective_from_game_day']) ?? 0;
+        if (policy['policy_type'] == type &&
+            policy['status'] == 'ACTIVE' &&
+            effectiveDay <= currentDay) return policy;
       }
       return null;
     }
@@ -122,7 +133,8 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
     final operating = active('OPERATING');
     final reserve = active('INVENTORY_RESERVE');
     final standing = active('MARKET_STANDING');
-    if (operating != null) _operatingMode = operating['operating_mode']?.toString() ?? 'BALANCED';
+    if (operating != null)
+      _operatingMode = operating['operating_mode']?.toString() ?? 'BALANCED';
     final reserveMap = _map(reserve?['reserve_floor_units']);
     final inputPriceMap = _map(standing?['max_input_price_units']);
     final salePriceMap = _map(standing?['min_sale_price_units']);
@@ -153,19 +165,25 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
 
   Map<String, String> _map(dynamic value) {
     if (value is! Map) return {};
-    return value.map((key, value) => MapEntry(key.toString().toUpperCase(), value.toString()));
+    return value.map((key, value) =>
+        MapEntry(key.toString().toUpperCase(), value.toString()));
   }
 
   void _set(TextEditingController controller, dynamic value) {
     if (value != null) controller.text = value.toString();
   }
 
-  String _value(TextEditingController controller) => controller.text.trim().isEmpty ? '0' : controller.text.trim();
+  String? _value(TextEditingController controller) {
+    final value = controller.text.trim();
+    return value.isEmpty ? null : value;
+  }
 
-  Map<String, String> _values(List<(String, String, TextEditingController)> fields) {
+  Map<String, String> _values(
+      List<(String, String, TextEditingController)> fields) {
     final result = <String, String>{};
     for (final field in fields) {
-      if (_value(field.$3) != '0') result[field.$1] = _value(field.$3);
+      final value = _value(field.$3);
+      if (value != null) result[field.$1] = value;
     }
     return result;
   }
@@ -173,52 +191,63 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
   Future<void> _save() async {
     final day = asInt(widget.state.clock['day']) ?? 0;
     if (day < 1) {
-      setState(() => _error = 'The current game day is unavailable. Try again after the world state refreshes.');
+      setState(() => _error =
+          'The current game day is unavailable. Try again after the world state refreshes.');
       return;
     }
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       final reserve = _values([
-        ('FOOD', 'Food', _foodReserve), ('ENERGY', 'Energy', _energyReserve),
-        ('MATERIAL', 'Material', _materialReserve), ('COMPONENTS', 'Components', _componentsReserve),
+        ('FOOD', 'Food', _foodReserve),
+        ('ENERGY', 'Energy', _energyReserve),
+        ('MATERIAL', 'Material', _materialReserve),
+        ('COMPONENTS', 'Components', _componentsReserve),
         ('COMPUTE', 'Compute', _computeReserve),
       ]);
       final prices = _values([
-        ('FOOD', 'Food', _foodPrice), ('ENERGY', 'Energy', _energyPrice),
-        ('MATERIAL', 'Material', _materialPrice), ('COMPONENTS', 'Components', _componentsPrice),
+        ('FOOD', 'Food', _foodPrice),
+        ('ENERGY', 'Energy', _energyPrice),
+        ('MATERIAL', 'Material', _materialPrice),
+        ('COMPONENTS', 'Components', _componentsPrice),
         ('COMPUTE', 'Compute', _computePrice),
       ]);
       final salePrices = _values([
-        ('FOOD', 'Food', _foodSalePrice), ('ENERGY', 'Energy', _energySalePrice),
-        ('MATERIAL', 'Material', _materialSalePrice), ('COMPONENTS', 'Components', _componentsSalePrice),
+        ('FOOD', 'Food', _foodSalePrice),
+        ('ENERGY', 'Energy', _energySalePrice),
+        ('MATERIAL', 'Material', _materialSalePrice),
+        ('COMPONENTS', 'Components', _componentsSalePrice),
         ('COMPUTE', 'Compute', _computeSalePrice),
       ]);
       final quantities = _values([
-        ('FOOD', 'Food', _foodQuantity), ('ENERGY', 'Energy', _energyQuantity),
-        ('MATERIAL', 'Material', _materialQuantity), ('COMPONENTS', 'Components', _componentsQuantity),
+        ('FOOD', 'Food', _foodQuantity),
+        ('ENERGY', 'Energy', _energyQuantity),
+        ('MATERIAL', 'Material', _materialQuantity),
+        ('COMPONENTS', 'Components', _componentsQuantity),
         ('COMPUTE', 'Compute', _computeQuantity),
       ]);
-      for (final entry in [
-        {'type': 'OPERATING', 'mode': _operatingMode, 'quantity': quantities},
-        {'type': 'INVENTORY_RESERVE', 'reserve': reserve},
-        {'type': 'MARKET_STANDING', 'prices': prices, 'salePrices': salePrices},
-      ]) {
-        final response = await const EarthApi().saveHousePolicy(
-          policyType: entry['type'] as String,
-          effectiveFromGameDay: day + 1,
-          operatingMode: entry['mode'] as String? ?? 'BALANCED',
-          dailySpendCapUnits: _value(_spendCap),
-          reserveFloorUnits: entry['reserve'] is Map ? Map<String, String>.from(entry['reserve'] as Map) : reserve,
-          maxInputPriceUnits: entry['prices'] is Map ? Map<String, String>.from(entry['prices'] as Map) : prices,
-          minSalePriceUnits: entry['salePrices'] is Map ? Map<String, String>.from(entry['salePrices'] as Map) : salePrices,
-          procurementQuantityUnits: entry['quantity'] is Map ? Map<String, String>.from(entry['quantity'] as Map) : quantities,
-        );
-        if (response['ok'] != true) throw StateError(response['error']?.toString() ?? 'Policy save failed');
+      final response = await const EarthApi().saveHouseAutomation(
+        effectiveFromGameDay: day + 1,
+        operatingMode: _operatingMode,
+        dailySpendCapUnits: _value(_spendCap) ?? '0',
+        reserveFloorUnits: reserve,
+        maxInputPriceUnits: prices,
+        minSalePriceUnits: salePrices,
+        procurementQuantityUnits: quantities,
+      );
+      if (response['ok'] != true) {
+        throw StateError(
+            response['error']?.toString() ?? 'Automation save failed');
       }
       await _load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('House policies saved for the next game day.')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('House policies saved for the next game day.')));
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString().replaceFirst('Bad state: ', ''));
+      if (mounted)
+        setState(() => _error = e.toString().replaceFirst('Bad state: ', ''));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -226,57 +255,87 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final activeCount = _policies.where((p) => p['status'] == 'ACTIVE').length;
+    final currentDay = asInt(widget.state.clock['day']);
+    final currentPolicies = _policies.where((p) =>
+        p['status'] == 'ACTIVE' &&
+        asInt(p['effective_from_game_day']) != null &&
+        asInt(p['effective_from_game_day'])! <= (currentDay ?? 0));
+    final scheduled = _policies.where((p) =>
+        p['status'] == 'ACTIVE' &&
+        asInt(p['effective_from_game_day']) != null &&
+        asInt(p['effective_from_game_day'])! > (currentDay ?? 0));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         EarthPageCockpit(
           tag: 'HOUSE CONTROL',
-          status: _loading ? 'LOADING' : '$activeCount ACTIVE POLICIES',
+          status: _loading
+              ? 'LOADING'
+              : currentPolicies.isEmpty
+                  ? 'AUTOMATION OFF'
+                  : 'AUTOMATION ON',
           statusColor: context.primaryColor,
           infoTitle: 'HOUSE POLICY & AUTOMATION',
-          infoDescription: 'Policies are evaluated by the server during daily settlement. They protect reserves and place normal market actions automatically; exceptions remain visible for human decisions.',
-          title: 'HOUSE POLICIES',
-          subtitle: 'Set the operating rules that carry your House through the next game day',
+          infoDescription:
+              'Policies are evaluated by the server during daily settlement. They protect reserves and place normal market actions automatically; exceptions remain visible for human decisions.',
+          title: 'HOUSE AUTOMATION',
+          subtitle:
+              'Daily post-settlement rules for reserves and market orders',
         ),
         const SizedBox(height: 24),
         if (_error != null) _message(context, _error!, true),
         if (_loading)
           const Center(child: CircularProgressIndicator())
         else ...[
-          _section(context, 'OPERATING MODE', Row(children: [
-            Expanded(child: DropdownButtonFormField<String>(
-              value: _operatingMode,
-              decoration: const InputDecoration(labelText: 'House operating mode'),
-              items: const ['CONSERVATIVE', 'BALANCED', 'GROWTH', 'CUSTOM']
-                  .map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-              onChanged: (v) => setState(() => _operatingMode = v ?? 'BALANCED'),
-            )),
-            const SizedBox(width: 16),
-            Expanded(child: _field(_spendCap, 'Daily CREDIT spend cap')),
-          ])),
-          _section(context, 'INVENTORY RESERVES', Column(children: _resources.map((r) {
-            final controller = _reserveController(r.$1);
-            return _resourceRow(r.$2, controller, null);
-          }).toList())),
-          _section(context, 'STANDING PROCUREMENT', Column(children: _resources.map((r) {
-            final controller = _priceController(r.$1);
-            return _resourceRow('Maximum ${r.$2} input price', controller, '0 = no automatic buy');
-          }).toList())),
-          _section(context, 'PROCUREMENT QUANTITY', Column(children: _resources.map((r) {
-            final controller = _quantityController(r.$1);
-            return _resourceRow('${r.$2} units to buy', controller, '0 = no automatic buy');
-          }).toList())),
-          _section(context, 'STANDING SALES', Column(children: _resources.map((r) {
-            final controller = _salePriceController(r.$1);
-            return _resourceRow('Minimum ${r.$2} sale price', controller, '0 = no automatic sale');
-          }).toList())),
-          Align(alignment: Alignment.centerRight, child: EarthButton(
-            label: _saving ? 'SAVING…' : 'SAVE POLICIES', icon: Icons.save_outlined,
-            variant: EarthButtonVariant.primary, onPressed: _saving || widget.busy ? null : _save,
-          )),
+          _section(context, 'SPENDING CONTROL',
+              _field(_spendCap, 'Daily CREDIT spend cap')),
+          _section(
+              context,
+              'INVENTORY RESERVES',
+              Column(
+                  children: _resources.map((r) {
+                final controller = _reserveController(r.$1);
+                return _resourceRow(r.$2, controller, null);
+              }).toList())),
+          _section(
+              context,
+              'DAILY BUY RULES',
+              Column(
+                  children: _resources.map((r) {
+                final controller = _priceController(r.$1);
+                return _resourceRow('Maximum ${r.$2} input price', controller,
+                    'Leave blank to disable automatic buying');
+              }).toList())),
+          _section(
+              context,
+              'BUY QUANTITY (OPTIONAL)',
+              Column(
+                  children: _resources.map((r) {
+                final controller = _quantityController(r.$1);
+                return _resourceRow('${r.$2} units per buy order', controller,
+                    'Blank = top up to reserve');
+              }).toList())),
+          _section(
+              context,
+              'DAILY SELL RULES',
+              Column(
+                  children: _resources.map((r) {
+                final controller = _salePriceController(r.$1);
+                return _resourceRow('Minimum ${r.$2} sale price', controller,
+                    'Leave blank to disable automatic selling');
+              }).toList())),
+          Align(
+              alignment: Alignment.centerRight,
+              child: EarthButton(
+                label: _saving ? 'SAVING…' : 'SAVE POLICIES',
+                icon: Icons.save_outlined,
+                variant: EarthButtonVariant.primary,
+                onPressed: _saving || widget.busy ? null : _save,
+              )),
           const SizedBox(height: 10),
-          Text('Changes become effective on game day ${asInt(widget.state.clock['day']) == null ? '—' : (asInt(widget.state.clock['day'])! + 1)}.', style: context.widgetFooterStyle),
+          Text(
+              'Evaluated once after daily settlement. ${scheduled.isNotEmpty ? 'Scheduled changes begin on game day ${asInt(scheduled.first['effective_from_game_day'])}.' : 'Changes become effective on the next game day.'}',
+              style: context.widgetFooterStyle),
         ],
       ],
     );
@@ -288,38 +347,64 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
       );
 
   Widget _field(TextEditingController controller, String label) => TextField(
-        controller: controller, keyboardType: TextInputType.number,
+        controller: controller,
+        keyboardType: TextInputType.number,
         decoration: InputDecoration(labelText: label),
       );
 
-  Widget _resourceRow(String label, TextEditingController controller, String? hint) => Padding(
+  Widget _resourceRow(
+          String label, TextEditingController controller, String? hint) =>
+      Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: Row(children: [Expanded(child: Text(label)), SizedBox(width: 180, child: _field(controller, hint ?? 'Minimum units'))]),
+        child: Row(children: [
+          Expanded(child: Text(label)),
+          SizedBox(
+              width: 180, child: _field(controller, hint ?? 'Minimum units'))
+        ]),
       );
 
   Widget _message(BuildContext context, String text, bool error) => Container(
-        margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: (error ? context.errorColor : context.successColor).withValues(alpha: .1), border: Border.all(color: (error ? context.errorColor : context.successColor).withValues(alpha: .4)), borderRadius: BorderRadius.circular(8)),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: (error ? context.errorColor : context.successColor)
+                .withValues(alpha: .1),
+            border: Border.all(
+                color: (error ? context.errorColor : context.successColor)
+                    .withValues(alpha: .4)),
+            borderRadius: BorderRadius.circular(8)),
         child: Text(text, style: context.widgetFooterStyle),
       );
 
   TextEditingController _reserveController(String key) => switch (key) {
-        'FOOD' => _foodReserve, 'ENERGY' => _energyReserve, 'MATERIAL' => _materialReserve,
-        'COMPONENTS' => _componentsReserve, _ => _computeReserve,
+        'FOOD' => _foodReserve,
+        'ENERGY' => _energyReserve,
+        'MATERIAL' => _materialReserve,
+        'COMPONENTS' => _componentsReserve,
+        _ => _computeReserve,
       };
 
   TextEditingController _priceController(String key) => switch (key) {
-        'FOOD' => _foodPrice, 'ENERGY' => _energyPrice, 'MATERIAL' => _materialPrice,
-        'COMPONENTS' => _componentsPrice, _ => _computePrice,
+        'FOOD' => _foodPrice,
+        'ENERGY' => _energyPrice,
+        'MATERIAL' => _materialPrice,
+        'COMPONENTS' => _componentsPrice,
+        _ => _computePrice,
       };
 
   TextEditingController _salePriceController(String key) => switch (key) {
-        'FOOD' => _foodSalePrice, 'ENERGY' => _energySalePrice, 'MATERIAL' => _materialSalePrice,
-        'COMPONENTS' => _componentsSalePrice, _ => _computeSalePrice,
+        'FOOD' => _foodSalePrice,
+        'ENERGY' => _energySalePrice,
+        'MATERIAL' => _materialSalePrice,
+        'COMPONENTS' => _componentsSalePrice,
+        _ => _computeSalePrice,
       };
 
   TextEditingController _quantityController(String key) => switch (key) {
-        'FOOD' => _foodQuantity, 'ENERGY' => _energyQuantity, 'MATERIAL' => _materialQuantity,
-        'COMPONENTS' => _componentsQuantity, _ => _computeQuantity,
+        'FOOD' => _foodQuantity,
+        'ENERGY' => _energyQuantity,
+        'MATERIAL' => _materialQuantity,
+        'COMPONENTS' => _componentsQuantity,
+        _ => _computeQuantity,
       };
 }
