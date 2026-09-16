@@ -55,7 +55,8 @@ Future<void> showProposalComposer(
             const SizedBox(height: 12),
             TextField(
               controller: targetRate,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               style: context.bodyStyle.copyWith(color: context.inkColor),
               decoration: InputDecoration(
                 labelText: 'Optional UC finance rate (0–0.25)',
@@ -68,7 +69,8 @@ Future<void> showProposalComposer(
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+          child: Text('CANCEL',
+              style: context.controlStyle.copyWith(color: context.mutedColor)),
         ),
         EarthButton(
           label: 'Submit proposal',
@@ -79,7 +81,8 @@ Future<void> showProposalComposer(
             final rate = targetRate.text.trim().isEmpty
                 ? null
                 : double.tryParse(targetRate.text.trim());
-            if (targetRate.text.trim().isNotEmpty && (rate == null || rate < 0 || rate > .25)) {
+            if (targetRate.text.trim().isNotEmpty &&
+                (rate == null || rate < 0 || rate > .25)) {
               return;
             }
             await action(() => const EarthApi().createProposal(

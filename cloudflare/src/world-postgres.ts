@@ -83,10 +83,41 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                        WHERE debtor_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1)
                                          AND status IN ('DUE', 'PARTIAL', 'ARREARS')
                                        ORDER BY due_game_day, id LIMIT 100`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
-    repository.query(`SELECT id, action_type AS title, status, created_game_day
-                        FROM proposals
-                       WHERE status IN ('OPEN', 'VOTING', 'PASSED')
-                       ORDER BY created_game_day DESC, id LIMIT 100`),
+    repository.query(`SELECT p.*, h.display_name AS creator_name, i.name AS institution_name,
+                             i.kind AS institution_kind,
+                             CASE WHEN p.institution_id = 'OUC-001' OR i.kind = 'WORLD' THEN 'WORLD'
+                                  WHEN i.kind = 'CITY' OR c.id IS NOT NULL THEN 'TERRITORY'
+                                  WHEN i.kind = 'CORPORATION' THEN 'CORPORATION'
+                                  ELSE 'UNKNOWN' END AS scope,
+                             COALESCE(v.support_count, 0) AS support,
+                             COALESCE(v.oppose_count, 0) AS oppose,
+                             COALESCE(v.abstain_count, 0) AS abstain,
+                             COALESCE(v.voter_count, 0) AS cast_count,
+                             COALESCE(p.eligible_voter_count, 0) AS eligible_voter_count,
+                             b.choice AS my_vote,
+                             jsonb_build_object(
+                               'canVote', CASE
+                                 WHEN p.decision_status <> 'voting' THEN FALSE
+                                 WHEN p.institution_id = 'OUC-001' OR i.kind = 'WORLD' THEN TRUE
+                                 WHEN i.kind = 'CITY' OR c.id IS NOT NULL THEN EXISTS (
+                                   SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id
+                                    WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND (ha.city_id = p.institution_id OR ha.city_id = i.id))
+                                 WHEN i.kind = 'CORPORATION' THEN EXISTS (
+                                   SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id
+                                    WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND ha.corporation_id IN (p.institution_id, i.id))
+                                 ELSE FALSE END,
+                               'canPropose', FALSE,
+                               'myVote', b.choice,
+                               'ineligibleReason', CASE WHEN p.decision_status <> 'voting' THEN 'Voting is not open.' ELSE NULL END
+                             ) AS viewer
+                        FROM proposals p
+                        LEFT JOIN humans h ON h.id = p.created_by_human_id
+                        LEFT JOIN institutions i ON i.id = p.institution_id
+                        LEFT JOIN cities c ON c.id = p.institution_id
+                        LEFT JOIN proposal_vote_totals v ON v.proposal_id = p.id
+                        LEFT JOIN ballots b ON b.proposal_id = p.id AND b.human_id = $1
+                       WHERE p.status IN ('OPEN', 'VOTING', 'PASSED')
+                       ORDER BY p.created_game_day DESC, p.id LIMIT 100`, [viewerId ?? null]),
     listRankings(repository),
     repository.query(`SELECT t.id, t.corporation_id, t.name, t.territory_type, t.status, t.is_primary, t.created_game_day,
                              s.house_capacity, s.active_house_count,

@@ -276,7 +276,7 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
         institutionId.toUpperCase().startsWith('TERR-')) {
       return 'TERRITORY';
     }
-    return 'CORPORATION';
+    return 'UNKNOWN';
   }
 
   List<Map<String, dynamic>> _proposalsForScope(String scope) {
@@ -286,7 +286,9 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
     for (final raw in all) {
       if (raw is! Map) continue;
       final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
-      final pScope = _scopeFor(pInst);
+      final pScope = (raw['scope']?.toString().toUpperCase() ?? '').isNotEmpty
+          ? raw['scope'].toString().toUpperCase()
+          : _scopeFor(pInst);
       if (pScope == scope) {
         filtered.add(Map<String, dynamic>.from(raw));
       }
@@ -480,8 +482,16 @@ class _ProposalTabContentState extends State<_ProposalTabContent> {
         ((widget.state.governance['rules'] as List<dynamic>?) ?? const [])
             .where((raw) => raw is Map && raw['status']?.toString() == 'active')
             .toList();
-    final currentRule =
-        rules.isEmpty ? null : Map<String, dynamic>.from(rules.first as Map);
+    final proposalRuleId = widget.proposals
+        .map((proposal) => proposal['rule_version_id']?.toString())
+        .firstWhere((id) => id != null && id.isNotEmpty, orElse: () => null);
+    final currentRule = rules
+        .cast<Map>()
+        .map((raw) => Map<String, dynamic>.from(raw))
+        .where((rule) =>
+            proposalRuleId == null || rule['id']?.toString() == proposalRuleId)
+        .cast<Map<String, dynamic>?>()
+        .firstWhere((rule) => rule != null, orElse: () => null);
     final ruleSummary = currentRule == null
         ? 'No active governance rule is published for this scope.'
         : 'Current rule: ${asIntOr(asDoubleOr(currentRule['quorum_threshold'], .25) * 100, 25)}% quorum · ${asIntOr(asDoubleOr(currentRule['approval_threshold'], .5) * 100, 50)}% approval · ${currentRule['voting_period_days'] ?? '—'}-day vote · implementation delay ${currentRule['implementation_delay_days'] ?? '—'} days.';
@@ -602,8 +612,9 @@ class _ProposalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final votes = Map<String, dynamic>.from(
-        (proposal['votes'] as Map<String, dynamic>?) ?? const {});
+    final votes = proposal['votes'] is Map
+        ? Map<String, dynamic>.from(proposal['votes'] as Map)
+        : proposal;
     final proposalId = proposal['id']?.toString() ?? '';
     final isPassed =
         proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
@@ -689,6 +700,11 @@ class _ProposalCard extends StatelessWidget {
             ? (proposal['ballots'] as Map)[state.human['id']?.toString()]
                 ?.toString()
             : null);
+    final viewer = proposal['viewer'] is Map
+        ? Map<String, dynamic>.from(proposal['viewer'] as Map)
+        : const <String, dynamic>{};
+    final canVote = viewer.isEmpty || viewer['canVote'] == true;
+    final ineligibleReason = viewer['ineligibleReason']?.toString();
     final voteDeadline = _formatGameDeadline(proposal);
     final gameMinutesRemaining = closesTotalMinutes == null
         ? null
@@ -696,8 +712,15 @@ class _ProposalCard extends StatelessWidget {
 
     final supportCount = asIntOr(votes['support'], 0);
     final opposeCount = asIntOr(votes['oppose'], 0);
-    final uncastCount = asIntOr(votes['uncast'], 0);
-    final totalVotes = supportCount + opposeCount + uncastCount;
+    final abstainCount = asIntOr(votes['abstain'], 0);
+    final castCount = asIntOr(votes['cast_count'] ?? votes['voter_count'],
+        supportCount + opposeCount + abstainCount);
+    final eligibleCount = asIntOr(proposal['eligible_voter_count'], 0);
+    final uncastCount = math.max(0, eligibleCount - castCount);
+    final decisiveCount = supportCount + opposeCount;
+    final turnout = eligibleCount > 0 ? castCount / eligibleCount * 100 : null;
+    final approval =
+        decisiveCount > 0 ? supportCount / decisiveCount * 100 : null;
 
     Color statusColor = context.primaryColor;
     if (isExecuted) statusColor = context.successColor;
@@ -870,13 +893,13 @@ class _ProposalCard extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Support $supportCount  ·  Oppose $opposeCount  ·  Uncast $uncastCount',
+                  'Support $supportCount  ·  Oppose $opposeCount  ·  Abstain $abstainCount  ·  Uncast $uncastCount',
                   style: context.widgetTitleStyle,
                 ),
               ),
-              if (totalVotes > 0)
+              if (approval != null)
                 Text(
-                  '${((supportCount / totalVotes) * 100).toStringAsFixed(1)}% SUPPORT',
+                  '${approval.toStringAsFixed(1)}% DECISIVE APPROVAL',
                   style: context.widgetTitleStyle
                       .copyWith(color: context.primaryColor),
                 ),
@@ -885,7 +908,7 @@ class _ProposalCard extends StatelessWidget {
           const SizedBox(height: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
-            child: totalVotes == 0
+            child: castCount == 0
                 ? const LinearProgressIndicator(
                     value: 0,
                     minHeight: 6,
@@ -909,6 +932,14 @@ class _ProposalCard extends StatelessWidget {
                             color: context.errorColor,
                           ),
                         ),
+                      if (abstainCount > 0)
+                        Expanded(
+                          flex: abstainCount,
+                          child: Container(
+                            height: 6,
+                            color: Colors.amber,
+                          ),
+                        ),
                       if (uncastCount > 0)
                         Expanded(
                           flex: uncastCount,
@@ -927,14 +958,28 @@ class _ProposalCard extends StatelessWidget {
           TextButton.icon(
             onPressed: proposalId.isEmpty ? null : onToggleExpand,
             icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
-            label: Text(isExpanded ? 'HIDE DETAILS' : 'SHOW DETAILS'),
+            label: Text(isExpanded ? 'HIDE DETAILS' : 'REVIEW & VOTE'),
           ),
           if (isExpanded) _buildRichDetails(context, proposal),
 
           SizedBox(height: context.spacingTitleOffset),
 
           // Voting action buttons — only visible when voting is open
-          if (isVotingOpen && (myVote == null || myVote.isEmpty))
+          if (isExpanded && isVotingOpen && !canVote)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                ineligibleReason == null || ineligibleReason.isEmpty
+                    ? 'You are not eligible to vote on this proposal.'
+                    : ineligibleReason,
+                style: context.widgetFooterStyle
+                    .copyWith(color: context.warningColor),
+              ),
+            ),
+          if (isExpanded &&
+              isVotingOpen &&
+              canVote &&
+              (myVote == null || myVote.isEmpty))
             Wrap(
               spacing: 8,
               runSpacing: 6,
@@ -952,8 +997,32 @@ class _ProposalCard extends StatelessWidget {
                             isExecuted ||
                             isExpiredUnfunded
                         ? null
-                        : () => action(
-                            () => const EarthApi().vote(proposalId, choice)),
+                        : () async {
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('CONFIRM VOTE'),
+                                content: Text(
+                                    'Cast ${choice.toUpperCase()} on “${proposal['title'] ?? 'this proposal'}”?\n\nYour vote cannot be changed after submission.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(false),
+                                    child: const Text('CANCEL'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(true),
+                                    child: const Text('CONFIRM VOTE'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true) {
+                              await action(() =>
+                                  const EarthApi().vote(proposalId, choice));
+                            }
+                          },
                   ),
               ],
             ),
@@ -1413,20 +1482,19 @@ class _ProposalCard extends StatelessWidget {
         (buildingType.isNotEmpty
             ? '${_humanize(buildingType)} Tier $targetTier'
             : 'Research Initiative');
-    final desc = (detail['description'] ??
-            detail['catalog_description'] ??
-            'Advanced technology blueprint development and operational upgrades.')
+    final desc = (detail['description'] ?? detail['catalog_description'] ?? '')
         .toString();
     final progress =
         asDoubleOr(detail['progress'] ?? detail['current_progress'], 0);
-    final cost = asDoubleOr(
-        detail['research_cost_credits'] ??
-            detail['cost_credits'] ??
-            detail['cost'] ??
-            detail['costs'],
-        40000);
-    final durationMinutes = asIntOr(detail['duration_minutes'], 2880);
-    final durationHours = math.max(1, (durationMinutes / 60).round());
+    final rawCost = detail['research_cost_credits'] ??
+        detail['cost_credits'] ??
+        detail['cost'] ??
+        detail['costs'];
+    final cost = rawCost == null ? null : asDoubleOr(rawCost, 0);
+    final durationMinutes = asInt(detail['duration_minutes']);
+    final durationHours = durationMinutes == null
+        ? null
+        : math.max(1, (durationMinutes / 60).round());
     final category = (detail['category'] ?? 'TECHNOLOGY').toString();
 
     return Container(
@@ -1503,10 +1571,12 @@ class _ProposalCard extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 6),
-                    Text(
-                      'Unlocks: Tier $targetTier blueprint & upgraded efficiency (+25% output, +12% upkeep)',
-                      style: context.widgetFooterStyle,
-                    ),
+                    if (detail['expected_effect'] != null ||
+                        detail['expectedEffect'] != null)
+                      Text(
+                        'Expected effect: ${detail['expected_effect'] ?? detail['expectedEffect']}',
+                        style: context.widgetFooterStyle,
+                      ),
                   ],
                 ),
               ),
@@ -1524,11 +1594,16 @@ class _ProposalCard extends StatelessWidget {
               const SizedBox(width: 2),
               const Icon(Icons.account_balance_wallet_outlined,
                   size: 14, color: EarthResourceColors.credits),
-              Text('${formatWholeNumber(cost)} CREDITS',
+              Text(
+                  cost == null
+                      ? 'NOT PUBLISHED'
+                      : '${formatWholeNumber(cost)} CREDITS',
                   style: context.widgetFooterStyle),
               const SizedBox(width: 6),
               const Icon(Icons.timer_outlined, size: 14, color: Colors.amber),
-              Text('${durationHours}h', style: context.widgetFooterStyle),
+              Text(
+                  durationHours == null ? 'NOT PUBLISHED' : '${durationHours}h',
+                  style: context.widgetFooterStyle),
             ],
           ),
         ],
