@@ -31,5 +31,5 @@ test('clean baseline and migration manifest remain frozen and contiguous', () =>
   assert.match(read('db/migrations/001_baseline.sha256'), /^[a-f0-9]{64}/);
   const manifest = JSON.parse(read('db/schema-manifest.json'));
   assert.equal(manifest.baseline, 'db/baseline/001_baseline.sql');
-  assert.equal(manifest.migrationVersion, 79);
+  assert.equal(manifest.migrationVersion, 81);
 });
