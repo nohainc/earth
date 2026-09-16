@@ -92,9 +92,16 @@ export async function listPantheonOfAchievements(repository: PostgresRepository,
     repository.query(`SELECT h.id AS human_id, h.display_name, h.house_id, d.house_name,
                              h.birth_game_day, h.death_game_day, h.age_years,
                              h.final_legacy, h.standing AS final_standing,
-                             h.cause_of_death, h.epitaph,
+                             memorial.cause_of_death, memorial.epitaph,
                              successor.display_name AS successor_name
                         FROM humans h JOIN houses d ON d.id = h.house_id
+                        LEFT JOIN LATERAL (
+                          SELECT cause_of_death, epitaph
+                            FROM house_lineage_records
+                           WHERE human_id = h.id
+                           ORDER BY generation DESC, id DESC
+                           LIMIT 1
+                        ) memorial ON TRUE
                         LEFT JOIN LATERAL (
                           SELECT successor_h.display_name
                             FROM succession_events se
