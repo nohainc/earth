@@ -452,7 +452,7 @@ Future<void> showCommunityApplicationDialog(
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) {
         final answer = messageController.text.trim();
-        final isValid = answer.isNotEmpty;
+        final isValid = true;
 
         return AlertDialog(
           backgroundColor: context.panelColor,
@@ -523,9 +523,10 @@ Future<void> showCommunityApplicationDialog(
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       alignLabelWithHint: true,
-                      labelText: 'Your Answer / Application Note (Required)',
+                      labelText: 'Application note (optional)',
                       labelStyle: context.widgetFooterStyle,
-                      hintText: 'Provide your response to the community...',
+                      hintText:
+                          'Tell the community why you would like to join (optional)...',
                       hintStyle:
                           context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(

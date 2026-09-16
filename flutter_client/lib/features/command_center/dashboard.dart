@@ -492,7 +492,12 @@ class Dashboard extends StatelessWidget {
         ];
       case 'communities':
         return [
-          CommunitiesPanel(state: state, busy: busy, action: action),
+          CommunitiesPanel(
+            state: state,
+            busy: busy,
+            action: action,
+            onNavigate: onNavigate,
+          ),
         ];
       case 'technology':
         return [
