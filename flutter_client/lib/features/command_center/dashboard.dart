@@ -595,49 +595,46 @@ class Dashboard extends StatelessWidget {
                 .toString()
                 .trim();
         final health = asDouble(human['health'] ??
-                human['vitality'] ??
-                life['health'] ??
-                life['vitality']) ??
-            100.0;
+            human['vitality'] ??
+            life['health'] ??
+            life['vitality']);
         final energy = asDouble(human['energy'] ??
-                human['stamina'] ??
-                life['energy'] ??
-                life['stamina']) ??
-            100.0;
+            human['stamina'] ??
+            life['energy'] ??
+            life['stamina']);
         final age =
-            asInt(human['age_years'] ?? human['age'] ?? life['ageYears']) ?? 31;
-        final houseName = (life['houseName'] ??
-                life['house_name'] ??
-                human['house_name'] ??
-                'Founding Lineage')
-            .toString();
-        final generation =
-            asIntOr(life['generation'] ?? human['generation'], 1);
+            asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
+        final houseName =
+            (life['houseName'] ?? life['house_name'] ?? human['house_name'])
+                ?.toString();
 
         return [
           LayoutBuilder(
             builder: (context, constraints) {
-              final succession = SuccessionPanel(
-                state: state,
-                busy: busy,
-                action: action,
-              );
               final lifeToday =
                   LifeTodayPanel(state: state, busy: busy, action: action);
-
-              final epitaph = (human['epitaph'] ??
-                      life['epitaph'] ??
-                      'Pioneered civilization across the frontier of Earth.')
-                  .toString()
-                  .trim();
+              final rawStatus =
+                  (life['status'] ?? human['life_status'] ?? 'ACTIVE')
+                      .toString()
+                      .toUpperCase();
+              final status = rawStatus == 'DECEASED'
+                  ? 'DECEASED'
+                  : rawStatus == 'ESTATE'
+                      ? 'ESTATE TRANSITION'
+                      : health != null && health < 40
+                          ? 'CRITICAL'
+                          : health != null && health < 70
+                              ? 'LOW VITALITY'
+                              : 'ACTIVE';
 
               final cockpit = EarthPageCockpit(
-                status: health < 40 ? 'CRITICAL VITALITY' : 'ACTIVE CITIZEN',
-                statusColor:
-                    health < 40 ? context.warningColor : context.successColor,
-                infoTitle: 'CITIZEN BIOMETRICS & SUCCESSION ARCHITECTURE',
+                status: status,
+                statusColor: status == 'CRITICAL'
+                    ? context.warningColor
+                    : context.successColor,
+                infoTitle: 'CURRENT HUMAN',
                 infoDescription:
-                    '• Vitality & Daily Energy: Physical health (100% base) and daily operational capacity for actions, work, and planetary decisions.\n\n• Dynastic Lineage: House heritage, generational continuity, and ancestral standing on Earth.\n\n• Estate Succession: Testamentary allocation, heirs, and asset preservation across generations.',
+                    'Your current living Human: identity, condition, residence, affiliations, and civic standing. House succession and inherited assets are managed from the House page.',
                 title: rawFullName.toUpperCase(),
                 titleWidget: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -729,144 +726,43 @@ class Dashboard extends StatelessWidget {
                     ),
                   ],
                 ),
-                subtitleWidget: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        epitaph,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: context.mutedColor,
-                          fontSize: 12,
-                          letterSpacing: 0.5,
-                          fontWeight: FontWeight.w600,
-                          fontStyle: FontStyle.italic,
-                          height: 1.35,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Edit epitaph / motto',
-                      icon: Icon(
-                        Icons.edit_outlined,
-                        size: 16,
-                        color: context.primaryColor,
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              final controller =
-                                  TextEditingController(text: epitaph);
-                              await showDialog<void>(
-                                context: context,
-                                builder: (dialogContext) => AlertDialog(
-                                  backgroundColor: context.panelColor,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        context.radiusPanel),
-                                    side: BorderSide(
-                                        color: context.primaryColor
-                                            .withValues(alpha: .35)),
-                                  ),
-                                  title: Text('Edit citizen epitaph',
-                                      style: context.topicTitleStyle.copyWith(
-                                          color: context.primaryColor)),
-                                  content: TextField(
-                                    controller: controller,
-                                    autofocus: true,
-                                    maxLength: 160,
-                                    maxLines: 2,
-                                    style: context.bodyStyle
-                                        .copyWith(color: context.inkColor),
-                                    decoration: InputDecoration(
-                                      labelText:
-                                          'Epitaph / Memorial Inscription',
-                                      labelStyle: context.widgetFooterStyle,
-                                    ),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(dialogContext),
-                                      child: Text('CANCEL',
-                                          style: context.controlStyle.copyWith(
-                                              color: context.mutedColor)),
-                                    ),
-                                    EarthButton(
-                                      label: 'SAVE',
-                                      onPressed: busy
-                                          ? null
-                                          : () async {
-                                              final text =
-                                                  controller.text.trim();
-                                              if (text.isEmpty) return;
-                                              Navigator.pop(dialogContext);
-                                              await action(() =>
-                                                  const EarthApi()
-                                                      .updateEpitaph(text));
-                                            },
-                                    ),
-                                  ],
-                                ),
-                              );
-                              controller.dispose();
-                            },
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
+                subtitle: houseName == null
+                    ? 'Current Human'
+                    : 'Current Human · House of $houseName',
                 metrics: [
                   CockpitMetric(
                     label: 'Vitality',
-                    value: '${health.toStringAsFixed(0)}%',
+                    value:
+                        health == null ? '—' : '${health.toStringAsFixed(0)}%',
                     icon: Icons.favorite_outline,
-                    color: health < 40
+                    color: health != null && health < 40
                         ? context.warningColor
                         : context.successColor,
                   ),
                   CockpitMetric(
                     label: 'Energy',
-                    value: '${energy.toStringAsFixed(0)}%',
+                    value:
+                        energy == null ? '—' : '${energy.toStringAsFixed(0)}%',
                     icon: Icons.bolt_outlined,
                     color: context.primaryColor,
                   ),
                   CockpitMetric(
                     label: 'Age',
-                    value: '$age',
+                    value: age == null ? '—' : '$age',
                     icon: Icons.hourglass_empty_outlined,
                     color: context.goldColor,
                   ),
                   CockpitMetric(
-                    label: 'Generation',
-                    value: '$generation',
-                    icon: Icons.account_balance_outlined,
+                    label: 'Civic standing',
+                    value: formatWholeNumber(
+                        asIntOr(human['standing'], 0).toDouble()),
+                    icon: Icons.verified_user_outlined,
                     color: context.secondaryColor,
                   ),
                 ],
               );
 
-              final content = constraints.maxWidth > 1000
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: lifeToday),
-                        const SizedBox(width: 40),
-                        Expanded(child: succession),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        lifeToday,
-                        const SizedBox(height: 34),
-                        succession,
-                      ],
-                    );
+              final content = lifeToday;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
