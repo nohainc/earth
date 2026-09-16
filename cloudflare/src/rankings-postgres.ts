@@ -36,10 +36,16 @@ export async function listRankings(repository: PostgresRepository, options: { ca
   const offset = Math.max(0, options.offset ?? 0);
   const latest = await repository.query<{ game_day: string }>('SELECT COALESCE(MAX(game_day),0)::TEXT AS game_day FROM ranking_snapshots WHERE scope=\'GLOBAL\'');
   const gameDay = Number(latest.rows[0]?.game_day ?? 0);
+  const population = await repository.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'");
+  const populationSize = Number(population.rows[0]?.count ?? 0);
   const result: Record<string, unknown[]> = {};
   for (const selected of metrics) {
     const rows = await repository.query(`SELECT e.rank, e.subject_id, e.subject_name, e.metric_value::TEXT AS metric_value FROM ranking_snapshot_entries e JOIN ranking_snapshots s ON s.id=e.snapshot_id WHERE s.metric_code=$1 AND s.scope='GLOBAL' AND s.game_day=$2 ${options.search ? 'AND e.subject_name ILIKE $3' : ''} ORDER BY e.rank LIMIT $${options.search ? 4 : 3} OFFSET $${options.search ? 5 : 4}`, options.search ? [selected, gameDay, `%${options.search}%`, limit, offset] : [selected, gameDay, limit, offset]);
-    result[selected] = rows.rows;
+    result[selected] = rows.rows.map((row) => ({
+      ...row,
+      population_size: populationSize,
+      percentile: populationSize > 0 ? Math.max(0, Math.min(100, ((populationSize - Number(row.rank) + 1) / populationSize) * 100)) : null,
+    }));
   }
   // Keep the legacy top-level collections as compatibility projections for
   // existing clients; V4 consumers use `metrics` and never infer a composite.
@@ -47,6 +53,7 @@ export async function listRankings(repository: PostgresRepository, options: { ca
     ok: true,
     rulesVersion: RANKING_RULES_VERSION,
     gameDay,
+    populationSize,
     metrics: result,
     dimensions: metrics,
     compositeScore: null,

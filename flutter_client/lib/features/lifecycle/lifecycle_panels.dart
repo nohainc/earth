@@ -1611,10 +1611,10 @@ class RankingLine extends StatelessWidget {
   }
 }
 
-class WorldRankingsPanel extends StatelessWidget {
+class LegacyWorldRankingsPanel extends StatelessWidget {
   final EarthState state;
 
-  const WorldRankingsPanel({super.key, required this.state});
+  const LegacyWorldRankingsPanel({super.key, required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -1715,6 +1715,8 @@ class WorldRankingsPanel extends StatelessWidget {
     );
   }
 }
+
+typedef WorldRankingsPanel = LegacyWorldRankingsPanel;
 
 class HistoryArchivePanel extends StatelessWidget {
   final EarthState state;

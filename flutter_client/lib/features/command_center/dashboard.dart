@@ -10,7 +10,7 @@ import '../finance/personal_finance_panel.dart';
 import '../governance/governance_panels.dart';
 import '../institutions/institutions_panels.dart';
 import '../institutions/organization_directory_panel.dart';
-import '../lifecycle/lifecycle_panels.dart';
+import '../lifecycle/lifecycle_panels.dart' hide WorldRankingsPanel;
 import '../market/market_panels.dart';
 import '../operations/technology_panel.dart';
 import '../operations/buildings_hub_screen.dart';
@@ -557,7 +557,7 @@ class Dashboard extends StatelessWidget {
           PublicFinanceGovernancePanel(state: state, busy: busy, action: action)
         ];
       case 'civic-rankings':
-        return [CivicRankingsPanel(state: state)];
+        return [WorldRankingsPanel(state: state)];
       case 'history':
       case 'pantheon':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];

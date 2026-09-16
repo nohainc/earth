@@ -1171,15 +1171,18 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   }
 }
 
-class CivicRankingsPanel extends StatefulWidget {
+class WorldRankingsPanel extends StatefulWidget {
   final EarthState state;
-  const CivicRankingsPanel({super.key, required this.state});
+  const WorldRankingsPanel({super.key, required this.state});
 
   @override
-  State<CivicRankingsPanel> createState() => _CivicRankingsPanelState();
+  State<WorldRankingsPanel> createState() => _WorldRankingsPanelState();
 }
 
-class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
+// Kept as a source-compatible alias for downstream page integrations.
+typedef CivicRankingsPanel = WorldRankingsPanel;
+
+class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
   int _singleTab = 0; // Legacy compatibility view.
   int _leftTab = 0; // 0: Citizens, 1: Houses
   int _rightTab = 0; // 0: Corps, 1: Cities
@@ -1234,14 +1237,11 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
       builder: (context, constraints) {
         final canonicalMetrics =
             _canonicalMetrics(widget.state.rankings['metrics']);
-        if (canonicalMetrics.isNotEmpty ||
-            widget.state.rankings['generatedFrom'] == 'ranking-snapshots') {
-          return _buildCanonicalMetricRankings(
-              context,
-              canonicalMetrics,
-              widget.state.rankings['gameDay'],
-              widget.state.rankings['rulesVersion']);
-        }
+        return _buildCanonicalMetricRankings(
+            context,
+            canonicalMetrics,
+            widget.state.rankings['gameDay'],
+            widget.state.rankings['rulesVersion']);
 
         final citizens = _citizenRows(
           widget.state.rankings['citizens'],
@@ -1624,19 +1624,60 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
         : selected.replaceAll('_', ' ');
     final gameDay = rawGameDay?.toString() ?? '—';
     final version = rulesVersion?.toString() ?? '—';
+    final houseName = (widget.state.human['house_name'] ??
+            widget.state.human['houseName'] ??
+            widget.state.membership?['house_name'] ??
+            widget.state.membership?['houseName'])
+        ?.toString();
+    final myHouseId = widget.state.human['house_id']?.toString() ??
+        widget.state.membership?['house_id']?.toString();
+    final myHouse = rows.cast<Map<String, dynamic>?>().firstWhere(
+          (row) =>
+              row?['subject_id']?.toString() == myHouseId ||
+              (houseName != null &&
+                  row?['subject_name']?.toString() == houseName),
+          orElse: () => null,
+        );
+    String topPercent(dynamic raw) {
+      final value = asDouble(raw);
+      if (value == null) return '—';
+      if (value >= 99) return 'Top 1%';
+      if (value >= 90) return 'Top 10%';
+      if (value >= 75) return 'Top 25%';
+      return '${value.toStringAsFixed(1)} percentile';
+    }
+
+    String description(String code) => switch (code) {
+          'WEALTH' =>
+            'Total settled House account balances at the latest daily snapshot.',
+          'PRODUCTIVE_CAPACITY' =>
+            'Active and under-construction buildings owned by the House.',
+          'LEGACY' =>
+            'The House legacy recorded by the canonical lineage system.',
+          'TECHNOLOGY' =>
+            'Patents and Corporation technology access attributed to the House.',
+          'PUBLIC_GOODS' => 'Settled contributions to public projects.',
+          'ORGANIZATION_SCALE' =>
+            'Active memberships held by the House in Organizations.',
+          'TERRITORY_QUALITY' =>
+            'Latest settled service capacity of the House primary Territory.',
+          'MARKET_ROLE' => 'Completed market fills associated with the House.',
+          _ =>
+            'Published House performance dimension from the daily ranking snapshot.',
+        };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         EarthPageCockpit(
-          status: 'SETTLED RANKING SNAPSHOT',
+          status: codes.isEmpty ? 'NOT SETTLED' : 'WORLD · RANKINGS',
           statusColor: context.goldColor,
-          infoTitle: 'MULTIDIMENSIONAL CIVIC RANKINGS',
+          infoTitle: 'HOW RANKINGS WORK',
           infoDescription:
-              'Each leaderboard is an independent, server-settled metric snapshot. Values are not combined into a hidden composite score. Rankings are ordered by the finalized game day and rules version shown below.',
-          title: 'CIVIC RANKINGS',
+              'Each leaderboard is an independent, server-settled metric snapshot. Values are not combined into a hidden composite score. Rankings are ordered by the finalized game day. Rules version: $version.',
+          title: 'WORLD RANKINGS',
           subtitle:
-              'Canonical House performance across the active planetary metrics',
+              'Compare Houses across independent, published performance dimensions.',
           metrics: [
             CockpitMetric(
                 label: 'Dimensions',
@@ -1644,18 +1685,55 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                 icon: Icons.stacked_bar_chart_outlined,
                 color: context.primaryColor),
             CockpitMetric(
-                label: 'Snapshot Day',
+                label: 'Updated Day',
                 value: gameDay,
                 icon: Icons.calendar_today_outlined,
                 color: context.secondaryColor),
             CockpitMetric(
-                label: 'Visible Rows',
-                value: '${rows.length}',
+                label: 'Houses',
+                value:
+                    '${widget.state.rankings['populationSize'] ?? (rows.isEmpty ? '—' : rows.first['population_size'] ?? '—')}',
                 icon: Icons.list_alt_outlined,
                 color: context.goldColor),
           ],
         ),
         const SizedBox(height: 28),
+        if (myHouse != null || houseName != null)
+          Container(
+            padding: EdgeInsets.all(context.cardPadding),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(
+                  color: context.primaryColor.withValues(alpha: .35)),
+            ),
+            child: Row(children: [
+              Icon(Icons.shield_outlined, color: context.primaryColor),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('YOUR HOUSE',
+                        style: context.captionStyle
+                            .copyWith(color: context.primaryColor)),
+                    Text(
+                        houseName ??
+                            myHouse?['subject_name']?.toString() ??
+                            'House',
+                        style: context.widgetValueStyle),
+                  ])),
+              if (myHouse != null)
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('#${myHouse['rank'] ?? '—'}',
+                      style: context.widgetValueStyle
+                          .copyWith(color: context.goldColor)),
+                  Text(topPercent(myHouse['percentile']),
+                      style: context.captionStyle),
+                ]),
+            ]),
+          ),
+        if (myHouse != null) const SizedBox(height: 16),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1672,13 +1750,14 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
         ),
         const SizedBox(height: 16),
         EarthSection(
-          title: '${title.toUpperCase()} · RULES $version · DAY $gameDay',
+          title: '${title.toUpperCase()} · UPDATED DAY $gameDay',
           showHeader: true,
           showSurface: false,
           child: rows.isEmpty
-              ? const EarthEmptyState(
-                  message:
-                      'No finalized entries exist for this ranking dimension yet.',
+              ? EarthEmptyState(
+                  message: codes.isEmpty
+                      ? 'Rankings are not settled yet. The first snapshot will be published after the next completed daily settlement.'
+                      : 'No finalized entries exist for this ranking dimension yet.',
                   icon: Icons.hourglass_empty_outlined)
               : Column(
                   children: [
@@ -1706,14 +1785,23 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                                         'Unknown subject',
                                     style: context.bodyStyle.copyWith(
                                         fontWeight: FontWeight.w700))),
-                            Text(row['metric_value']?.toString() ?? '0',
-                                style: context.widgetValueStyle),
+                            Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(row['metric_value']?.toString() ?? '0',
+                                      style: context.widgetValueStyle),
+                                  Text(topPercent(row['percentile']),
+                                      style: context.captionStyle),
+                                ]),
                           ],
                         ),
                       ),
                   ],
                 ),
         ),
+        const SizedBox(height: 8),
+        if (selected.isNotEmpty)
+          Text(description(selected), style: context.widgetFooterStyle),
       ],
     );
   }
