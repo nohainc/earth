@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
-import '../../shared/design_system/earth_theme_context.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import 'public_projects_panel.dart';
 import 'world_programs_panel.dart';
@@ -26,32 +26,23 @@ class InitiativesPanel extends StatefulWidget {
   State<InitiativesPanel> createState() => _InitiativesPanelState();
 }
 
-class _InitiativesPanelState extends State<InitiativesPanel>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _InitiativesPanelState extends State<InitiativesPanel> {
+  late int _selectedTab;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: 2,
-      vsync: this,
-      initialIndex: widget.initialTabIndex.clamp(0, 1),
-    );
+    _selectedTab = widget.initialTabIndex.clamp(0, 1);
   }
 
   @override
   void didUpdateWidget(covariant InitiativesPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTabIndex != widget.initialTabIndex) {
-      _tabController.animateTo(widget.initialTabIndex.clamp(0, 1));
+      setState(() {
+        _selectedTab = widget.initialTabIndex.clamp(0, 1);
+      });
     }
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
@@ -85,59 +76,96 @@ class _InitiativesPanelState extends State<InitiativesPanel>
         ),
         const SizedBox(height: 20),
         Container(
+          margin: EdgeInsets.only(bottom: context.spacingControl),
           decoration: BoxDecoration(
-            color: context.surfaceColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: context.primaryColor.withValues(alpha: 0.14),
-            ),
+            color: context.surfaceColor.withValues(alpha: .6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: context.subtleBorderColor),
           ),
-          child: TabBar(
-            controller: _tabController,
-            labelColor: context.primaryColor,
-            unselectedLabelColor: context.mutedColor,
-            indicatorColor: context.primaryColor,
-            indicatorSize: TabBarIndicatorSize.tab,
-            labelStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.0,
-            ),
-            tabs: const [
-              Tab(
-                text: 'PROGRAMS',
-                icon: Icon(Icons.public_outlined, size: 18),
+          child: Row(
+            children: [
+              _buildTabButton(
+                context,
+                title: 'PROGRAMS',
+                icon: Icons.public_outlined,
+                isSelected: _selectedTab == 0,
+                onTap: () => setState(() => _selectedTab = 0),
               ),
-              Tab(
-                text: 'PROJECTS',
-                icon: Icon(Icons.construction_outlined, size: 18),
+              _buildTabButton(
+                context,
+                title: 'PROJECTS',
+                icon: Icons.construction_outlined,
+                isSelected: _selectedTab == 1,
+                onTap: () => setState(() => _selectedTab = 1),
               ),
             ],
           ),
         ),
         const SizedBox(height: 20),
-        AnimatedBuilder(
-          animation: _tabController,
-          builder: (context, _) {
-            switch (_tabController.index) {
-              case 1:
-                return PublicProjectsPanel(
-                  state: widget.state,
-                  personalFinanceData: widget.personalFinanceData,
-                  busy: widget.busy,
-                  action: widget.action,
-                );
-              case 0:
-              default:
-                return WorldProgramsPanel(
-                  personalFinanceData: widget.personalFinanceData,
-                  busy: widget.busy,
-                  action: widget.action,
-                );
-            }
-          },
-        ),
+        _selectedTab == 1
+            ? PublicProjectsPanel(
+                state: widget.state,
+                personalFinanceData: widget.personalFinanceData,
+                busy: widget.busy,
+                action: widget.action,
+              )
+            : WorldProgramsPanel(
+                personalFinanceData: widget.personalFinanceData,
+                busy: widget.busy,
+                action: widget.action,
+              ),
       ],
+    );
+  }
+
+  Widget _buildTabButton(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          EarthAudioEngine.instance.playClick();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? context.primaryColor.withValues(alpha: .15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: isSelected
+                ? Border.all(color: context.primaryColor.withValues(alpha: .4))
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? context.primaryColor : context.mutedColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.controlStyle.copyWith(
+                  color: isSelected ? context.primaryColor : context.mutedColor,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

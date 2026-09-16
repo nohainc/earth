@@ -61,16 +61,6 @@ class WorldConditionsPanel extends StatelessWidget {
             color: conditions.isEmpty
                 ? context.secondaryColor
                 : context.warningColor),
-        CockpitMetric(
-            label: 'Updated Day',
-            value: gameDay?.toString() ?? '—',
-            icon: Icons.calendar_today_outlined,
-            color: context.goldColor),
-        CockpitMetric(
-            label: 'Rules Version',
-            value: rulesVersion ?? '—',
-            icon: Icons.verified_outlined,
-            color: context.primaryColor),
       ],
     );
 

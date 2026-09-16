@@ -53,6 +53,6 @@ void main() {
     expect(find.text('GRID STRESS'), findsOneWidget);
     expect(find.text('ENERGY +5%'), findsOneWidget);
     expect(find.text('Bratislava'), findsOneWidget);
-    expect(find.text('world-conditions-v1'), findsOneWidget);
+    expect(find.text('ACTIVE CONDITIONS'), findsWidgets);
   });
 }

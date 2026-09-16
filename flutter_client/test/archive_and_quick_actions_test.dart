@@ -32,7 +32,8 @@ void main() {
               {
                 'house_name': 'House of Vance',
                 'generation': 3,
-                'legacy_points': 240
+                'legacy_points': 240,
+                'is_extinct': true,
               }
             ],
           },
@@ -44,7 +45,7 @@ void main() {
 
     expect(find.text('MEMORIAL'), findsWidgets);
     expect(find.text('Mira Vance'), findsOneWidget);
-    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES (1)'));
+    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES'));
     await tester.pumpAndSettle();
     expect(find.text('House of Vance'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);
@@ -66,7 +67,7 @@ void main() {
     expect(find.text('QUICK ACTIONS'), findsOneWidget);
     expect(find.text('RUN THE BUSINESS'), findsOneWidget);
     expect(find.text('DIRECT RESEARCH'), findsOneWidget);
-    await tester.tap(find.text('CHECK CITY SERVICES'));
-    expect(destination, 'city');
+    await tester.tap(find.text('CHECK TERRITORY SERVICES'));
+    expect(destination, 'territory-commons');
   });
 }

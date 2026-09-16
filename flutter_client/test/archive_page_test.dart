@@ -32,12 +32,12 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.text('MEMORIAL'), findsWidgets);
-    expect(find.widgetWithText(InkWell, 'CITIZENS (1)'), findsOneWidget);
-    expect(find.widgetWithText(InkWell, 'EXTINCT HOUSES (1)'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CITIZENS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'EXTINCT HOUSES'), findsOneWidget);
     expect(find.textContaining('Founder Marcus Vance'), findsOneWidget);
 
     // Switch to Houses tab on narrow layout
-    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES (1)'));
+    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES'));
     await tester.pumpAndSettle();
     expect(find.textContaining('House of Vance'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);
@@ -55,7 +55,7 @@ void main() {
     expect(find.text('No citizens have entered the public archive yet.'),
         findsOneWidget);
 
-    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES (0)'));
+    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES'));
     await tester.pumpAndSettle();
     expect(
         find.text(
@@ -157,7 +157,7 @@ void main() {
     expect(find.textContaining('Elena Rostova'), findsOneWidget);
 
     // Switch to Houses tab
-    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES (2)'));
+    await tester.tap(find.widgetWithText(InkWell, 'EXTINCT HOUSES'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('House of Vance'), findsWidgets);

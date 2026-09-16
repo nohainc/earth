@@ -99,7 +99,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
               Expanded(
                 child: _buildNarrowTabButton(
                   context,
-                  title: 'CITIZENS (${deceased.length})',
+                  title: 'CITIZENS',
                   icon: Icons.account_box_outlined,
                   isSelected: _selectedTab == 0,
                   onTap: () => setState(() => _selectedTab = 0),
@@ -108,7 +108,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
               Expanded(
                 child: _buildNarrowTabButton(
                   context,
-                  title: 'EXTINCT HOUSES (${houses.length})',
+                  title: 'EXTINCT HOUSES',
                   icon: Icons.shield_outlined,
                   isSelected: _selectedTab == 1,
                   onTap: () => setState(() => _selectedTab = 1),
