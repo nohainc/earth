@@ -206,9 +206,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final accountItem = find.text('Account');
-    expect(accountItem, findsOneWidget);
-    await tester.tap(accountItem);
+    final profileTile = find.text('Amara Vance');
+    expect(profileTile, findsOneWidget);
+    await tester.tap(profileTile);
     await tester.pumpAndSettle();
 
     expect(navigatedTo, 'account');

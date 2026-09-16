@@ -385,11 +385,12 @@ class _SidebarState extends State<Sidebar> {
     required String houseName,
   }) {
     final isAccountSelected = widget.selectedSection == 'account';
+    final initial = humanName.isNotEmpty ? humanName[0].toUpperCase() : 'C';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: context.canvasColor.withValues(alpha: 0.8),
+        color: context.canvasColor.withValues(alpha: 0.9),
         border: Border(
           top: BorderSide(
             color: context.primaryColor.withValues(alpha: 0.12),
@@ -400,99 +401,171 @@ class _SidebarState extends State<Sidebar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Account Button
-          _buildNavItem(
-            context,
-            sectionKey: 'account',
-            label: 'Account',
-            icon: Icons.manage_accounts_outlined,
-            badge: null,
-            isSelected: isAccountSelected,
-            onSelect: () {
-              EarthAudioEngine.instance.playClick();
-              widget.onNavigate('account');
-            },
-          ),
-          const SizedBox(height: 4),
-
-          // User Summary & Quick Controls Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        humanName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: context.inkColor,
-                        ),
-                      ),
-                      Text(
-                        'House $houseName',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w500,
-                          color: context.mutedColor,
-                        ),
-                      ),
-                    ],
-                  ),
+          // 1. UNIFIED USER PROFILE TILE (Navigates to Account & Preferences)
+          Material(
+            color: isAccountSelected
+                ? context.primaryColor.withValues(alpha: 0.14)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                EarthAudioEngine.instance.playClick();
+                widget.onNavigate('account');
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: isAccountSelected
+                      ? Border.all(
+                          color: context.primaryColor.withValues(alpha: 0.32),
+                          width: 0.8,
+                        )
+                      : null,
                 ),
-                // Theme / Appearance Button
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: context.primaryColor.withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: context.primaryColor.withValues(alpha: 0.4),
+                          width: 1.0,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        initial,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: context.primaryColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            humanName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isAccountSelected
+                                  ? context.inkColor
+                                  : context.inkColor.withValues(alpha: 0.9),
+                            ),
+                          ),
+                          Text(
+                            'House $houseName',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: context.mutedColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: isAccountSelected
+                          ? context.primaryColor
+                          : context.mutedColor.withValues(alpha: 0.7),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // 2. QUICK ACTION BAR (Appearance · Audio · Security · Logout)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              // Appearance / Theme
+              IconButton(
+                icon: const Icon(Icons.palette_outlined, size: 16),
+                tooltip: 'Appearance Suite',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 30),
+                color: context.mutedColor,
+                onPressed: () {
+                  EarthAudioEngine.instance.playClick();
+                  showThemeCustomizerDialog(context);
+                },
+              ),
+              // Audio Toggle
+              IconButton(
+                icon: Icon(
+                  EarthAudioEngine.instance.isMuted
+                      ? Icons.volume_off_outlined
+                      : Icons.volume_up_outlined,
+                  size: 16,
+                ),
+                tooltip: EarthAudioEngine.instance.isMuted
+                    ? 'Enable Audio'
+                    : 'Mute Audio',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 30),
+                color: EarthAudioEngine.instance.isMuted
+                    ? context.warningColor
+                    : context.mutedColor,
+                onPressed: () {
+                  setState(() {
+                    EarthAudioEngine.instance.toggleMute();
+                    if (!EarthAudioEngine.instance.isMuted) {
+                      EarthAudioEngine.instance.playClick();
+                    }
+                  });
+                },
+              ),
+              // Security
+              if (widget.onSecurity != null)
                 IconButton(
-                  icon: const Icon(Icons.palette_outlined, size: 16),
-                  tooltip: 'Appearance',
+                  icon: const Icon(Icons.lock_outline_rounded, size: 16),
+                  tooltip: 'Security & Sessions',
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 30),
                   color: context.mutedColor,
                   onPressed: () {
                     EarthAudioEngine.instance.playClick();
-                    showThemeCustomizerDialog(context);
+                    widget.onSecurity?.call();
                   },
                 ),
-                // Security Button
-                if (widget.onSecurity != null)
-                  IconButton(
-                    icon: const Icon(Icons.lock_outline_rounded, size: 16),
-                    tooltip: 'Security',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
-                    color: context.mutedColor,
-                    onPressed: () {
-                      EarthAudioEngine.instance.playClick();
-                      widget.onSecurity?.call();
-                    },
-                  ),
-                // Logout Button
-                if (widget.onLogout != null)
-                  IconButton(
-                    icon: const Icon(Icons.logout_rounded, size: 16),
-                    tooltip: 'Logout',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
-                    color: context.mutedColor,
-                    onPressed: () {
-                      EarthAudioEngine.instance.playClick();
-                      widget.onLogout?.call();
-                    },
-                  ),
-              ],
-            ),
+              // Logout
+              if (widget.onLogout != null)
+                IconButton(
+                  icon: const Icon(Icons.logout_rounded, size: 16),
+                  tooltip: 'Sign Out',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 30),
+                  color: context.mutedColor,
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    widget.onLogout?.call();
+                  },
+                ),
+            ],
           ),
         ],
       ),
@@ -581,9 +654,20 @@ class _SidebarState extends State<Sidebar> {
                     widget.onNavigate('account');
                   },
                 ),
+                Tooltip(
+                  message: 'Appearance Suite',
+                  child: IconButton(
+                    icon: const Icon(Icons.palette_outlined, size: 18),
+                    color: context.mutedColor,
+                    onPressed: () {
+                      EarthAudioEngine.instance.playClick();
+                      showThemeCustomizerDialog(context);
+                    },
+                  ),
+                ),
                 if (widget.onLogout != null)
                   Tooltip(
-                    message: 'Logout',
+                    message: 'Sign Out',
                     child: IconButton(
                       icon: const Icon(Icons.logout_rounded, size: 18),
                       color: context.mutedColor,

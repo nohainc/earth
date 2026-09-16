@@ -8,12 +8,9 @@ import '../../core/models/live_connection_status.dart';
 import '../../core/notification_classifier.dart';
 import '../../shared/design_system/earth_logo.dart';
 import '../../shared/design_system/earth_theme_context.dart';
-import '../../core/onboarding_controller.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
-import '../onboarding/onboarding_welcome_dialog.dart';
 import 'daily_summary_dialog.dart';
-import 'theme_customizer_dialog.dart';
 
 class YearAndDay {
   final int year;
@@ -360,14 +357,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
               // MESSAGES BUTTON
               _buildCommLinkButton(context),
-
-              const SizedBox(width: 6),
-
-              // SETTINGS & ACCOUNT MENU
-              _buildSettingsMenu(
-                context,
-                isMobile: isMobile,
-              ),
             ],
           ),
         );
@@ -1013,139 +1002,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  // --- SETTINGS / ACCOUNT MENU ---
-  Widget _buildSettingsMenu(
-    BuildContext context, {
-    required bool isMobile,
-  }) {
-    return PopupMenuButton<String>(
-      tooltip: 'Settings & Account',
-      position: PopupMenuPosition.under,
-      offset: const Offset(0, 8),
-      constraints: const BoxConstraints(minWidth: 230, maxWidth: 270),
-      color: context.surfaceColor,
-      elevation: 14,
-      shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.all(Radius.circular(12)),
-        side: BorderSide(
-          color: context.primaryColor.withValues(alpha: 0.25),
-        ),
-      ),
-      onSelected: (value) {
-        EarthAudioEngine.instance.playClick();
-        if (value == 'account') {
-          widget.onNavigate?.call('account');
-        } else if (value == 'theme') {
-          showThemeCustomizerDialog(context);
-        } else if (value == 'audio') {
-          setState(() {
-            EarthAudioEngine.instance.toggleMute();
-            if (!EarthAudioEngine.instance.isMuted) {
-              EarthAudioEngine.instance.playClick();
-            }
-          });
-        } else if (value == 'onboarding') {
-          OnboardingController.instance.setDismissed(false);
-          showOnboardingWelcomeDialog(
-            context,
-            onNavigate: widget.onNavigate,
-          );
-        } else if (value == 'logout') {
-          widget.onLogout?.call();
-        }
-      },
-      itemBuilder: (context) => [
-        _menuItem(
-          context,
-          'theme',
-          Icons.palette_outlined,
-          'Theme Suite',
-        ),
-        _menuItem(
-          context,
-          'audio',
-          EarthAudioEngine.instance.isMuted
-              ? Icons.volume_off
-              : Icons.volume_up,
-          EarthAudioEngine.instance.isMuted ? 'Enable Audio' : 'Mute Audio',
-        ),
-        _menuItem(
-          context,
-          'onboarding',
-          Icons.school_outlined,
-          'Onboarding',
-        ),
-        const PopupMenuDivider(),
-        _menuItem(
-          context,
-          'account',
-          Icons.manage_accounts_outlined,
-          'Account',
-        ),
-        _menuItem(
-          context,
-          'logout',
-          Icons.logout,
-          'Sign Out',
-          color: context.errorColor,
-        ),
-      ],
-      child: Tooltip(
-        message: 'Settings & Account',
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          child: Icon(
-            Icons.settings_outlined,
-            size: 21,
-            color: context.mutedColor,
-          ),
-        ),
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _menuItem(
-    BuildContext context,
-    String value,
-    IconData icon,
-    String label, {
-    Color? color,
-    String? trailing,
-  }) {
-    final itemColor = color ?? context.mutedColor;
-    return PopupMenuItem<String>(
-      value: value,
-      height: 40,
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: itemColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                letterSpacing: 0.5,
-                fontWeight: FontWeight.w500,
-                color: itemColor,
-              ),
-            ),
-          ),
-          if (trailing != null)
-            Text(
-              trailing,
-              style: TextStyle(
-                fontSize: 11,
-                letterSpacing: 1.1,
-                fontWeight: FontWeight.w700,
-                color: context.primaryColor,
-              ),
-            ),
-        ],
       ),
     );
   }
