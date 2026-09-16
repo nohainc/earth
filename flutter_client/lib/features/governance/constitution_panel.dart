@@ -17,243 +17,6 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
   String _selectedCategory = 'ALL';
   final _searchController = TextEditingController();
 
-  static const List<Map<String, dynamic>> _canonicalArticles = [
-    {
-      'id': 'CONST-TIME-001',
-      'part_number': 1,
-      'rule_number': '1.1',
-      'category': 'TIME & SETTLEMENT',
-      'title': 'Authoritative World Time',
-      'description':
-          'EARTH is governed by authoritative PostgreSQL game time. Economic and daily gameplay settlement occurs by complete game day, independent of the number of Cron deliveries or Worker invocations.',
-      'default_value': 'Authoritative PostgreSQL Engine',
-      'permitted_values': 'Immutable World Clock',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-TIME-002',
-      'part_number': 1,
-      'rule_number': '1.2',
-      'category': 'TIME & SETTLEMENT',
-      'title': 'Daily Economic Accounting Period',
-      'description':
-          'The complete game day is EARTH\'s fundamental economic accounting period. Production, consumption, services, needs, taxes, interest, research, license fees, and institutional payments are calculated and settled per game day.',
-      'default_value': 'Daily Settlement',
-      'permitted_values': 'Daily only',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-MONEY-001',
-      'part_number': 2,
-      'rule_number': '2.1',
-      'category': 'MONETARY & LEDGER',
-      'title': 'Sole Monetary Authority',
-      'description':
-          'Economy V2 is the sole authority for CREDIT balances and monetary history. economic_accounts hold balances; economic_transactions and economic_entries record value movement.',
-      'default_value': 'Economy V2 Dual-Entry Ledger',
-      'permitted_values': 'Strict Conservation of Value',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-MONEY-002',
-      'part_number': 2,
-      'rule_number': '2.2',
-      'category': 'MONETARY & LEDGER',
-      'title': 'Explicit Credit Issuance',
-      'description':
-          'Only explicitly authorized monetary issuance may create CREDIT. Every issuance and retirement must identify its rule version, source, reason, game day, and correlation ID. Ordinary gameplay moves existing CREDIT without creating unbacked tokens.',
-      'default_value': 'Authorized Issuance Only',
-      'permitted_values': 'Zero Unbacked Minting',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-ASSET-001',
-      'part_number': 3,
-      'rule_number': '3.1',
-      'category': 'RESOURCES & PROPERTY',
-      'title': 'Canonical Physical Resources',
-      'description':
-          'EARTH has five canonical physical resources: Material, Components, Energy, Compute, and Food. Production and consumption use explicit source/sink or counterparty accounting reconciled with the ledger.',
-      'default_value': 'Material, Components, Energy, Compute, Food',
-      'permitted_values': '5 Resource Quotas',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-OWNER-001',
-      'part_number': 3,
-      'rule_number': '3.2',
-      'category': 'RESOURCES & PROPERTY',
-      'title': 'Property and Account Ownership',
-      'description':
-          'Houses, Territories, and Organizations may own economic assets only through the canonical owner/economic-account model. A read projection is never an independent balance authority.',
-      'default_value': 'Owner / Account Linkage',
-      'permitted_values': 'Explicit Account Identity',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-HOUSE-001',
-      'part_number': 4,
-      'rule_number': '4.1',
-      'category': 'DYNASTY & SUCCESSION',
-      'title': 'House Continuity Invariant',
-      'description':
-          'A House is the persistent player identity and economic principal. A Human is a mortal representative. House property, contracts, debts, affiliations, and economic history survive Human succession; personal offices and personal standing do not automatically survive.',
-      'default_value': 'Persistent House Principal',
-      'permitted_values': 'House Level Ownership',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-SUCCESSION-001',
-      'part_number': 4,
-      'rule_number': '4.2',
-      'category': 'DYNASTY & SUCCESSION',
-      'title': 'Succession and Representation',
-      'description':
-          'House property survives Human mortality. Succession transfers executive agency to the appointed heir or dynastic trust, protecting dynasty accumulated capital from arbitrary confiscation.',
-      'default_value': 'Lineage Succession Protocol',
-      'permitted_values': 'Direct Heir / Dynastic Commons',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-MARKET-001',
-      'part_number': 5,
-      'rule_number': '5.1',
-      'category': 'MARKET & COMMERCE',
-      'title': 'Central Spot Market Architecture',
-      'description':
-          'EARTH maintains one unified central Spot Market for physical resources. Orders, escrow, batches, matching, fills, and price discovery use the shared order book architecture without uncollateralized shorting.',
-      'default_value': 'Unified Spot Order Book',
-      'permitted_values': 'Escrow-backed Trades',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-BUILDING-001',
-      'part_number': 5,
-      'rule_number': '5.2',
-      'category': 'MARKET & COMMERCE',
-      'title': 'Physical Building Economics',
-      'description':
-          'Buildings consume defined physical inputs and explicit operating expenses, producing physical resources or service capacity. A building does not generate CREDIT purely from catalog presence.',
-      'default_value': 'Physical Input/Output Conservation',
-      'permitted_values': 'Catalog Operating Rules',
-      'authority': 'EARTH',
-      'immutable': false,
-    },
-    {
-      'id': 'CONST-TAX-001',
-      'part_number': 6,
-      'rule_number': '6.1',
-      'category': 'TAXATION & FISCAL',
-      'title': 'Lawful Non-Retroactive Taxation',
-      'description':
-          'Taxes require an authorized, immutable, versioned rule effective for the settlement game day. Tax rules cannot apply retroactively. Unpaid lawful taxes become explicit arrears obligations.',
-      'default_value': 'Versioned Statute Authority',
-      'permitted_values': 'Max 50% Rate BPS',
-      'authority': 'EARTH',
-      'immutable': false,
-    },
-    {
-      'id': 'CONST-BUDGET-001',
-      'part_number': 6,
-      'rule_number': '6.2',
-      'category': 'TAXATION & FISCAL',
-      'title': 'Fiscal Vocabulary and Spending Discipline',
-      'description':
-          'Budget is spending authority. Treasury is liquid cash. A commitment is an authorized reservation. Spending is an actual ledger transfer.',
-      'default_value': 'Separated Budget & Treasury',
-      'permitted_values': 'Double-Entry Reconciliation',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-TERRITORY-001',
-      'part_number': 7,
-      'rule_number': '7.1',
-      'category': 'SUBSIDIARITY & INSTITUTIONS',
-      'title': 'Territory Commons & Public Charter',
-      'description':
-          'Territories are public geographical commons. Financial distress is handled through defined stress, receivership, and recovery rules without arbitrary erasure of residents.',
-      'default_value': 'Public Commons Trust',
-      'permitted_values': 'Territory Self-Governance',
-      'authority': 'EARTH',
-      'immutable': false,
-    },
-    {
-      'id': 'CONST-CORP-001',
-      'part_number': 7,
-      'rule_number': '7.2',
-      'category': 'SUBSIDIARITY & INSTITUTIONS',
-      'title': 'Organizations & Enterprise Alliances',
-      'description':
-          'Organizations are collective economic institutions for shared capital, joint ventures, and technology pools. Distress, restructuring, and dividends follow explicit statutory rules.',
-      'default_value': 'Shared Equity & Patent Pools',
-      'permitted_values': 'Charter Democracy',
-      'authority': 'EARTH',
-      'immutable': false,
-    },
-    {
-      'id': 'CONST-GOV-001',
-      'part_number': 8,
-      'rule_number': '8.1',
-      'category': 'DEMOCRACY & GOVERNANCE',
-      'title': 'Authorized Democratic Procedures',
-      'description':
-          'Rules and institutional authorities change only through authorized governance procedures. Historical decisions, ballots, and rule versions are immutable permanent records.',
-      'default_value': 'Cryptographic & Quorum Ballots',
-      'permitted_values': 'Democracy / Supermajority',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-    {
-      'id': 'CONST-RESEARCH-001',
-      'part_number': 9,
-      'rule_number': '9.1',
-      'category': 'RESEARCH & PATENTS',
-      'title': 'Technology and Blueprint Progression',
-      'description':
-          'Organization research unlocks predefined building blueprints and technologies. Research is funded through the ledger and progresses from compute and funding capacity.',
-      'default_value': 'Ledger-Funded Research Trees',
-      'permitted_values': 'Open / Patented',
-      'authority': 'EARTH',
-      'immutable': false,
-    },
-    {
-      'id': 'CONST-IP-001',
-      'part_number': 9,
-      'rule_number': '9.2',
-      'category': 'RESEARCH & PATENTS',
-      'title': 'Patent Exclusivity and Licensing',
-      'description':
-          'Only explicitly configured technologies may receive patents. Patent rights are time-limited, versioned, and organization-owned, enabling lawful commercial licensing contracts.',
-      'default_value': 'Time-Limited Patent Pool',
-      'permitted_values': 'Cross-Licensing Agreements',
-      'authority': 'EARTH',
-      'immutable': false,
-    },
-    {
-      'id': 'CONST-AMEND-001',
-      'part_number': 10,
-      'rule_number': '10.1',
-      'category': 'AMENDMENTS & CONSTITUTION',
-      'title': 'Constitutional Amendment Supermajority',
-      'description':
-          'This Constitution may change only through a special constitutional amendment process requiring supermajority planetary consensus. Normal balance changes cannot bypass invariants.',
-      'default_value': '67% Supermajority Invariant',
-      'permitted_values': 'Planetary Referendum',
-      'authority': 'EARTH',
-      'immutable': true,
-    },
-  ];
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -268,23 +31,10 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
             .toList()
         : const <Map<String, dynamic>>[];
 
-    if (serverRules.isEmpty) {
-      return _canonicalArticles;
-    }
-
-    final merged = <String, Map<String, dynamic>>{};
-    for (final art in _canonicalArticles) {
-      merged[art['id']?.toString() ?? ''] = Map<String, dynamic>.from(art);
-    }
-    for (final sRule in serverRules) {
-      final id = sRule['id']?.toString() ?? '';
-      if (id.isNotEmpty && merged.containsKey(id)) {
-        merged[id] = {...merged[id]!, ...sRule};
-      } else if (id.isNotEmpty) {
-        merged[id] = sRule;
-      }
-    }
-    return merged.values.toList();
+    // Constitutional text is authoritative only when it comes from the
+    // server. Never merge it with client-maintained baseline articles: that
+    // can produce a Constitution version that was never adopted.
+    return serverRules;
   }
 
   @override
@@ -318,10 +68,10 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
             .map(Map<String, dynamic>.from)
             .where((event) {
               final type = event['event_type']?.toString().toLowerCase() ?? '';
-              return type.contains('rule') ||
-                  type.contains('charter') ||
-                  type.contains('tax') ||
-                  type.contains('constitution');
+              return type == 'constitutional_amendment_enacted' ||
+                  type == 'constitution_amended' ||
+                  type == 'organization_charter_amended' ||
+                  type == 'territory_charter_amended';
             })
             .take(12)
             .toList()
@@ -398,7 +148,7 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Reference view: the authoritative constitutional rule feed is not available in this snapshot. These baseline articles are informational and cannot change gameplay until confirmed by the server.',
+                      'CONSTITUTION UNAVAILABLE\n\nThe current canonical Constitution could not be verified from the server. No local or reconstructed articles are shown because they could be outdated or never adopted.',
                       style: context.bodyStyle,
                     ),
                   ),
@@ -416,13 +166,19 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
             title: 'CONSTITUTIONAL STATUTES (${filteredRules.length})',
             showHeader: true,
             showSurface: false,
-            child: filteredRules.isEmpty
+            child: !hasServerRules
                 ? const EarthEmptyState(
                     message:
-                        'No constitutional statutes match your search query.',
-                    icon: Icons.search_off_outlined,
+                        'The constitutional rule registry is unavailable. Retry after the canonical feed is restored.',
+                    icon: Icons.gavel_outlined,
                   )
-                : _buildStatuteList(context, filteredRules),
+                : filteredRules.isEmpty
+                    ? const EarthEmptyState(
+                        message:
+                            'No constitutional statutes match your search query.',
+                        icon: Icons.search_off_outlined,
+                      )
+                    : _buildStatuteList(context, filteredRules),
           ),
 
           SizedBox(height: context.spacingSection),
@@ -656,7 +412,14 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
 
   Widget _buildStatuteCard(BuildContext context, Map<String, dynamic> rule,
       {required bool isLast}) {
-    final isImmutable = rule['immutable'] == true;
+    final invariant = rule['invariant'] == true ||
+        rule['immutability']?.toString().toUpperCase() == 'INVARIANT';
+    final overridePolicy = rule['override_policy']?.toString().toUpperCase();
+    final status = invariant
+        ? 'INVARIANT'
+        : overridePolicy == 'LOCAL_ALLOWED'
+            ? 'LOCAL OVERRIDE'
+            : 'AMENDABLE';
     final id = rule['id']?.toString() ?? '';
     final code = rule['rule_number']?.toString() ?? '';
     final title = rule['title']?.toString() ?? 'Statute';
@@ -715,9 +478,9 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                 ),
               ),
               EarthBadge(
-                label: isImmutable ? 'INVARIANT' : 'OVERRIDABLE',
+                label: status,
                 customColor:
-                    isImmutable ? context.primaryColor : context.secondaryColor,
+                    invariant ? context.primaryColor : context.secondaryColor,
               ),
             ],
           ),
