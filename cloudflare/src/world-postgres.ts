@@ -93,29 +93,38 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                              COALESCE(v.oppose_count, 0) AS oppose,
                              COALESCE(v.abstain_count, 0) AS abstain,
                              COALESCE(v.voter_count, 0) AS cast_count,
-                             COALESCE(p.eligible_voter_count, 0) AS eligible_voter_count,
+                             0 AS eligible_voter_count,
                              b.choice AS my_vote,
                              jsonb_build_object(
                                'canVote', CASE
-                                 WHEN p.decision_status <> 'voting' THEN FALSE
+                                 WHEN p.status NOT IN ('OPEN', 'VOTING') THEN FALSE
                                  WHEN p.institution_id = 'OUC-001' OR i.kind = 'WORLD' THEN TRUE
                                  WHEN i.kind = 'CITY' OR c.id IS NOT NULL THEN EXISTS (
                                    SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id
-                                    WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND (ha.city_id = p.institution_id OR ha.city_id = i.id))
+                                    WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND (ha.primary_territory_id = p.institution_id OR ha.primary_territory_id = i.id))
                                  WHEN i.kind = 'CORPORATION' THEN EXISTS (
                                    SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id
                                     WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND ha.corporation_id IN (p.institution_id, i.id))
                                  ELSE FALSE END,
                                'canPropose', FALSE,
                                'myVote', b.choice,
-                               'ineligibleReason', CASE WHEN p.decision_status <> 'voting' THEN 'Voting is not open.' ELSE NULL END
+                               'ineligibleReason', CASE WHEN p.status NOT IN ('OPEN', 'VOTING') THEN 'Voting is not open.' ELSE NULL END
                              ) AS viewer
                         FROM proposals p
                         LEFT JOIN humans h ON h.id = p.created_by_human_id
                         LEFT JOIN institutions i ON i.id = p.institution_id
-                        LEFT JOIN territories c ON c.id = p.institution_id
-                        LEFT JOIN proposal_vote_totals v ON v.proposal_id = p.id
-                        LEFT JOIN ballots b ON b.proposal_id = p.id AND b.human_id = $1
+                        LEFT JOIN territories c ON c.id = COALESCE(p.target_id, p.institution_id)
+                        LEFT JOIN (
+                          SELECT proposal_id,
+                                 COUNT(*) FILTER (WHERE LOWER(choice) = 'support') AS support_count,
+                                 COUNT(*) FILTER (WHERE LOWER(choice) = 'oppose') AS oppose_count,
+                                 COUNT(*) FILTER (WHERE LOWER(choice) = 'abstain') AS abstain_count,
+                                 COUNT(*) AS voter_count
+                            FROM ballots
+                           GROUP BY proposal_id
+                        ) v ON v.proposal_id = p.id
+                        LEFT JOIN ballots b ON b.proposal_id = p.id
+                                           AND b.cast_by_human_id = $1
                        WHERE p.status IN ('OPEN', 'VOTING', 'PASSED')
                        ORDER BY p.created_game_day DESC, p.id LIMIT 100`, [viewerId ?? null]),
     listRankings(repository),
