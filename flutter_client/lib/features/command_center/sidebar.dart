@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/navigation_registry.dart';
+import '../../core/onboarding_controller.dart';
 import '../../shared/design_system/earth_theme_context.dart';
+import '../onboarding/onboarding_welcome_dialog.dart';
 import 'theme_customizer_dialog.dart';
 
 class Sidebar extends StatefulWidget {
@@ -401,7 +403,7 @@ class _SidebarState extends State<Sidebar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 1. UNIFIED USER PROFILE TILE (Navigates to Account & Preferences)
+          // 1. UNIFIED USER PROFILE BUTTON (Navigates to Account & Preferences)
           Material(
             color: isAccountSelected
                 ? context.primaryColor.withValues(alpha: 0.14)
@@ -427,8 +429,8 @@ class _SidebarState extends State<Sidebar> {
                 child: Row(
                   children: [
                     Container(
-                      width: 28,
-                      height: 28,
+                      width: 26,
+                      height: 26,
                       decoration: BoxDecoration(
                         color: context.primaryColor.withValues(alpha: 0.18),
                         shape: BoxShape.circle,
@@ -449,33 +451,20 @@ class _SidebarState extends State<Sidebar> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            humanName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isAccountSelected
-                                  ? context.inkColor
-                                  : context.inkColor.withValues(alpha: 0.9),
-                            ),
-                          ),
-                          Text(
-                            'House $houseName',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: context.mutedColor,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        humanName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: isAccountSelected
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                          color: isAccountSelected
+                              ? context.inkColor
+                              : context.inkColor.withValues(alpha: 0.9),
+                          letterSpacing: 0.2,
+                        ),
                       ),
                     ),
                     Icon(
@@ -492,7 +481,7 @@ class _SidebarState extends State<Sidebar> {
           ),
           const SizedBox(height: 6),
 
-          // 2. QUICK ACTION BAR (Appearance · Audio · Security · Logout)
+          // 2. QUICK ACTION BAR (Appearance · Audio · Onboarding · Logout)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -535,21 +524,23 @@ class _SidebarState extends State<Sidebar> {
                   });
                 },
               ),
-              // Security
-              if (widget.onSecurity != null)
-                IconButton(
-                  icon: const Icon(Icons.lock_outline_rounded, size: 16),
-                  tooltip: 'Security & Sessions',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 30),
-                  color: context.mutedColor,
-                  onPressed: () {
-                    EarthAudioEngine.instance.playClick();
-                    widget.onSecurity?.call();
-                  },
-                ),
+              // Guide & Onboarding
+              IconButton(
+                icon: const Icon(Icons.school_outlined, size: 16),
+                tooltip: 'Guide & Onboarding',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 30),
+                color: context.mutedColor,
+                onPressed: () {
+                  EarthAudioEngine.instance.playClick();
+                  OnboardingController.instance.setDismissed(false);
+                  showOnboardingWelcomeDialog(
+                    context,
+                    onNavigate: widget.onNavigate,
+                  );
+                },
+              ),
               // Logout
               if (widget.onLogout != null)
                 IconButton(
@@ -662,6 +653,21 @@ class _SidebarState extends State<Sidebar> {
                     onPressed: () {
                       EarthAudioEngine.instance.playClick();
                       showThemeCustomizerDialog(context);
+                    },
+                  ),
+                ),
+                Tooltip(
+                  message: 'Guide & Onboarding',
+                  child: IconButton(
+                    icon: const Icon(Icons.school_outlined, size: 18),
+                    color: context.mutedColor,
+                    onPressed: () {
+                      EarthAudioEngine.instance.playClick();
+                      OnboardingController.instance.setDismissed(false);
+                      showOnboardingWelcomeDialog(
+                        context,
+                        onNavigate: widget.onNavigate,
+                      );
                     },
                   ),
                 ),
