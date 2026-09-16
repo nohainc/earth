@@ -115,20 +115,18 @@ test('public landing page and game client are served from the same entrypoint', 
   assert.equal(landing.status, 200);
   assert.match(landing.headers.get('content-type'), /text\/html/);
   assert.match(landingHtml, /Build a future/);
-  assert.match(landingHtml, /prototype3\.html/);
-  const game = await fetch(`http://127.0.0.1:${port}/prototype3.html`);
+  assert.match(landingHtml, /UNITED CORPORATIONS/);
+  const game = await fetch(`http://127.0.0.1:${port}/app`);
   assert.equal(game.status, 200);
-  assert.match(await game.text(), /The world is moving/);
+  assert.match(await game.text(), /flutter|<base href/i);
 });
 
 test('new user-facing product copy uses UC terminology', async () => {
   const landingHtml = await (await fetch(`http://127.0.0.1:${port}/`)).text();
-  const prototypeHtml = await (await fetch(`http://127.0.0.1:${port}/prototype3.html`)).text();
-  assert.match(landingHtml, /A UC WORLD/);
-  assert.match(landingHtml, />UC</);
-  assert.match(prototypeHtml, /UNITED CORPORATIONS|A UC WORLD/);
+  const appHtml = await (await fetch(`http://127.0.0.1:${port}/app`)).text();
+  assert.match(landingHtml, /UNITED CORPORATIONS/);
+  assert.match(appHtml, /flutter|<base href/i);
   assert.doesNotMatch(landingHtml, /AN OUC WORLD|THE OUC WORLD|>OUC</);
-  assert.doesNotMatch(prototypeHtml, /AN OUC WORLD|OUC \/ CENTRAL MARKET/);
 });
 
 test('authentication flow supports register, login, session lookup, and logout', async () => {

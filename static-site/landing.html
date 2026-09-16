@@ -8,7 +8,7 @@
 </head>
 <body>
   <div class="glow glow-a"></div><div class="glow glow-b"></div>
-  <nav><a class="brand" href="/"><span>◌</span><b>EARTH</b><small>UNITED CORPORATIONS</small></a><div class="links"><a href="#world">The world</a><a href="#systems">Systems</a><a href="#principles">Principles</a></div><a class="nav-cta" href="/app">Enter EARTH <span>↗</span></a></nav>
+  <nav><a class="brand" href="/"><span>◌</span><b>EARTH</b><small>UNITED CORPORATIONS</small></a><div class="links"><a href="#world">The world</a><a href="#systems">Systems</a><a href="#principles">Principles</a></div><div class="nav-actions"><button id="theme" type="button" aria-label="Toggle color theme" aria-pressed="false">◐</button><a class="nav-cta" href="/app">Enter EARTH <span>↗</span></a></div></nav>
   <main>
     <section class="hero">
       <div class="hero-copy"><p class="eyebrow"><i></i> A PERSISTENT SHARED FUTURE SOCIETY</p><h1>Build a future<br><em>worth inheriting.</em></h1><p class="lede">EARTH is a living economic and civic world where your decisions shape markets, institutions, technology, and the generations that follow.</p><div class="actions"><a class="button primary" href="/app">Create your identity <span>→</span></a><a class="text-link" href="/app">Already have an identity? Sign in</a></div><p class="note">Web-first closed alpha · No physical warfare · No pay-to-win</p></div>
@@ -21,4 +21,19 @@
     <section class="final"><p class="eyebrow">THE WORLD IS WAITING</p><h2>What will your generation<br>leave behind?</h2><p>Take your first position in the shared future.</p><a class="button primary" href="/app">Enter EARTH <span>→</span></a></section>
   </main>
   <footer><span>EARTH · UNITED CORPORATIONS</span><span>Decision-first · Transparent · Persistent</span><span>Closed alpha</span></footer>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const button = document.querySelector('#theme');
+      const saved = localStorage.getItem('earth-theme');
+      if (saved === 'light') root.dataset.theme = 'light';
+      button?.addEventListener('click', () => {
+        const light = root.dataset.theme !== 'light';
+        root.dataset.theme = light ? 'light' : 'dark';
+        root.style.colorScheme = light ? 'light' : 'dark';
+        button.setAttribute('aria-pressed', String(light));
+        localStorage.setItem('earth-theme', light ? 'light' : 'dark');
+      });
+    })();
+  </script>
 </body></html>

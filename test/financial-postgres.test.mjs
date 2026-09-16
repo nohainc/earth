@@ -5,9 +5,11 @@ import { transferCredits } from '../cloudflare/src/financial-postgres.ts';
 class FakeRepository {
   constructor(row) { this.row = row; this.calls = []; }
 
+  async transaction(callback) { return callback(this); }
+
   async query(sql, params) {
     this.calls.push({ sql, params });
-    if (sql.includes('FROM economic_accounts')) return { rows: [{ account_id: params[0] === input.debitAccount ? '101' : '102' }] };
+    if (sql.includes('FROM economic_accounts')) return { rows: [{ account_id: params[0] === input.debitPrincipalId ? '101' : '102' }] };
     if (sql.includes('earth_post_transaction')) return { rows: this.row ? [{ transaction_id: input.ledgerId, created: this.row.already_processed !== true }] : [] };
     return { rows: this.row ? [this.row] : [] };
   }
@@ -16,8 +18,10 @@ class FakeRepository {
 const input = {
   ledgerId: '00000000-0000-0000-0000-000000000001',
   gameDay: 12,
-  debitAccount: 'human-account',
-  creditAccount: 'account-ouc-treasury',
+  debitPrincipalId: 'human-account',
+  debitPurpose: 'WALLET',
+  creditPrincipalId: 'earth-treasury',
+  creditPurpose: 'TREASURY',
   amount: 12.34,
   reasonType: 'tax_settlement',
   reasonId: 'human-account',

@@ -2781,10 +2781,11 @@ function sendError(res, status, message, code = null, correlationId = null, req 
 
 async function serveStatic(res, pathname) {
   const files = {
-    '/': resolve('index.html'),
-    '/index.html': resolve('index.html'),
-    '/landing': resolve('index.html'),
-    '/landing.css': resolve('landing.css'),
+    '/': resolve('static-site/landing.html'),
+    '/index.html': resolve('static-site/landing.html'),
+    '/landing': resolve('static-site/landing.html'),
+    '/landing/': resolve('static-site/landing.html'),
+    '/landing.css': resolve('static-site/landing.css'),
     '/prototype3.html': resolve('prototype3.html'),
     '/prototype3.css': resolve('prototype3.css'),
     '/prototype3.js': resolve('prototype3.js'),
