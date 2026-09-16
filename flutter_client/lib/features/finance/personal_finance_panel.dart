@@ -1606,6 +1606,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
             ClipRRect(
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
+                key: ValueKey('deposit-progress-${deposit['id'] ?? 'unknown'}'),
                 value: progress,
                 minHeight: 4,
                 backgroundColor: Colors.white.withValues(alpha: .08),

@@ -6,7 +6,7 @@ Run the maintained Phase 7 gate locally before a deployment:
 DATABASE_URL='postgres://earth:earth_dev_only@localhost:5432/earth' npm run release:rehearse
 ```
 
-The rehearsal is fail-closed and verifies migration ordering, the live schema manifest, canonical schema shape, PostgreSQL invariants, generated contracts, deployment route coverage, dependency security, mutation boundaries, Flutter analysis and release assets, maintained V4 page contracts, backend certification, and local deployment canaries.
+The rehearsal is fail-closed and verifies migration ordering, the live schema manifest, canonical schema shape, PostgreSQL invariants, generated contracts, deployment route coverage, dependency security, mutation boundaries, Flutter analysis and release assets, maintained V4 Flutter gameplay tests, maintained V4 page contracts, backend certification, and local deployment canaries.
 
 For an artifact-only check when PostgreSQL is intentionally unavailable:
 

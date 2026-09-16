@@ -283,6 +283,6 @@ void main() {
 
     expect(find.text('Withdrawn'), findsOneWidget);
     expect(find.widgetWithText(EarthButton, 'WITHDRAW'), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byKey(const ValueKey('deposit-progress-DEP-WITHDRAWN')), findsNothing);
   });
 }
