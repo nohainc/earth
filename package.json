@@ -35,6 +35,7 @@
     "test:live": "node --experimental-strip-types --test test/postgres-live-e2e.test.mjs",
     "test:clean-room-runtime": "node --experimental-strip-types scripts/certify-clean-room-runtime.mjs",
     "test:pages": "./scripts/run-all-page-tests.sh",
+    "test:pages:legacy": "./scripts/run-legacy-page-tests.sh",
     "test:integration": "./scripts/run-integration-tests.sh",
     "test:ui": "bash ./scripts/run-ui-tests.sh",
     "test:ui:headed": "EARTH_UI_HEADED=true bash ./scripts/run-ui-tests.sh",

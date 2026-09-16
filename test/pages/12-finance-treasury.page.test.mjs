@@ -1,54 +1,48 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { Client } from "pg";
-import { PostgresRepository } from "../../cloudflare/src/repository.ts";
-import { publicSpending, settleTax } from "../../cloudflare/src/finance-postgres.ts";
-import { recordDailyNetWorthSnapshot } from "../../cloudflare/src/net-worth-postgres.ts";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { Client } from 'pg';
+import { PostgresRepository } from '../../cloudflare/src/repository.ts';
+import { getTaxStatement } from '../../cloudflare/src/tax-statement-postgres.ts';
+import { getNetWorthHistory, recordDailyNetWorthSnapshot } from '../../cloudflare/src/net-worth-postgres.ts';
 
-const DATABASE_URL = process.env.DATABASE_URL || "postgres://earth:earth_dev_only@localhost:5432/earth";
-const TEST_HUMAN_ID = "H-D11AA14C";
-
-test("Page 12: Personal Finance, Taxation & Municipal Treasury", async (t) => {
-  const client = new Client({ connectionString: DATABASE_URL });
+const databaseUrl = process.env.DATABASE_URL || 'postgres://earth:earth_dev_only@localhost:5432/earth';
+test('Page 12: Personal Finance, Taxation and Net Worth', async (t) => {
+  const client = new Client({ connectionString: databaseUrl });
   await client.connect();
-  const repo = new PostgresRepository(client);
+  const repository = new PostgresRepository(client);
+  const principal = (await repository.query("SELECT id, house_id FROM humans WHERE status = 'active' ORDER BY id LIMIT 1")).rows[0];
 
-  t.after(async () => {
-    await client.end();
+  t.after(() => client.end());
+
+  if (!principal) {
+    t.skip('requires at least one active local test Human');
+    return;
+  }
+
+  await t.test('tax statement is sourced from canonical V4 facts', async () => {
+    const statement = await getTaxStatement(repository, principal.id);
+    assert.equal(statement.generatedFrom, 'postgres-canonical-facts');
+    assert.equal(statement.houseId, principal.house_id);
+    assert.ok(Array.isArray(statement.activeRules));
+    assert.ok(Array.isArray(statement.financialObligations));
+    assert.ok(Array.isArray(statement.taxObligations));
   });
 
-  await t.test("TC-12.1: Public Treasury Spending with Mayor Role", async () => {
-    await repo.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ('account-ouc-treasury', 'OUC', 1000000.00, 'CREDIT') ON CONFLICT (account_id) DO UPDATE SET balance = account_balances.balance + 50000.00");
-    await repo.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ('account-city-CITY-0084', 'CITY-0084', 50000.00, 'CREDIT') ON CONFLICT (account_id) DO NOTHING");
-    await repo.query("UPDATE institutions SET administrator_human_id = $1 WHERE id = 'CITY-0084'", [TEST_HUMAN_ID]);
-
-    const correlationId = "pub-spend-" + Date.now();
-    const res = await publicSpending(repo, {
-      actorId: TEST_HUMAN_ID,
-      cityId: "CITY-0084",
-      category: "healthcare",
-      amount: 150.00,
-      correlationId,
-    });
-
-    assert.equal(res.ok, true);
-    assert.equal(res.amount, 150.00);
+  await t.test('net-worth snapshot is idempotent for a game day', async () => {
+    const first = await recordDailyNetWorthSnapshot(repository, principal.id, 14528);
+    const second = await recordDailyNetWorthSnapshot(repository, principal.id, 14528);
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, true);
+    assert.equal(second.snapshot.game_day, 14528);
+    assert.equal(second.snapshot.human_id, principal.id);
   });
 
-  await t.test("TC-12.2: Settle Personal Tax Obligation", async () => {
-    await repo.query("UPDATE account_balances SET balance = balance + 500.00 WHERE owner_id = $1 AND currency = 'CREDIT'", [TEST_HUMAN_ID]);
-    await repo.query("INSERT INTO tax_rules (id, scope, category, rate, version, active) VALUES ('TAX-OUC-BASIC', 'universal', 'income', 0.05, 1, true) ON CONFLICT (id) DO UPDATE SET rate = 0.05");
-
-    const res = await settleTax(repo, TEST_HUMAN_ID, 100.00);
-
-    assert.equal(res.ok, true);
-  });
-
-  await t.test("TC-12.3: Record Daily Net Worth Snapshot for Chart Analytics", async () => {
-    const res = await recordDailyNetWorthSnapshot(repo, TEST_HUMAN_ID, 14528);
-
-    assert.equal(res.ok, true);
-    assert.ok(res.snapshot);
-    assert.ok(typeof res.snapshot.total_net_worth === "number" || typeof res.snapshot.total_net_worth === "string");
+  await t.test('net-worth history exposes a bounded canonical summary', async () => {
+    const history = await getNetWorthHistory(client, principal.id);
+    assert.equal(history.ok, true);
+    assert.equal(history.humanId, principal.id);
+    assert.ok(Array.isArray(history.snapshots));
+    assert.ok(history.snapshots.length <= 60);
+    assert.equal(typeof history.summary.currentNetWorth, 'number');
   });
 });
