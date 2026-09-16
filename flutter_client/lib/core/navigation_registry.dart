@@ -365,14 +365,17 @@ class NavigationRegistry {
 
   static int groupIndexForSection(String section) {
     final clean = normalizeRoute(section);
-    if (clean.startsWith('my-community') || clean.startsWith('messages')) {
+    if (clean == 'account' || clean == 'messages' || clean == 'notifications') {
+      return -1;
+    }
+    if (clean.startsWith('my-community')) {
       return NavigationGroup.society.index;
     }
     final item = findItem(clean);
-    if (item != null) {
+    if (item != null && item.isPrimary) {
       return item.group.index;
     }
-    return NavigationGroup.command.index;
+    return -1;
   }
 
   static String pageTitle(String section, [EarthState? state]) {

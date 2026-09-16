@@ -346,9 +346,80 @@ void main() {
     expect(find.byTooltip('Account'), findsOneWidget);
 
     // Tapping a slim icon triggers navigation
-    await tester.tap(find.byTooltip('Market'));
+    await tester.tap(find.byTooltip('Overview'));
     await tester.pumpAndSettle();
 
-    expect(navigatedTo, 'market');
+    expect(navigatedTo, 'command');
+  });
+
+  testWidgets('Account button in sidebar footer does not activate House group',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 185, 'minute': 720},
+      'human': {'name': 'Amara Vance'},
+      'life': {'houseName': 'House Vance'},
+      'membership': {},
+      'institutions': {},
+      'business': {},
+      'technology': {'research': {}},
+    });
+
+    String? navigatedTo;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 900,
+            width: 250,
+            child: Sidebar(
+              state: state,
+              selectedSection: 'command',
+              onNavigate: (section) {
+                navigatedTo = section;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Initially COMMAND is expanded
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('Amara'), findsNothing);
+    expect(find.text('Vance'), findsNothing);
+
+    // Tap the account button in the footer
+    final accountFinder = find.text('Amara Vance');
+    expect(accountFinder, findsOneWidget);
+    await tester.tap(accountFinder);
+    await tester.pumpAndSettle();
+
+    expect(navigatedTo, 'account');
+
+    // Re-pump with selectedSection = 'account'
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 900,
+            width: 250,
+            child: Sidebar(
+              state: state,
+              selectedSection: 'account',
+              onNavigate: (section) {
+                navigatedTo = section;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // HOUSE group items should NOT be expanded/visible
+    expect(find.text('Vance'), findsNothing);
+    expect(find.text('Automation'), findsNothing);
   });
 }

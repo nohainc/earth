@@ -57,6 +57,12 @@ void main() {
       expect(NavigationRegistry.groupIndexForSection('initiatives'), 4);
       expect(NavigationRegistry.groupIndexForSection('constitution'), 4);
       expect(NavigationRegistry.groupIndexForSection('history'), 4);
+
+      // Secondary / Footer / Utility routes do NOT expand accordion groups
+      expect(NavigationRegistry.groupIndexForSection('account'), -1);
+      expect(NavigationRegistry.groupIndexForSection('messages'), -1);
+      expect(NavigationRegistry.groupIndexForSection('notifications'), -1);
+      expect(NavigationRegistry.groupIndexForSection('unknown'), -1);
     });
 
     test('resolves dynamic labels and titles correctly without hardcoded spelling changes', () {
