@@ -113,7 +113,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                         FROM proposals p
                         LEFT JOIN humans h ON h.id = p.created_by_human_id
                         LEFT JOIN institutions i ON i.id = p.institution_id
-                        LEFT JOIN cities c ON c.id = p.institution_id
+                        LEFT JOIN territories c ON c.id = p.institution_id
                         LEFT JOIN proposal_vote_totals v ON v.proposal_id = p.id
                         LEFT JOIN ballots b ON b.proposal_id = p.id AND b.human_id = $1
                        WHERE p.status IN ('OPEN', 'VOTING', 'PASSED')
