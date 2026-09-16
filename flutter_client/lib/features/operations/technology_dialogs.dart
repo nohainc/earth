@@ -4,24 +4,46 @@ import '../../core/models/earth_state.dart';
 import '../../core/models/decision_consequence.dart';
 import '../../shared/widgets/consequence_preview_card.dart';
 
-Future<void> showResearchComposerDialog(BuildContext context,
-    Future<void> Function(Future<EarthState> Function()) action) async {
-  String name = 'Automated Assembly';
-  final budget = TextEditingController(text: '240');
+Future<void> showResearchComposerDialog(
+    BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    List<dynamic> catalog) async {
+  final entries = catalog
+      .whereType<Map>()
+      .map((raw) {
+        return Map<String, dynamic>.from(raw);
+      })
+      .where((item) => item['name'] != null)
+      .toList();
+  if (entries.isEmpty) return;
+  String name = entries.first['name'].toString();
+  final initialCost = entries.first['research_credit_cost_units'] ??
+      entries.first['researchCostUnits'] ??
+      entries.first['researchCost'] ??
+      0;
+  final budget = TextEditingController(text: initialCost.toString());
   String focus = 'efficiency';
-  int minimumBudget(String technology) => const {
-        'Automated Assembly': 240,
-        'Clean Energy Systems': 320,
-        'Food Synthesis': 280,
-        'Predictive Maintenance': 300,
-        'Civic Network Infrastructure': 360,
-      }[technology] ?? 240;
+  Map<String, dynamic> selectedEntry() => entries.firstWhere(
+        (item) => item['name'].toString() == name,
+        orElse: () => entries.first,
+      );
+  double minimumBudget(String technology) {
+    final item = selectedEntry();
+    return double.tryParse((item['research_credit_cost_units'] ??
+                item['researchCostUnits'] ??
+                item['researchCost'] ??
+                0)
+            .toString()) ??
+        0;
+  }
+
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setState) {
-            final parsedBudget = double.tryParse(budget.text.trim()) ?? 240.0;
-            return AlertDialog(
+            builder: (context, setState) {
+              final parsedBudget =
+                  double.tryParse(budget.text.trim()) ?? minimumBudget(name);
+              return AlertDialog(
                 title: const Text('Start Research Project'),
                 content: SizedBox(
                   width: 520,
@@ -30,24 +52,24 @@ Future<void> showResearchComposerDialog(BuildContext context,
                       DropdownButtonFormField<String>(
                           isExpanded: true,
                           initialValue: name,
-                          items: const [
-                            'Automated Assembly',
-                            'Clean Energy Systems',
-                            'Food Synthesis',
-                            'Predictive Maintenance',
-                            'Civic Network Infrastructure',
-                          ].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+                          items: entries
+                              .map((item) => DropdownMenuItem(
+                                  value: item['name'].toString(),
+                                  child: Text(item['name'].toString())))
+                              .toList(),
                           onChanged: (value) {
                             if (value != null) setState(() => name = value);
                           },
-                          decoration: const InputDecoration(labelText: 'Technology catalogue')),
+                          decoration: const InputDecoration(
+                              labelText: 'Technology catalogue')),
                       const SizedBox(height: 10),
                       TextField(
                           controller: budget,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: InputDecoration(
-                              labelText: 'Initial budget (minimum ${minimumBudget(name)} C)'),
+                              labelText:
+                                  'Initial budget (minimum ${minimumBudget(name)} C)'),
                           onChanged: (_) => setState(() {})),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
@@ -59,8 +81,8 @@ Future<void> showResearchComposerDialog(BuildContext context,
                             'safety',
                             'cost'
                           ]
-                              .map((item) =>
-                                  DropdownMenuItem(value: item, child: Text(item)))
+                              .map((item) => DropdownMenuItem(
+                                  value: item, child: Text(item)))
                               .toList(),
                           onChanged: (value) {
                             if (value != null) setState(() => focus = value);
@@ -72,7 +94,8 @@ Future<void> showResearchComposerDialog(BuildContext context,
                         consequence: DecisionConsequence.researchFunding(
                           projectName: name,
                           computeAllocated: parsedBudget,
-                          unlockYield: '+15% $focus boost across industrial production',
+                          unlockYield:
+                              'Effects are defined by the approved technology catalogue.',
                         ),
                       ),
                     ]),
@@ -88,9 +111,8 @@ Future<void> showResearchComposerDialog(BuildContext context,
                         if (amount == null || amount < minimumBudget(name)) {
                           return;
                         }
-                        await action(() => const EarthApi().startResearch(
-                            name, amount,
-                            focus: focus));
+                        await action(() => const EarthApi()
+                            .startResearch(name, amount, focus: focus));
                         if (dialogContext.mounted) Navigator.pop(dialogContext);
                       },
                       child: const Text('Start')),

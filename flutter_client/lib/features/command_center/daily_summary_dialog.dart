@@ -34,6 +34,7 @@ class DailySummaryDialog extends StatefulWidget {
 }
 
 class _DailySummaryDialogState extends State<DailySummaryDialog> {
+  static int? _lastChimedBriefingDay;
   bool _loading = true;
   String? _error;
   DailySummaryReport? _report;
@@ -44,27 +45,33 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
     _loadBriefing();
   }
 
-  Future<void> _loadBriefing() async {
+  Future<void> _loadBriefing([int? day]) async {
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final res = await widget.api.getDailySummary();
+      final res = await widget.api.getDailySummary(day: day);
       final isOk = res['ok'] == true || res['ok'] == 'true';
       if (isOk) {
         if (mounted) {
           setState(() {
-            _report = DailySummaryReport.fromJson(Map<String, dynamic>.from(res));
+            _report =
+                DailySummaryReport.fromJson(Map<String, dynamic>.from(res));
             _loading = false;
           });
-          EarthAudioEngine.instance.playChime();
+          if (_lastChimedBriefingDay == null ||
+              _report!.gameDay > _lastChimedBriefingDay!) {
+            _lastChimedBriefingDay = _report!.gameDay;
+            EarthAudioEngine.instance.playChime();
+          }
         }
       } else {
         if (mounted) {
           setState(() {
-            _error = res['error']?.toString() ?? 'Failed to load executive briefing';
+            _error =
+                res['error']?.toString() ?? 'Failed to load executive briefing';
             _loading = false;
           });
         }
@@ -95,7 +102,8 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 880, maxHeight: 740),
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(context.tokens.number('pageTopics.cardPadding', 16)),
+          padding: EdgeInsets.all(
+              context.tokens.number('pageTopics.cardPadding', 16)),
           child: _buildBriefingBody(),
         ),
       ),
@@ -106,7 +114,8 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
     if (_loading) {
       return SizedBox(
         height: 220,
-        child: Center(child: CircularProgressIndicator(color: context.primaryColor)),
+        child: Center(
+            child: CircularProgressIndicator(color: context.primaryColor)),
       );
     }
     if (_error != null) {
@@ -136,68 +145,69 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
   }
 
   Widget _buildHeroDeltaBanner(DailySummaryReport r) {
-    final delta = r.netWealthDelta.delta;
-    final isPos = delta >= 0;
+    final net = r.financial.netProfit;
 
     return EarthMetricGrid(
       metrics: [
         EarthMetricTile(
-          label: 'NET WORTH',
-          value: '${r.netWealthDelta.current.toStringAsFixed(2)} CR',
-          subtitle: 'Current sovereign valuation',
-          icon: Icons.insights_outlined,
+          label: 'NET CREDIT FLOW',
+          value: '${net >= 0 ? '+' : ''}${formatWholeNumber(net)} CR',
+          subtitle:
+              net >= 0 ? 'Positive completed day' : 'Negative completed day',
+          icon: net >= 0 ? Icons.trending_up : Icons.trending_down,
           accentColor: context.primaryColor,
         ),
         EarthMetricTile(
-          label: 'NET CHANGE',
-          value: '${isPos ? '+' : ''}${delta.toStringAsFixed(2)} CR',
-          subtitle: '${isPos ? '+' : ''}${r.netWealthDelta.deltaPct.toStringAsFixed(2)}% since previous day close',
-          icon: isPos ? Icons.trending_up : Icons.trending_down,
-          accentColor: isPos ? context.successColor : context.errorColor,
+          label: 'INCOME',
+          value: '+${formatWholeNumber(r.financial.totalIncome)} CR',
+          subtitle: 'Recorded House receipts',
+          icon: Icons.south_west_outlined,
+          accentColor: context.successColor,
         ),
         EarthMetricTile(
-          label: 'NET CASHFLOW',
-          value: '${r.financial.netProfit >= 0 ? '+' : ''}${r.financial.netProfit.toStringAsFixed(2)} CR/day',
-          subtitle: r.financial.netProfit >= 0 ? 'Operating surplus' : 'Operating deficit',
-          icon: Icons.account_balance_wallet_outlined,
-          accentColor: r.financial.netProfit >= 0 ? context.successColor : context.warningColor,
+          label: 'EXPENSES',
+          value: '-${formatWholeNumber(r.financial.totalExpenses)} CR',
+          subtitle: 'Recorded House outflows',
+          icon: Icons.north_east_outlined,
+          accentColor: context.warningColor,
         ),
       ],
     );
   }
 
   Widget _buildAllBriefingContent(DailySummaryReport r) {
-    final netWealth = r.netWealthDelta;
     final financial = r.financial;
-    final isPosWealth = netWealth.delta >= 0;
 
     final cockpit = EarthPageCockpit(
-      status: 'EXECUTIVE BRIEFING',
-      tag: 'GAME DAY ${r.gameDay}',
+      status: 'DAY ${r.gameDay} COMPLETE',
+      tag: 'DAILY BRIEFING',
       statusColor: context.primaryColor,
-      infoTitle: 'DAILY PRIORITIES & BRIEFING ARCHITECTURE',
+      infoTitle: 'ABOUT THIS BRIEFING',
       infoDescription:
-          '• Overnight Telemetry: Compares sovereign balance and asset valuations across elapsed game days.\n\n• Daily Cashflow: Net daily yields across enterprise dividends, commodity trade, and municipal tax deductions.\n\n• Action Directives: High-urgency operational, commercial, and civic recommendations requiring immediate attention.',
-      title: 'DAILY PRIORITIES',
+          'This report covers the last completed game day for your House. It separates financial results, resource changes, important events, and actions that may need your attention.',
+      title: 'DAILY BRIEFING',
       subtitle:
-          'Executive status report, overnight delta telemetry, and recommended daily directives across Earth',
+          'Your House results, changes, and priorities from the completed day',
       metrics: [
         CockpitMetric(
-          label: 'Net Wealth',
+          label: 'Net Flow',
           value:
-              '${formatWholeNumber(netWealth.current)} (${isPosWealth ? '+' : ''}${netWealth.deltaPct.toStringAsFixed(1)}%)',
-          icon: isPosWealth ? Icons.trending_up : Icons.trending_down,
-          color: isPosWealth ? context.successColor : context.warningColor,
+              '${financial.netProfit >= 0 ? '+' : ''}${formatWholeNumber(financial.netProfit)} CR',
+          icon: financial.netProfit >= 0
+              ? Icons.trending_up
+              : Icons.trending_down,
+          color: financial.netProfit >= 0
+              ? context.successColor
+              : context.warningColor,
         ),
         CockpitMetric(
-          label: 'Net Cashflow',
-          value:
-              '${financial.netProfit >= 0 ? '+' : ''}${formatWholeNumber(financial.netProfit)}',
-          icon: Icons.account_balance_wallet_outlined,
-          color: financial.netProfit >= 0 ? context.successColor : context.warningColor,
+          label: 'Income',
+          value: '+${formatWholeNumber(financial.totalIncome)} CR',
+          icon: Icons.south_west_outlined,
+          color: context.successColor,
         ),
         CockpitMetric(
-          label: 'Directives',
+          label: 'Priorities',
           value: '${r.highlights.length}',
           icon: Icons.bolt_outlined,
           color: r.highlights.isNotEmpty
@@ -211,19 +221,43 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         cockpit,
+        if (r.currentGameDay > 1) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              EarthButton(
+                label: '‹ DAY ${r.gameDay - 1}',
+                onPressed:
+                    r.gameDay > 0 ? () => _loadBriefing(r.gameDay - 1) : null,
+              ),
+              const SizedBox(width: 12),
+              Text('DAY ${r.gameDay}', style: context.widgetTitleStyle),
+              const SizedBox(width: 12),
+              EarthButton(
+                label: 'DAY ${r.gameDay + 1} ›',
+                onPressed: r.gameDay + 1 < r.currentGameDay
+                    ? () => _loadBriefing(r.gameDay + 1)
+                    : null,
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 24),
         EarthSection(
-          title: 'SINCE YOUR LAST VISIT',
+          title: 'DAY ${r.gameDay} RESULTS',
           showSurface: false,
           infoBulletPoints: const [
-            'The financial result compares your current position with the previous game day.',
-            'The change list highlights business, contract, civic, and household effects that may require a decision.',
-            'Open Finance or Activity for the complete ledger and event history.',
+            'This report covers one completed game day, not time since your last visit.',
+            'Routine facts are shown under What Changed; only actionable issues appear under Needs Attention.',
+            'Open Finance or Market for transaction-level detail.',
           ],
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeroDeltaBanner(r),
+              SizedBox(height: context.spacingControl),
+              _buildCreditFlow(r),
               SizedBox(height: context.spacingTopic),
               Text('WHAT CHANGED', style: context.widgetTitleStyle),
               SizedBox(height: context.spacingControl),
@@ -242,19 +276,19 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
         ),
         SizedBox(height: context.spacingTopic),
         EarthSection(
-          title: 'CURRENT OPERATIONS',
+          title: 'RESOURCES & MARKET',
           showSurface: false,
           infoBulletPoints: const [
-            'Active enterprise summary, building portfolio, and output volume.',
+            'Production, consumption, and market activity recorded during this day.',
           ],
-          child: _buildIndustryContent(r),
+          child: _buildResourcesContent(r),
         ),
         SizedBox(height: context.spacingTopic),
         EarthSection(
-          title: 'TERRITORY & CIVIC EFFECTS',
+          title: 'TERRITORY & GOVERNANCE CHANGES',
           showSurface: false,
           infoBulletPoints: const [
-            'Current territorial residency, local taxation, and recent civic legislative resolutions.',
+            'Public territory and governance events recorded during this day.',
           ],
           child: _buildCivicContent(r),
         ),
@@ -262,38 +296,84 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
     );
   }
 
-  Widget _buildRecentChangesContent(DailySummaryReport r) {
-    final changes = <(String, String, IconData, Color)>[
+  Widget _buildCreditFlow(DailySummaryReport r) {
+    final f = r.financial;
+    final rows = [
       (
-        'Financial result',
-        '${r.financial.netProfit >= 0 ? '+' : ''}${formatWholeNumber(r.financial.netProfit)} CR net financial',
-        r.financial.netProfit >= 0 ? Icons.trending_up : Icons.trending_down,
-        r.financial.netProfit >= 0 ? context.successColor : context.errorColor,
+        'Income',
+        '+${formatWholeNumber(f.totalIncome)} CR',
+        context.successColor
       ),
       (
-        'Operations',
-        '${r.buildings.activeBusinesses} enterprises · ${r.buildings.activeBuildings} buildings',
-        Icons.business_center_outlined,
-        context.primaryColor,
+        'Expenses',
+        '-${formatWholeNumber(f.totalExpenses)} CR',
+        context.warningColor
       ),
-      if (r.governance.recentCivicEvents.isNotEmpty)
-        (
-          'Territorial & civic life',
-          r.governance.recentCivicEvents.first,
-          Icons.location_city_outlined,
-          context.secondaryColor,
-        ),
+      (
+        'Taxes paid',
+        '-${formatWholeNumber(f.civicTaxes)} CR',
+        context.mutedColor
+      ),
+      (
+        'Market sales',
+        '+${formatWholeNumber(f.marketSales)} CR',
+        context.successColor
+      ),
+      (
+        'Market purchases',
+        '-${formatWholeNumber(f.marketPurchases)} CR',
+        context.mutedColor
+      ),
     ];
+    return EarthSection(
+      title: 'CREDIT FLOW',
+      showSurface: true,
+      child: Column(
+        children: rows
+            .map((row) => EarthDataRow(
+                  title: row.$1,
+                  trailing: Text(row.$2,
+                      style: context.widgetTitleStyle.copyWith(color: row.$3)),
+                ))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildRecentChangesContent(DailySummaryReport r) {
+    final events = [
+      ...r.buildings.completed,
+      ...r.buildings.upgraded,
+      ...r.buildings.inactive,
+      ...r.researchEvents,
+      ...r.governanceEvents,
+      ...r.houseEvents,
+    ];
+    if (events.isEmpty) {
+      return const EarthEmptyState(
+        message:
+            'Everything operated normally. No material changes were recorded.',
+        icon: Icons.check_circle_outline,
+      );
+    }
 
     return EarthDataList(
-      children: changes.indexed.map((indexed) {
-        final change = indexed.$2;
-        final isLast = indexed.$1 == changes.length - 1;
+      children: events.indexed.map((indexed) {
+        final event = indexed.$2;
+        final isLast = indexed.$1 == events.length - 1;
+        final isProblem =
+            event.type.contains('INACTIVE') || event.type.contains('FAILED');
 
         return EarthDataRow(
-          title: change.$1,
-          subtitle: change.$2,
-          leading: Icon(change.$3, size: context.iconSize, color: change.$4),
+          title: event.title,
+          subtitle: event.details.isEmpty ? event.type : event.details,
+          leading: Icon(
+            isProblem
+                ? Icons.warning_amber_outlined
+                : Icons.check_circle_outline,
+            size: context.iconSize,
+            color: isProblem ? context.warningColor : context.successColor,
+          ),
           showDivider: !isLast,
         );
       }).toList(),
@@ -330,7 +410,9 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
             key: Key('btn-directive-${d.id}'),
             label: d.actionLabel,
             icon: Icons.launch,
-            variant: d.urgency == 'high' ? EarthButtonVariant.danger : EarthButtonVariant.primary,
+            variant: d.urgency == 'high'
+                ? EarthButtonVariant.danger
+                : EarthButtonVariant.primary,
             onPressed: () {
               EarthAudioEngine.instance.playClick();
               if (!widget.isPageMode) Navigator.of(context).pop();
@@ -343,64 +425,52 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
     );
   }
 
-  Widget _buildIndustryContent(DailySummaryReport r) {
-    return EarthMetricGrid(
-      metrics: [
-        EarthMetricTile(
-          label: 'ACTIVE ENTERPRISES',
-          value: '${r.buildings.activeBusinesses}',
-          icon: Icons.storefront_outlined,
-          accentColor: context.primaryColor,
-        ),
-        EarthMetricTile(
-          label: 'DAILY OUTPUT',
-          value: '${r.buildings.totalDailyOutput}',
-          icon: Icons.precision_manufacturing_outlined,
-          accentColor: context.successColor,
-        ),
-        EarthMetricTile(
-          label: 'ACTIVE BUILDINGS',
-          value: '${r.buildings.activeBuildings}',
-          icon: Icons.domain_outlined,
-          accentColor: context.primaryColor,
-        ),
-      ],
-    );
+  Widget _buildResourcesContent(DailySummaryReport r) {
+    final rows = <Widget>[];
+    if (r.resources.isNotEmpty) {
+      rows.addAll(r.resources.map((resource) => EarthDataRow(
+            title: resource.resource,
+            subtitle:
+                'Produced ${formatWholeNumber(resource.produced)} · Consumed ${formatWholeNumber(resource.consumed)}',
+            leading: Icon(
+                resource.net < 0 ? Icons.trending_down : Icons.trending_up,
+                size: context.iconSize,
+                color: resource.net < 0
+                    ? context.warningColor
+                    : context.successColor),
+            trailing: Text(
+                '${resource.net >= 0 ? '+' : ''}${formatWholeNumber(resource.net)}',
+                style: context.widgetTitleStyle),
+          )));
+    }
+    rows.addAll(r.marketMovements.map((movement) => EarthDataRow(
+          title: movement.commodity,
+          subtitle:
+              'Bought ${formatWholeNumber(movement.purchases)} · Sold ${formatWholeNumber(movement.sales)} · Volume ${movement.volume24h}',
+          leading: Icon(Icons.storefront_outlined,
+              size: context.iconSize, color: context.primaryColor),
+        )));
+    return rows.isEmpty
+        ? const EarthEmptyState(
+            message: 'No resource or market activity was recorded.',
+            icon: Icons.inventory_2_outlined)
+        : EarthDataList(children: rows);
   }
 
   Widget _buildCivicContent(DailySummaryReport r) {
-    final c = r.governance;
-
-    return Container(
-      padding: EdgeInsets.all(context.cardPadding),
-      decoration: BoxDecoration(
-        color: context.surfaceColor,
-        borderRadius: BorderRadius.circular(context.radiusCard),
-        border: Border.all(color: context.subtleBorderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'TERRITORIAL RESIDENCY: ${c.territoryResidency.toUpperCase()}',
-            style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Territory Tax Rate: ${c.territoryTaxRatePct}% • Active Senate Bills: ${c.activeProposals}',
-            style: context.widgetFooterStyle,
-          ),
-          if (c.recentCivicEvents.isNotEmpty) ...[
-            SizedBox(height: context.spacingTitleOffset),
-            Text('RECENT CIVIC RESOLUTIONS', style: context.captionStyle),
-            const SizedBox(height: 6),
-            ...c.recentCivicEvents.map((e) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text('• $e', style: context.widgetFooterStyle),
-                )),
-          ],
-        ],
-      ),
-    );
+    if (r.governanceEvents.isEmpty) {
+      return const EarthEmptyState(
+          message: 'No territory or governance changes were recorded.',
+          icon: Icons.account_balance_outlined);
+    }
+    return EarthDataList(
+        children: r.governanceEvents
+            .map((event) => EarthDataRow(
+                  title: event.title,
+                  subtitle: event.details.isEmpty ? event.type : event.details,
+                  leading: Icon(Icons.account_balance_outlined,
+                      size: context.iconSize, color: context.secondaryColor),
+                ))
+            .toList());
   }
 }

@@ -8,18 +8,18 @@ void main() {
     expect(dashboardSectionTitle('market'), 'MARKET');
     expect(dashboardSectionTitle('business'), 'BUSINESS');
     expect(dashboardSectionTitle('civic'), 'GOVERNANCE');
-    expect(dashboardSectionTitle('corporations'), 'DIRECTORY');
-    expect(dashboardSectionTitle('corporation'), 'ORGANIZATION');
-    expect(dashboardSectionTitle('city'), 'TERRITORY');
-    expect(dashboardSectionTitle('my-community'), 'COMMUNITY');
+    expect(dashboardSectionTitle('corporations'), 'CORPORATIONS');
+    expect(dashboardSectionTitle('corporation'), 'MY CORPORATION');
+    expect(dashboardSectionTitle('city'), 'TERRITORIES');
+    expect(dashboardSectionTitle('my-community'), 'COMMUNITIES');
     expect(dashboardSectionTitle('communities'), 'COMMUNITIES');
-    expect(dashboardSectionTitle('technology'), 'RESEARCH');
-    expect(dashboardSectionTitle('life'), 'LIFE');
+    expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
+    expect(dashboardSectionTitle('life'), 'CITIZEN');
     expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
     expect(dashboardSectionTitle('finance'), 'FINANCE');
-    expect(dashboardSectionTitle('activity'), 'ACTIVITY');
-    expect(dashboardSectionTitle('command'), 'COMMAND');
-    expect(dashboardSectionTitle('other'), 'COMMAND');
+    expect(dashboardSectionTitle('activity'), 'NOTIFICATIONS');
+    expect(dashboardSectionTitle('command'), 'OVERVIEW');
+    expect(dashboardSectionTitle('other'), 'OTHER');
   });
 
   testWidgets('Dashboard renders sections in wide and compact layouts',

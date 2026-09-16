@@ -13,48 +13,75 @@ Future<void> showFormationComposer(
   String? territoryName,
 }) async {
   final name = TextEditingController();
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: context.panelColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusPanel),
-        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-      ),
-      title: Text(
-        'Form a Corporation',
-        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
-      ),
-      content: TextField(
-        controller: name,
-        autofocus: true,
-        style: context.bodyStyle.copyWith(color: context.inkColor),
-        decoration: InputDecoration(
-          labelText: 'Corporation name',
-          labelStyle: context.widgetFooterStyle,
+  final territory = TextEditingController(text: territoryName ?? '');
+  try {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: context.panelColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.radiusPanel),
+          side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
         ),
+        title: Text(
+          'Form a Corporation',
+          style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                'Founding creates a primary Territory and makes you its first executive.',
+                style: context.widgetFooterStyle),
+            const SizedBox(height: 12),
+            TextField(
+              controller: name,
+              autofocus: true,
+              style: context.bodyStyle.copyWith(color: context.inkColor),
+              decoration: InputDecoration(
+                labelText: 'Corporation name',
+                labelStyle: context.widgetFooterStyle,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: territory,
+              style: context.bodyStyle.copyWith(color: context.inkColor),
+              decoration: InputDecoration(
+                labelText: 'Primary Territory name',
+                labelStyle: context.widgetFooterStyle,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('Cancel',
+                style:
+                    context.controlStyle.copyWith(color: context.mutedColor)),
+          ),
+          EarthButton(
+            label: 'Submit',
+            onPressed: () async {
+              final selectedName = name.text.trim();
+              if (selectedName.length < 2) return;
+              Navigator.pop(dialogContext);
+              await action(() => const EarthApi().createCorporation(
+                    selectedName,
+                    territoryName: territory.text.trim().isEmpty
+                        ? null
+                        : territory.text.trim(),
+                  ));
+            },
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text('Cancel',
-              style: context.controlStyle.copyWith(color: context.mutedColor)),
-        ),
-        EarthButton(
-          label: 'Submit',
-          onPressed: () async {
-            final selectedName = name.text.trim();
-            if (selectedName.length < 2) return;
-            Navigator.pop(dialogContext);
-            await action(() => const EarthApi().createCorporation(
-                  selectedName,
-                  territoryName: territoryName,
-                ));
-          },
-        ),
-      ],
-    ),
-  );
+    );
+  } finally {
+    name.dispose();
+    territory.dispose();
+  }
 }
 
 Future<void> showCommunityComposer(BuildContext context,
@@ -425,7 +452,7 @@ Future<void> showCommunityApplicationDialog(
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) {
         final answer = messageController.text.trim();
-        final isValid = answer.isNotEmpty;
+        final isValid = true;
 
         return AlertDialog(
           backgroundColor: context.panelColor,
@@ -496,9 +523,10 @@ Future<void> showCommunityApplicationDialog(
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       alignLabelWithHint: true,
-                      labelText: 'Your Answer / Application Note (Required)',
+                      labelText: 'Application note (optional)',
                       labelStyle: context.widgetFooterStyle,
-                      hintText: 'Provide your response to the community...',
+                      hintText:
+                          'Tell the community why you would like to join (optional)...',
                       hintStyle:
                           context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(
@@ -1593,9 +1621,9 @@ Future<void> showCorporationCharterDialog(
 }) async {
   final id = corporation['id']?.toString() ?? '';
   final name = corporation['name']?.toString() ?? id;
-  final capitalCity =
-      corporation['capital_territory_name']?.toString() ??
-      corporation['capital_city_name']?.toString() ?? 'Territory unavailable';
+  final capitalCity = corporation['capital_territory_name']?.toString() ??
+      corporation['capital_city_name']?.toString() ??
+      'Territory unavailable';
   final members = asIntOr(corporation['member_count'], 0);
   final cityCount = asIntOr(corporation['city_count'], 1);
   final treasury = asDouble(corporation['treasury']) ?? 0.0;

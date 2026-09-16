@@ -331,19 +331,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             'House')
         .toString()
         .replaceFirst(RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
-        .replaceFirst(RegExp(r'^of\s+', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\bNoga\b', caseSensitive: false), 'Noha');
-    final legacyPoints = _parseInt(_house['legacy_points'], fallback: 0);
-
-    final legacy = _parseNum(_house['legacy_points'] ??
-        _house['total_legacy'] ??
-        widget.state?.json['legacy_score'] ??
-        legacyPoints);
-    final standing = _parseNum(_house['standing'] ??
-        _house['civic_standing'] ??
-        _house['peak_standing'] ??
-        widget.state?.human['civic_standing'] ??
-        widget.state?.json['civic_standing']);
+        .replaceFirst(RegExp(r'^of\s+', caseSensitive: false), '');
+    final legacy = _parseNum(_house['legacy_points'] ?? _house['total_legacy']);
     final rawScore =
         _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
     final houseScore = rawScore == null ? null : _parseNum(rawScore);
@@ -351,12 +340,12 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final successorName = successor is Map
         ? (successor['successor_name'] ?? successor['name'])?.toString()
         : null;
-    final activeHeir = (_house['active_heir'] ??
-            _house['heir_name'] ??
-            successorName ??
-            'Undesignated')
-        .toString();
-    final generation = _lineage.isNotEmpty ? _lineage.length : 1;
+    final activeHeir =
+        (_house['active_heir'] ?? _house['heir_name'] ?? successorName)
+            ?.toString();
+    final generation = _parseInt(
+        _house['current_generation'] ?? _house['generation'],
+        fallback: 0);
 
     final cockpit = EarthPageCockpit(
       status: 'ANCESTRAL HERITAGE',
@@ -411,7 +400,10 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       metrics: [
         CockpitMetric(
           label: 'Legacy',
-          value: formatWholeNumber(legacy),
+          value:
+              _house['legacy_points'] == null && _house['total_legacy'] == null
+                  ? 'UNAVAILABLE'
+                  : formatWholeNumber(legacy),
           icon: Icons.auto_awesome_outlined,
           color: context.secondaryColor,
         ),
@@ -424,8 +416,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
           color: context.goldColor,
         ),
         CockpitMetric(
-          label: 'Succession',
-          value: activeHeir,
+          label: 'Generation',
+          value: generation > 0 ? '$generation' : 'UNAVAILABLE',
           icon: Icons.how_to_reg_outlined,
           color: context.successColor,
         ),
@@ -437,11 +429,21 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         final isWide = constraints.maxWidth >= 840;
 
         final leftColumn = [
-          if (!_loading) _buildHouseIdentitySection(houseName, legacyPoints),
+          if (!_loading) ...[
+            _buildHouseIdentitySection(houseName),
+            const SizedBox(height: 24),
+            _buildPerksSection(),
+          ],
         ];
 
         final rightColumn = [
-          if (!_loading) _buildLineageSection(),
+          if (!_loading) ...[
+            _buildSuccessionSection(activeHeir),
+            const SizedBox(height: 24),
+            _buildLineageSection(),
+            const SizedBox(height: 24),
+            _buildHeirloomsSection(),
+          ],
         ];
 
         if (isWide) {
@@ -601,63 +603,36 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     );
   }
 
-  Widget _buildHouseIdentitySection(String rawHouseName, int legacyPoints) {
+  Widget _buildHouseIdentitySection(String rawHouseName) {
     final tokens = UiStyleTokens.current;
     final houseName = rawHouseName.trim().toUpperCase();
     final initials = houseName.length >= 2 ? houseName.substring(0, 2) : 'HO';
 
-    final activeHumanName = (widget.state?.human['display_name'] ??
-            widget.state?.human['name'] ??
-            '')
-        .toString()
-        .trim();
     final gen1Member = _lineage.firstWhere(
       (m) => _parseInt(m['generation'], fallback: 0) == 1,
       orElse: () =>
           _lineage.isNotEmpty ? _lineage.first : const <String, dynamic>{},
     );
-    final isIncumbentGen1 =
-        gen1Member['is_incumbent'] == true || _lineage.length <= 1;
-    final founder = (isIncumbentGen1 && activeHumanName.isNotEmpty)
-        ? activeHumanName
-        : (_house['founder_name'] ??
-                _house['founder'] ??
-                gen1Member['name'] ??
-                (activeHumanName.isNotEmpty
-                    ? activeHumanName
-                    : 'Founding Ancestor'))
-            .toString();
+    final founder =
+        (_house['founder_name'] ?? _house['founder'] ?? gen1Member['name'])
+            ?.toString();
     final rawFoundedDay = _parseInt(
         _house['founded_game_day'] ??
             _house['founded_day'] ??
             gen1Member['birth_game_day'],
-        fallback: 1);
-    final fYear = ((rawFoundedDay - 1) ~/ 365) + 1;
-    final fDay = ((rawFoundedDay - 1) % 365) + 1;
-    final foundedText = 'Year $fYear, Day $fDay';
+        fallback: 0);
+    final foundedText =
+        rawFoundedDay > 0 ? _formatGameDay(rawFoundedDay) : 'UNAVAILABLE';
 
-    final legacy = _parseNum(_house['legacy_points'] ??
-        _house['total_legacy'] ??
-        widget.state?.json['legacy_score'] ??
-        legacyPoints);
-    final standing = _parseNum(_house['standing'] ??
+    final rawStanding = _house['standing'] ??
         _house['civic_standing'] ??
         _house['peak_standing'] ??
         widget.state?.human['civic_standing'] ??
-        widget.state?.json['civic_standing']);
+        widget.state?.json['civic_standing'];
+    final standing = rawStanding == null ? null : _parseNum(rawStanding);
     final rawScore =
         _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
     final houseScore = rawScore == null ? null : _parseNum(rawScore);
-
-    final successor = widget.state?.life['successor'];
-    final successorName = successor is Map
-        ? (successor['successor_name'] ?? successor['name'])?.toString()
-        : null;
-    final activeHeir = (_house['active_heir'] ??
-            _house['heir_name'] ??
-            successorName ??
-            'Undesignated')
-        .toString();
 
     return EarthSection(
       title: 'HOUSE IDENTITY',
@@ -687,7 +662,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     context,
                     icon: Icons.person_outline,
                     label: 'FOUNDER',
-                    value: founder,
+                    value: founder ?? 'UNAVAILABLE',
                     accentColor: context.primaryColor,
                   ),
                   _buildAttributeRow(
@@ -713,7 +688,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     context,
                     icon: Icons.verified_user_outlined,
                     label: 'HOUSE STANDING',
-                    value: '${formatWholeNumber(standing)} Std',
+                    value: standing == null
+                        ? 'UNAVAILABLE'
+                        : '${formatWholeNumber(standing)} Std',
                     accentColor: context.primaryColor,
                   ),
                 ];
@@ -823,6 +800,63 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     );
   }
 
+  Widget _buildSuccessionSection(String? successorName) {
+    final currentHead = (_house['current_head_name'] ??
+            _house['head_of_house'] ??
+            _house['current_human_name'] ??
+            widget.state?.human['display_name'] ??
+            widget.state?.human['name'])
+        ?.toString();
+    final status = (_house['succession_status'] ??
+            _house['succession_state'] ??
+            (successorName == null ? null : 'DESIGNATED'))
+        ?.toString()
+        .toUpperCase();
+
+    return EarthSection(
+      title: 'SUCCESSION & CURRENT HEAD',
+      showSurface: false,
+      infoBulletPoints: const [
+        'The House is persistent; the current Human is its representative.',
+        'The designated successor receives executive agency when succession is activated.',
+        'Only server-confirmed succession facts are shown.',
+      ],
+      child: Container(
+        padding: EdgeInsets.all(context.cardPadding),
+        decoration: BoxDecoration(
+          color: context.surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(context.radiusCard),
+          border: Border.all(color: context.subtleBorderColor),
+        ),
+        child: Column(
+          children: [
+            _buildAttributeRow(
+              context,
+              icon: Icons.person_outline,
+              label: 'HEAD OF HOUSE',
+              value: currentHead ?? 'UNAVAILABLE',
+              accentColor: context.primaryColor,
+            ),
+            _buildAttributeRow(
+              context,
+              icon: Icons.how_to_reg_outlined,
+              label: 'SUCCESSOR',
+              value: successorName ?? 'UNDESIGNATED',
+              accentColor: context.successColor,
+            ),
+            _buildAttributeRow(
+              context,
+              icon: Icons.verified_outlined,
+              label: 'STATUS',
+              value: status ?? 'UNAVAILABLE',
+              accentColor: context.secondaryColor,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLineageSection() {
     return EarthSection(
       title: 'LINEAGE & HEIRS',
@@ -834,23 +868,31 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _lineage.map((member) {
-          final isExpanded = _selectedMember?['id'] == member['id'];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              onTap: () => setState(() {
-                if (_selectedMember?['id'] == member['id']) {
-                  _selectedMember = null;
-                } else {
-                  _selectedMember = member;
-                }
-              }),
-              child: _buildMemberNodeCard(member, isExpanded),
-            ),
-          );
-        }).toList(),
+        children: _lineage.isEmpty
+            ? [
+                const EarthEmptyState(
+                  message:
+                      'No canonical lineage records are available for this House.',
+                  icon: Icons.account_tree_outlined,
+                ),
+              ]
+            : _lineage.map((member) {
+                final isExpanded = _selectedMember?['id'] == member['id'];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(context.radiusCard),
+                    onTap: () => setState(() {
+                      if (_selectedMember?['id'] == member['id']) {
+                        _selectedMember = null;
+                      } else {
+                        _selectedMember = member;
+                      }
+                    }),
+                    child: _buildMemberNodeCard(member, isExpanded),
+                  ),
+                );
+              }).toList(),
       ),
     );
   }
@@ -860,7 +902,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final themeColor = Theme.of(context).colorScheme.primary;
     final secondaryColor = tokens.color('colors.secondary', violetColor);
     final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
-    final gen = member['generation'] ?? 1;
+    final gen = member['generation']?.toString() ?? '—';
     final isIncumbent = member['is_incumbent'] == true;
     final activeHumanName = (widget.state?.human['display_name'] ??
             widget.state?.human['name'] ??
@@ -870,26 +912,16 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final name = (isIncumbent && activeHumanName.isNotEmpty)
         ? activeHumanName
         : (member['name'] ?? 'House Heir').toString();
-    final birth = _parseInt(member['birth_game_day'], fallback: 1);
+    final birth = member['birth_game_day']?.toString() ?? '—';
     final death = member['death_game_day'] != null
         ? _parseInt(member['death_game_day'])
         : null;
-    final wealth = isIncumbent
-        ? _parseNum(widget.state?.human['credits'] ?? member['lifetime_wealth'])
-        : _parseNum(member['lifetime_wealth']);
-    final legacy = isIncumbent
-        ? _parseNum(widget.state?.human['legacy'] ?? member['legacy_score'])
-        : _parseNum(member['legacy_score'] ?? 0);
-    final standing = isIncumbent
-        ? _parseNum(widget.state?.human['standing'] ??
-            widget.state?.human['civic_standing'] ??
-            member['standing'])
-        : _parseNum(
-            member['standing'] ?? member['final_standing'] ?? (legacy * 3));
-    final age = isIncumbent
-        ? _parseInt(widget.state?.human['age_years'] ?? member['age_years'])
-        : _parseInt(member['age_years'],
-            fallback: (((death ?? (birth + 140)) - birth) ~/ 365) + 18);
+    final wealth = _parseNum(member['lifetime_wealth'] ??
+        member['capital_generated'] ??
+        member['total_wealth']);
+    final legacy = _parseNum(member['legacy_score']);
+    final standing = member['standing'] ?? member['final_standing'];
+    final age = member['age_years'];
 
     final epitaph = (member['epitaph'] ?? '').toString().trim();
 
@@ -1026,8 +1058,12 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                       spacing: tokens.number('spacing.titleOffset', 12),
                       runSpacing: 4,
                       children: [
-                        _nodeMiniStat('Age', '$age'),
-                        _nodeMiniStat('Standing', formatWholeNumber(standing)),
+                        _nodeMiniStat('Age', age?.toString() ?? '—'),
+                        _nodeMiniStat(
+                            'Standing',
+                            standing == null
+                                ? '—'
+                                : formatWholeNumber(_parseNum(standing))),
                         _nodeMiniStat(
                             'Legacy', '${formatWholeNumber(legacy)} LP'),
                       ],
@@ -1083,59 +1119,15 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     );
   }
 
-  double _calculateActiveCapital() {
-    if (widget.state == null) return 0.0;
-    final state = widget.state!;
-
-    final explicitNw = state.json['total_net_worth'] ??
-        state.json['net_worth'] ??
-        state.finance['net_worth'] ??
-        state.finance['total_net_worth'] ??
-        state.personalFinance['net_worth'] ??
-        state.personalFinance['total_net_worth'];
-    if (explicitNw != null && _parseNum(explicitNw) > 0) {
-      return _parseNum(explicitNw);
-    }
-
-    double total = _parseNum(state.human['credits']);
-    final res = state.resources;
-    final mat = _parseNum(res['material']);
-    final energy = _parseNum(res['energy']);
-    final compute = _parseNum(res['compute']);
-    final food = _parseNum(res['food']);
-    total += (mat * 12.0) + (energy * 6.0) + (compute * 25.0) + (food * 8.0);
-
-    for (final b in state.buildings) {
-      if (b is Map) {
-        total += _parseNum(b['value'] ?? b['cost']);
-      }
-    }
-
-    for (final s in state.investmentShares) {
-      if (s is Map) {
-        total += _parseNum(s['value'] ?? s['valuation'] ?? s['total_value']);
-      }
-    }
-
-    return total > 0 ? total : _parseNum(state.human['credits']);
-  }
-
   Widget _buildMemberInspectorContent(Map<String, dynamic> member) {
     final isIncumbent = member['is_incumbent'] == true;
-    final birth = _parseInt(member['birth_game_day'], fallback: 1);
-    final bYear = ((birth - 1) ~/ 365) + 1;
-    final bDay = ((birth - 1) % 365) + 1;
-    final birthDayFormatted = 'Year $bYear, Day $bDay';
+    final birth = _parseInt(member['birth_game_day'], fallback: 0);
+    final birthDayFormatted = birth > 0 ? _formatGameDay(birth) : 'UNAVAILABLE';
 
-    final wealth = isIncumbent
-        ? _calculateActiveCapital()
-        : _parseNum(member['lifetime_wealth'] ??
-            member['capital_generated'] ??
-            member['total_wealth']);
-    final legacy = isIncumbent
-        ? _parseNum(
-            widget.state?.human['legacy'] ?? member['legacy_score'] ?? 31)
-        : _parseNum(member['legacy_score'] ?? 0);
+    final wealth = _parseNum(member['lifetime_wealth'] ??
+        member['capital_generated'] ??
+        member['total_wealth']);
+    final legacy = _parseNum(member['legacy_score']);
 
     final activeTerritoryName =
         widget.state?.residency['territory_name']?.toString().toUpperCase() ??
@@ -1234,25 +1226,35 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             children: [
               _milestoneTileRow(
                 'Total Capital & Wealth Generated',
-                '${formatWholeNumber(wealth)} CR',
+                member['lifetime_wealth'] == null &&
+                        member['capital_generated'] == null &&
+                        member['total_wealth'] == null
+                    ? 'UNAVAILABLE'
+                    : '${formatWholeNumber(wealth)} CR',
                 Icons.account_balance,
                 isLast: false,
               ),
               _milestoneTileRow(
                 'Corporations & Enterprises Founded',
-                '$businesses Enterprises',
+                member['operations_completed'] == null
+                    ? 'UNAVAILABLE'
+                    : '$businesses Enterprises',
                 Icons.business,
                 isLast: false,
               ),
               _milestoneTileRow(
                 'World Senate Proposals Passed',
-                '$proposals Enacted',
+                member['proposals_authored'] == null
+                    ? 'UNAVAILABLE'
+                    : '$proposals Enacted',
                 Icons.gavel,
                 isLast: false,
               ),
               _milestoneTileRow(
                 'Generational Legacy Contribution',
-                '${formatWholeNumber(legacy)} LP',
+                member['legacy_score'] == null
+                    ? 'UNAVAILABLE'
+                    : '${formatWholeNumber(legacy)} LP',
                 Icons.auto_awesome,
                 isLast: true,
               ),
@@ -1651,6 +1653,12 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     if (val is num) return val.toDouble();
     if (val is String) return double.tryParse(val) ?? fallback;
     return fallback;
+  }
+
+  static String _formatGameDay(int day) {
+    final year = ((day - 1) ~/ 365) + 1;
+    final yearDay = ((day - 1) % 365) + 1;
+    return 'Year $year, Day $yearDay';
   }
 
   static int _parseInt(dynamic val, {int fallback = 0}) {

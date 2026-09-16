@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
-import '../../core/notification_classifier.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 
 class NewsPanel extends StatefulWidget {
+  final List<dynamic> news;
+  final bool hasMore;
+  final VoidCallback? onLoadEarlier;
+  final ValueChanged<String>? onNavigate;
   final List<dynamic> events;
   final List<dynamic> notifications;
   final VoidCallback? onRefresh;
 
   const NewsPanel({
     super.key,
+    this.news = const [],
+    this.hasMore = false,
+    this.onLoadEarlier,
+    this.onNavigate,
     this.events = const [],
     this.notifications = const [],
     this.onRefresh,
@@ -21,100 +28,35 @@ class NewsPanel extends StatefulWidget {
 
 class _NewsPanelState extends State<NewsPanel> {
   String _filter = 'all';
-  int _currentPage = 0;
-  static const int _pageSize = 12;
 
-  /// Merge publishable public events and corporate/territory notifications.
+  /// The server-owned news projection is authoritative; generic events and
+  /// House notifications are intentionally not classified in the client.
   List<Map<String, dynamic>> _buildNewsFeed() {
-    final feed = <Map<String, dynamic>>[];
-    final seenIds = <String>{};
-
-    // 1. Add public events
-    for (final raw in widget.events.whereType<Map>()) {
-      final event = Map<String, dynamic>.from(raw);
-      final eventType = (event['event_type'] ?? '').toString().toLowerCase();
-      final title = (event['title'] ?? '').toString().toLowerCase();
-      final eventCategory = (event['category'] ?? '').toString().toLowerCase();
-      if (eventType == 'world_clock' ||
-          eventType == 'scheduled_tick' ||
-          title.contains('public world announcement') ||
-          eventCategory == 'ledger' ||
-          eventCategory == 'trade' ||
-          eventCategory == 'proposal' ||
-          eventType.contains('bookkeeping') ||
-          eventType.contains('ledger') ||
-          eventType.contains('proposal')) {
-        continue;
-      }
-      // The general activity endpoint also contains ledger, trade, and
-      // proposal bookkeeping rows. They are not publishable news items.
-      if ((event['title'] ?? '').toString().trim().isEmpty &&
-          (event['details'] ?? '').toString().trim().isEmpty) {
-        continue;
-      }
-      final id = _stableItemId(event);
-      if (id.isNotEmpty) seenIds.add(id);
-      event['_source'] = 'event';
-      feed.add(event);
-    }
-
-    // 2. Add corporate/territory notifications (avoid duplicates by id/fingerprint)
-    for (final raw in widget.notifications.whereType<Map>()) {
-      final n = Map<String, dynamic>.from(raw);
-      if (!isCorpOrTerritoryNotification(n)) continue;
-      final id = _stableItemId(n);
-      if (id.isNotEmpty && seenIds.contains(id)) continue;
-      if (id.isNotEmpty) seenIds.add(id);
-
-      // Normalize notification fields into event-like shape
-      n['_source'] = 'notification';
-      n['event_type'] ??= n['notification_type'] ?? 'world';
-      n['title'] ??= 'News';
-      n['details'] ??= n['body'] ?? '';
-      n['game_day'] ??= '';
-      feed.add(n);
-    }
-
-    // Sort newest first (by created_at or game_day descending)
-    feed.sort((a, b) {
-      final aTime = a['created_at']?.toString() ?? '';
-      final bTime = b['created_at']?.toString() ?? '';
-      if (aTime.isNotEmpty && bTime.isNotEmpty) {
-        return bTime.compareTo(aTime);
-      }
-      final aDay = int.tryParse(a['game_day']?.toString() ?? '') ?? 0;
-      final bDay = int.tryParse(b['game_day']?.toString() ?? '') ?? 0;
-      return bDay.compareTo(aDay);
-    });
-
-    return feed;
-  }
-
-  String _stableItemId(Map<String, dynamic> item) {
-    final explicit = item['id']?.toString().trim() ?? '';
-    if (explicit.isNotEmpty) return explicit;
-    return '${item['event_type'] ?? item['notification_type'] ?? ''}|'
-        '${item['title'] ?? ''}|${item['details'] ?? item['body'] ?? ''}|'
-        '${item['game_day'] ?? ''}';
+    return widget.news.whereType<Map>().map((raw) {
+      final item = Map<String, dynamic>.from(raw);
+      item['_source'] = 'news';
+      return item;
+    }).toList();
   }
 
   String _category(Map<String, dynamic> item) {
-    // If it came from a notification, use the classifier
-    if (item['_source'] == 'notification') {
-      return notificationNewsCategory(item);
-    }
-    final type = (item['event_type'] ?? '').toString().toLowerCase();
-    if (type.contains('corporation') || type.contains('research')) {
-      return 'corporation';
-    }
-    if (type.contains('territory') || type.contains('city') || type.contains('civic')) {
-      return 'territory';
+    if (item['_source'] == 'news') {
+      final scope = (item['scope'] ?? 'EARTH').toString().toUpperCase();
+      return scope == 'ORGANIZATION'
+          ? 'organization'
+          : scope == 'TERRITORY'
+              ? 'territory'
+              : 'world';
     }
     return 'world';
   }
 
+  String _topic(Map<String, dynamic> item) =>
+      (item['topic'] ?? 'WORLD').toString().toUpperCase();
+
   IconData _icon(String category) {
     switch (category) {
+      case 'organization':
       case 'corporation':
         return Icons.domain_outlined;
       case 'territory':
@@ -126,6 +68,7 @@ class _NewsPanelState extends State<NewsPanel> {
 
   Color _categoryColor(BuildContext context, String category) {
     switch (category) {
+      case 'organization':
       case 'corporation':
         return Colors.lightBlueAccent;
       case 'territory':
@@ -135,6 +78,54 @@ class _NewsPanelState extends State<NewsPanel> {
     }
   }
 
+  void _showStory(BuildContext context, Map<String, dynamic> item) {
+    final title = (item['headline'] ?? item['title'] ?? 'News').toString();
+    final summary =
+        (item['summary'] ?? item['details'] ?? item['body'] ?? '').toString();
+    final day = item['game_day']?.toString() ?? '';
+    final minute = item['game_minute']?.toString();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${_category(item).toUpperCase()} · ${_topic(item)}',
+                style: Theme.of(context).textTheme.labelMedium),
+            if (day.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('DAY $day${minute != null ? ' · $minute' : ''}'),
+            ],
+            if (summary.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(summary),
+            ],
+            if (item['related_entity_id'] != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                  'Related ${item['related_entity_type'] ?? 'system'}: ${item['related_entity_id']}'),
+            ],
+          ],
+        ),
+        actions: [
+          if (item['related_route'] != null && widget.onNavigate != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onNavigate!(item['related_route'].toString());
+              },
+              child: const Text('OPEN RELATED SYSTEM'),
+            ),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CLOSE')),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final allItems = _buildNewsFeed();
@@ -142,62 +133,23 @@ class _NewsPanelState extends State<NewsPanel> {
       return _filter == 'all' || _category(item) == _filter;
     }).toList();
 
-    // Category counts for cockpit metrics
-    final corpCount =
-        allItems.where((i) => _category(i) == 'corporation').length;
-    final territoryCount = allItems.where((i) => _category(i) == 'territory').length;
-    final worldCount = allItems.where((i) => _category(i) == 'world').length;
-
     // Pagination
-    final totalPages =
-        (filteredItems.length / _pageSize).ceil().clamp(1, 9999);
-    if (_currentPage >= totalPages) _currentPage = totalPages - 1;
-    if (_currentPage < 0) _currentPage = 0;
-    final pageItems =
-        filteredItems.skip(_currentPage * _pageSize).take(_pageSize).toList();
+    final pageItems = filteredItems;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ─── COCKPIT ─────────────────────────────────────────────
         EarthPageCockpit(
-          tag: 'PUBLIC RECORD',
-          status: 'REFRESHED SNAPSHOT',
+          tag: 'WORLD INTELLIGENCE',
+          status: 'LIVE FEED',
           statusColor: context.primaryColor,
-          infoTitle: 'PLANETARY NEWS ARCHITECTURE',
+          infoTitle: 'ABOUT NEWS',
           infoDescription:
-              '• News is the public record of meaningful corporation, territory, and world events.\n\n'
-              '• Corporate and territory notifications are merged here automatically.\n\n'
-              '• News is read-only; personal actions and private communication remain in their own pages.',
+              'Follow important public developments across Earth. News covers world events, territories, organizations, technology and other public systems. Personal alerts remain in Notifications.',
           title: 'NEWS',
           subtitle:
-              'Public events, corporate updates, and territorial bulletins across Earth',
-          metrics: [
-            CockpitMetric(
-              label: 'Total',
-              value: '${allItems.length}',
-              icon: Icons.newspaper_outlined,
-              color: context.primaryColor,
-            ),
-            CockpitMetric(
-              label: 'Corporate',
-              value: '$corpCount',
-              icon: Icons.domain_outlined,
-              color: Colors.lightBlueAccent,
-            ),
-            CockpitMetric(
-              label: 'Territory',
-              value: '$territoryCount',
-              icon: Icons.location_city_outlined,
-              color: Colors.amberAccent,
-            ),
-            CockpitMetric(
-              label: 'World',
-              value: '$worldCount',
-              icon: Icons.public_outlined,
-              color: context.secondaryColor,
-            ),
-          ],
+              'Important developments and public intelligence across Earth',
           actions: widget.onRefresh == null
               ? []
               : [
@@ -226,15 +178,13 @@ class _NewsPanelState extends State<NewsPanel> {
                   isSelected: _filter == 'all',
                   onTap: () => setState(() {
                         _filter = 'all';
-                        _currentPage = 0;
                       })),
               _buildTabButton(context,
-                  title: 'CORPORATE',
+                  title: 'ORGANIZATIONS',
                   icon: Icons.domain_outlined,
-                  isSelected: _filter == 'corporation',
+                  isSelected: _filter == 'organization',
                   onTap: () => setState(() {
-                        _filter = 'corporation';
-                        _currentPage = 0;
+                        _filter = 'organization';
                       })),
               _buildTabButton(context,
                   title: 'TERRITORY',
@@ -242,7 +192,6 @@ class _NewsPanelState extends State<NewsPanel> {
                   isSelected: _filter == 'territory',
                   onTap: () => setState(() {
                         _filter = 'territory';
-                        _currentPage = 0;
                       })),
               _buildTabButton(context,
                   title: 'WORLD',
@@ -250,7 +199,6 @@ class _NewsPanelState extends State<NewsPanel> {
                   isSelected: _filter == 'world',
                   onTap: () => setState(() {
                         _filter = 'world';
-                        _currentPage = 0;
                       })),
             ],
           ),
@@ -267,15 +215,18 @@ class _NewsPanelState extends State<NewsPanel> {
           EarthDataList(
             children: pageItems.map((item) {
               final category = _category(item);
-              final title = item['title']?.toString() ?? 'World event';
-              final details = (item['details'] ?? item['body'] ?? '').toString();
+              final title = (item['headline'] ?? item['title'] ?? 'World event')
+                  .toString();
+              final details =
+                  (item['summary'] ?? item['details'] ?? item['body'] ?? '')
+                      .toString();
               final day = item['game_day']?.toString() ?? '';
               final catColor = _categoryColor(context, category);
-              final isUnread = item['read'] == false &&
-                  item['read_at'] == null &&
-                  item['_source'] == 'notification';
+              final isUnread = item['is_new'] == true ||
+                  (item['read'] == false && item['read_at'] == null);
 
               return EarthDataRow(
+                onTap: () => _showStory(context, item),
                 title: title,
                 subtitle: details.isEmpty
                     ? 'Public ${category == 'world' ? 'world' : category} announcement'
@@ -287,7 +238,8 @@ class _NewsPanelState extends State<NewsPanel> {
                 ),
                 badges: [
                   EarthBadge(
-                    label: category.toUpperCase(),
+                    label:
+                        '${category == 'organization' ? 'ORGANIZATION' : category.toUpperCase()} · ${_topic(item)}',
                     variant: category == 'world'
                         ? EarthBadgeVariant.neutral
                         : EarthBadgeVariant.primary,
@@ -299,44 +251,22 @@ class _NewsPanelState extends State<NewsPanel> {
                     ),
                 ],
                 trailing: day.isNotEmpty
-                    ? Text('DAY $day', style: context.captionStyle)
+                    ? Text(
+                        'DAY $day${item['game_minute'] != null ? ' · ${item['game_minute']}' : ''}',
+                        style: context.captionStyle)
                     : null,
               );
             }).toList(),
           ),
-
-          // ─── PAGINATION ──────────────────────────────────────
-          if (filteredItems.length > _pageSize) ...[
+          if (widget.hasMore && widget.onLoadEarlier != null) ...[
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'PAGE ${_currentPage + 1} OF $totalPages (${filteredItems.length} TOTAL)',
-                  style: context.captionStyle
-                      .copyWith(color: context.mutedColor),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    EarthButton(
-                      label: 'PREVIOUS',
-                      icon: Icons.chevron_left_rounded,
-                      onPressed: _currentPage > 0
-                          ? () => setState(() => _currentPage--)
-                          : null,
-                    ),
-                    const SizedBox(width: 8),
-                    EarthButton(
-                      label: 'NEXT',
-                      icon: Icons.chevron_right_rounded,
-                      onPressed: _currentPage < totalPages - 1
-                          ? () => setState(() => _currentPage++)
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
+            Align(
+              alignment: Alignment.center,
+              child: EarthButton(
+                label: 'LOAD EARLIER NEWS',
+                icon: Icons.history,
+                onPressed: widget.onLoadEarlier,
+              ),
             ),
           ],
         ],
@@ -364,8 +294,7 @@ class _NewsPanelState extends State<NewsPanel> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: isSelected
-                ? Border.all(
-                    color: context.primaryColor.withValues(alpha: .4))
+                ? Border.all(color: context.primaryColor.withValues(alpha: .4))
                 : null,
           ),
           child: FittedBox(
@@ -378,17 +307,15 @@ class _NewsPanelState extends State<NewsPanel> {
                 Icon(
                   icon,
                   size: 14,
-                  color:
-                      isSelected ? context.primaryColor : context.mutedColor,
+                  color: isSelected ? context.primaryColor : context.mutedColor,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   title,
                   maxLines: 1,
                   style: context.controlStyle.copyWith(
-                    color: isSelected
-                        ? context.primaryColor
-                        : context.mutedColor,
+                    color:
+                        isSelected ? context.primaryColor : context.mutedColor,
                   ),
                 ),
               ],

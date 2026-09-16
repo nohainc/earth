@@ -77,7 +77,7 @@ void main() {
 
     // Verify brand header text and telemetry in desktop mode
     expect(find.text('EARTH'), findsOneWidget);
-    expect(find.text('UNITED CORPORATIONS'), findsOneWidget);
+    expect(find.text('A LIVING WORLD'), findsOneWidget);
     expect(find.text('LIVE'), findsOneWidget);
 
     // Verify separate badges for Notifications (3) and Comm Messages (5)

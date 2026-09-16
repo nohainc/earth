@@ -12,8 +12,22 @@ extension EarthApiWorld on EarthApi {
     return (response['events'] as List<dynamic>?) ?? const [];
   }
 
+  Future<Map<String, dynamic>> news({int limit = 25, String? before}) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+      if (before != null && before.isNotEmpty) 'before': before,
+    };
+    final response = await _request(
+        Uri(path: '/api/news', queryParameters: params).toString());
+    return response as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> notifications() async =>
       (await _request('/api/notifications?limit=20')) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> commandCenter({int limit = 20}) async =>
+      (await _request('/api/command-center?limit=$limit'))
+          as Map<String, dynamic>;
 
   Future<void> markNotificationRead(String id) async {
     await _request('/api/notifications/$id/read', method: 'POST');
@@ -64,10 +78,8 @@ extension EarthApiWorld on EarthApi {
       'offset': offset.toString(),
       if (category != null && category.trim().isNotEmpty)
         'category': category.trim(),
-      if (metric != null && metric.trim().isNotEmpty)
-        'metric': metric.trim(),
-      if (search != null && search.trim().isNotEmpty)
-        'search': search.trim(),
+      if (metric != null && metric.trim().isNotEmpty) 'metric': metric.trim(),
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
     };
     final uri = Uri(path: '/api/rankings', queryParameters: params);
     return (await _request(uri.toString())) as Map<String, dynamic>;

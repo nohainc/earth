@@ -52,7 +52,19 @@ export async function listRankings(repository: PostgresRepository, options: Rank
 export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const [projects, catalog] = await Promise.all([
     repository.query(`SELECT p.* FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id JOIN house_affiliations ha ON ha.corporation_id = o.id JOIN humans h ON h.house_id = ha.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' ORDER BY p.id DESC`, [humanId]).catch(() => ({ rows: [] })),
-    repository.query('SELECT tc.id, tc.code, tc.name, tc.patentable, tc.credit_cost_units::TEXT AS research_credit_cost_units, tc.research_points_required::TEXT, tc.definition_version FROM technology_catalog tc ORDER BY tc.code').catch(() => ({ rows: [] })),
+    repository.query(`SELECT DISTINCT ON (tc.code)
+      tc.id, tc.code, tc.name, tc.category, tc.description, tc.patentable,
+      tc.patent_exclusivity_days,
+      tc.credit_cost_units::TEXT AS research_credit_cost_units,
+      tc.research_points_required::TEXT, tc.definition_version,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object(
+        'effectType', e.effect_type, 'modifierFamily', e.modifier_family,
+        'targetType', e.target_type, 'targetKey', e.target_key,
+        'modifierBps', e.modifier_bps) ORDER BY e.id)
+        FROM technology_effects e WHERE e.technology_id = tc.id), '[]'::JSONB) AS effects
+      FROM technology_catalog tc
+      WHERE tc.status = 'ACTIVE'
+      ORDER BY tc.code, tc.definition_version DESC`).catch(() => ({ rows: [] })),
   ]);
   return { catalog: catalog.rows.map(mapTechnologyCatalogRow), projects: projects.rows };
 }
@@ -84,14 +96,29 @@ export async function getServiceStatus(repository: PostgresRepository, humanId: 
 }
 
 /** Public legacy read model. It deliberately exposes only memorial facts, never account data. */
-export async function listPantheonOfAchievements(repository: PostgresRepository): Promise<Record<string, unknown>> {
+export async function listPantheonOfAchievements(repository: PostgresRepository, query: { search?: string; limit?: number } = {}): Promise<Record<string, unknown>> {
+  const search = query.search?.trim() ?? '';
+  const requestedLimit = Number(query.limit ?? 100);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, Math.trunc(requestedLimit))) : 100;
   const [deceased, living, houses] = await Promise.all([
     repository.query(`SELECT h.id AS human_id, h.display_name, h.house_id, d.house_name,
-                             h.death_game_day, h.final_legacy, h.standing AS final_standing
+                             h.birth_game_day, h.death_game_day, h.age_years,
+                             h.final_legacy, h.standing AS final_standing,
+                             NULL::TEXT AS cause_of_death, NULL::TEXT AS epitaph,
+                             successor.display_name AS successor_name
                         FROM humans h JOIN houses d ON d.id = h.house_id
+                        LEFT JOIN LATERAL (
+                          SELECT successor_h.display_name
+                            FROM succession_events se
+                            JOIN humans successor_h ON successor_h.id = se.successor_human_id
+                           WHERE se.predecessor_human_id = h.id
+                           ORDER BY se.effective_game_day DESC, se.id DESC
+                           LIMIT 1
+                        ) successor ON TRUE
                        WHERE h.status = 'DECEASED'
-                       ORDER BY h.final_legacy DESC, h.death_game_day ASC NULLS LAST, h.id
-                       LIMIT 100`),
+                         AND ($1 = '' OR h.display_name ILIKE '%' || $1 || '%' OR d.house_name ILIKE '%' || $1 || '%')
+                       ORDER BY h.death_game_day DESC NULLS LAST, h.id
+                       LIMIT $2`, [search, limit]),
     repository.query(`SELECT h.id, h.display_name, h.house_id, d.house_name, h.age_years,
                              h.standing, h.final_legacy AS legacy,
                              (h.final_legacy + h.standing) AS composite_legacy_score
@@ -101,14 +128,17 @@ export async function listPantheonOfAchievements(repository: PostgresRepository)
                        LIMIT 100`),
     repository.query(`SELECT houses.id, houses.house_name, houses.motto, houses.dynasty_legacy, houses.generation, houses.status,
                              (SELECT MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = houses.id) AS founded_game_day,
+                             (SELECT MAX(hum.death_game_day) FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'DECEASED') AS extinct_game_day,
+                             (SELECT MAX(hum.death_game_day) - MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = houses.id) AS lifespan_days,
                              (SELECT COUNT(*)::INTEGER FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'DECEASED') AS deceased_count,
                              0::INTEGER AS active_member_count,
                              TRUE AS is_extinct
                         FROM houses WHERE status IN ('ACTIVE', 'SUSPENDED')
                          AND EXISTS (SELECT 1 FROM humans hum WHERE hum.house_id = houses.id)
                          AND NOT EXISTS (SELECT 1 FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'ACTIVE')
-                       ORDER BY houses.dynasty_legacy DESC, houses.generation DESC, houses.id
-                       LIMIT 100`),
+                         AND ($1 = '' OR houses.house_name ILIKE '%' || $1 || '%')
+                       ORDER BY extinct_game_day DESC NULLS LAST, houses.id
+                       LIMIT $2`, [search, limit]),
   ]);
   return {
     deceasedPantheon: deceased.rows,
@@ -116,6 +146,8 @@ export async function listPantheonOfAchievements(repository: PostgresRepository)
     houses: houses.rows,
     dynasticHouses: houses.rows,
     game_day: Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id='WORLD'")).rows[0]?.game_day ?? 1),
+    search,
+    limit,
     generatedFrom: 'postgres-canonical-facts',
   };
 }

@@ -10,7 +10,7 @@ import {
   updateHouseMotto,
 } from './house-postgres.ts';
 import { getHouseDailySummary } from './house-daily-summary-postgres.ts';
-import { listHousePolicies, saveHousePolicy } from './house-policy-postgres.ts';
+import { listHousePolicies, saveHouseAutomation, saveHousePolicy } from './house-policy-postgres.ts';
 import { advanceHouseOnboarding, getHouseOnboarding } from './house-onboarding-postgres.ts';
 import { getHouseResidency, moveHouseResidence, quoteHouseMove } from './residency-postgres.ts';
 import { claimHouseEntrySupport, getHouseEntrySupport } from './catch-up-postgres.ts';
@@ -160,6 +160,25 @@ export async function handleHouseRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Policy save failed' }, { status: 400 });
+    }
+  }
+
+  if (url.pathname === '/api/house/automation' && request.method === 'PUT') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<Record<string, unknown>>(request);
+    if (!parsed.ok) return parsed.response;
+    const value = parsed.value;
+    try {
+      const result = await withRepository(env, (repository) => saveHouseAutomation(repository, viewer.house_id, {
+        operatingMode: String(value.operatingMode ?? 'BALANCED').toUpperCase() as 'CONSERVATIVE' | 'BALANCED' | 'GROWTH' | 'CUSTOM',
+        effectiveFromGameDay: Number(value.effectiveFromGameDay), dailySpendCapUnits: String(value.dailySpendCapUnits ?? '0'),
+        reserveFloorUnits: (value.reserveFloorUnits ?? {}) as Record<string, string | number>, maxInputPriceUnits: (value.maxInputPriceUnits ?? {}) as Record<string, string | number>, minSalePriceUnits: (value.minSalePriceUnits ?? {}) as Record<string, string | number>, procurementQuantityUnits: (value.procurementQuantityUnits ?? {}) as Record<string, string | number>, correlationId: resolveIdempotencyKey(request, String(value.correlationId ?? '')),
+      }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Automation save failed' }, { status: 400 });
     }
   }
 

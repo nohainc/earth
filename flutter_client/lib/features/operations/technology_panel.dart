@@ -346,22 +346,6 @@ class _CorporateBuildingResearchPanelState
     return math.max(persisted, projected).clamp(0.0, 100.0);
   }
 
-  int _calculateResearchCost(dynamic baseCost, int targetTier,
-      {String ownership = 'private'}) {
-    final base = math.max(1000.0, asDoubleOr(baseCost, 1000.0));
-    final double scopeMul = ownership == 'public_investment'
-        ? 3.5
-        : (ownership == 'civic' ? 2.5 : 2.0);
-    final tierMul = math.pow(2.0, math.max(0, targetTier - 2)).toDouble();
-    return math.max(1000, (base * scopeMul * tierMul).round());
-  }
-
-  int _calculateDurationDays(dynamic slotFootprint, int targetTier,
-      {String ownership = 'private'}) {
-    final slots = math.max(1, asIntOr(slotFootprint, 1));
-    return (targetTier + 3) * slots;
-  }
-
   String _buildingAssetPath(String type) {
     return EarthBuildingMeta.getAssetPath(type);
   }
@@ -547,13 +531,6 @@ class _CorporateBuildingResearchPanelState
       }
     }
 
-    for (final fb in _kDefaultBlueprints) {
-      final type = fb['building_type']?.toString();
-      if (type != null && type.isNotEmpty) {
-        blueprintCatalogMap.putIfAbsent(type, () => fb);
-      }
-    }
-
     final allBlueprints = blueprintCatalogMap.values.toList();
 
     final privateCount = allBlueprints.where((b) {
@@ -589,16 +566,16 @@ class _CorporateBuildingResearchPanelState
       final bType = b['building_type']?.toString() ?? '';
       final aTier = (unlockedTiers[aType] ?? 1) + 1;
       final bTier = (unlockedTiers[bType] ?? 1) + 1;
-      final aBaseCost =
-          asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 35000);
-      final bBaseCost =
-          asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 35000);
-      final aOwnership = a['ownership_class']?.toString() ?? 'private';
-      final bOwnership = b['ownership_class']?.toString() ?? 'private';
-      final aCost =
-          _calculateResearchCost(aBaseCost, aTier, ownership: aOwnership);
-      final bCost =
-          _calculateResearchCost(bBaseCost, bTier, ownership: bOwnership);
+      final aCost = asDoubleOr(
+          a['research_credit_cost_units'] ??
+              a['researchCost'] ??
+              a['research_cost'],
+          0);
+      final bCost = asDoubleOr(
+          b['research_credit_cost_units'] ??
+              b['researchCost'] ??
+              b['research_cost'],
+          0);
       final costCmp = aCost.compareTo(bCost);
       if (costCmp != 0) return costCmp;
       return (a['name']?.toString() ?? '')
@@ -671,18 +648,15 @@ class _CorporateBuildingResearchPanelState
                 final targetTier = currentTier + 1;
 
                 final baseCost = asDoubleOr(
-                    bp['cost_credits'] ?? bp['baseCreditCost'], 35000);
+                    bp['construction_credit_units'] ?? bp['cost_credits'], 0);
                 final slots = math.max(1, asIntOr(bp['slot_footprint'], 1));
-                final nextResearchCost = _calculateResearchCost(
-                  baseCost,
-                  targetTier,
-                  ownership: ownership,
-                );
-                final durationDays = _calculateDurationDays(
-                  bp['slot_footprint'],
-                  targetTier,
-                  ownership: ownership,
-                );
+                final nextResearchCost = asDoubleOr(
+                    bp['research_credit_cost_units'] ??
+                        bp['researchCost'] ??
+                        bp['research_cost'],
+                    0);
+                final durationDays = asIntOr(
+                    bp['research_duration_days'] ?? bp['duration_days'], 0);
 
                 final activeProject = activeProjectMap[type];
                 final isResearching = activeProject != null;
@@ -708,78 +682,29 @@ class _CorporateBuildingResearchPanelState
                 final civicBenefit = bp['civicBenefit']?.toString();
 
                 // 1. Cost line entries (CapEx +70% per tier)
-                final costCreditsCur =
-                    baseCost * math.pow(1.70, currentTier - 1);
-                final costCreditsNext =
-                    baseCost * math.pow(1.70, targetTier - 1);
-                final matBase = asDoubleOr(
-                    bp['cost_materials'] ?? bp['baseMaterialCost'], 0);
-                final compBase = asDoubleOr(bp['cost_components'], 0);
-                final computeBase = asDoubleOr(bp['cost_compute'], 0);
+                final costCreditsCur = baseCost;
+                final costCreditsNext = asDoubleOr(
+                    bp['next_construction_credit_units'] ?? baseCost, baseCost);
+                final matBase = 0.0;
+                final compBase = 0.0;
+                final computeBase = 0.0;
 
                 // 2. Upkeep Inputs (Daily Upkeep +12% per tier)
                 final upkeepInputs =
                     <(IconData, Color, String, double, double)>[];
-                void addUpkeep(String key, IconData icon, Color color) {
-                  final raw = asDoubleOr(bp['upkeep_$key'], 0);
-                  if (raw > 0) {
-                    final cur = raw * math.pow(1.12, currentTier - 1);
-                    final next = raw * math.pow(1.12, targetTier - 1);
-                    upkeepInputs
-                        .add((icon, color, key.toUpperCase(), cur, next));
-                  }
-                }
-
-                addUpkeep(
-                    'energy', Icons.bolt_rounded, EarthResourceColors.energy);
-                addUpkeep('food', Icons.eco_outlined, EarthResourceColors.food);
-                addUpkeep('materials', Icons.terrain_outlined,
-                    EarthResourceColors.materials);
-                addUpkeep('components', Icons.precision_manufacturing_outlined,
-                    EarthResourceColors.components);
-                addUpkeep('compute', Icons.memory_rounded,
-                    EarthResourceColors.compute);
 
                 // 3. Output entries (Output +25% per tier)
                 final outputItems =
                     <(IconData, Color, String, double, double)>[];
-                void addOutput(String key, IconData icon, Color color) {
-                  final raw = asDoubleOr(bp['output_$key'], 0);
-                  if (raw > 0) {
-                    final cur = raw * math.pow(1.25, currentTier - 1);
-                    final next = raw * math.pow(1.25, targetTier - 1);
-                    outputItems
-                        .add((icon, color, key.toUpperCase(), cur, next));
-                  }
-                }
-
-                addOutput('credits', Icons.account_balance_wallet_outlined,
-                    EarthResourceColors.credits);
-                addOutput(
-                    'energy', Icons.bolt_rounded, EarthResourceColors.energy);
-                addOutput('food', Icons.eco_outlined, EarthResourceColors.food);
-                addOutput('materials', Icons.terrain_outlined,
-                    EarthResourceColors.materials);
-                addOutput('components', Icons.precision_manufacturing_outlined,
-                    EarthResourceColors.components);
-                addOutput('compute', Icons.memory_rounded,
-                    EarthResourceColors.compute);
 
                 // 4. Operating Expenses (+12% per tier)
                 final opCreditsBase = asDoubleOr(
-                  bp['operating_credits'] ??
-                      bp['dailyOperatingCredits'] ??
-                      bp['dailyStaffingCredits'] ??
-                      bp['daily_operating_credits'],
-                  0,
-                );
-                final opEnergyBase = asDoubleOr(bp['operating_energy'], 0);
-                final opFoodBase = asDoubleOr(bp['operating_food'], 0);
-                final opMaterialsBase =
-                    asDoubleOr(bp['operating_materials'], 0);
-                final opComponentsBase =
-                    asDoubleOr(bp['operating_components'], 0);
-                final opComputeBase = asDoubleOr(bp['operating_compute'], 0);
+                    bp['operating_credit_units'] ?? bp['operating_credits'], 0);
+                final opEnergyBase = 0.0;
+                final opFoodBase = 0.0;
+                final opMaterialsBase = 0.0;
+                final opComponentsBase = 0.0;
+                final opComputeBase = 0.0;
 
                 final hasOperating = opCreditsBase > 0 ||
                     opEnergyBase > 0 ||
@@ -789,8 +714,14 @@ class _CorporateBuildingResearchPanelState
                     opComputeBase > 0;
 
                 // Build Time (Slot × Tier construction days)
-                final tierDaysCurrent = slots * currentTier;
-                final tierDaysNext = slots * targetTier;
+                final tierDaysCurrent =
+                    (asDoubleOr(bp['construction_minutes'], 0) / 1440).ceil();
+                final tierDaysNext = (asDoubleOr(
+                            bp['next_construction_minutes'] ??
+                                bp['construction_minutes'],
+                            0) /
+                        1440)
+                    .ceil();
 
                 Widget buildCardBody({bool fillHeight = false}) {
                   return Container(
@@ -1148,20 +1079,11 @@ class _CorporateBuildingResearchPanelState
                         ] else ...[
                           Builder(
                             builder: (context) {
-                              final userCredits = asDouble(
-                                    widget.state.human['credits'] ??
-                                        widget.state.finance['balance'] ??
-                                        widget.state.personalFinance['balance'],
-                                  ) ??
-                                  0.0;
                               final isPrivate = ownership == 'private';
-                              // Do not check corporation credits for corporate/public research proposals
-                              final canAffordResearch = isPrivate
-                                  ? (userCredits >= nextResearchCost)
-                                  : true;
-                              final isButtonDisabled = widget.busy ||
-                                  (!isPrivate && !isCorporationMember) ||
-                                  !canAffordResearch;
+                              final canAffordResearch =
+                                  isCorporationMember && nextResearchCost > 0;
+                              final isButtonDisabled =
+                                  widget.busy || !canAffordResearch;
 
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1236,7 +1158,8 @@ class _CorporateBuildingResearchPanelState
                                                   name: name,
                                                   targetTier: targetTier,
                                                   currentTier: currentTier,
-                                                  costCredits: nextResearchCost,
+                                                  costCredits:
+                                                      nextResearchCost.round(),
                                                   durationDays: durationDays,
                                                   costCreditsCur:
                                                       costCreditsCur,
@@ -2173,6 +2096,8 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
   @override
   Widget build(BuildContext context) {
     final registry = widget.state.technologyRegistry;
+    final techCatalog =
+        registry['catalog'] is List ? registry['catalog'] as List : const [];
     final projectList = registry['corporationProjects'] is List
         ? (registry['corporationProjects'] as List).whereType<Map>().toList()
         : <Map>[];
@@ -2254,7 +2179,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
           '• Corporate R&D Sponsorship: Industrial building tiers and general technologies are sponsored by corporations and funded from their corporate treasuries.\n\n• Capabilities & Breakthroughs: Choose and fund a capability that improves business outcomes. A completed capability can be activated with a subscription.\n\n• Building Tiers: Researches the next technological tier for shared industrial, commercial, and utility buildings in Earth\'s catalog.\n\n• Effects, cost, duration, prerequisites, and rules version are authoritative values from the active technology catalog; this page never estimates unpublished research values.',
       title: 'RESEARCH & TECHNOLOGY',
       subtitle:
-          'Planetary patent trees, corporate capability breakthroughs, and industrial tech tiers across Earth',
+          'Corporate capability breakthroughs and industrial technology tiers across Earth',
       metrics: [
         CockpitMetric(
           label: 'Tiers Researched',
@@ -2581,28 +2506,6 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: cyanAccentColor,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: widget.busy || isComplete || !isCorporationMember
-                        ? null
-                        : () => widget
-                            .action(() => const EarthApi().fundResearch()),
-                    icon: const Icon(Icons.bolt_rounded, size: 15),
-                    label: const Text(
-                      'FUND 240 C · +4% MAX',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: .6,
-                      ),
-                    ),
-                  ),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: inkColor,
@@ -2613,11 +2516,11 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                     ),
                     onPressed: widget.busy || !isCorporationMember
                         ? null
-                        : () =>
-                            showResearchComposerDialog(context, widget.action),
+                        : () => showResearchComposerDialog(
+                            context, widget.action, techCatalog),
                     icon: const Icon(Icons.science_outlined, size: 15),
                     label: const Text(
-                      'NEW PROJECT · 240 C',
+                      'NEW PROJECT · CATALOG COST',
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,

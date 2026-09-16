@@ -28,7 +28,7 @@ function eventRows(rows: Record<string, unknown>[]): SummaryEvent[] {
     id: String(row.id),
     type: String(row.event_type),
     title: String(row.title),
-    details: String(row.details ?? 'null'),
+    details: row.details == null ? '' : String(row.details),
     gameDay: Number(row.game_day),
     gameMinute: row.game_minute == null ? null : Number(row.game_minute),
   }));
@@ -121,13 +121,16 @@ export async function getHouseDailySummary(
     read: row.read_at != null,
   }));
 
-  const highlights: Array<{ code: string; reason: string }> = [];
-  if (expenses > income) highlights.push({ code: 'negative_cashflow', reason: `Recorded CREDIT expenses (${expenses}) exceeded recorded income (${income}) on game day ${summaryDay}.` });
-  if (taxUnits > 0) highlights.push({ code: 'taxes_paid', reason: `Recorded tax payments totaled ${taxUnits} CREDIT on game day ${summaryDay}.` });
-  if (research.some((event) => event.type.includes('COMPLETED'))) highlights.push({ code: 'research_completed', reason: 'A research or technology completion event was recorded for this House on the summary day.' });
-  if (buildings.some((event) => event.type === 'BUILDING_BECAME_INACTIVE')) highlights.push({ code: 'building_attention_required', reason: 'A building became inactive on the summary day.' });
-
   const authoritative = statement.rows[0] as Record<string, unknown> | undefined;
+  const production = authoritative ? jsonObject(authoritative.production) : {};
+  const consumption = authoritative ? jsonObject(authoritative.consumption) : {};
+  const resourceCodes = new Set([...Object.keys(production), ...Object.keys(consumption)]);
+  const resourceDeltas = [...resourceCodes].sort().map((resource) => ({
+    resource,
+    produced: units(production[resource]),
+    consumed: units(consumption[resource]),
+    net: units(production[resource]) - units(consumption[resource]),
+  }));
   const statementView = authoritative ? {
     openingAssets: jsonObject(authoritative.opening_assets),
     closingAssets: jsonObject(authoritative.closing_assets),
@@ -139,8 +142,32 @@ export async function getHouseDailySummary(
     netCreditUnits: String(authoritative.net_credit_units ?? '0'),
   } : null;
 
+  const highlights: Array<Record<string, unknown>> = [];
+  if (expenses > income) highlights.push({
+    id: 'negative_cashflow', severity: 'warning', title: 'Expenses exceeded income',
+    reason: `Your House spent ${expenses} CREDIT and received ${income} CREDIT on game day ${summaryDay}.`,
+    actionLabel: 'REVIEW FINANCE', targetSection: 'finance',
+  });
+  for (const event of buildings.filter((item) => item.type.includes('INACTIVE'))) highlights.push({
+    id: `building-inactive:${event.id}`, severity: 'high', title: event.title,
+    reason: event.details, actionLabel: 'VIEW BUILDINGS', targetSection: 'buildings',
+  });
+  for (const item of resourceDeltas.filter((delta) => delta.net < 0)) highlights.push({
+    id: `resource-decline:${item.resource}`, severity: 'warning', title: `${item.resource} decreased`,
+    reason: `${item.resource} production was ${item.produced} and consumption was ${item.consumed} on game day ${summaryDay}.`,
+    actionLabel: 'REVIEW RESOURCES', targetSection: 'buildings',
+  });
+  for (const alert of notifications.rows as Array<Record<string, unknown>>) {
+    const type = String(alert.notification_type ?? '').toLowerCase();
+    if (alert.read_at != null || !/(failed|overdue|inactive|expired|risk|urgent|required|shortage)/.test(type)) continue;
+    highlights.push({
+      id: `alert:${alert.id}`, severity: 'high', title: String(alert.title ?? 'House alert'),
+      reason: String(alert.body ?? ''), actionLabel: 'OPEN ALERTS', targetSection: 'notifications',
+    });
+  }
+
   return {
-    version: 1,
+    version: 2,
     currentGameDay,
     summaryDay,
     financial: {
@@ -152,7 +179,7 @@ export async function getHouseDailySummary(
       marketSales: market.rows.reduce((sum, row) => sum + units(row.sales), 0),
     },
     statement: statementView,
-    resources: { produced: [], consumed: [], traded: market.rows.map((row) => ({ commodity: row.commodity, purchases: units(row.purchases), sales: units(row.sales), volume: units(row.volume) })) },
+    resources: { produced: resourceDeltas.filter((item) => item.produced > 0), consumed: resourceDeltas.filter((item) => item.consumed > 0), deltas: resourceDeltas, traded: market.rows.map((row) => ({ commodity: row.commodity, purchases: units(row.purchases), sales: units(row.sales), volume: units(row.volume) })) },
     buildings: { completed: buildings.filter((event) => event.type.includes('COMPLETED')), upgraded: buildings.filter((event) => event.type.includes('UPGRADED')), inactive: buildings.filter((event) => event.type.includes('INACTIVE')) },
     research: { progress: research.filter((event) => !event.type.includes('COMPLETED')), completed: research.filter((event) => event.type.includes('COMPLETED')) },
     governance: { relevantEvents: governance },

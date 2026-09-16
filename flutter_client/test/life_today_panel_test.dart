@@ -16,9 +16,7 @@ void main() {
         'life_status': 'active',
       },
       'business': {'name': 'Northstar Robotics'},
-      'institutions': {
-        'city': {'name': 'Aurelia'},
-      },
+      'residency': {},
       'membership': {'name': 'Civic Assembly'},
       'life': {},
     });
@@ -27,8 +25,7 @@ void main() {
       home: Scaffold(body: LifeTodayPanel(state: state)),
     ));
 
-    expect(find.text('AURELIA'), findsOneWidget);
-    expect(find.text('AURELIA'), findsOneWidget);
+    expect(find.text('NO REGISTERED RESIDENCE'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
     expect(find.text('82%'), findsOneWidget);
     expect(find.text('64%'), findsOneWidget);

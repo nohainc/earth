@@ -251,7 +251,7 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
                 items: territories
                     .map((row) => DropdownMenuItem<String>(
                           value: row['id'],
-                          child: Text('${row['name']} (${row['id']})'),
+                          child: Text(row['name']!.toString()),
                         ))
                     .toList(),
                 onChanged: (value) {
@@ -275,9 +275,44 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
                 ? null
                 : () async {
                     final messenger = ScaffoldMessenger.of(context);
-                    Navigator.of(dialogCtx).pop();
-                    setState(() => _isLoading = true);
                     try {
+                      final quote =
+                          await widget.api!.quoteHouseMove(territoryId: target);
+                      if (!context.mounted) return;
+                      final targetTerritory = quote['targetTerritory'] is Map
+                          ? Map<String, dynamic>.from(
+                              quote['targetTerritory'] as Map)
+                          : const <String, dynamic>{};
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (confirmCtx) => AlertDialog(
+                          title: const Text('REVIEW RESIDENCY MOVE'),
+                          content: Text(
+                            '${targetTerritory['name'] ?? target}\n\n'
+                            'Eligibility: ${quote['eligible'] == true ? 'Eligible' : 'Not eligible'}\n'
+                            'Effective: next settlement boundary\n'
+                            'Move cost: ${quote['moveCostUnits'] ?? '0'} CR\n'
+                            'Remote buildings remain owned: ${quote['assetLocationRetained'] == true ? 'Yes' : 'No'}',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(confirmCtx).pop(false),
+                              child: const Text('CANCEL'),
+                            ),
+                            FilledButton(
+                              onPressed: quote['eligible'] == true
+                                  ? () => Navigator.of(confirmCtx).pop(true)
+                                  : null,
+                              child: const Text('CONFIRM MOVE'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true) return;
+                      if (!dialogCtx.mounted) return;
+                      Navigator.of(dialogCtx).pop();
+                      setState(() => _isLoading = true);
                       await widget.api!.moveHouseResidence(territoryId: target);
                       if (mounted) {
                         messenger.showSnackBar(
@@ -291,7 +326,7 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
                       if (mounted) {
                         messenger.showSnackBar(
                           SnackBar(
-                              content: Text('Relocation failed: $e'),
+                              content: Text('Relocation unavailable: $e'),
                               backgroundColor: Colors.red),
                         );
                       }
@@ -409,13 +444,12 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
               style: context.widgetFooterStyle)
         else
           ...rights.whereType<Map>().map((right) {
-            final rightId = right['id']?.toString() ?? '—';
+            final rightId = right['id']?.toString() ?? '';
             final status = right['status']?.toString() ?? 'ACTIVE';
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 4),
               child: ListTile(
-                title: Text(
-                    '${right['slot_quantity'] ?? 0} private slots · $rightId',
+                title: Text('${right['slot_quantity'] ?? 0} private slots',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(
                     'Rent: ${right['rent_per_game_day_units'] ?? '—'} CR/day · Ends: Day ${right['effective_to_game_day'] ?? 'open'}'),
@@ -429,7 +463,8 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
             );
           }),
         const SizedBox(height: 16),
-        Text('COMMONS FISCAL STATEMENT', style: context.topicTitleStyle),
+        Text('COMMONS POLICY & ACCOUNTING STATUS',
+            style: context.topicTitleStyle),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.all(12),
@@ -446,7 +481,7 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
             children: [
               Text(
                 policy.isEmpty
-                    ? 'No active dividend policy is declared for this territory.'
+                    ? 'No active dividend policy is reported for this territory.'
                     : 'Policy: ${policy['reserve_bps'] ?? '—'} bps reserve · ${policy['dividend_bps'] ?? '—'} bps resident dividend',
                 style: context.widgetFooterStyle,
               ),

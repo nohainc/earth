@@ -17,35 +17,20 @@ class CommandExecutiveQuadrant extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeBuildings = state.buildings.whereType<Map>().where((building) {
-      return (building['status']?.toString().toLowerCase() ?? 'active') == 'active';
+      return (building['status']?.toString().toLowerCase() ?? 'active') ==
+          'active';
     }).length;
-    final buildingName = activeBuildings == 0 ? 'NO ACTIVE BUILDINGS' : 'PRIVATE OPERATIONS';
-    final condition = state.buildings
-        .whereType<Map>()
-        .map((b) => b['condition'] ?? b['health'] ?? b['integrity'])
-        .whereType<num>()
-        .toList();
-    final averageCondition = condition.isEmpty
-        ? null
-        : condition.reduce((a, b) => a + b) / condition.length;
-    final operations = state.json['operations'] is Map
-        ? Map<String, dynamic>.from(state.json['operations'] as Map)
-        : state.json['business'] is Map
-            ? Map<String, dynamic>.from(state.json['business'] as Map)
-            : const <String, dynamic>{};
-    final profit = asDouble(operations['profit'] ?? operations['netProfit']);
-    final policy = operations['policy']?.toString();
 
-    final territoryRaw = state.residency['territory'] ?? state.institutions['territory'];
-    final territory = territoryRaw is Map ? Map<String, dynamic>.from(territoryRaw) : <String, dynamic>{};
+    final territoryRaw =
+        state.residency['territory'] ?? state.institutions['territory'];
+    final territory = territoryRaw is Map
+        ? Map<String, dynamic>.from(territoryRaw)
+        : <String, dynamic>{};
     final territoryName =
-        (state.residency['territory_name'] ?? territory['name'] ?? 'NEW CARTHAGE')
-            .toString()
-            .toUpperCase();
-    final territoryHealth = formatWholeNumber(
-      territory['fiscal_health'] ?? territory['health'],
-      fallback: 'UNAVAILABLE',
-    );
+        (state.residency['territory_name'] ?? territory['name'])
+                ?.toString()
+                .toUpperCase() ??
+            'TERRITORY UNAVAILABLE';
 
     final marketProducts = state.market;
     String formatPrice(dynamic val) {
@@ -103,9 +88,9 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   icon: '⌁',
                   iconColor: cyanAccentColor,
                   title: 'MARKET',
-                  subtitle: 'UNIFORM BATCH SETTLEMENT',
+                  subtitle: 'LAST CLEARING PRICE',
                   infoDescription:
-                      '• Spot Clearing Prices: Displays current clearing prices for key commodities (Components, Energy, Materials) settled per batch cycle.\n\n• Batch Auction Clearing: Periodic auctions aggregate discrete supply/demand curves to clear trades at a single non-arbitrage equilibrium price.\n\n• Action: Tap card to open Central Market to view full order books or submit limit orders.',
+                      'Verified prices from the latest market clearing. Open Market for the full book and order actions.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -122,40 +107,26 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   onTap: () => onNavigate?.call('market'),
                 ),
 
-                // 2. BUSINESS & OPERATIONS CARD
+                // 2. CURRENT BUILDINGS CARD
                 _ExecutiveCard(
                   width: cardWidth,
                   icon: '◈',
                   iconColor: violetColor,
                   title: 'OPERATIONS',
-                  subtitle: '$buildingName · $activeBuildings ACTIVE',
+                  subtitle:
+                      '$activeBuildings ACTIVE · ${state.buildings.length} TOTAL',
                   infoDescription:
-                      '• Fleet Condition: Average structural integrity across all registered machinery. Drops below 50% risk severe downtime and emergency maintenance surcharges.\n\n• Projected Net P&L: Net credits earned per operating cycle after subtracting power, raw materials, and municipal taxes.\n\n• Operating Policy: Active dispatch strategy (Reliability, Margin, or Capacity) balancing output yield against wear rate.\n\n• Action: Tap card to manage unit economics, issue shares, distribute dividends, or tune policies.',
+                      'Current building inventory and lifecycle state. Open Buildings for construction, maintenance, and production controls.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rowMetric(
-                          'Building Condition',
-                          averageCondition == null
-                              ? 'UNAVAILABLE'
-                              : '${averageCondition.toStringAsFixed(0)}%',
-                          averageCondition != null && averageCondition < 50
-                              ? Colors.orangeAccent
-                              : cyanAccentColor),
+                      _rowMetric('Active buildings', '$activeBuildings',
+                          cyanAccentColor),
                       const SizedBox(height: 5),
                       _rowMetric(
-                        'Projected Net P&L',
-                        profit == null
-                            ? 'UNAVAILABLE'
-                            : '${profit >= 0 ? '+' : ''}${profit.toStringAsFixed(1)} C / cycle',
-                        profit == null
-                            ? mutedColor
-                            : profit >= 0
-                                ? cyanAccentColor
-                                : Colors.redAccent,
-                      ),
-                      const SizedBox(height: 5),
-                      _rowMetric('Operating Policy', policy ?? 'UNAVAILABLE', mutedColor),
+                          'Other lifecycle states',
+                          '${state.buildings.length - activeBuildings}',
+                          mutedColor),
                     ],
                   ),
                   onTap: () => onNavigate?.call('buildings'),
@@ -167,26 +138,26 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   icon: '⊙',
                   iconColor: Colors.amberAccent,
                   title: territoryName,
-                  subtitle: 'TERRITORY COMMONS · HEALTH $territoryHealth',
+                  subtitle: 'CURRENT RESIDENCY',
                   infoDescription:
-                      '• Power Grid Stability: Percentage of total territorial electrical demand satisfied by local energy generation.\n\n• Housing & Slot Capacity: Available territorial lease slots preventing overcrowding.\n\n• Commons Dividend Yield: Shared territorial revenue returned to verified resident Houses.\n\n• Action: Tap card to inspect territory commons, slot leases, dividends, and residency relocation.',
+                      'Current territory facts available to this House. Open Territory to inspect services, capacity, and residency options.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _rowMetric(
-                          'Power Grid Stability',
+                          'Energy coverage',
                           _formatPercent(territory['power_grid_stability'] ??
                               territory['energy_coverage']),
                           cyanAccentColor),
                       const SizedBox(height: 5),
                       _rowMetric(
-                          'Slot Capacity',
+                          'Available capacity',
                           _formatPercent(territory['slot_capacity_available'] ??
                               territory['available_capacity']),
                           mutedColor),
                       const SizedBox(height: 5),
                       _rowMetric(
-                          'Commons Dividend',
+                          'Commons dividend',
                           territory['commons_dividend']?.toString() ??
                               'UNAVAILABLE',
                           Colors.greenAccent),
@@ -201,19 +172,19 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   icon: '§',
                   iconColor: Colors.tealAccent,
                   title: 'FINANCE',
-                  subtitle: 'DOUBLE-ENTRY SETTLED LEDGER',
+                  subtitle: 'CURRENT BALANCE',
                   infoDescription:
-                      '• Liquid Credits: Spendable funds available immediately for market orders and operating expenses.\n\n• Ledger Integrity: Real-time validation of double-entry transaction ledgers ensuring zero balance leakage.\n\n• Action: Tap card to open financial statements and transaction history.',
+                      'Spendable balance currently reported for this House. Open Finance for statements and obligations.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rowMetric('Liquid Credits',
+                      _rowMetric(
+                          'Liquid Credits',
                           formatCreditsAmount(state.finance['balance'] ??
                               state.personalFinance['balance'] ??
-                              state.human['credits']), violetColor),
+                              state.human['credits']),
+                          violetColor),
                       const SizedBox(height: 5),
-                      const SizedBox(height: 5),
-                      _rowMetric('Ledger Integrity', 'Audited', cyanAccentColor),
                     ],
                   ),
                   onTap: () => onNavigate?.call('finance'),

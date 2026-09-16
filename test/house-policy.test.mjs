@@ -16,6 +16,15 @@ test('inventory policy produces deterministic bounded procurement decisions', ()
   assert.throws(() => evaluateInventoryPolicy(policy, { ENERGY: 1n }, 101n), /outside the configured cap/);
 });
 
+test('an explicit zero procurement quantity disables buying for that resource', () => {
+  const result = evaluateInventoryPolicy(
+    { ...policy, procurementQuantityUnits: { ENERGY: 0n } },
+    { ENERGY: 0n },
+    0n,
+  );
+  assert.deepEqual(result, []);
+});
+
 test('sale policy never sells through the saved reserve floor', () => {
   assert.deepEqual(evaluateSalePolicy(policy, { FOOD: 30n }), [{ action: 'SELL', product: 'FOOD', quantityUnits: 30n, priceLimitUnits: 8n, reason: 'FOOD is above the saved House reserve floor' }]);
   assert.deepEqual(evaluateSalePolicy(policy, { ENERGY: 20n }), []);

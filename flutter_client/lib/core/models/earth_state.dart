@@ -40,6 +40,11 @@ class EarthState {
       asDouble(
           json['market'] is Map ? (json['market'] as Map)['feeRate'] : null) ??
       0;
+  double get marketReservedCredits =>
+      asDouble(json['market'] is Map
+          ? (json['market'] as Map)['reservedCredits']
+          : null) ??
+      0;
   List<dynamic> get communities => _toList(json['communities']);
   List<dynamic> get territories => _toList(json['territories']);
   List<dynamic> get organizations => _toList(json['organizations']);

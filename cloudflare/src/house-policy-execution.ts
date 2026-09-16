@@ -30,7 +30,11 @@ function compileBuy(policy: HousePolicy, evaluation: PolicyEvaluation, dailySpen
     return { product, action: 'BUY', reason: 'A positive maximum input price is required before a policy can place a buy order' };
   }
   const remainingSpend = policy.dailySpendCapUnits - dailySpendUsedUnits;
-  const boundedQuantity = remainingSpend / evaluation.priceLimitUnits;
+  // Quantity is stored in millionths of a resource unit while price is in
+  // CREDIT cents per unit. Keep the inverse calculation dimensionally
+  // consistent with settlement's quantity*price/1_000_000 formula.
+  const boundedQuantity =
+    (remainingSpend * 1_000_000n) / evaluation.priceLimitUnits;
   const quantity = evaluation.quantityUnits < boundedQuantity ? evaluation.quantityUnits : boundedQuantity;
   if (quantity <= 0n) return { product, action: 'BUY', reason: 'The daily policy spend cap has no remaining capacity' };
   return { actionType: 'BUY', product, side: 'buy', quantityUnits: quantity, limitPriceUnits: evaluation.priceLimitUnits, source: 'HOUSE_POLICY', reason: evaluation.reason };
@@ -47,10 +51,19 @@ export function compileHousePolicy(policy: HousePolicy, inventory: Record<string
   const evaluations = [...evaluateInventoryPolicy(policy, inventory, dailySpendUsedUnits), ...evaluateSalePolicy(policy, inventory)];
   const actions: CompiledPolicyAction[] = [];
   const exceptions: PolicyException[] = [];
+  let remainingSpend = policy.dailySpendCapUnits - dailySpendUsedUnits;
   for (const evaluation of evaluations) {
-    const result = evaluation.action === 'BUY' ? compileBuy(policy, evaluation, dailySpendUsedUnits) : compileSell(evaluation);
+    const result = evaluation.action === 'BUY'
+      ? compileBuy(policy, evaluation, policy.dailySpendCapUnits - remainingSpend)
+      : compileSell(evaluation);
     if ('actionType' in result) {
       actions.push(result);
+      if (result.actionType === 'BUY') {
+        remainingSpend = remainingSpend -
+            ((result.quantityUnits * result.limitPriceUnits + 500_000n) /
+                1_000_000n);
+        if (remainingSpend < 0n) remainingSpend = 0n;
+      }
     } else exceptions.push(result);
   }
   return { actions, exceptions };
@@ -84,7 +97,7 @@ function inventoryMap(rows: Array<{ code: string; balance_units: string }>): Rec
  * not a second economic authority. */
 export async function executeHousePoliciesForDay(repository: PostgresRepository, gameDay: number): Promise<{ actions: number; exceptions: number }> {
   const policies = await repository.query<StoredPolicyRow>(
-    `SELECT id, house_id AS "houseId", policy_type AS "policyType", version,
+    `SELECT DISTINCT ON (house_id) id, house_id AS "houseId", policy_type AS "policyType", version,
             effective_from_game_day AS "effectiveFromGameDay", status,
             operating_mode AS "operatingMode", daily_spend_cap_units::TEXT AS daily_spend_cap_units,
             reserve_floor_units AS reserve_floor_units, max_input_price_units AS max_input_price_units,
@@ -92,7 +105,7 @@ export async function executeHousePoliciesForDay(repository: PostgresRepository,
             rules_version AS "rulesVersion"
        FROM house_operating_policies
       WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
-      ORDER BY house_id, policy_type, version`, [gameDay],
+      ORDER BY house_id, effective_from_game_day DESC, version DESC`, [gameDay],
   );
   let actions = 0;
   let exceptions = 0;

@@ -6,7 +6,7 @@ import { listOrganizations } from './organizations-postgres.ts';
 import { generateDecisionQueue } from './decision-queue.ts';
 import { listTechnology } from './read-postgres.ts';
 import { listCorporationBuildingResearch } from './corporation-building-research-postgres.ts';
-import { assetUnitScale } from './market-model.ts';
+import { assetUnitScale, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { marketFeeRate } from './market-rules.ts';
 
@@ -83,15 +83,62 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                        WHERE debtor_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1)
                                          AND status IN ('DUE', 'PARTIAL', 'ARREARS')
                                        ORDER BY due_game_day, id LIMIT 100`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
-    repository.query(`SELECT id, action_type AS title, status, created_game_day
-                        FROM proposals
-                       WHERE status IN ('OPEN', 'VOTING', 'PASSED')
-                       ORDER BY created_game_day DESC, id LIMIT 100`),
+    repository.query(`SELECT p.*, h.display_name AS creator_name, i.name AS institution_name,
+                             i.kind AS institution_kind,
+                             CASE WHEN p.institution_id = 'OUC-001' OR i.kind = 'WORLD' THEN 'WORLD'
+                                  WHEN i.kind = 'CITY' OR c.id IS NOT NULL THEN 'TERRITORY'
+                                  WHEN i.kind = 'CORPORATION' THEN 'CORPORATION'
+                                  ELSE 'UNKNOWN' END AS scope,
+                             COALESCE(v.support_count, 0) AS support,
+                             COALESCE(v.oppose_count, 0) AS oppose,
+                             COALESCE(v.abstain_count, 0) AS abstain,
+                             COALESCE(v.voter_count, 0) AS cast_count,
+                             0 AS eligible_voter_count,
+                             b.choice AS my_vote,
+                             jsonb_build_object(
+                               'canVote', CASE
+                                 WHEN p.status NOT IN ('OPEN', 'VOTING') THEN FALSE
+                                 WHEN p.institution_id = 'OUC-001' OR i.kind = 'WORLD' THEN TRUE
+                                 WHEN i.kind = 'CITY' OR c.id IS NOT NULL THEN EXISTS (
+                                   SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id
+                                    WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND (ha.primary_territory_id = p.institution_id OR ha.primary_territory_id = i.id))
+                                 WHEN i.kind = 'CORPORATION' THEN EXISTS (
+                                   SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id
+                                    WHERE vh.id = $1 AND ha.status = 'ACTIVE' AND ha.corporation_id IN (p.institution_id, i.id))
+                                 ELSE FALSE END,
+                               'canPropose', FALSE,
+                               'myVote', b.choice,
+                               'ineligibleReason', CASE WHEN p.status NOT IN ('OPEN', 'VOTING') THEN 'Voting is not open.' ELSE NULL END
+                             ) AS viewer
+                        FROM proposals p
+                        LEFT JOIN humans h ON h.id = p.created_by_human_id
+                        LEFT JOIN institutions i ON i.id = p.institution_id
+                        LEFT JOIN territories c ON c.id = COALESCE(p.target_id, p.institution_id)
+                        LEFT JOIN (
+                          SELECT proposal_id,
+                                 COUNT(*) FILTER (WHERE LOWER(choice) = 'support') AS support_count,
+                                 COUNT(*) FILTER (WHERE LOWER(choice) = 'oppose') AS oppose_count,
+                                 COUNT(*) FILTER (WHERE LOWER(choice) = 'abstain') AS abstain_count,
+                                 COUNT(*) AS voter_count
+                            FROM ballots
+                           GROUP BY proposal_id
+                        ) v ON v.proposal_id = p.id
+                        LEFT JOIN ballots b ON b.proposal_id = p.id
+                                           AND b.cast_by_human_id = $1
+                       WHERE p.status IN ('OPEN', 'VOTING', 'PASSED')
+                       ORDER BY p.created_game_day DESC, p.id LIMIT 100`, [viewerId ?? null]),
     listRankings(repository),
-    repository.query(`SELECT id, corporation_id, name, territory_type, status, is_primary, created_game_day
-                        FROM territories
-                       WHERE status IN ('ACTIVE', 'UNGOVERNED')
-                       ORDER BY corporation_id, is_primary DESC, id`),
+    repository.query(`SELECT t.id, t.corporation_id, t.name, t.territory_type, t.status, t.is_primary, t.created_game_day,
+                             s.house_capacity, s.active_house_count,
+                             s.private_slot_capacity, s.private_slots_used,
+                             COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id,
+                             i.name AS governing_authority_name
+                        FROM territories t
+                        LEFT JOIN territory_capacity_state s ON s.territory_id = t.id
+                        LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE'
+                        LEFT JOIN institutions i ON i.id = COALESCE(g.governing_institution_id, t.corporation_id)
+                       WHERE t.status IN ('ACTIVE', 'UNGOVERNED')
+                       ORDER BY t.corporation_id, t.is_primary DESC, t.id`),
     viewerHouseId
       ? repository.query(`SELECT c.id, i.name, c.status, c.charter_version, c.admission_policy,
                                  c.created_game_day,
@@ -154,9 +201,12 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     repository.query(`SELECT o.id, i.symbol, o.side, o.status, o.quantity_units::TEXT,
                              o.remaining_units::TEXT, o.limit_price_units::TEXT,
                              o.rules_version, o.good_til_game_day, o.created_at,
-                             i.asset_id
+                             i.asset_id,
+                             COALESCE(r.remaining_units, 0)::TEXT AS reserved_credit_units
                         FROM market_orders o
                         JOIN market_instruments i ON i.id = o.instrument_id
+                        LEFT JOIN market_order_reservations r
+                          ON r.order_id = o.id AND r.asset_id = 1 AND r.status = 'ACTIVE'
                        WHERE o.status IN ('OPEN', 'PARTIAL')
                          AND ($1::TEXT IS NOT NULL AND o.owner_economic_id =
                               (SELECT economic_id FROM owner_registry WHERE id = $1))
@@ -194,9 +244,13 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
         rulesVersion: row.rules_version,
         goodTilGameDay: row.good_til_game_day,
         createdAt: row.created_at,
+        reservedCredits: row.side === 'BUY' ? priceUnitsToDisplayPrice(String(row.reserved_credit_units ?? '0')) : 0,
       };
     }),
     feeRate: Number(await marketFeeRate(repository, viewerId)),
+    reservedCredits: marketOrders.rows.reduce((sum: number, row: any) => sum + (row.side === 'BUY' ? Number(priceUnitsToDisplayPrice(String(row.reserved_credit_units ?? '0'))) : 0), 0),
+    clearingIntervalMinutes: MARKET_BATCH_GAME_MINUTES,
+    nextClearingGameMinute: gameMinute + (MARKET_BATCH_GAME_MINUTES - (gameMinute % MARKET_BATCH_GAME_MINUTES)),
     gameDay,
     generatedFrom: 'postgres-canonical-facts',
   };
@@ -249,6 +303,18 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     districtZoning: capacity ?? {},
     decisionQueue,
     rankings,
-    worldConditions: exposedConditions,
+    worldConditions: {
+      status: 'AVAILABLE',
+      snapshotGameDay: conditions.gameDay,
+      rulesVersion: conditions.rulesVersion,
+      worldState: exposedConditions.length > 0 ? 'ACTIVE_CONDITIONS' : 'STABLE',
+      activeConditions: exposedConditions,
+      playerExposure: {
+        territoryId: territory?.territory_id ?? null,
+        territoryName: territory?.territory_name ?? null,
+        activeConditionCount: exposedConditions.filter((condition: any) =>
+          condition.exposure === 'YOUR_TERRITORY' || condition.exposure === 'WORLDWIDE').length,
+      },
+    },
   };
 }

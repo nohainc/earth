@@ -53,7 +53,7 @@ export async function handleRealEstateRoutes(
   const territoryRightsMatch = url.pathname.match(/^\/api\/territories\/([^/]+)\/rights$/);
   if (territoryRightsMatch && request.method === 'GET') {
     try {
-      const result = await withRepository(env, (repository) => listTerritoryRights(repository, { territoryId: territoryRightsMatch[1] }));
+      const result = await withRepository(env, (repository) => listTerritoryRights(repository, { territoryId: territoryRightsMatch[1], humanId: viewer.id }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Territory rights unavailable' }, { status: 400 }); }

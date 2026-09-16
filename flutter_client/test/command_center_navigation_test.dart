@@ -136,6 +136,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('EXECUTIVE OVERVIEW'), findsOneWidget);
-    expect(find.text('CREDITS'), findsOneWidget);
+    expect(find.text('CURRENT BALANCE'), findsOneWidget);
   });
 }

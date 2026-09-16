@@ -248,6 +248,8 @@ void main() {
     expect(find.text('CANCEL ORDER'), findsOneWidget);
     await tester.tap(find.text('CANCEL ORDER'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('CANCEL ORDER').last);
+    await tester.pumpAndSettle();
 
     expect(cancelledOrderId, 'ORD-01');
   });
@@ -257,7 +259,13 @@ void main() {
       (tester) async {
     const state = EarthState({
       'human': {},
-      'resources': {'energy': 20, 'food': 0, 'material': 80, 'components': 50, 'compute': 4},
+      'resources': {
+        'energy': 20,
+        'food': 0,
+        'material': 80,
+        'components': 50,
+        'compute': 4
+      },
       'market': {
         'products': {
           'energy': {'price': 8.0},
@@ -272,12 +280,15 @@ void main() {
     });
 
     await tester.pumpWidget(MaterialApp(
-      home: Scaffold(body: SuppliesTodayPanel(state: state, action: (fn) async {})),
+      home: Scaffold(
+          body: SuppliesTodayPanel(state: state, action: (fn) async {})),
     ));
 
     expect(find.text('STOCK & SHORTAGES'), findsOneWidget);
-    expect(find.textContaining('Needs attention'), findsOneWidget);
+    expect(
+        find.textContaining('No immediate commodity shortage'), findsOneWidget);
     expect(find.text('0 available'), findsOneWidget);
-    expect(find.textContaining('Buildings and businesses drive demand'), findsOneWidget);
+    expect(find.textContaining('Buildings and businesses drive demand'),
+        findsOneWidget);
   });
 }

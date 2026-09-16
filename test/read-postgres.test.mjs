@@ -122,7 +122,7 @@ test('public memorial read models are bounded and sourced from canonical facts',
   assert.equal(pantheon.deceasedPantheon.length, 1);
   assert.equal(pantheon.livingLeaders.length, 1);
   assert.equal(pantheon.houses.length, 1);
-  assert.match(client.calls[0].sql, /LIMIT 100/);
+  assert.match(client.calls[0].sql, /LIMIT \$2/);
 
   const cemetery = await listCemeteryProfiles(repo, { search: 'Ada', limit: 9999 });
   assert.equal(cemetery.cemetery.length, 1);

@@ -61,7 +61,10 @@ class _CommandCenterState extends State<CommandCenter> {
   String? error;
   bool busy = false;
   List<dynamic> events = const [];
+  List<dynamic> news = const [];
+  String? newsNextCursor;
   List<dynamic> notifications = const [];
+  List<dynamic> decisionQueue = const [];
   List<dynamic> ownershipEvents = const [];
   List<dynamic> membershipEvents = const [];
   Map<String, dynamic> marketHistory = const {};
@@ -420,12 +423,16 @@ class _CommandCenterState extends State<CommandCenter> {
     try {
       final results = await Future.wait<dynamic>([
         api.events(),
+        api.news().catchError((_) => <String, dynamic>{}),
         api.notifications(),
+        api.commandCenter().catchError((_) => <String, dynamic>{}),
         api.personalFinance().catchError((_) => personalFinanceData),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
       ]);
       final latest = results[0] as List<dynamic>;
-      final notificationData = results[1] as Map<String, dynamic>;
+      final newsData = results[1] as Map<String, dynamic>;
+      final notificationData = results[2] as Map<String, dynamic>;
+      final decisionData = results[3] as Map<String, dynamic>;
       final ownership = latest
           .where((event) =>
               event is Map<String, dynamic> && event['category'] == 'OWNERSHIP')
@@ -435,17 +442,21 @@ class _CommandCenterState extends State<CommandCenter> {
               event is Map<String, dynamic> &&
               event['category'] == 'AFFILIATION')
           .toList();
-      final finData = results[2] as Map<String, dynamic>;
+      final finData = results[4] as Map<String, dynamic>;
       final commUnread = 0;
       if (mounted) {
         setState(() {
           events = latest;
+          news = (newsData['news'] as List<dynamic>?) ?? const [];
+          newsNextCursor = newsData['nextCursor']?.toString();
           ownershipEvents = ownership;
           membershipEvents = memberships;
           personalFinanceData = finData;
           unreadCommMessages = commUnread;
           notifications =
               (notificationData['notifications'] as List<dynamic>?) ?? const [];
+          decisionQueue =
+              (decisionData['decisions'] as List<dynamic>?) ?? const [];
           unreadNotifications = asInt(notificationData['unread']) ??
               asInt(notificationData['unreadCount']) ??
               0;
@@ -468,6 +479,21 @@ class _CommandCenterState extends State<CommandCenter> {
       if (mounted && connectionStatus != LiveConnectionStatus.reconnecting) {
         setState(() => connectionStatus = LiveConnectionStatus.offline);
       }
+    }
+  }
+
+  Future<void> _loadEarlierNews() async {
+    final cursor = newsNextCursor;
+    if (cursor == null || cursor.isEmpty) return;
+    try {
+      final response = await api.news(before: cursor);
+      if (!mounted) return;
+      setState(() {
+        news = [...news, ...((response['news'] as List<dynamic>?) ?? const [])];
+        newsNextCursor = response['nextCursor']?.toString();
+      });
+    } catch (_) {
+      // The existing feed remains usable; the next refresh can retry.
     }
   }
 
@@ -684,6 +710,8 @@ class _CommandCenterState extends State<CommandCenter> {
             : RefreshIndicator(
                 onRefresh: () async => _run(api.world),
                 child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
                   decoration: BoxDecoration(
                     color: context.canvasColor,
                     gradient: LinearGradient(
@@ -696,9 +724,39 @@ class _CommandCenterState extends State<CommandCenter> {
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      TopFixedHudPanel(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 1536),
+                      decoration: BoxDecoration(
+                        color: context.canvasColor,
+                        border: viewport.maxWidth > 1536
+                            ? Border(
+                                left: BorderSide(
+                                  color: context.primaryColor
+                                      .withValues(alpha: 0.12),
+                                  width: 1.0,
+                                ),
+                                right: BorderSide(
+                                  color: context.primaryColor
+                                      .withValues(alpha: 0.12),
+                                  width: 1.0,
+                                ),
+                              )
+                            : null,
+                        boxShadow: viewport.maxWidth > 1536
+                            ? [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 24,
+                                  spreadRadius: 2,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Column(
+                        children: [
+                          TopFixedHudPanel(
                         state: current,
                         notifications: notifications,
                         unreadNotifications: unreadNotifications,
@@ -835,7 +893,12 @@ class _CommandCenterState extends State<CommandCenter> {
                                         ),
                                         busy: busy,
                                         events: events,
+                                        news: news,
+                                        newsHasMore: newsNextCursor != null &&
+                                            newsNextCursor!.isNotEmpty,
+                                        onLoadEarlierNews: _loadEarlierNews,
                                         notifications: notifications,
+                                        decisionQueue: decisionQueue,
                                         ownershipEvents: ownershipEvents,
                                         membershipEvents: membershipEvents,
                                         marketHistory: marketHistory,
@@ -855,6 +918,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                         sectionKeys: _sectionKeys,
                                         action: _run,
                                         onRefreshEvents: _refreshEvents,
+                                        onRefreshTerritoryCommons: () =>
+                                            _loadSecondaryPanels(current),
                                         onMarkNotificationRead: (id) async {
                                           await api.markNotificationRead(id);
                                           await _refreshEvents();
@@ -876,6 +941,8 @@ class _CommandCenterState extends State<CommandCenter> {
                   ),
                 ),
               ),
+            ),
+          ),
       );
     });
   }

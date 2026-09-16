@@ -149,34 +149,15 @@ class LifeTodayPanel extends StatelessWidget {
     final human = state.human;
     final life = state.life;
     final health = asDouble(human['health'] ??
-            human['vitality'] ??
-            life['health'] ??
-            life['vitality']) ??
-        0.0;
+        human['vitality'] ??
+        life['health'] ??
+        life['vitality']);
     final energy = asDouble(human['energy'] ??
-            human['stamina'] ??
-            life['energy'] ??
-            life['stamina']) ??
-        0.0;
+        human['stamina'] ??
+        life['energy'] ??
+        life['stamina']);
     final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
-    final legacy = asDouble(human['legacy'] ?? life['legacy']) ?? 0.0;
     final standing = asIntOr(human['standing'], 0);
-    final credits = asDouble(human['credits']) ?? 0.0;
-    final rawFullName =
-        (human['display_name'] ?? human['name'] ?? 'CITIZEN').toString().trim();
-    final displayName =
-        rawFullName.contains(' ') ? rawFullName.split(' ').first : rawFullName;
-    final initials = displayName.length >= 2
-        ? displayName.substring(0, 2).toUpperCase()
-        : 'OP';
-    final epitaph = (human['epitaph'] ??
-            life['epitaph'] ??
-            'Pioneered civilization across the frontier of Earth.')
-        .toString()
-        .trim();
-    final lifeStatus = life['status']?.toString() ??
-        human['life_status']?.toString() ??
-        'ACTIVE';
 
     final houseName = (life['houseName'] ??
             life['house_name'] ??
@@ -195,15 +176,8 @@ class LifeTodayPanel extends StatelessWidget {
         ? '—'
         : 'Year ${((birthGameDay - 1) ~/ 365) + 1}, Day ${((birthGameDay - 1) % 365) + 1}';
 
-    final territoryName = (state.residency['territory_name'] ??
-            (state.institutions['territory'] is Map
-                ? (state.institutions['territory'] as Map)['name']
-                : null) ??
-            (state.institutions['city'] is Map
-                ? (state.institutions['city'] as Map)['name']
-                : null))
-        ?.toString()
-        .toUpperCase();
+    final territoryName =
+        state.residency['territory_name']?.toString().toUpperCase();
     final organizationName = (state.institutions['corporation'] is Map
             ? (state.institutions['corporation'] as Map)['name']
                 ?.toString()
@@ -213,8 +187,9 @@ class LifeTodayPanel extends StatelessWidget {
         (state.membership?['organization_name']?.toString().toUpperCase()) ??
         (state.membership?['name']?.toString().toUpperCase());
 
-    final healthColor =
-        health < 40 ? context.warningColor : context.successColor;
+    final healthColor = health != null && health < 40
+        ? context.warningColor
+        : context.successColor;
 
     return EarthSection(
       title: 'MY LIFE TODAY',
@@ -253,8 +228,8 @@ class LifeTodayPanel extends StatelessWidget {
               _buildAttributeRow(
                 context,
                 icon: Icons.map_outlined,
-                label: 'TERRITORY',
-                value: territoryName ?? 'INDEPENDENT COMMONS',
+                label: 'RESIDENCE',
+                value: territoryName ?? 'NO REGISTERED RESIDENCE',
                 accentColor: context.secondaryColor,
               ),
             ];
@@ -264,20 +239,21 @@ class LifeTodayPanel extends StatelessWidget {
                 context,
                 icon: Icons.favorite_outline,
                 label: 'BIOMETRIC HEALTH',
-                value: '${health.toStringAsFixed(0)}%',
-                accentColor: healthColor,
+                value: health == null ? '—' : '${health.toStringAsFixed(0)}%',
+                accentColor: health == null ? context.mutedColor : healthColor,
               ),
               _buildAttributeRow(
                 context,
                 icon: Icons.bolt_outlined,
                 label: 'LIFE ENERGY',
-                value: '${energy.toStringAsFixed(0)}%',
-                accentColor: context.warningColor,
+                value: energy == null ? '—' : '${energy.toStringAsFixed(0)}%',
+                accentColor:
+                    energy == null ? context.mutedColor : context.warningColor,
               ),
               _buildAttributeRow(
                 context,
                 icon: Icons.verified_user_outlined,
-                label: 'USER STANDING',
+                label: 'CIVIC STANDING',
                 value: formatWholeNumber(standing.toDouble()),
                 accentColor: context.primaryColor,
               ),
@@ -306,28 +282,21 @@ class LifeTodayPanel extends StatelessWidget {
                 const SizedBox(height: 16),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'LIFESTYLE & HEALTH ACTIONS',
-                      style: TextStyle(
-                        color: context.primaryColor,
-                        fontSize: 10.5,
-                        letterSpacing: 1.1,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'MEDICAL ACCESS: AUTOMATIC VIA TERRITORY SERVICES',
-                      style: TextStyle(
-                        color: context.mutedColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
+                _lifecycleTopicHeading(context, 'AFFILIATIONS',
+                    description:
+                        'Your current House, Territory, Corporation, and other active memberships. Only server-confirmed relationships are shown.'),
+                if (state.residency['territory_name'] != null)
+                  _buildAttributeRow(context,
+                      icon: Icons.map_outlined,
+                      label: 'TERRITORY',
+                      value: state.residency['territory_name'].toString(),
+                      accentColor: context.secondaryColor),
+                if (organizationName != null)
+                  _buildAttributeRow(context,
+                      icon: Icons.domain_outlined,
+                      label: 'CORPORATION',
+                      value: organizationName,
+                      accentColor: context.primaryColor),
               ],
             );
           },
@@ -1642,10 +1611,10 @@ class RankingLine extends StatelessWidget {
   }
 }
 
-class WorldRankingsPanel extends StatelessWidget {
+class LegacyWorldRankingsPanel extends StatelessWidget {
   final EarthState state;
 
-  const WorldRankingsPanel({super.key, required this.state});
+  const LegacyWorldRankingsPanel({super.key, required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -1746,6 +1715,8 @@ class WorldRankingsPanel extends StatelessWidget {
     );
   }
 }
+
+typedef WorldRankingsPanel = LegacyWorldRankingsPanel;
 
 class HistoryArchivePanel extends StatelessWidget {
   final EarthState state;

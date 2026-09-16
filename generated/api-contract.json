@@ -304,6 +304,14 @@
       "status": "ACTIVE"
     },
     {
+      "method": "PUT",
+      "path": "/api/house/automation",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "saveHouseAutomation",
+      "status": "ACTIVE"
+    },
+    {
       "method": "GET",
       "path": "/api/command-center",
       "owner": "ReadModelRoutes",
@@ -357,6 +365,14 @@
       "owner": "ReadModelRoutes",
       "auth": "HOUSE_SELF",
       "service": "listGameEvents",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/news",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listNews",
       "status": "ACTIVE"
     },
     {

@@ -7,7 +7,16 @@ async function currentDay(tx: PostgresRepository): Promise<number> {
 
 export async function listGlobalPrograms(repository: PostgresRepository): Promise<Record<string, unknown>> {
   const programs = await repository.query(`SELECT p.id, p.program_type, p.name, p.description, p.status, p.authorized_units::TEXT, p.funded_units::TEXT, p.spent_units::TEXT, p.progress_units::TEXT, p.target_units::TEXT, p.matching_authorized_units::TEXT, p.matching_used_units::TEXT, p.funding_deadline_game_day, p.authorization_proposal_id, p.created_game_day, p.completed_game_day, COUNT(c.id) FILTER (WHERE c.status IN ('ESCROWED','APPLIED'))::INTEGER AS supporter_count FROM global_programs p LEFT JOIN global_program_contributions c ON c.program_id = p.id GROUP BY p.id ORDER BY p.status, p.created_game_day DESC, p.id`);
-  return { programs: programs.rows, generatedFrom: 'postgres-canonical-facts' };
+  return {
+    programs: programs.rows.map((program) => ({
+      ...program,
+      capabilities: {
+        canContribute: ['PROPOSED', 'ACTIVE'].includes(String(program.status).toUpperCase()),
+        canCreate: false,
+      },
+    })),
+    generatedFrom: 'postgres-canonical-facts',
+  };
 }
 
 export async function listGlobalProgramContributions(repository: PostgresRepository, programId: string, houseId: string): Promise<Record<string, unknown>> {

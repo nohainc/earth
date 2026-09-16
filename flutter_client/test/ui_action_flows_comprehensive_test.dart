@@ -378,7 +378,7 @@ void main() {
                   action: spy.invoke,
                   personalFinanceData: finance),
               spy);
-          expect(find.text('PERSONAL FINANCE'), findsOneWidget);
+          expect(find.text('HOUSE FINANCE'), findsOneWidget);
           expect(find.textContaining('470'), findsWidgets);
           expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
         }

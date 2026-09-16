@@ -32,7 +32,15 @@ export function evaluateInventoryPolicy(policy: HousePolicy, inventory: Record<s
   for (const [asset, floor] of Object.entries(policy.reserveFloorUnits)) {
     const held = current[asset] ?? 0n;
     if (held >= floor) continue;
-    const quantity = policy.procurementQuantityUnits[asset] ?? floor - held;
+    const configuredQuantity = policy.procurementQuantityUnits[asset];
+    const hasConfiguredQuantity = Object.prototype.hasOwnProperty.call(
+      policy.procurementQuantityUnits,
+      asset,
+    );
+    if (hasConfiguredQuantity && configuredQuantity === 0n) continue;
+    const quantity = hasConfiguredQuantity
+      ? configuredQuantity!
+      : floor - held;
     const priceLimit = policy.maxInputPriceUnits[asset] ?? null;
     evaluations.push({ action: 'BUY', product: asset, quantityUnits: quantity, priceLimitUnits: priceLimit, reason: `${asset} is below the saved House reserve floor` });
   }
