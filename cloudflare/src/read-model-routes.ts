@@ -10,6 +10,7 @@ import {
   listRankings as listRankingsPostgres,
 } from './read-postgres.ts';
 import { listEvents as listEventsPostgres, listHistory as listHistoryPostgres } from './read-models/events-read.ts';
+import { listNews as listNewsPostgres } from './read-models/news-read.ts';
 import { listNotifications as listNotificationsPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-models/notifications-read.ts';
 import { getDecisionQueue } from './decision-queue-postgres.ts';
 import { contributeToGlobalProgram, createGlobalProgram, fundGlobalProgram, listGlobalProgramContributions, listGlobalPrograms, settleGlobalProgramFunding } from './global-programs-postgres.ts';
@@ -305,6 +306,20 @@ export async function handleReadModelRoutes(
   }
 
   // ── Events / activity feed ───────────────────────────────────────────────────
+  if (url.pathname === '/api/news' && request.method === 'GET') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const rawLimit = Number(url.searchParams.get('limit') ?? 25);
+    if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 50) return Response.json({ ok: false, error: 'limit must be an integer between 1 and 50' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => listNewsPostgres(repository, viewer.house_id, rawLimit, url.searchParams.get('before') ?? undefined));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'News feed unavailable' }, { status: 400 });
+    }
+  }
+
   if (url.pathname === '/api/events' && request.method === 'GET') {
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });

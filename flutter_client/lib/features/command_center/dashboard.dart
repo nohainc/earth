@@ -54,6 +54,9 @@ class Dashboard extends StatelessWidget {
   final Map<String, dynamic>? businessProfile;
   final bool busy;
   final List<dynamic> events;
+  final List<dynamic> news;
+  final bool newsHasMore;
+  final VoidCallback? onLoadEarlierNews;
   final List<dynamic> notifications;
   final List<dynamic> ownershipEvents;
   final List<dynamic> membershipEvents;
@@ -85,6 +88,9 @@ class Dashboard extends StatelessWidget {
     this.businessProfile,
     required this.busy,
     required this.events,
+    this.news = const [],
+    this.newsHasMore = false,
+    this.onLoadEarlierNews,
     required this.notifications,
     required this.ownershipEvents,
     required this.membershipEvents,
@@ -571,6 +577,10 @@ class Dashboard extends StatelessWidget {
       case 'news':
         return [
           NewsPanel(
+              news: news,
+              hasMore: newsHasMore,
+              onLoadEarlier: onLoadEarlierNews,
+              onNavigate: onNavigate,
               events: events,
               notifications: notifications,
               onRefresh: onRefreshEvents)

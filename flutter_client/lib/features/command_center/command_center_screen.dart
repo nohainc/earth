@@ -61,6 +61,8 @@ class _CommandCenterState extends State<CommandCenter> {
   String? error;
   bool busy = false;
   List<dynamic> events = const [];
+  List<dynamic> news = const [];
+  String? newsNextCursor;
   List<dynamic> notifications = const [];
   List<dynamic> ownershipEvents = const [];
   List<dynamic> membershipEvents = const [];
@@ -420,12 +422,14 @@ class _CommandCenterState extends State<CommandCenter> {
     try {
       final results = await Future.wait<dynamic>([
         api.events(),
+        api.news().catchError((_) => <String, dynamic>{}),
         api.notifications(),
         api.personalFinance().catchError((_) => personalFinanceData),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
       ]);
       final latest = results[0] as List<dynamic>;
-      final notificationData = results[1] as Map<String, dynamic>;
+      final newsData = results[1] as Map<String, dynamic>;
+      final notificationData = results[2] as Map<String, dynamic>;
       final ownership = latest
           .where((event) =>
               event is Map<String, dynamic> && event['category'] == 'OWNERSHIP')
@@ -435,11 +439,13 @@ class _CommandCenterState extends State<CommandCenter> {
               event is Map<String, dynamic> &&
               event['category'] == 'AFFILIATION')
           .toList();
-      final finData = results[2] as Map<String, dynamic>;
+      final finData = results[3] as Map<String, dynamic>;
       final commUnread = 0;
       if (mounted) {
         setState(() {
           events = latest;
+          news = (newsData['news'] as List<dynamic>?) ?? const [];
+          newsNextCursor = newsData['nextCursor']?.toString();
           ownershipEvents = ownership;
           membershipEvents = memberships;
           personalFinanceData = finData;
@@ -468,6 +474,21 @@ class _CommandCenterState extends State<CommandCenter> {
       if (mounted && connectionStatus != LiveConnectionStatus.reconnecting) {
         setState(() => connectionStatus = LiveConnectionStatus.offline);
       }
+    }
+  }
+
+  Future<void> _loadEarlierNews() async {
+    final cursor = newsNextCursor;
+    if (cursor == null || cursor.isEmpty) return;
+    try {
+      final response = await api.news(before: cursor);
+      if (!mounted) return;
+      setState(() {
+        news = [...news, ...((response['news'] as List<dynamic>?) ?? const [])];
+        newsNextCursor = response['nextCursor']?.toString();
+      });
+    } catch (_) {
+      // The existing feed remains usable; the next refresh can retry.
     }
   }
 
@@ -835,6 +856,10 @@ class _CommandCenterState extends State<CommandCenter> {
                                         ),
                                         busy: busy,
                                         events: events,
+                                        news: news,
+                                        newsHasMore: newsNextCursor != null &&
+                                            newsNextCursor!.isNotEmpty,
+                                        onLoadEarlierNews: _loadEarlierNews,
                                         notifications: notifications,
                                         ownershipEvents: ownershipEvents,
                                         membershipEvents: membershipEvents,

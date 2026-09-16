@@ -74,6 +74,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'POST', path: '/api/house/{action}/{subaction}', owner: 'HouseRoutes', auth: 'HOUSE_SELF', service: 'houseService', status: 'ACTIVE' },
   { method: 'GET', path: '/api/buildings/catalog', owner: 'ReadModelRoutes', auth: 'PUBLIC', service: 'buildingCatalog', status: 'ACTIVE' },
   { method: 'GET', path: '/api/events', owner: 'ReadModelRoutes', auth: 'HOUSE_SELF', service: 'listGameEvents', status: 'ACTIVE' },
+  { method: 'GET', path: '/api/news', owner: 'ReadModelRoutes', auth: 'HOUSE_SELF', service: 'listNews', status: 'ACTIVE' },
   { method: 'GET', path: '/api/history', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'listHistory', status: 'ACTIVE' },
   { method: 'GET', path: '/api/notifications', owner: 'ReadModelRoutes', auth: 'HOUSE_SELF', service: 'listNotifications', status: 'ACTIVE' },
   { method: 'POST', path: '/api/notifications/read-all', owner: 'ReadModelRoutes', auth: 'HOUSE_SELF', service: 'markAllNotificationsRead', status: 'ACTIVE' },

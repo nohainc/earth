@@ -369,6 +369,14 @@
     },
     {
       "method": "GET",
+      "path": "/api/news",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listNews",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
       "path": "/api/history",
       "owner": "ReadModelRoutes",
       "auth": "AUTHENTICATED",
