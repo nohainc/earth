@@ -150,7 +150,9 @@ void main() {
   });
 
   group('BuildingsHubScreen Comprehensive Unit & UI Tests', () {
-    testWidgets('Grouped buildings display aggregated count, total spaces, and combined output', (tester) async {
+    testWidgets(
+        'Grouped buildings display aggregated count, total spaces, and combined output',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -181,7 +183,9 @@ void main() {
       expect(find.byIcon(Icons.bolt_rounded), findsWidgets);
     });
 
-    testWidgets('Expanding grouped buildings reveals per-item individual details and collapse hides them', (tester) async {
+    testWidgets(
+        'Expanding grouped buildings reveals per-item individual details and collapse hides them',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -223,7 +227,9 @@ void main() {
       expect(find.textContaining('#2  ·  1 space'), findsNothing);
     });
 
-    testWidgets('Common operating policy buttons invoke action callback with correct parameters', (tester) async {
+    testWidgets(
+        'Common operating policy buttons invoke action callback with correct parameters',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -249,11 +255,11 @@ void main() {
       );
 
       expect(find.text('Normal'), findsOneWidget);
-      expect(find.text('Frugal −30%'), findsOneWidget);
+      expect(find.text('Frugal −25% / −30% cost'), findsOneWidget);
       expect(find.text('High output +30%'), findsOneWidget);
 
       // Tap Frugal policy
-      await tester.tap(find.text('Frugal −30%'));
+      await tester.tap(find.text('Frugal −25% / −30% cost'));
       await tester.pumpAndSettle();
 
       // Invocations executed for both items in the group
@@ -286,7 +292,7 @@ void main() {
       );
 
       // Tapping Frugal policy when busy should not invoke callback
-      await tester.tap(find.text('Frugal −30%'));
+      await tester.tap(find.text('Frugal −25% / −30% cost'));
       await tester.pumpAndSettle();
       expect(actionsTriggered, 0);
     });
@@ -318,14 +324,20 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Operating policy'), findsOneWidget);
-      expect(find.textContaining('Normal uses standard output and operating cost'), findsOneWidget);
+      expect(
+          find.textContaining('Normal uses standard output and operating cost'),
+          findsOneWidget);
 
       await tester.tap(find.text('CLOSE'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Normal uses standard output and operating cost'), findsNothing);
+      expect(
+          find.textContaining('Normal uses standard output and operating cost'),
+          findsNothing);
     });
 
-    testWidgets('Ownership tabs correctly isolate Private, Civic, and Public Investment buildings', (tester) async {
+    testWidgets(
+        'Ownership tabs correctly isolate Private, Civic, and Public Investment buildings',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -383,10 +395,13 @@ void main() {
 
       expect(find.textContaining('Available shares: 90 / 100'), findsOneWidget);
       expect(find.textContaining('You hold: 10'), findsOneWidget);
-      expect(find.text('INVEST IN SHARES'), findsOneWidget);
+      expect(find.textContaining('Purchase shares from the Public Projects'),
+          findsOneWidget);
     });
 
-    testWidgets('Narrow viewport (375px mobile) switches to single-column layout with sub-tabs', (tester) async {
+    testWidgets(
+        'Narrow viewport (375px mobile) switches to single-column layout with sub-tabs',
+        (tester) async {
       tester.view.physicalSize = const Size(375, 667);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -420,7 +435,9 @@ void main() {
       expect(find.text('Bistro & Molecular Restaurant'), findsOneWidget);
     });
 
-    testWidgets('Independent citizen sees only private buildings and no ownership tabs', (tester) async {
+    testWidgets(
+        'Independent citizen sees only private buildings and no ownership tabs',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -503,7 +520,9 @@ void main() {
       expect(find.text('BUILDING CAPACITY & DISTRICT ZONING'), findsNothing);
     });
 
-    testWidgets('Unresearched upgrade shows RESEARCH TIER button and opens research dialog', (tester) async {
+    testWidgets(
+        'Unresearched upgrade shows RESEARCH TIER button and opens research dialog',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -561,12 +580,15 @@ void main() {
 
       // Research dialog opens
       expect(find.text('Initiate R&D Project'), findsOneWidget);
-      expect(find.textContaining('Nova Molecular Bistro · Tier 2 → Tier 3'), findsOneWidget);
+      expect(find.textContaining('Nova Molecular Bistro · Tier 2 → Tier 3'),
+          findsOneWidget);
       expect(find.text('CONFIRM R&D PROJECT'), findsOneWidget);
       expect(find.text('CANCEL'), findsOneWidget);
     });
 
-    testWidgets('Civic building tab displays urban district module with research or propose upgrade button', (tester) async {
+    testWidgets(
+        'Civic building tab displays urban district module with research or propose upgrade button',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -635,7 +657,8 @@ void main() {
 
       // Research dialog opens
       expect(find.text('Propose Civic Research'), findsOneWidget);
-      expect(find.textContaining('Urban District Module · Tier 1 → Tier 2'), findsOneWidget);
+      expect(find.textContaining('Urban District Module · Tier 1 → Tier 2'),
+          findsOneWidget);
     });
   });
 }

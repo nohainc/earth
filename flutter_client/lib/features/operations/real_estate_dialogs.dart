@@ -17,14 +17,16 @@ Future<void> showBuildingAcquisitionDialog(
       .map((m) => Map<String, dynamic>.from(m))
       .toList();
 
-  final privateBlueprints = catalog.where((b) => b['ownershipClass'] != 'civic').toList();
+  final privateBlueprints =
+      catalog.where((b) => b['ownershipClass'] != 'civic').toList();
   if (privateBlueprints.isEmpty) {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: context.panelColor,
         title: const Text('Construction Catalog Unavailable'),
-        content: const Text('No authoritative private building blueprints are available for this Territory right now.'),
+        content: const Text(
+            'No authoritative private building blueprints are available for this Territory right now.'),
         actions: [
           EarthButton(
             label: 'CLOSE',
@@ -36,8 +38,10 @@ Future<void> showBuildingAcquisitionDialog(
     );
     return;
   }
-  String selectedType = privateBlueprints.first['type']?.toString() ?? 'restaurant';
-  final nameCtrl = TextEditingController(text: privateBlueprints.first['name']?.toString() ?? 'Facility');
+  String selectedType =
+      privateBlueprints.first['type']?.toString() ?? 'restaurant';
+  final nameCtrl = TextEditingController(
+      text: privateBlueprints.first['name']?.toString() ?? 'Facility');
 
   await showDialog<void>(
     context: context,
@@ -53,7 +57,8 @@ Future<void> showBuildingAcquisitionDialog(
         final opCost = asDoubleOr(currentSpec['dailyOperatingCredits'], 0);
         final baseRev = asDoubleOr(currentSpec['dailyOutputCredits'], 0);
         final resOutType = currentSpec['dailyOutputResourceType']?.toString();
-        final resOutAmt = asDoubleOr(currentSpec['dailyOutputResourceAmount'], 0);
+        final resOutAmt =
+            asDoubleOr(currentSpec['dailyOutputResourceAmount'], 0);
 
         final uEnergy = asDoubleOr(currentSpec['dailyInputEnergy'], 0);
         final uFood = asDoubleOr(currentSpec['dailyInputFood'], 0);
@@ -67,13 +72,15 @@ Future<void> showBuildingAcquisitionDialog(
           backgroundColor: context.panelColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(context.radiusPanel),
-            side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+            side:
+                BorderSide(color: context.primaryColor.withValues(alpha: .35)),
           ),
           title: Row(
             children: [
               Icon(Icons.domain_add_outlined, color: context.primaryColor),
               const SizedBox(width: 8),
-              Text('Acquire District Plot & Construct', style: context.topicTitleStyle),
+              Text('Acquire District Plot & Construct',
+                  style: context.topicTitleStyle),
             ],
           ),
           content: SizedBox(
@@ -91,20 +98,27 @@ Future<void> showBuildingAcquisitionDialog(
                     dropdownColor: context.panelColor,
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(context.radiusControl)),
+                      border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(context.radiusControl)),
                     ),
                     items: privateBlueprints.map((b) {
                       final type = b['type']?.toString() ?? '';
                       final name = b['name']?.toString() ?? type;
                       final slots = asIntOr(b['slotFootprint'], 1);
-                      return DropdownMenuItem(value: type, child: Text('$name ($slots Slot${slots > 1 ? 's' : ''})'));
+                      return DropdownMenuItem(
+                          value: type,
+                          child: Text(
+                              '$name ($slots Slot${slots > 1 ? 's' : ''})'));
                     }).toList(),
                     onChanged: (val) {
                       if (val != null) {
                         setState(() {
                           selectedType = val;
-                          final match = privateBlueprints.firstWhere((x) => x['type'] == val);
-                          nameCtrl.text = match['name']?.toString() ?? 'Facility';
+                          final match = privateBlueprints
+                              .firstWhere((x) => x['type'] == val);
+                          nameCtrl.text =
+                              match['name']?.toString() ?? 'Facility';
                         });
                       }
                     },
@@ -118,7 +132,9 @@ Future<void> showBuildingAcquisitionDialog(
                     controller: nameCtrl,
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(context.radiusControl)),
+                      border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(context.radiusControl)),
                     ),
                   ),
                   SizedBox(height: context.spacingControl),
@@ -128,7 +144,8 @@ Future<void> showBuildingAcquisitionDialog(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: context.surfaceColor,
-                      borderRadius: BorderRadius.circular(context.radiusControl),
+                      borderRadius:
+                          BorderRadius.circular(context.radiusControl),
                       border: Border.all(color: context.subtleBorderColor),
                     ),
                     child: Column(
@@ -146,7 +163,8 @@ Future<void> showBuildingAcquisitionDialog(
                             Row(
                               children: [
                                 EarthBadge(
-                                  label: '$footprint DISTRICT SLOT${footprint > 1 ? 'S' : ''}',
+                                  label:
+                                      '$footprint DISTRICT SLOT${footprint > 1 ? 'S' : ''}',
                                   variant: EarthBadgeVariant.primary,
                                 ),
                                 const SizedBox(width: 6),
@@ -155,7 +173,9 @@ Future<void> showBuildingAcquisitionDialog(
                                       ? '($availablePrivateSlots Free Slots Available)'
                                       : '(Requires $footprint Slots · Only $availablePrivateSlots Free)',
                                   style: context.captionStyle.copyWith(
-                                    color: hasEnoughSlots ? context.successColor : context.dangerColor,
+                                    color: hasEnoughSlots
+                                        ? context.successColor
+                                        : context.dangerColor,
                                   ),
                                 ),
                               ],
@@ -165,11 +185,13 @@ Future<void> showBuildingAcquisitionDialog(
                         const SizedBox(height: 8),
                         Text(
                           'Construction Cost: ${formatWholeNumber(creditCost)} C + $materialCost Materials',
-                          style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                          style: context.widgetTitleStyle
+                              .copyWith(color: context.primaryColor),
                         ),
                         const Divider(height: 16),
                         // Daily Inflow / Outflow
-                        Text('AUTONOMOUS DAILY OPERATING CYCLE', style: context.captionStyle),
+                        Text('AUTONOMOUS DAILY OPERATING CYCLE',
+                            style: context.captionStyle),
                         const SizedBox(height: 6),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,14 +200,33 @@ Future<void> showBuildingAcquisitionDialog(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('UPKEEP DRAINS', style: context.widgetFooterStyle),
+                                  Text('UPKEEP DRAINS',
+                                      style: context.widgetFooterStyle),
                                   const SizedBox(height: 4),
-                                  if (opCost > 0) Text('• ${formatWholeNumber(opCost)} C / day', style: context.bodyStyle),
-                                  if (uEnergy > 0) Text('• ${uEnergy.toStringAsFixed(1)} Energy / day', style: context.bodyStyle),
-                                  if (uFood > 0) Text('• ${uFood.toStringAsFixed(1)} Food / day', style: context.bodyStyle),
-                                  if (uMat > 0) Text('• ${uMat.toStringAsFixed(1)} Materials / day', style: context.bodyStyle),
-                                  if (uComp > 0) Text('• ${uComp.toStringAsFixed(1)} Components / day', style: context.bodyStyle),
-                                  if (uDat > 0) Text('• ${uDat.toStringAsFixed(1)} Compute / day', style: context.bodyStyle),
+                                  if (opCost > 0)
+                                    Text(
+                                        '• ${formatWholeNumber(opCost)} C / day',
+                                        style: context.bodyStyle),
+                                  if (uEnergy > 0)
+                                    Text(
+                                        '• ${uEnergy.toStringAsFixed(1)} Energy / day',
+                                        style: context.bodyStyle),
+                                  if (uFood > 0)
+                                    Text(
+                                        '• ${uFood.toStringAsFixed(1)} Food / day',
+                                        style: context.bodyStyle),
+                                  if (uMat > 0)
+                                    Text(
+                                        '• ${uMat.toStringAsFixed(1)} Materials / day',
+                                        style: context.bodyStyle),
+                                  if (uComp > 0)
+                                    Text(
+                                        '• ${uComp.toStringAsFixed(1)} Components / day',
+                                        style: context.bodyStyle),
+                                  if (uDat > 0)
+                                    Text(
+                                        '• ${uDat.toStringAsFixed(1)} Compute / day',
+                                        style: context.bodyStyle),
                                 ],
                               ),
                             ),
@@ -193,14 +234,21 @@ Future<void> showBuildingAcquisitionDialog(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('OUTPUT YIELDS', style: context.widgetFooterStyle),
+                                  Text('OUTPUT YIELDS',
+                                      style: context.widgetFooterStyle),
                                   const SizedBox(height: 4),
                                   if (baseRev > 0)
-                                    Text('+${formatWholeNumber(baseRev)} C / day',
-                                        style: context.bodyStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
+                                    Text(
+                                        '+${formatWholeNumber(baseRev)} C / day',
+                                        style: context.bodyStyle.copyWith(
+                                            color: context.successColor,
+                                            fontWeight: FontWeight.bold)),
                                   if (resOutAmt > 0 && resOutType != null)
-                                    Text('+${resOutAmt.toStringAsFixed(1)} ${resOutType.toUpperCase()} / day',
-                                        style: context.bodyStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
+                                    Text(
+                                        '+${resOutAmt.toStringAsFixed(1)} ${resOutType.toUpperCase()} / day',
+                                        style: context.bodyStyle.copyWith(
+                                            color: context.successColor,
+                                            fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             ),
@@ -230,7 +278,9 @@ Future<void> showBuildingAcquisitionDialog(
                       Navigator.of(dialogContext).pop();
                       await action(() => const EarthApi().purchaseBuilding(
                             buildingType: selectedType,
-                            name: nameCtrl.text.trim().isEmpty ? 'Facility' : nameCtrl.text.trim(),
+                            name: nameCtrl.text.trim().isEmpty
+                                ? 'Facility'
+                                : nameCtrl.text.trim(),
                             territoryId: territoryId,
                           ));
                     },
@@ -266,7 +316,8 @@ Future<void> showBuildingUpgradeDialog(
         borderRadius: BorderRadius.circular(context.radiusPanel),
         side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
       ),
-      title: Text('Upgrade Facility to Tier $nextTier', style: context.topicTitleStyle),
+      title: Text('Upgrade Facility to Tier $nextTier',
+          style: context.topicTitleStyle),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -289,8 +340,11 @@ Future<void> showBuildingUpgradeDialog(
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Current Tier: $currentTier', style: context.widgetFooterStyle),
-                    Text('Upgraded Tier: $nextTier', style: context.widgetFooterStyle.copyWith(color: context.successColor)),
+                    Text('Current Tier: $currentTier',
+                        style: context.widgetFooterStyle),
+                    Text('Upgraded Tier: $nextTier',
+                        style: context.widgetFooterStyle
+                            .copyWith(color: context.successColor)),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -298,15 +352,21 @@ Future<void> showBuildingUpgradeDialog(
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Yield: +${outType == 'credits' || outType == null ? formatWholeNumber(outAmt) : outAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}', style: context.widgetFooterStyle),
-                      Text('Projected: +${outType == 'credits' || outType == null ? formatWholeNumber(projectedAmt) : projectedAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}',
-                          style: context.widgetFooterStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
+                      Text(
+                          'Yield: +${outType == 'credits' || outType == null ? formatWholeNumber(outAmt) : outAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}',
+                          style: context.widgetFooterStyle),
+                      Text(
+                          'Projected: +${outType == 'credits' || outType == null ? formatWholeNumber(projectedAmt) : projectedAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}',
+                          style: context.widgetFooterStyle.copyWith(
+                              color: context.successColor,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                 const Divider(height: 16),
                 Text(
                   'Upgrade Investment: ${formatWholeNumber(upgradeCreditCost)} CRD + $upgradeMaterialCost Materials',
-                  style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                  style: context.widgetTitleStyle
+                      .copyWith(color: context.primaryColor),
                 ),
               ],
             ),
@@ -326,7 +386,8 @@ Future<void> showBuildingUpgradeDialog(
           onPressed: () async {
             EarthAudioEngine.instance.playClick();
             Navigator.of(dialogContext).pop();
-            await action(() => const EarthApi().upgradeBuilding(buildingId: id));
+            await action(
+                () => const EarthApi().upgradeBuilding(buildingId: id));
           },
         ),
       ],
@@ -334,8 +395,7 @@ Future<void> showBuildingUpgradeDialog(
   );
 }
 
-
-Future<void> showDemolishConfirmDialog(
+Future<bool?> showDemolishConfirmDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
   Map<String, dynamic> building,
@@ -344,7 +404,7 @@ Future<void> showDemolishConfirmDialog(
   final name = building['name']?.toString() ?? 'Facility';
   final footprint = asIntOr(building['slot_footprint'], 1);
 
-  await showDialog<void>(
+  return await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       backgroundColor: context.panelColor,
@@ -367,7 +427,7 @@ Future<void> showDemolishConfirmDialog(
         EarthButton(
           label: 'CANCEL',
           variant: EarthButtonVariant.neutral,
-          onPressed: () => Navigator.of(dialogContext).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         EarthButton(
           label: 'DEMOLISH & RECYCLE',
@@ -375,8 +435,9 @@ Future<void> showDemolishConfirmDialog(
           variant: EarthButtonVariant.danger,
           onPressed: () async {
             EarthAudioEngine.instance.playClick();
-            Navigator.of(dialogContext).pop();
-            await action(() => const EarthApi().demolishBuilding(buildingId: id));
+            Navigator.of(dialogContext).pop(true);
+            await action(
+                () => const EarthApi().demolishBuilding(buildingId: id));
           },
         ),
       ],
