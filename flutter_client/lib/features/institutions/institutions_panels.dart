@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
+import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
@@ -1672,15 +1673,54 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
     dynamic rawGameDay,
     dynamic rulesVersion,
   ) {
-    final codes = metrics.keys.toList()..sort();
-    final metricIndex = codes.isEmpty
+    const coreMetricDefinitions = [
+      (
+        code: 'LEGACY',
+        label: 'LEGACY',
+        icon: Icons.shield_outlined,
+      ),
+      (
+        code: 'WEALTH',
+        label: 'WEALTH',
+        icon: Icons.account_balance_wallet_outlined,
+      ),
+      (
+        code: 'PRODUCTIVE_CAPACITY',
+        label: 'BUILDINGS',
+        icon: Icons.domain_outlined,
+      ),
+      (
+        code: 'TECHNOLOGY',
+        label: 'TECHNOLOGY',
+        icon: Icons.biotech_outlined,
+      ),
+    ];
+
+    final availableCore = coreMetricDefinitions
+        .where((m) => metrics.containsKey(m.code))
+        .toList();
+    final activeList = availableCore.isNotEmpty
+        ? availableCore
+        : metrics.keys
+            .map((k) => (
+                  code: k,
+                  label: k.replaceAll('_', ' '),
+                  icon: Icons.leaderboard_outlined,
+                ))
+            .toList();
+
+    final metricIndex = activeList.isEmpty
         ? 0
-        : (_metricTab < codes.length ? _metricTab : codes.length - 1);
-    final selected = codes.isEmpty ? '' : codes[metricIndex];
-    final rows = metrics[selected] ?? const <Map<String, dynamic>>[];
-    final title = selected.isEmpty
-        ? 'NO SETTLED DIMENSIONS'
-        : selected.replaceAll('_', ' ');
+        : (_metricTab < activeList.length ? _metricTab : 0);
+    final selectedItem = activeList.isEmpty ? null : activeList[metricIndex];
+    final selectedCode = selectedItem?.code ?? '';
+    final rows = selectedCode.isNotEmpty
+        ? (metrics[selectedCode] ?? const <Map<String, dynamic>>[])
+        : const <Map<String, dynamic>>[];
+    final title = selectedItem?.label ??
+        (selectedCode.isEmpty
+            ? 'NO SETTLED LEADERBOARDS'
+            : selectedCode.replaceAll('_', ' '));
     final gameDay = rawGameDay?.toString() ?? '—';
     final version = rulesVersion?.toString() ?? '—';
     final houseName = (widget.state.human['house_name'] ??
@@ -1729,7 +1769,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         EarthPageCockpit(
-          status: codes.isEmpty ? 'NOT SETTLED' : 'WORLD · RANKINGS',
+          status: activeList.isEmpty ? 'NOT SETTLED' : 'WORLD · RANKINGS',
           statusColor: context.goldColor,
           infoTitle: 'HOW RANKINGS WORK',
           infoDescription:
@@ -1740,7 +1780,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
           metrics: [
             CockpitMetric(
                 label: 'Categories',
-                value: '${codes.length}',
+                value: '${activeList.length}',
                 icon: Icons.stacked_bar_chart_outlined,
                 color: context.primaryColor),
             CockpitMetric(
@@ -1788,19 +1828,30 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
             ]),
           ),
         if (myHouse != null) const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (var index = 0; index < codes.length; index++)
-              _buildNarrowTabButton(
-                context,
-                title: codes[index].replaceAll('_', ' '),
-                icon: Icons.leaderboard_outlined,
-                isSelected: index == metricIndex,
-                onTap: () => setState(() => _metricTab = index),
-              ),
-          ],
+        Container(
+          margin: EdgeInsets.only(bottom: context.spacingControl),
+          decoration: BoxDecoration(
+            color: context.surfaceColor.withValues(alpha: .6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: context.subtleBorderColor),
+          ),
+          child: Row(
+            children: [
+              for (var index = 0; index < activeList.length; index++)
+                Expanded(
+                  child: _buildNarrowTabButton(
+                    context,
+                    title: activeList[index].label,
+                    icon: activeList[index].icon,
+                    isSelected: index == metricIndex,
+                    onTap: () {
+                      EarthAudioEngine.instance.playClick();
+                      setState(() => _metricTab = index);
+                    },
+                  ),
+                ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         EarthSection(
@@ -1809,7 +1860,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
           showSurface: false,
           child: rows.isEmpty
               ? EarthEmptyState(
-                  message: codes.isEmpty
+                  message: activeList.isEmpty
                       ? 'Rankings are not settled yet. The first snapshot will be published after the next completed daily settlement.'
                       : 'No finalized entries exist for this ranking dimension yet.',
                   icon: Icons.hourglass_empty_outlined)
@@ -1854,8 +1905,8 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                 ),
         ),
         const SizedBox(height: 8),
-        if (selected.isNotEmpty)
-          Text(description(selected), style: context.widgetFooterStyle),
+        if (selectedCode.isNotEmpty)
+          Text(description(selectedCode), style: context.widgetFooterStyle),
       ],
     );
   }
@@ -1875,7 +1926,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
           decoration: BoxDecoration(
             color: isSelected
                 ? context.primaryColor.withValues(alpha: .15)
@@ -1891,19 +1942,20 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
             children: [
               Icon(
                 icon,
-                size: 13,
+                size: 14,
                 color: isSelected ? context.primaryColor : context.mutedColor,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   title,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10.5,
+                  style: context.controlStyle.copyWith(
+                    color:
+                        isSelected ? context.primaryColor : context.mutedColor,
                     fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.white : context.mutedColor,
+                        isSelected ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
               ),
