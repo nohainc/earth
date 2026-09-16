@@ -331,8 +331,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             'House')
         .toString()
         .replaceFirst(RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
-        .replaceFirst(RegExp(r'^of\s+', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\bNoga\b', caseSensitive: false), 'Noha');
+        .replaceFirst(RegExp(r'^of\s+', caseSensitive: false), '');
     final legacy = _parseNum(_house['legacy_points'] ?? _house['total_legacy']);
     final rawScore =
         _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];

@@ -32,61 +32,15 @@ import 'quick_actions_panel.dart';
 import 'service_risk_panel.dart';
 import 'command_executive_quadrant.dart';
 import '../world/world_conditions_panel.dart';
-import '../world/world_programs_panel.dart';
-import '../world/public_projects_panel.dart';
+import '../../core/navigation_registry.dart';
+import '../world/initiatives_panel.dart';
 import '../institutions/mutual_credit_panel.dart';
 import '../institutions/territory_commons_panel.dart';
 import '../institutions/territory_overview_panel.dart';
 import '../house/house_policy_panel.dart';
 
 String dashboardSectionTitle(String section, [EarthState? state]) =>
-    switch (section) {
-      'account' => 'ACCOUNT',
-      'command' => 'COMMAND',
-      'business' => 'BUSINESS',
-      'market' => 'MARKET',
-      'net_worth' => 'NET WORTH',
-      'briefing' => 'BRIEFING',
-      'messages' => 'MESSAGES',
-      String s when s.startsWith('messages:') => 'MESSAGES',
-      'notifications' => 'NOTIFICATIONS',
-      'buildings' => 'ASSETS',
-      'real_estate' => 'ASSETS',
-      'civic' => 'GOVERNANCE',
-      'corporations' => 'DIRECTORY',
-      'directory' => 'DIRECTORY',
-      'corporation' => 'ORGANIZATION',
-      'my-corporation' => 'ORGANIZATION',
-      'city' => 'TERRITORY',
-      String s when s.startsWith('my-community') => 'COMMUNITY',
-      'communities' => 'COMMUNITIES',
-      'news' => 'NEWS',
-      'house' => 'HOUSE',
-      'dynasty' => 'DYNASTY',
-      'technology' => 'RESEARCH',
-      'public-finance' => 'PUBLIC FINANCE',
-      'civic-rankings' => 'RANKINGS',
-      'history' => 'MEMORIAL',
-      'world' => 'WORLD',
-      'public-projects' => 'PUBLIC PROJECTS',
-      'mutual-credit' => 'MUTUAL CREDIT',
-      'territory-commons' => 'TERRITORIES',
-      'memorial' => 'MEMORIAL',
-      'life' => () {
-          if (state == null) return 'LIFE';
-          final raw = (state.human['display_name'] ?? state.human['name'])
-              ?.toString()
-              .trim();
-          if (raw == null || raw.isEmpty) return 'CITIZEN';
-          return raw.split(RegExp(r'\s+')).first.toUpperCase();
-        }(),
-      'pantheon' => 'MEMORIAL',
-      'constitution' => 'CONSTITUTION',
-      'contracts' => 'CONTRACTS',
-      'finance' => 'FINANCE',
-      'activity' => 'ACTIVITY',
-      _ => 'COMMAND',
-    };
+    NavigationRegistry.pageTitle(section, state);
 
 class Dashboard extends StatelessWidget {
   final EarthState state;
@@ -560,18 +514,39 @@ class Dashboard extends StatelessWidget {
         return [WorldRankingsPanel(state: state)];
       case 'history':
       case 'pantheon':
+      case 'memorial':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
       case 'world':
+      case 'conditions':
         return [WorldConditionsPanel(state: state)];
-      case 'programs':
-        return [const WorldProgramsPanel()];
-      case 'public-projects':
+      case 'initiatives':
         return [
-          PublicProjectsPanel(
+          InitiativesPanel(
             state: state,
             personalFinanceData: personalFinanceData,
             busy: busy,
             action: action,
+            initialTabIndex: 0,
+          ),
+        ];
+      case 'programs':
+        return [
+          InitiativesPanel(
+            state: state,
+            personalFinanceData: personalFinanceData,
+            busy: busy,
+            action: action,
+            initialTabIndex: 0,
+          ),
+        ];
+      case 'public-projects':
+        return [
+          InitiativesPanel(
+            state: state,
+            personalFinanceData: personalFinanceData,
+            busy: busy,
+            action: action,
+            initialTabIndex: 1,
           ),
         ];
       case 'mutual-credit':
@@ -812,6 +787,7 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case 'policies':
+      case 'automation':
         return [
           HousePolicyPanel(state: state, busy: busy, action: action),
         ];

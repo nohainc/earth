@@ -11,9 +11,10 @@ void main() {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
-      'membership': {'city_id': 'CITY-001'},
+      'life': {'houseName': 'House Vance'},
+      'membership': {'corporation_id': 'CORP-001'},
       'institutions': {
-        'city': {'name': 'New Kyoto'}
+        'corporation': {'name': 'Aether Dynamics'},
       },
       'business': {'name': 'Aether Dynamics'},
       'technology': {'research': {}},
@@ -41,54 +42,60 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('NOW'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Command Center'), findsOneWidget);
-    expect(find.text('Daily Priorities'), findsOneWidget);
+    // Default expanded group: COMMAND (0)
+    expect(find.text('COMMAND'), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('Daily Briefing'), findsOneWidget);
     expect(find.text('News'), findsOneWidget);
-    expect(find.text('Trade & Supplies'), findsNothing);
+    expect(find.text('Market'), findsNothing);
 
+    // Expand ECONOMY
     await tester.tap(find.text('ECONOMY'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('NOW'));
-    await tester.pumpAndSettle();
-    expect(find.text('Daily Priorities'), findsOneWidget);
-    expect(find.text('Command Center'), findsOneWidget);
-
-    await tester.tap(find.text('ECONOMY'));
-    await tester.pumpAndSettle();
+    expect(find.text('Buildings'), findsOneWidget);
     expect(find.text('Market'), findsOneWidget);
-    expect(find.text('Research'), findsOneWidget);
-    expect(find.text('Daily Priorities'), findsNothing);
+    expect(find.text('Technology'), findsOneWidget);
+    expect(find.text('Overview'), findsNothing);
 
-    await tester.tap(find.text('LIFE'));
+    // Expand HOUSE
+    await tester.tap(find.text('HOUSE'));
     await tester.pumpAndSettle();
+    expect(find.text('Amara'), findsOneWidget);
+    expect(find.text('Vance'), findsOneWidget);
+    expect(find.text('Finance'), findsOneWidget);
+    expect(find.text('Automation'), findsOneWidget);
+
     final financeButton = find.text('Finance');
     expect(financeButton, findsOneWidget);
     await tester.tap(financeButton);
     await tester.pumpAndSettle();
     expect(navigatedTo, 'finance');
 
-    // Test expanding EARTH group
-    expect(find.text('EARTH'), findsOneWidget);
-    await tester.tap(find.text('EARTH'));
+    // Expand WORLD group
+    final worldFinder = find.text('WORLD');
+    expect(worldFinder, findsOneWidget);
+    await tester.ensureVisible(worldFinder);
+    await tester.tap(worldFinder);
     await tester.pumpAndSettle();
+    expect(find.text('Conditions'), findsOneWidget);
     expect(find.text('Rankings'), findsOneWidget);
-    expect(find.text('Memorial'), findsOneWidget);
+    expect(find.text('Initiatives'), findsOneWidget);
     expect(find.text('Constitution'), findsOneWidget);
+    expect(find.text('Memorial'), findsOneWidget);
 
-    await tester.tap(find.text('Constitution'));
+    final constitutionFinder = find.text('Constitution');
+    await tester.ensureVisible(constitutionFinder);
+    await tester.tap(constitutionFinder);
     await tester.pumpAndSettle();
     expect(navigatedTo, 'constitution');
   });
 
-  testWidgets('Sidebar hides City when unaffiliated', (tester) async {
+  testWidgets('Sidebar hides My Corporation when unaffiliated', (tester) async {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
       'membership': {},
-      'institutions': {
-        'city': {'name': 'New Kyoto'}
-      },
+      'institutions': {},
       'business': {},
       'technology': {'research': {}},
     });
@@ -110,27 +117,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('City & Services'), findsNothing);
-    await tester.tap(find.text('CIVIC'));
+    await tester.tap(find.text('SOCIETY'));
     await tester.pumpAndSettle();
-    expect(find.text('City & Services'), findsNothing);
-    expect(find.text('Corporations'), findsNothing);
-    expect(find.text('Public Governance'), findsOneWidget);
-
-    await tester.tap(find.text('EARTH'));
-    await tester.pumpAndSettle();
+    expect(find.text('My Corporation'), findsNothing);
     expect(find.text('Corporations'), findsOneWidget);
+    expect(find.text('Territories'), findsOneWidget);
     expect(find.text('Communities'), findsOneWidget);
+    expect(find.text('Governance'), findsOneWidget);
   });
 
-  testWidgets('Sidebar displays joined corporation and city in CIVIC group when affiliated', (tester) async {
+  testWidgets(
+      'Sidebar displays joined corporation in SOCIETY group when affiliated',
+      (tester) async {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
-      'membership': {'corporation_id': 'CORP-01', 'city_id': 'CITY-01'},
+      'membership': {'corporation_id': 'CORP-01'},
       'institutions': {
         'corporation': {'name': 'Aether Dynamics'},
-        'city': {'name': 'New Kyoto'},
       },
       'business': {},
       'technology': {'research': {}},
@@ -156,46 +160,27 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('CIVIC'));
+    await tester.tap(find.text('SOCIETY'));
     await tester.pumpAndSettle();
     expect(find.text('Aether Dynamics'), findsOneWidget);
-    expect(find.text('New Kyoto'), findsOneWidget);
-    expect(find.text('Public Governance'), findsOneWidget);
+    expect(find.text('Corporations'), findsOneWidget);
+    expect(find.text('Territories'), findsOneWidget);
+    expect(find.text('Communities'), findsOneWidget);
+    expect(find.text('Governance'), findsOneWidget);
 
     await tester.tap(find.text('Aether Dynamics'));
     await tester.pumpAndSettle();
     expect(target, 'corporation');
-
-    await tester.tap(find.text('New Kyoto'));
-    await tester.pumpAndSettle();
-    expect(target, 'city');
-
-    await tester.tap(find.text('EARTH'));
-    await tester.pumpAndSettle();
-    expect(find.text('Corporations'), findsOneWidget);
-    await tester.tap(find.text('Corporations'));
-    await tester.pumpAndSettle();
-    expect(target, 'corporations');
   });
 
-  testWidgets('Sidebar displays all joined community names in CIVIC group when affiliated', (tester) async {
+  testWidgets('Sidebar footer renders Account and triggers onNavigate',
+      (tester) async {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
+      'life': {'houseName': 'House Vance'},
       'membership': {},
       'institutions': {},
-      'communities': [
-        {
-          'id': 'COM-001',
-          'name': 'Carthage Artisans',
-          'my_role': 'founder',
-        },
-        {
-          'id': 'COM-002',
-          'name': 'Solar Engineers',
-          'my_role': 'member',
-        },
-      ],
       'business': {},
       'technology': {'research': {}},
     });
@@ -221,40 +206,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('CIVIC'));
+    final accountItem = find.text('Account');
+    expect(accountItem, findsOneWidget);
+    await tester.tap(accountItem);
     await tester.pumpAndSettle();
 
-    expect(find.text('Carthage Artisans'), findsOneWidget);
-    expect(find.text('Solar Engineers'), findsOneWidget);
-
-    await tester.tap(find.text('Solar Engineers'));
-    await tester.pumpAndSettle();
-
-    expect(navigatedTo, 'my-community:COM-002');
-
-    // Verify rebuilding with the selected section keeps the CIVIC group expanded
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            height: 900,
-            width: 250,
-            child: Sidebar(
-              state: state,
-              selectedSection: 'my-community:COM-002',
-              onNavigate: (section) {
-                navigatedTo = section;
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Solar Engineers'), findsOneWidget);
-    expect(find.text('Carthage Artisans'), findsOneWidget);
-    expect(find.text('Daily Priorities'), findsNothing); // NOW group is collapsed
+    expect(navigatedTo, 'account');
   });
 
   testWidgets('showProposalComposer validates length and submits proposal',
@@ -344,9 +301,9 @@ void main() {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
-      'membership': {'city_id': 'CITY-001'},
+      'membership': {'corporation_id': 'CORP-001'},
       'institutions': {
-        'city': {'name': 'New Kyoto'}
+        'corporation': {'name': 'Aether Dynamics'},
       },
       'business': {'name': 'Aether Dynamics'},
       'technology': {'research': {}},
@@ -376,12 +333,13 @@ void main() {
     await tester.pumpAndSettle();
 
     // Group text headers should NOT be present in slim mode
-    expect(find.text('NOW'), findsNothing);
+    expect(find.text('COMMAND'), findsNothing);
     expect(find.text('ECONOMY'), findsNothing);
 
     // Tooltips with labels should be present
-    expect(find.byTooltip('Command Center'), findsOneWidget);
+    expect(find.byTooltip('Overview'), findsOneWidget);
     expect(find.byTooltip('Market'), findsOneWidget);
+    expect(find.byTooltip('Account'), findsOneWidget);
 
     // Tapping a slim icon triggers navigation
     await tester.tap(find.byTooltip('Market'));

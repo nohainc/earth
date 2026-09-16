@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/navigation_registry.dart';
 import '../../shared/design_system/earth_theme_context.dart';
+import 'theme_customizer_dialog.dart';
 
 class Sidebar extends StatefulWidget {
   final EarthState state;
@@ -37,14 +39,14 @@ class _SidebarState extends State<Sidebar> {
   @override
   void initState() {
     super.initState();
-    final group = _groupForSection(widget.selectedSection);
+    final group = NavigationRegistry.groupIndexForSection(widget.selectedSection);
     _expandedGroup = group != -1 ? group : 0;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final group = _groupForSection(widget.selectedSection);
+    final group = NavigationRegistry.groupIndexForSection(widget.selectedSection);
     if (group != -1) {
       _expandedGroup = group;
     }
@@ -54,55 +56,12 @@ class _SidebarState extends State<Sidebar> {
   void didUpdateWidget(covariant Sidebar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedSection != widget.selectedSection) {
-      final group = _groupForSection(widget.selectedSection);
+      final group =
+          NavigationRegistry.groupIndexForSection(widget.selectedSection);
       if (group != -1) {
         _expandedGroup = group;
       }
     }
-  }
-
-  int _groupForSection(String section) {
-    if (section.startsWith('my-community')) return 2;
-    if (section == 'corporations' || section == 'directory') return 4;
-    const groups = [
-      ['command', 'briefing', 'news'],
-      [
-        'buildings',
-        'technology',
-        'market',
-        'contracts',
-      ],
-      [
-        'corporation',
-        'my-corporation',
-        'organizations',
-        'territories',
-        'territory-commons',
-        'communities',
-        'my-community',
-        'messages',
-        'notifications',
-        'civic',
-        'public-finance'
-      ],
-      ['life', 'house', 'dynasty', 'finance', 'policies', 'account'],
-      [
-        'directory',
-        'corporations',
-        'civic-rankings',
-        'pantheon',
-        'history',
-        'world',
-        'programs',
-        'public-projects',
-        'mutual-credit',
-        'constitution'
-      ],
-    ];
-    for (var index = 0; index < groups.length; index++) {
-      if (groups[index].contains(section)) return index;
-    }
-    return -1;
   }
 
   void _toggleGroup(int groupIdx) {
@@ -114,243 +73,53 @@ class _SidebarState extends State<Sidebar> {
 
   @override
   Widget build(BuildContext context) {
-    final isCorporationMember =
-        widget.state.membership?['corporation_id'] != null;
-    final corporation = widget.state.institutions['corporation'];
-    final corporationName = isCorporationMember && corporation is Map
-        ? corporation['name']?.toString() ?? 'Corporations'
-        : 'Corporations';
-
-    final myCommunities = widget.state.myCommunities;
-
-    final fullUserName = (widget.state.human['name'] ??
-            widget.state.human['display_name'] ??
-            'Life')
-        .toString();
-    final nameTokens = fullUserName.trim().split(RegExp(r'\s+'));
-    final userName = nameTokens.first;
-    final userSurname = nameTokens.length > 1 ? nameTokens.last : '';
-
-    final rawHouseName = (widget.state.life['houseName'] ??
-            widget.state.life['dynastyName'] ??
-            widget.state.human['house_name'] ??
-            widget.state.human['houseName'] ??
-            widget.state.human['dynasty_name'])
-        ?.toString()
-        .trim();
-
-    final houseName = rawHouseName != null && rawHouseName.isNotEmpty
-        ? rawHouseName
-            .replaceFirst(
-                RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
-            .replaceAll(RegExp(r'\bNoga\b', caseSensitive: false), 'Noha')
-        : (userSurname.isNotEmpty ? userSurname : 'House');
-
     final groups = [
       (
-        'COMMAND',
-        Icons.radar_rounded,
-        [
-          (
-            'command',
-            'Command',
-            Icons.dashboard_outlined,
-            null,
-          ),
-          (
-            'briefing',
-            'Briefing',
-            Icons.today_outlined,
-            null,
-          ),
-          (
-            'news',
-            'News',
-            Icons.newspaper_outlined,
-            null,
-          ),
-        ]
+        NavigationGroup.command.displayName,
+        NavigationGroup.command.icon,
+        NavigationRegistry.itemsForGroup(NavigationGroup.command, widget.state),
       ),
       (
-        'ECONOMY',
-        Icons.apartment_rounded,
-        [
-          (
-            'buildings',
-            'Assets',
-            Icons.domain_outlined,
-            null,
-          ),
-          (
-            'technology',
-            'Research',
-            Icons.biotech_outlined,
-            null,
-          ),
-          (
-            'market',
-            'Market',
-            Icons.swap_horiz_rounded,
-            null,
-          ),
-          (
-            'contracts',
-            'Contracts',
-            Icons.handshake_outlined,
-            null,
-          ),
-        ]
+        NavigationGroup.house.displayName,
+        NavigationGroup.house.icon,
+        NavigationRegistry.itemsForGroup(NavigationGroup.house, widget.state),
       ),
       (
-        'SOCIETY',
-        Icons.account_balance_rounded,
-        [
-          (
-            'corporation',
-            corporationName != 'Corporations'
-                ? corporationName
-                : 'Organizations',
-            Icons.account_balance_outlined,
-            null,
-          ),
-          (
-            'organizations',
-            'Organization directory',
-            Icons.account_tree_outlined,
-            null,
-          ),
-          (
-            'territories',
-            'Territories',
-            Icons.map_outlined,
-            null,
-          ),
-          (
-            'communities',
-            'Communities',
-            Icons.diversity_3_outlined,
-            null,
-          ),
-          for (final comm in myCommunities)
-            (
-              'my-community:${comm['id']}',
-              comm['name']?.toString() ?? 'Community',
-              Icons.diversity_3_outlined,
-              null,
-            ),
-          (
-            'messages',
-            'Messages',
-            Icons.forum_outlined,
-            widget.unreadCommMessages > 0
-                ? '${widget.unreadCommMessages}'
-                : null,
-          ),
-          (
-            'notifications',
-            'Notifications',
-            Icons.notifications_none_outlined,
-            widget.unreadNotifications > 0
-                ? '${widget.unreadNotifications}'
-                : null,
-          ),
-          (
-            'civic',
-            'Governance',
-            Icons.public_outlined,
-            null,
-          ),
-        ]
+        NavigationGroup.economy.displayName,
+        NavigationGroup.economy.icon,
+        NavigationRegistry.itemsForGroup(NavigationGroup.economy, widget.state),
       ),
       (
-        'HOUSE',
-        Icons.shield_outlined,
-        [
-          (
-            'life',
-            userName.isNotEmpty && userName != 'Life' ? userName : 'Citizen',
-            Icons.person_outline_rounded,
-            null,
-          ),
-          (
-            'house',
-            houseName.isNotEmpty == true ? houseName : 'Dynasty',
-            Icons.shield_outlined,
-            null,
-          ),
-          (
-            'finance',
-            'Finance',
-            Icons.account_balance_wallet_outlined,
-            null,
-          ),
-          (
-            'policies',
-            'Policies',
-            Icons.tune_outlined,
-            null,
-          ),
-          (
-            'account',
-            'Account',
-            Icons.manage_accounts_outlined,
-            null,
-          ),
-        ]
+        NavigationGroup.society.displayName,
+        NavigationGroup.society.icon,
+        NavigationRegistry.itemsForGroup(NavigationGroup.society, widget.state),
       ),
       (
-        'WORLD',
-        Icons.public_rounded,
-        [
-          (
-            'corporations',
-            'Directory',
-            Icons.domain_outlined,
-            null,
-          ),
-          (
-            'civic-rankings',
-            'Rankings',
-            Icons.leaderboard_outlined,
-            null,
-          ),
-          (
-            'constitution',
-            'Constitution',
-            Icons.gavel_outlined,
-            null,
-          ),
-          (
-            'history',
-            'Memorial',
-            Icons.account_balance_outlined,
-            null,
-          ),
-          (
-            'world',
-            'Conditions',
-            Icons.public_outlined,
-            null,
-          ),
-          (
-            'programs',
-            'Programs',
-            Icons.biotech_outlined,
-            null,
-          ),
-          (
-            'public-projects',
-            'Public projects',
-            Icons.construction_outlined,
-            null,
-          ),
-        ]
+        NavigationGroup.world.displayName,
+        NavigationGroup.world.icon,
+        NavigationRegistry.itemsForGroup(NavigationGroup.world, widget.state),
       ),
     ];
 
     if (widget.isSlim) {
       return _buildSlimSidebar(context, groups);
     }
+
+    final humanName = (widget.state.human['name'] ??
+            widget.state.human['display_name'] ??
+            'Citizen')
+        .toString()
+        .trim();
+    final rawHouse = (widget.state.life['houseName'] ??
+            widget.state.human['house_name'] ??
+            widget.state.human['houseName'] ??
+            '')
+        .toString()
+        .trim();
+    final houseDisplay = rawHouse.isNotEmpty
+        ? rawHouse.replaceFirst(
+            RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
+        : 'Independent';
 
     return Container(
       width: 236,
@@ -398,14 +167,19 @@ class _SidebarState extends State<Sidebar> {
                             for (final item in groups[groupIdx].$3)
                               _buildNavItem(
                                 context,
-                                sectionKey: item.$1,
-                                label: item.$2,
-                                icon: item.$3,
-                                badge: item.$4,
-                                isSelected: item.$1 == widget.selectedSection,
+                                sectionKey: item.id,
+                                label: item.getLabel(widget.state),
+                                icon: item.icon,
+                                badge: null,
+                                isSelected:
+                                    item.id == widget.selectedSection ||
+                                        item.canonicalRoute ==
+                                            widget.selectedSection ||
+                                        item.aliases
+                                            .contains(widget.selectedSection),
                                 onSelect: () {
                                   EarthAudioEngine.instance.playClick();
-                                  widget.onNavigate(item.$1);
+                                  widget.onNavigate(item.canonicalRoute);
                                 },
                               ),
                           ],
@@ -415,6 +189,13 @@ class _SidebarState extends State<Sidebar> {
                 ],
               ),
             ),
+          ),
+
+          // 2. SIDEBAR FOOTER / PROFILE MENU
+          _buildSidebarFooter(
+            context,
+            humanName: humanName,
+            houseName: houseDisplay,
           ),
         ],
       ),
@@ -526,7 +307,6 @@ class _SidebarState extends State<Sidebar> {
             ),
             child: Row(
               children: [
-                // Fixed-width Indicator Slot (preserves exact horizontal alignment across all items)
                 SizedBox(
                   width: 10,
                   child: isSelected
@@ -552,8 +332,6 @@ class _SidebarState extends State<Sidebar> {
                       : null,
                 ),
                 const SizedBox(width: 6),
-
-                // Item Icon
                 Icon(
                   icon,
                   size: 16,
@@ -562,8 +340,6 @@ class _SidebarState extends State<Sidebar> {
                       : context.mutedColor.withValues(alpha: 0.85),
                 ),
                 const SizedBox(width: 10),
-
-                // Item Label
                 Expanded(
                   child: Text(
                     label,
@@ -603,10 +379,132 @@ class _SidebarState extends State<Sidebar> {
     );
   }
 
+  Widget _buildSidebarFooter(
+    BuildContext context, {
+    required String humanName,
+    required String houseName,
+  }) {
+    final isAccountSelected = widget.selectedSection == 'account';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.canvasColor.withValues(alpha: 0.8),
+        border: Border(
+          top: BorderSide(
+            color: context.primaryColor.withValues(alpha: 0.12),
+            width: 1.0,
+          ),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Account Button
+          _buildNavItem(
+            context,
+            sectionKey: 'account',
+            label: 'Account',
+            icon: Icons.manage_accounts_outlined,
+            badge: null,
+            isSelected: isAccountSelected,
+            onSelect: () {
+              EarthAudioEngine.instance.playClick();
+              widget.onNavigate('account');
+            },
+          ),
+          const SizedBox(height: 4),
+
+          // User Summary & Quick Controls Bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        humanName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: context.inkColor,
+                        ),
+                      ),
+                      Text(
+                        'House $houseName',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w500,
+                          color: context.mutedColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Theme / Appearance Button
+                IconButton(
+                  icon: const Icon(Icons.palette_outlined, size: 16),
+                  tooltip: 'Appearance',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  color: context.mutedColor,
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    showThemeCustomizerDialog(context);
+                  },
+                ),
+                // Security Button
+                if (widget.onSecurity != null)
+                  IconButton(
+                    icon: const Icon(Icons.lock_outline_rounded, size: 16),
+                    tooltip: 'Security',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    color: context.mutedColor,
+                    onPressed: () {
+                      EarthAudioEngine.instance.playClick();
+                      widget.onSecurity?.call();
+                    },
+                  ),
+                // Logout Button
+                if (widget.onLogout != null)
+                  IconButton(
+                    icon: const Icon(Icons.logout_rounded, size: 16),
+                    tooltip: 'Logout',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    color: context.mutedColor,
+                    onPressed: () {
+                      EarthAudioEngine.instance.playClick();
+                      widget.onLogout?.call();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSlimSidebar(
-      BuildContext context,
-      List<(String, IconData, List<(String, String, IconData, String?)>)>
-          groups) {
+    BuildContext context,
+    List<(String, IconData, List<NavigationItem>)> groups,
+  ) {
+    final isAccountSelected = widget.selectedSection == 'account';
+
     return Container(
       width: 60,
       decoration: BoxDecoration(
@@ -642,19 +540,60 @@ class _SidebarState extends State<Sidebar> {
                     for (final item in groups[g].$3)
                       _buildSlimNavItem(
                         context,
-                        sectionKey: item.$1,
-                        label: item.$2,
-                        icon: item.$3,
-                        badge: item.$4,
-                        isSelected: item.$1 == widget.selectedSection,
+                        sectionKey: item.id,
+                        label: item.getLabel(widget.state),
+                        icon: item.icon,
+                        badge: null,
+                        isSelected: item.id == widget.selectedSection ||
+                            item.canonicalRoute == widget.selectedSection ||
+                            item.aliases.contains(widget.selectedSection),
                         onSelect: () {
                           EarthAudioEngine.instance.playClick();
-                          widget.onNavigate(item.$1);
+                          widget.onNavigate(item.canonicalRoute);
                         },
                       ),
                   ],
                 ],
               ),
+            ),
+          ),
+
+          // Slim Footer
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              children: [
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: context.primaryColor.withValues(alpha: 0.1),
+                ),
+                const SizedBox(height: 6),
+                _buildSlimNavItem(
+                  context,
+                  sectionKey: 'account',
+                  label: 'Account',
+                  icon: Icons.manage_accounts_outlined,
+                  badge: null,
+                  isSelected: isAccountSelected,
+                  onSelect: () {
+                    EarthAudioEngine.instance.playClick();
+                    widget.onNavigate('account');
+                  },
+                ),
+                if (widget.onLogout != null)
+                  Tooltip(
+                    message: 'Logout',
+                    child: IconButton(
+                      icon: const Icon(Icons.logout_rounded, size: 18),
+                      color: context.mutedColor,
+                      onPressed: () {
+                        EarthAudioEngine.instance.playClick();
+                        widget.onLogout?.call();
+                      },
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
