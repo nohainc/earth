@@ -89,7 +89,7 @@ void main() {
     expect(find.text('72%'), findsOneWidget);
     expect(find.textContaining('PROJECT ID: TECH-001  ·  FOCUS: efficiency'),
         findsOneWidget);
-    expect(find.text('FUND 240 C · +4% MAX'), findsOneWidget);
+    expect(find.text('FUND 240 C · +4% MAX'), findsNothing);
 
     // Verify info icon is present and opens description dialog
     expect(find.byIcon(Icons.info_outline), findsWidgets);
@@ -99,11 +99,8 @@ void main() {
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('FUND 240 C · +4% MAX'));
-    await tester.tap(find.text('FUND 240 C · +4% MAX'));
-    await tester.pumpAndSettle();
-
-    expect(fundTriggered, isTrue);
+    expect(find.text('NEW PROJECT · CATALOG COST'), findsOneWidget);
+    expect(fundTriggered, isFalse);
   });
 
   testWidgets('TechnologyPanel enables patent grant when research reaches 100%',
@@ -135,7 +132,7 @@ void main() {
       'life': {},
       'governance': {},
       'market': {'orders': []},
-      });
+    });
 
     bool patentTriggered = false;
 
@@ -196,7 +193,7 @@ void main() {
       'life': {},
       'governance': {},
       'market': {'orders': []},
-      });
+    });
 
     await tester.pumpWidget(
       const MaterialApp(
@@ -246,6 +243,8 @@ void main() {
           'ownership_class': 'private',
           'cost_credits': 38000,
           'construction_days': 2,
+          'research_credit_cost_units': 1000,
+          'construction_minutes': 2880,
           'tier': 1,
         },
         {
@@ -255,6 +254,8 @@ void main() {
           'ownership_class': 'civic',
           'cost_credits': 140000,
           'construction_days': 5,
+          'research_credit_cost_units': 1000,
+          'construction_minutes': 7200,
           'tier': 1,
         },
       ],
@@ -287,7 +288,6 @@ void main() {
     // Active research is shown on its matching blueprint card.
     expect(find.text('R&D IN PROGRESS'), findsOneWidget);
     expect(find.textContaining('65%'), findsWidgets);
-
 
     // Filter to CIVIC & UTILITY
     await tester.tap(find.textContaining('CIVIC & UTILITY'));

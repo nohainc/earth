@@ -52,7 +52,19 @@ export async function listRankings(repository: PostgresRepository, options: Rank
 export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const [projects, catalog] = await Promise.all([
     repository.query(`SELECT p.* FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id JOIN house_affiliations ha ON ha.corporation_id = o.id JOIN humans h ON h.house_id = ha.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' ORDER BY p.id DESC`, [humanId]).catch(() => ({ rows: [] })),
-    repository.query('SELECT tc.id, tc.code, tc.name, tc.patentable, tc.credit_cost_units::TEXT AS research_credit_cost_units, tc.research_points_required::TEXT, tc.definition_version FROM technology_catalog tc ORDER BY tc.code').catch(() => ({ rows: [] })),
+    repository.query(`SELECT DISTINCT ON (tc.code)
+      tc.id, tc.code, tc.name, tc.category, tc.description, tc.patentable,
+      tc.patent_exclusivity_days,
+      tc.credit_cost_units::TEXT AS research_credit_cost_units,
+      tc.research_points_required::TEXT, tc.definition_version,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object(
+        'effectType', e.effect_type, 'modifierFamily', e.modifier_family,
+        'targetType', e.target_type, 'targetKey', e.target_key,
+        'modifierBps', e.modifier_bps) ORDER BY e.id)
+        FROM technology_effects e WHERE e.technology_id = tc.id), '[]'::JSONB) AS effects
+      FROM technology_catalog tc
+      WHERE tc.status = 'ACTIVE'
+      ORDER BY tc.code, tc.definition_version DESC`).catch(() => ({ rows: [] })),
   ]);
   return { catalog: catalog.rows.map(mapTechnologyCatalogRow), projects: projects.rows };
 }
