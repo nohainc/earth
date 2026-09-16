@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
-import '../../shared/widgets/earth_page_cockpit.dart';
 
 /// Player-facing workflow for collaborative public goods. The server remains
 /// authoritative for proposal approval, matching limits, escrow, and settlement.
@@ -168,24 +167,46 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
       final detail = response['project'] is Map
           ? Map<String, dynamic>.from(response['project'] as Map)
           : project;
+      final capabilities = detail['capabilities'] is Map
+          ? Map<String, dynamic>.from(detail['capabilities'] as Map)
+          : const <String, dynamic>{};
       if (!mounted) return;
       await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
                 title: Text(detail['name']?.toString() ?? id),
-                content: Text(
-                    'Status: ${detail['status'] ?? '—'}\n\nFunding: ${detail['contribution_units'] ?? '0'} / ${detail['target_units'] ?? '—'} C\nMatching funded: ${detail['matching_pool_funded_units'] ?? '0'} C\nProjected match: ${detail['projected_match_units'] ?? '0'} C\nSupporters: ${detail['supporter_count'] ?? '0'}\n\n${detail['description'] ?? ''}'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                          '${detail['beneficiary_type'] ?? 'PUBLIC'} · ${detail['status'] ?? '—'}'),
+                      const SizedBox(height: 16),
+                      Text(detail['description']?.toString() ??
+                          'No description published.'),
+                      const SizedBox(height: 16),
+                      Text(
+                          'COMMUNITY FUNDING\n${detail['contribution_units'] ?? '0'} / ${detail['target_units'] ?? '—'} C'),
+                      Text(
+                          'EARTH MATCHING\n${detail['matched_units'] ?? detail['matching_pool_funded_units'] ?? '0'} C'),
+                      Text(
+                          'PROJECTED MATCH\n${detail['projected_match_units'] ?? '0'} C'),
+                      Text('SUPPORTERS\n${detail['supporter_count'] ?? '0'}'),
+                      Text(
+                          'DEADLINE\nDay ${detail['deadline_game_day'] ?? '—'}'),
+                    ],
+                  ),
+                ),
                 actions: [
-                  if ((detail['status'] ?? '').toString().toUpperCase() ==
-                      'OPEN')
+                  if (capabilities['canFundMatching'] == true)
                     TextButton(
                         onPressed: () async {
                           Navigator.pop(dialogContext);
                           await _fundMatching(detail);
                         },
                         child: const Text('FUND MATCHING')),
-                  if ((detail['status'] ?? '').toString().toUpperCase() !=
-                      'SETTLED')
+                  if (capabilities['canSettle'] == true)
                     TextButton(
                         onPressed: () async {
                           Navigator.pop(dialogContext);
@@ -198,7 +219,8 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
                 ],
               ));
     } catch (error) {
-      _showMessage('Project details unavailable: $error');
+      _showMessage(
+          'Project details are temporarily unavailable. Please retry.');
     }
   }
 
@@ -238,42 +260,25 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final statusCounts = <String, int>{};
+    for (final project in _projects) {
+      final status = '${project['status'] ?? 'UNKNOWN'}'.toUpperCase();
+      statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+    }
+    final activeCount = (statusCounts['OPEN'] ?? 0) +
+        (statusCounts['FUNDED'] ?? 0) +
+        (statusCounts['EXECUTING'] ?? 0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        EarthPageCockpit(
-          tag: 'COLLECTIVE CAPITAL',
-          status: _loading ? 'LOADING' : '${_projects.length} ACTIVE PROJECTS',
-          statusColor: context.primaryColor,
-          infoTitle: 'PUBLIC PROJECTS',
-          infoDescription:
-              'Collaborative projects use approved proposals, capped matching funds, House contributions, escrow, and auditable settlement. Funding is never created by the client.',
-          title: 'PUBLIC PROJECTS',
-          subtitle:
-              'Coordinate infrastructure and public goods with other Houses',
-          actions: [
-            EarthButton(
-                label: 'CREATE PROJECT',
-                icon: Icons.add_task_outlined,
-                onPressed: widget.busy || _loading ? null : _create),
-            EarthButton(
-                label: 'REFRESH',
-                icon: Icons.refresh,
-                onPressed: _loading ? null : _load),
-          ],
-          metrics: [
-            CockpitMetric(
-                label: 'Active',
-                value: '${_projects.length}',
-                icon: Icons.construction_outlined,
-                color: context.primaryColor),
-          ],
-        ),
-        const SizedBox(height: 20),
         if (_error != null)
           EarthEmptyState(
-              message: 'Project data unavailable: $_error',
-              icon: Icons.sync_problem_outlined)
+              message: 'Project data is unavailable. Please retry.',
+              icon: Icons.sync_problem_outlined,
+              action: TextButton.icon(
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('RETRY')))
         else if (_loading)
           const Center(child: CircularProgressIndicator())
         else if (_projects.isEmpty)
@@ -282,8 +287,14 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
               icon: Icons.construction_outlined)
         else
           EarthSection(
-            title: 'PUBLISHED PROJECTS',
+            title:
+                'PUBLIC PROJECTS · $activeCount ACTIVE · ${statusCounts['SETTLED'] ?? 0} COMPLETED',
             showSurface: true,
+            trailing: IconButton(
+              onPressed: _loading ? null : _load,
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh projects',
+            ),
             child: EarthDataList(
                 children: _projects.map((project) {
               final target =
@@ -293,6 +304,9 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
                   '0';
               final status =
                   (project['status'] ?? 'UNKNOWN').toString().toUpperCase();
+              final capabilities = project['capabilities'] is Map
+                  ? Map<String, dynamic>.from(project['capabilities'] as Map)
+                  : const <String, dynamic>{};
               return EarthDataRow(
                 title: project['name']?.toString() ??
                     project['id']?.toString() ??
@@ -310,7 +324,7 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
                   TextButton(
                       onPressed: () => _openProject(project),
                       child: const Text('DETAILS')),
-                  if (status == 'OPEN' && !widget.busy)
+                  if (capabilities['canContribute'] == true && !widget.busy)
                     TextButton(
                         onPressed: () => _contribute(project),
                         child: const Text('CONTRIBUTE')),

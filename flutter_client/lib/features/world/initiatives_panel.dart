@@ -34,9 +34,9 @@ class _InitiativesPanelState extends State<InitiativesPanel>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: 2,
       vsync: this,
-      initialIndex: widget.initialTabIndex.clamp(0, 2),
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
     );
   }
 
@@ -44,7 +44,7 @@ class _InitiativesPanelState extends State<InitiativesPanel>
   void didUpdateWidget(covariant InitiativesPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTabIndex != widget.initialTabIndex) {
-      _tabController.animateTo(widget.initialTabIndex.clamp(0, 2));
+      _tabController.animateTo(widget.initialTabIndex.clamp(0, 1));
     }
   }
 
@@ -65,10 +65,9 @@ class _InitiativesPanelState extends State<InitiativesPanel>
           statusColor: context.primaryColor,
           infoTitle: 'PLANETARY INITIATIVES & PUBLIC GOODS',
           infoDescription:
-              'Long-horizon global programs, collaborative public goods, and discovered Technology Generations shaping the future of EARTH.',
+              'Collective programs and public projects shaping Earth’s future. Technology Generations are tracked in the technology progression surfaces.',
           title: 'INITIATIVES',
-          subtitle:
-              'Global programs, public infrastructure projects, and technology generations',
+          subtitle: 'Strategic programs and concrete public goods',
           metrics: [
             CockpitMetric(
               label: 'Initiatives Focus',
@@ -106,16 +105,12 @@ class _InitiativesPanelState extends State<InitiativesPanel>
             ),
             tabs: const [
               Tab(
-                text: 'GLOBAL PROGRAMS',
+                text: 'PROGRAMS',
                 icon: Icon(Icons.public_outlined, size: 18),
               ),
               Tab(
-                text: 'PUBLIC PROJECTS',
+                text: 'PROJECTS',
                 icon: Icon(Icons.construction_outlined, size: 18),
-              ),
-              Tab(
-                text: 'TECHNOLOGY GENERATIONS',
-                icon: Icon(Icons.biotech_outlined, size: 18),
               ),
             ],
           ),
@@ -132,11 +127,13 @@ class _InitiativesPanelState extends State<InitiativesPanel>
                   busy: widget.busy,
                   action: widget.action,
                 );
-              case 2:
-                return const WorldProgramsPanel();
               case 0:
               default:
-                return const WorldProgramsPanel();
+                return WorldProgramsPanel(
+                  personalFinanceData: widget.personalFinanceData,
+                  busy: widget.busy,
+                  action: widget.action,
+                );
             }
           },
         ),

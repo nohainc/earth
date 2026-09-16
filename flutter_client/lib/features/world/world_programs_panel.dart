@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
+import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
-import '../../shared/widgets/earth_page_cockpit.dart';
 
 class WorldProgramsPanel extends StatefulWidget {
-  const WorldProgramsPanel({super.key});
+  final Map<String, dynamic> personalFinanceData;
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function())? action;
+
+  const WorldProgramsPanel({
+    super.key,
+    this.personalFinanceData = const {},
+    this.busy = false,
+    this.action,
+  });
 
   @override
   State<WorldProgramsPanel> createState() => _WorldProgramsPanelState();
@@ -14,7 +23,6 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _programs = [];
-  List<Map<String, dynamic>> _generations = [];
 
   @override
   void initState() {
@@ -28,14 +36,10 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        const EarthApi().listEarthPrograms(),
-        const EarthApi().listEarthTechnologyGenerations(),
-      ]);
+      final result = await const EarthApi().listEarthPrograms();
       if (!mounted) return;
       setState(() {
-        _programs = _rows(results[0]['programs']);
-        _generations = _rows(results[1]['generations']);
+        _programs = _rows(result['programs']);
         _loading = false;
       });
     } catch (e) {
@@ -77,19 +81,27 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
   }
 
   Future<void> _contribute(String programId) async {
-    final finance = await const EarthApi().personalFinance();
-    final wallet =
-        (finance['account'] as Map?)?['account_id']?.toString() ?? '';
-    if (!mounted) return;
+    final wallet = _walletAccountId ?? '';
     final result = await showDialog<Map<String, String>>(
         context: context,
-        builder: (_) => _ProgramContributionDialog(walletAccountId: wallet));
+        builder: (_) => _ProgramContributionDialog(
+              walletAccountId: wallet,
+              walletBalance: _walletBalance,
+            ));
     if (result == null || !mounted) return;
     try {
-      await const EarthApi().contributeToGlobalProgram(
-          programId: programId,
-          sourceAccountId: result['accountId']!,
-          amountUnits: result['amount']!);
+      Future<EarthState> submit() => const EarthApi()
+          .contributeToGlobalProgram(
+            programId: programId,
+            sourceAccountId: result['accountId']!,
+            amountUnits: result['amount']!,
+          )
+          .then((_) => const EarthApi().world());
+      if (widget.action != null) {
+        await widget.action!(submit);
+      } else {
+        await submit();
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
@@ -116,114 +128,91 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
     return '${progress.toStringAsFixed(0)} / ${target.toStringAsFixed(0)}';
   }
 
+  String? get _walletAccountId {
+    final accounts = widget.personalFinanceData['accounts'];
+    if (accounts is! List) return null;
+    for (final raw in accounts) {
+      if (raw is! Map) continue;
+      final code = '${raw['asset_code'] ?? raw['assetCode']}'.toUpperCase();
+      final type = '${raw['account_type'] ?? raw['accountType']}'.toUpperCase();
+      if (code == 'CREDIT' && type == 'WALLET') {
+        return raw['account_id']?.toString();
+      }
+    }
+    return null;
+  }
+
+  String? get _walletBalance {
+    final accounts = widget.personalFinanceData['accounts'];
+    if (accounts is! List) return null;
+    for (final raw in accounts) {
+      if (raw is! Map) continue;
+      final code = '${raw['asset_code'] ?? raw['assetCode']}'.toUpperCase();
+      final type = '${raw['account_type'] ?? raw['accountType']}'.toUpperCase();
+      if (code == 'CREDIT' && type == 'WALLET') {
+        return (raw['balance_units'] ?? raw['balanceUnits'])?.toString();
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        EarthPageCockpit(
-          tag: 'PLANETARY HORIZON',
-          status: _loading ? 'LOADING' : 'CANONICAL WORLD DATA',
-          statusColor: context.primaryColor,
-          infoTitle: 'EARTH PROGRAMS & TECHNOLOGY GENERATIONS',
-          infoDescription:
-              'Global programs coordinate long-horizon planetary investment. Technology Generations are discovered globally, then adopted by Organizations and installed into productive assets. This page reports authoritative status and progress.',
-          title: 'WORLD PROGRAMS',
-          subtitle:
-              'Shared technology, commons, and planetary initiatives shaping future game days',
-          actions: [
-            EarthButton(
-                label: 'PROPOSE PROGRAM',
-                icon: Icons.add_task_outlined,
-                onPressed: _loading ? null : _createProgram),
-            EarthButton(
-                label: 'REFRESH',
-                icon: Icons.refresh,
-                onPressed: _loading ? null : _load),
-          ],
-          metrics: [
-            CockpitMetric(
-                label: 'Programs',
-                value: '${_programs.length}',
-                icon: Icons.public_outlined,
-                color: context.primaryColor),
-            CockpitMetric(
-                label: 'Generations',
-                value: '${_generations.length}',
-                icon: Icons.biotech_outlined,
-                color: context.secondaryColor),
-          ],
-        ),
-        const SizedBox(height: 24),
         if (_error != null)
           EarthEmptyState(
-              message: 'World program data is unavailable: $_error',
-              icon: Icons.sync_problem_outlined)
+              message: 'Program data is unavailable. Please retry.',
+              icon: Icons.sync_problem_outlined,
+              action: TextButton.icon(
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('RETRY')))
         else if (_loading)
           const Center(child: CircularProgressIndicator())
         else ...[
           EarthSection(
-            title: 'TECHNOLOGY GENERATIONS',
-            showSurface: true,
-            child: _generations.isEmpty
-                ? const EarthEmptyState(
-                    message:
-                        'No technology generations have been published yet.',
-                    icon: Icons.biotech_outlined)
-                : EarthDataList(
-                    children: _generations
-                        .map((row) => EarthDataRow(
-                              title: row['name']?.toString() ??
-                                  row['id']?.toString() ??
-                                  'Technology Generation',
-                              subtitle:
-                                  '${row['status'] ?? 'UNKNOWN'} · minimum game day ${row['minimum_game_day'] ?? '—'}',
-                              leading: Icon(Icons.biotech_outlined,
-                                  color: context.secondaryColor),
-                              badges: [
-                                EarthBadge(
-                                    label: (row['status'] ?? 'UNKNOWN')
-                                        .toString()
-                                        .toUpperCase(),
-                                    variant: EarthBadgeVariant.primary)
-                              ],
-                            ))
-                        .toList()),
-          ),
-          const SizedBox(height: 18),
-          EarthSection(
             title: 'PLANETARY PROGRAMS',
             showSurface: true,
+            trailing: IconButton(
+              onPressed: _loading ? null : _load,
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh programs',
+            ),
             child: _programs.isEmpty
                 ? const EarthEmptyState(
-                    message: 'No planetary programs are active yet.',
+                    message: 'No planetary programs are currently published.',
                     icon: Icons.public_outlined)
                 : EarthDataList(
-                    children: _programs
-                        .map((row) => EarthDataRow(
-                              title: row['name']?.toString() ??
-                                  row['id']?.toString() ??
-                                  'EARTH Program',
-                              subtitle:
-                                  '${row['program_type'] ?? 'PROGRAM'} · ${row['status'] ?? 'UNKNOWN'} · progress ${_progress(row)}',
-                              leading: Icon(Icons.public_outlined,
-                                  color: context.primaryColor),
-                              trailing: row['status'] == 'PROPOSED' ||
-                                      row['status'] == 'ACTIVE'
-                                  ? TextButton(
-                                      onPressed: () =>
-                                          _contribute('${row['id']}'),
-                                      child: const Text('FUND'))
-                                  : null,
-                              badges: [
-                                EarthBadge(
-                                    label: (row['status'] ?? 'UNKNOWN')
-                                        .toString()
-                                        .toUpperCase(),
-                                    variant: EarthBadgeVariant.primary)
-                              ],
-                            ))
-                        .toList()),
+                    children: _programs.map((row) {
+                    final capabilities = row['capabilities'] is Map
+                        ? Map<String, dynamic>.from(row['capabilities'] as Map)
+                        : const <String, dynamic>{};
+                    return EarthDataRow(
+                      title: row['name']?.toString() ??
+                          row['id']?.toString() ??
+                          'EARTH Program',
+                      subtitle:
+                          '${row['program_type'] ?? 'PROGRAM'} · ${row['status'] ?? 'UNKNOWN'} · progress ${_progress(row)}',
+                      leading: Icon(Icons.public_outlined,
+                          color: context.primaryColor),
+                      trailing: capabilities['canContribute'] == true
+                          ? TextButton(
+                              onPressed: widget.busy || _walletAccountId == null
+                                  ? null
+                                  : () => _contribute('${row['id']}'),
+                              child: const Text('FUND'))
+                          : null,
+                      badges: [
+                        EarthBadge(
+                            label: (row['status'] ?? 'UNKNOWN')
+                                .toString()
+                                .toUpperCase(),
+                            variant: EarthBadgeVariant.primary)
+                      ],
+                    );
+                  }).toList()),
           ),
         ],
       ],
@@ -241,7 +230,11 @@ class _CreateWorldProgramDialog extends StatefulWidget {
 
 class _ProgramContributionDialog extends StatefulWidget {
   final String walletAccountId;
-  const _ProgramContributionDialog({required this.walletAccountId});
+  final String? walletBalance;
+  const _ProgramContributionDialog({
+    required this.walletAccountId,
+    this.walletBalance,
+  });
   @override
   State<_ProgramContributionDialog> createState() =>
       _ProgramContributionDialogState();
@@ -260,8 +253,7 @@ class _ProgramContributionDialogState
   Widget build(BuildContext context) => AlertDialog(
         title: const Text('FUND EARTH PROGRAM'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(
-              'Funding wallet: ${widget.walletAccountId.isEmpty ? 'unavailable' : 'authenticated House wallet'}'),
+          Text('Wallet balance: ${widget.walletBalance ?? 'unavailable'} C'),
           TextField(
               controller: amount,
               onChanged: (_) => setState(() {}),

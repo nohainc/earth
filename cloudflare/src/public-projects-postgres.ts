@@ -39,7 +39,19 @@ export async function fundMatchingPool(repository: PostgresRepository, input: { 
 
 export async function listPublicProjects(repository: PostgresRepository): Promise<Record<string, unknown>> {
   const projects = await repository.query(`SELECT p.id, p.name, p.description, p.beneficiary_type, p.beneficiary_id, p.target_units::TEXT, p.deadline_game_day, p.matching_pool_authorized_units::TEXT, p.matching_pool_funded_units::TEXT, p.contribution_units::TEXT, p.matched_units::TEXT, p.status, p.proposal_id, p.created_game_day, COUNT(c.id)::INTEGER AS supporter_count FROM public_projects p LEFT JOIN public_project_contributions c ON c.project_id = p.id AND c.status = 'ESCROWED' GROUP BY p.id ORDER BY p.status, p.deadline_game_day, p.id`);
-  return { projects: projects.rows, generatedFrom: 'postgres-canonical-facts' };
+  return {
+    projects: projects.rows.map((project) => ({
+      ...project,
+      capabilities: {
+        canContribute: ['OPEN', 'FUNDED'].includes(String(project.status).toUpperCase()),
+        // Matching and settlement are governance/treasury operations. They
+        // must not be inferred from a public status alone.
+        canFundMatching: false,
+        canSettle: false,
+      },
+    })),
+    generatedFrom: 'postgres-canonical-facts',
+  };
 }
 
 export async function getPublicProject(repository: PostgresRepository, projectId: string): Promise<Record<string, unknown>> {
@@ -47,7 +59,18 @@ export async function getPublicProject(repository: PostgresRepository, projectId
   const project = result.rows[0];
   if (!project) throw new Error('Public project not found');
   const match = calculateMatching({ contributionUnits: BigInt(project.contribution_units), supporterCount: BigInt(project.supporter_count), poolRemaining: BigInt(project.matching_pool_funded_units) - BigInt(project.matching_pool_spent_units), targetRemaining: BigInt(project.target_units) > BigInt(project.contribution_units) ? BigInt(project.target_units) - BigInt(project.contribution_units) : 0n, matchBps: 10000n });
-  return { project: { ...project, projected_match_units: match.toString() }, generatedFrom: 'postgres-canonical-facts' };
+  return {
+    project: {
+      ...project,
+      projected_match_units: match.toString(),
+      capabilities: {
+        canContribute: ['OPEN', 'FUNDED'].includes(String(project.status).toUpperCase()),
+        canFundMatching: false,
+        canSettle: false,
+      },
+    },
+    generatedFrom: 'postgres-canonical-facts',
+  };
 }
 
 export async function contributeToPublicProject(repository: PostgresRepository, input: { projectId: string; houseId: string; sourceAccountId: string; amountUnits: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
