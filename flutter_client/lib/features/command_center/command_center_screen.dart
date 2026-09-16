@@ -855,6 +855,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                         sectionKeys: _sectionKeys,
                                         action: _run,
                                         onRefreshEvents: _refreshEvents,
+                                        onRefreshTerritoryCommons: () =>
+                                            _loadSecondaryPanels(current),
                                         onMarkNotificationRead: (id) async {
                                           await api.markNotificationRead(id);
                                           await _refreshEvents();

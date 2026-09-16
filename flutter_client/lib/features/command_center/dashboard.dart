@@ -72,6 +72,7 @@ class Dashboard extends StatelessWidget {
   final ValueChanged<String>? onNavigate;
   final Future<void> Function(Future<EarthState> Function()) action;
   final VoidCallback? onRefreshEvents;
+  final Future<void> Function()? onRefreshTerritoryCommons;
   final Future<void> Function(String)? onMarkNotificationRead;
   final Future<void> Function()? onMarkAllNotificationsRead;
   final VoidCallback? onLogout;
@@ -102,6 +103,7 @@ class Dashboard extends StatelessWidget {
     this.onNavigate,
     required this.action,
     this.onRefreshEvents,
+    this.onRefreshTerritoryCommons,
     this.onMarkNotificationRead,
     this.onMarkAllNotificationsRead,
     this.onLogout,
@@ -552,7 +554,15 @@ class Dashboard extends StatelessWidget {
       case 'mutual-credit':
         return [MutualCreditPanel(data: mutualCreditData)];
       case 'territory-commons':
-        return [TerritoryCommonsPanel(data: territoryCommonsData)];
+        return [
+          TerritoryCommonsPanel(
+            data: territoryCommonsData,
+            api: const EarthApi(),
+            onRefresh: () {
+              onRefreshTerritoryCommons?.call();
+            },
+          ),
+        ];
       case 'news':
         return [
           NewsPanel(

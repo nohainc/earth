@@ -88,10 +88,17 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                        WHERE status IN ('OPEN', 'VOTING', 'PASSED')
                        ORDER BY created_game_day DESC, id LIMIT 100`),
     listRankings(repository),
-    repository.query(`SELECT id, corporation_id, name, territory_type, status, is_primary, created_game_day
-                        FROM territories
-                       WHERE status IN ('ACTIVE', 'UNGOVERNED')
-                       ORDER BY corporation_id, is_primary DESC, id`),
+    repository.query(`SELECT t.id, t.corporation_id, t.name, t.territory_type, t.status, t.is_primary, t.created_game_day,
+                             s.house_capacity, s.active_house_count,
+                             s.private_slot_capacity, s.private_slots_used,
+                             COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id,
+                             i.name AS governing_authority_name
+                        FROM territories t
+                        LEFT JOIN territory_capacity_state s ON s.territory_id = t.id
+                        LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE'
+                        LEFT JOIN institutions i ON i.id = COALESCE(g.governing_institution_id, t.corporation_id)
+                       WHERE t.status IN ('ACTIVE', 'UNGOVERNED')
+                       ORDER BY t.corporation_id, t.is_primary DESC, t.id`),
     viewerHouseId
       ? repository.query(`SELECT c.id, i.name, c.status, c.charter_version, c.admission_policy,
                                  c.created_game_day,
