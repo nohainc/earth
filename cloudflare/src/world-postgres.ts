@@ -249,6 +249,18 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     districtZoning: capacity ?? {},
     decisionQueue,
     rankings,
-    worldConditions: exposedConditions,
+    worldConditions: {
+      status: 'AVAILABLE',
+      snapshotGameDay: conditions.gameDay,
+      rulesVersion: conditions.rulesVersion,
+      worldState: exposedConditions.length > 0 ? 'ACTIVE_CONDITIONS' : 'STABLE',
+      activeConditions: exposedConditions,
+      playerExposure: {
+        territoryId: territory?.territory_id ?? null,
+        territoryName: territory?.territory_name ?? null,
+        activeConditionCount: exposedConditions.filter((condition: any) =>
+          condition.exposure === 'YOUR_TERRITORY' || condition.exposure === 'WORLDWIDE').length,
+      },
+    },
   };
 }

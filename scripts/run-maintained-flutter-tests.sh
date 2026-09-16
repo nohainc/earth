@@ -18,6 +18,7 @@ flutter test \
   test/institutions_capacity_panel_test.dart \
   test/house_tree_dialog_test.dart \
   test/world_rankings_panel_test.dart \
+  test/world_conditions_panel_test.dart \
   test/net_worth_analytics_test.dart \
   test/onboarding_test.dart \
   test/personal_finance_panel_test.dart \
