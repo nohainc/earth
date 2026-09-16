@@ -11,6 +11,11 @@ export const ONBOARDING_MILESTONES = [
 ] as const;
 
 type ProgressRow = { house_id: string; onboarding_version: string; status: 'ACTIVE' | 'COMPLETED' | 'SKIPPED'; completed_milestones: string[]; completed_game_day: string | null };
+type QueryRows<Row> = { rows?: Row[] } | undefined;
+
+function rowsOf<Row>(result: QueryRows<Row>): Row[] {
+  return result?.rows ?? [];
+}
 
 const ACTION_ROUTES: Record<string, string> = {
   review_house_assets: '/app/house',
@@ -54,10 +59,17 @@ export async function getHouseOnboarding(repository: PostgresRepository, houseId
        WHERE r.house_id = $1 AND r.residency_class = 'PRIMARY' AND r.status = 'ACTIVE'
        ORDER BY r.effective_from_game_day DESC LIMIT 1`, [houseId]),
   ]);
-  const row = progress.rows[0] ?? { house_id: houseId, onboarding_version: 'onboarding-v4-1', status: 'ACTIVE', completed_milestones: [], completed_game_day: null };
+  const progressRows = rowsOf(progress);
+  const worldRows = rowsOf(world);
+  const assetRows = rowsOf(assets);
+  const creditRows = rowsOf(credit);
+  const buildingRows = rowsOf(buildings);
+  const orderRows = rowsOf(orders);
+  const territoryRows = rowsOf(territory);
+  const row = progressRows[0] ?? { house_id: houseId, onboarding_version: 'onboarding-v4-1', status: 'ACTIVE', completed_milestones: [], completed_game_day: null };
   const completed = new Set(Array.isArray(row.completed_milestones) ? row.completed_milestones : []);
   const next = nextMilestone(completed);
-  const residenceRow = territory.rows[0];
+  const residenceRow = territoryRows[0];
   const capacityAvailable = residenceRow
     ? Math.max(0, Number(residenceRow.house_capacity) - Number(residenceRow.active_house_count))
     : null;
@@ -72,13 +84,13 @@ export async function getHouseOnboarding(repository: PostgresRepository, houseId
     : null;
   return {
     status: row.status, version: row.onboarding_version,
-    currentGameDay: Number(world.rows[0]?.game_day ?? 1), completedMilestones: [...completed],
+    currentGameDay: Number(worldRows[0]?.game_day ?? 1), completedMilestones: [...completed],
     milestones: ONBOARDING_MILESTONES, recommendedNext: next, recommendation,
     facts: {
-      creditBalanceUnits: credit.rows[0]?.balance_units ?? '0',
-      resourceBalances: assets.rows,
-      buildingCount: Number(buildings.rows[0]?.count ?? 0),
-      marketOrderCount: Number(orders.rows[0]?.count ?? 0),
+      creditBalanceUnits: creditRows[0]?.balance_units ?? '0',
+      resourceBalances: assetRows,
+      buildingCount: Number(buildingRows[0]?.count ?? 0),
+      marketOrderCount: Number(orderRows[0]?.count ?? 0),
       residence: residenceRow ? {
         territoryId: residenceRow.territory_id,
         territoryName: residenceRow.territory_name,
