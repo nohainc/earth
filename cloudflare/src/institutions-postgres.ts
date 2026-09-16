@@ -38,7 +38,10 @@ export async function listCorporations(repository: PostgresRepository, search = 
   const result = await repository.query(`
     SELECT c.id, i.name, i.status, c.status AS corporation_status,
            c.charter_version, c.admission_policy,
-           COALESCE((c.tax_charter->>'corporateTaxBps')::INTEGER, 0) AS local_tax_bps,
+           NULLIF(c.tax_charter->>'incomeTaxBps', '')::INTEGER AS income_tax_bps,
+           NULLIF(c.tax_charter->>'salesTaxBps', '')::INTEGER AS sales_tax_bps,
+           NULLIF(c.tax_charter->>'propertyTaxBps', '')::INTEGER AS property_tax_bps,
+           NULLIF(c.tax_charter->>'corporateTaxBps', '')::INTEGER AS corporate_tax_bps,
            (SELECT COUNT(*)::integer FROM territories t WHERE t.corporation_id = c.id AND t.status = 'ACTIVE') AS territory_count,
            (SELECT COUNT(*)::integer FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_count,
            (SELECT t.id FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_id,

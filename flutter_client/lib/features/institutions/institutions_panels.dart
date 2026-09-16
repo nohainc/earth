@@ -289,6 +289,32 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final target = corp ?? _selected;
     final id = target?['id']?.toString();
     if (id == null) return;
+    final policy =
+        (target?['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase();
+    if (policy != 'OPEN' && policy != 'REQUEST') return;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(policy == 'OPEN' ? 'JOIN CORPORATION?' : 'APPLY TO JOIN?'),
+        content: Text(
+          '${target?['name'] ?? id}\n\n'
+          'Territory: ${target?['primary_territory_name'] ?? 'Not reported'}\n'
+          'Income tax: ${_rate(target?['income_tax_bps'])}\n'
+          'Sales fee: ${_rate(target?['sales_tax_bps'])}\n\n'
+          'Review this affiliation before continuing. The server remains authoritative for membership and residency consequences.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('CANCEL')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                  policy == 'OPEN' ? 'JOIN CORPORATION' : 'APPLY TO JOIN')),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
     await widget
         .action(() => const EarthApi().joinCorporation(corporationId: id));
   }
@@ -299,23 +325,37 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   }
 
   String _admissionLabel(Map<String, dynamic> row) {
-    switch ((row['admission_policy']?.toString() ?? 'OPEN').toUpperCase()) {
+    switch ((row['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase()) {
+      case 'OPEN':
+        return 'OPEN';
       case 'REQUEST':
-        return 'REQUEST TO JOIN';
+        return 'APPLICATION';
       case 'INVITE_ONLY':
       case 'INVITE':
-        return 'INVITE REQUIRED';
+        return 'INVITE ONLY';
       case 'CLOSED':
         return 'CLOSED';
       default:
-        return 'JOIN';
+        return 'UNKNOWN';
     }
+  }
+
+  String _joinLabel(Map<String, dynamic> row) =>
+      (row['admission_policy']?.toString().toUpperCase() == 'REQUEST')
+          ? 'APPLY TO JOIN'
+          : 'JOIN';
+
+  String _rate(dynamic value) {
+    final bps = asInt(value);
+    return bps == null || bps < 0
+        ? 'Not published'
+        : '${(bps / 100).toStringAsFixed(1)}%';
   }
 
   bool _canJoin(Map<String, dynamic> row, bool isAffiliated) {
     if (_isMember || isAffiliated) return false;
     final policy =
-        (row['admission_policy']?.toString() ?? 'OPEN').toUpperCase();
+        (row['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase();
     return policy == 'OPEN' || policy == 'REQUEST';
   }
 
@@ -504,7 +544,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final privateUsed = asIntOr(row['private_slots_used'], 0);
     final capacityAvailable = math.max(0, privateCapacity - privateUsed);
     final admissionPolicy =
-        (row['admission_policy'] ?? 'open').toString().toUpperCase();
+        (row['admission_policy'] ?? 'UNKNOWN').toString().toUpperCase();
 
     final rules = row['rules'] is Map
         ? Map<String, dynamic>.from(row['rules'] as Map)
@@ -512,14 +552,15 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
     final corporateTaxBps =
         asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], -1);
-    final propertyTaxBps =
-        asIntOr(rules['propertyTaxBps'] ?? rules['property_tax_bps'], 150);
+    final propertyTaxBps = asIntOr(
+        row['property_tax_bps'] ??
+            rules['propertyTaxBps'] ??
+            rules['property_tax_bps'],
+        -1);
 
     final sharedPatents = row['shared_patents'] is List
         ? row['shared_patents'] as List
-        : (widget.state.technology['corporationSharedPatents'] is List
-            ? widget.state.technology['corporationSharedPatents'] as List
-            : const <dynamic>[]);
+        : const <dynamic>[];
 
     final leftColumn = [
       _buildAttributeRow(
@@ -532,8 +573,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       _buildAttributeRow(
         context,
         icon: Icons.home_work_outlined,
-        label: 'LOCAL TAX',
-        value: '${(propertyTaxBps / 100).toStringAsFixed(1)}%',
+        label: 'PROPERTY TAX',
+        value: _rate(propertyTaxBps),
         accentColor: context.primaryColor,
       ),
       _buildAttributeRow(
@@ -759,8 +800,19 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         ? Map<String, dynamic>.from(row['rules'] as Map)
         : const <String, dynamic>{};
 
-    final corporateTaxBps =
-        asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], 250);
+    final incomeTaxBps = asIntOr(
+        row['income_tax_bps'] ??
+            rules['incomeTaxBps'] ??
+            rules['income_tax_bps'],
+        -1);
+    final salesTaxBps = asIntOr(
+        row['sales_tax_bps'] ?? rules['salesTaxBps'] ?? rules['sales_tax_bps'],
+        -1);
+    final corporateTaxBps = asIntOr(
+        row['corporate_tax_bps'] ??
+            rules['corporateTaxBps'] ??
+            rules['corporate_tax_bps'],
+        -1);
 
     final cardBorderColor = (isExpanded || isSelected)
         ? themeColor.withValues(alpha: .6)
@@ -846,7 +898,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                         if (!isAffiliated)
                           EarthBadge(
                               label: admission,
-                              variant: admission == 'JOIN'
+                              variant: admission == 'OPEN'
                                   ? EarthBadgeVariant.secondary
                                   : EarthBadgeVariant.neutral),
                       ],
@@ -860,8 +912,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                       children: [
                         _nodeMiniStat(context, 'Houses', '$members'),
                         _nodeMiniStat(context, 'Territory', territory),
-                        _nodeMiniStat(context, 'Local Tax',
-                            '${(corporateTaxBps / 100).toStringAsFixed(1)}%'),
+                        _nodeMiniStat(
+                            context, 'Income Tax', _rate(incomeTaxBps)),
+                        _nodeMiniStat(context, 'Sales Fee', _rate(salesTaxBps)),
+                        _nodeMiniStat(
+                            context, 'Corporate Tax', _rate(corporateTaxBps)),
                       ],
                     ),
                   ],
@@ -897,7 +952,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                     ),
                     if (_canJoin(row, isAffiliated))
                       EarthButton(
-                        label: admission,
+                        label: _joinLabel(row),
                         variant: isSelected
                             ? EarthButtonVariant.primary
                             : EarthButtonVariant.secondary,
@@ -960,7 +1015,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         CockpitMetric(
           label: 'Open to join',
           value:
-              '${_corporations.where((r) => (r['admission_policy']?.toString() ?? 'OPEN').toUpperCase() == 'OPEN').length}',
+              '${_corporations.where((r) => (r['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase() == 'OPEN').length}',
           icon: Icons.login,
           color: context.goldColor,
         ),
@@ -996,6 +1051,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final name = current['name']?.toString() ?? 'your corporation';
     final territory = current['primary_territory_name']?.toString() ??
         current['territory_name']?.toString() ??
+        current['capital_city_name']?.toString() ??
         widget.state.membership?['territory_name']?.toString() ??
         widget.state.membership?['territory_id']?.toString() ??
         'territory';
@@ -1128,9 +1184,12 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             icon: Icons.domain_disabled_outlined,
           )
         else
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: _corporations.map((row) {
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _corporations.length,
+            itemBuilder: (context, index) {
+              final row = _corporations[index];
               final id = row['id']?.toString() ?? '';
               final corporationName = row['name']?.toString() ?? id;
               final isAffiliated = id == currentCorpId;
@@ -1164,7 +1223,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                   ),
                 ),
               );
-            }).toList(),
+            },
           ),
       ],
     );
@@ -3000,9 +3059,7 @@ class CorporationOverviewPanel extends StatelessWidget {
 
     final sharedPatents = corporation['shared_patents'] is List
         ? corporation['shared_patents'] as List
-        : (state.technology['corporationSharedPatents'] is List
-            ? state.technology['corporationSharedPatents'] as List
-            : const <dynamic>[]);
+        : const <dynamic>[];
 
     final isAffiliated = myCorpId != null && myCorpId == id;
 
@@ -3107,7 +3164,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                         context,
                         icon: Icons.shield_outlined,
                         label: 'ADMISSION POLICY',
-                        value: (corporation['admission_policy'] ?? 'open')
+                        value: (corporation['admission_policy'] ?? 'UNKNOWN')
                             .toString()
                             .toUpperCase(),
                         accentColor: context.primaryColor,
@@ -3339,18 +3396,18 @@ class CorporationOverviewPanel extends StatelessWidget {
               EarthDataRow(
                 title: 'Membership Admission Standards',
                 subtitle:
-                    'Current policy: ${(corporation['admission_policy'] ?? 'open').toString().toUpperCase()}. Open admission welcomes all universal citizens; approval requires executive review.',
+                    'Current policy: ${(corporation['admission_policy'] ?? 'UNKNOWN').toString().toUpperCase()}. Admission consequences are determined by the corporation charter.',
                 leading: Icon(Icons.how_to_reg_outlined,
                     size: context.iconSize, color: context.secondaryColor),
                 badges: [
                   EarthBadge(
-                    label: (corporation['admission_policy'] ?? 'open')
+                    label: (corporation['admission_policy'] ?? 'UNKNOWN')
                                 .toString()
                                 .toLowerCase() ==
                             'open'
                         ? 'EARTH DEFAULT'
                         : 'CUSTOM OVERRIDE',
-                    variant: (corporation['admission_policy'] ?? 'open')
+                    variant: (corporation['admission_policy'] ?? 'UNKNOWN')
                                 .toString()
                                 .toLowerCase() ==
                             'open'
