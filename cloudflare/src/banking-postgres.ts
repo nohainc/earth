@@ -33,7 +33,8 @@ function quoteFromFacts(facts: CreditFacts, requestedUnits: bigint, termDays: nu
 export async function getBankLoanQuote(repository: PostgresRepository, input: { humanId: string; requestedUnits: bigint; termDays: number }): Promise<Record<string, unknown>> {
   const facts = await creditFacts(repository, input.humanId);
   const quote = quoteFromFacts(facts, input.requestedUnits, input.termDays);
-  return { quote: { ...quote, requestedUnits: input.requestedUnits.toString(), termDays: input.termDays, policyVersion: facts.policy.policy_version }, generatedFrom: 'postgres-canonical-facts' };
+  const interest = (input.requestedUnits * BigInt(quote.rateBps) * BigInt(input.termDays)) / 36500n;
+  return { quote: { ...quote, requestedUnits: input.requestedUnits.toString(), termDays: input.termDays, estimatedInterestUnits: interest.toString(), estimatedTotalRepaymentUnits: (input.requestedUnits + interest).toString(), maturityGameDay: facts.day + input.termDays, policyVersion: facts.policy.policy_version }, generatedFrom: 'postgres-canonical-facts' };
 }
 
 export async function originateBankLoan(repository: PostgresRepository, input: { humanId: string; requestedUnits: bigint; termDays: number; correlationId: string }): Promise<Record<string, unknown>> {

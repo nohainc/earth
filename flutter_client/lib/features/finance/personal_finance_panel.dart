@@ -82,6 +82,9 @@ class PersonalFinancePanel extends StatelessWidget {
     final liquidCredits = v2Credit != null
         ? asDoubleOr(v2Credit['balance'], 0)
         : (asDouble(state.human['credits']) ?? 0.0);
+    final availableToSpend = protected == null
+        ? liquidCredits
+        : (liquidCredits - protected).clamp(0, double.infinity).toDouble();
     final netDailyCredits = grossCredits - incomeTax;
     final netSign = netDailyCredits >= 0 ? '+' : '';
 
@@ -99,16 +102,15 @@ class PersonalFinancePanel extends StatelessWidget {
     final cockpit = EarthPageCockpit(
       status: unpaid > 0 ? 'NEEDS ATTENTION' : 'ON TRACK',
       statusColor: unpaid > 0 ? context.warningColor : context.successColor,
-      infoTitle: 'PERSONAL FINANCE & TREASURY ARCHITECTURE',
+      infoTitle: 'HOUSE FINANCE & TREASURY',
       infoDescription:
-          '• Liquid Balances & Daily Income: Citizen liquid credits derived from private real estate, enterprise holdings, and public municipal investments.\n\n• Constitutional Basic Tax: Daily basic income levy governed by planetary and municipal statutes within constitutional limits.\n\n• Protected Citizen Reserve: Guaranteed credit reserve baseline shielded by Earth law to preserve core solvency.',
-      title: 'PERSONAL FINANCE',
-      subtitle:
-          'Liquid balances, daily cashflow, and tax schedule across Earth',
+          'Manage House liquidity, the next settlement, obligations, savings and borrowing. The protected reserve is excluded from discretionary spending.',
+      title: 'HOUSE FINANCE',
+      subtitle: 'Liquidity, obligations, savings and borrowing for your House',
       metrics: [
         CockpitMetric(
-          label: 'Liquid Cash',
-          value: formatWholeNumber(liquidCredits),
+          label: 'Available to Spend',
+          value: formatWholeNumber(availableToSpend),
           icon: Icons.account_balance_wallet_outlined,
           color: context.primaryColor,
         ),
@@ -127,12 +129,18 @@ class PersonalFinancePanel extends StatelessWidget {
           icon: Icons.receipt_long_outlined,
           color: context.secondaryColor,
         ),
+        CockpitMetric(
+          label: 'Protected Reserve',
+          value: protected == null ? '—' : formatWholeNumber(protected),
+          icon: Icons.shield_outlined,
+          color: violetColor,
+        ),
       ],
     );
 
     return EarthPanel(
       key: panelKey,
-      title: 'PERSONAL FINANCE',
+      title: 'HOUSE FINANCE',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -141,7 +149,7 @@ class PersonalFinancePanel extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         cockpit,
         const SizedBox(height: 28),
-        const Text('DAILY INCOME', style: _sectionStyle),
+        const Text('NEXT SETTLEMENT', style: _sectionStyle),
         const SizedBox(height: 12),
         _allResourcesLine(finalChange, emphasize: true),
         const SizedBox(height: 24),
@@ -156,13 +164,13 @@ class PersonalFinancePanel extends StatelessWidget {
         const SizedBox(height: 24),
         _BankDepositsCard(
           deposits: bankDeposits,
-          liquidCredits: liquidCredits,
+          liquidCredits: availableToSpend,
           currentDay: currentDay ?? 0,
           currentMinute: currentMinute ?? 0,
           action: action,
         ),
         const SizedBox(height: 24),
-        _BankCreditCard(action: action),
+        _BankCreditCard(action: action, availableToSpend: availableToSpend),
         const SizedBox(height: 24),
         if (unpaid > 0) ...[
           _notice(Icons.warning_amber_rounded, Colors.orangeAccent,
@@ -175,6 +183,13 @@ class PersonalFinancePanel extends StatelessWidget {
             protected == null
                 ? 'Protected reserve is unavailable until the active financial rule is published.'
                 : 'Protected reserve: ${_credits(protected)}. Essential shortfalls are recorded; they do not remove you from the game.'),
+        const SizedBox(height: 24),
+        _FinanceActivityCard(
+            transactions:
+                (personalFinanceData['transactions'] as List? ?? const [])
+                    .whereType<Map>()
+                    .map((row) => Map<String, dynamic>.from(row))
+                    .toList()),
       ]),
     );
   }
@@ -469,7 +484,8 @@ class PersonalFinancePanel extends StatelessWidget {
 
 class _BankCreditCard extends StatefulWidget {
   final Future<void> Function(Future<EarthState> Function()) action;
-  const _BankCreditCard({required this.action});
+  final double availableToSpend;
+  const _BankCreditCard({required this.action, required this.availableToSpend});
 
   @override
   State<_BankCreditCard> createState() => _BankCreditCardState();
@@ -479,7 +495,6 @@ class _BankCreditCardState extends State<_BankCreditCard> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _loans = const [];
-  Map<String, dynamic> _risk = const {};
 
   @override
   void initState() {
@@ -489,10 +504,7 @@ class _BankCreditCardState extends State<_BankCreditCard> {
 
   Future<void> _load() async {
     try {
-      final results = await Future.wait([
-        const EarthApi().bankLoans(),
-        const EarthApi().bankRiskProjection()
-      ]);
+      final results = await Future.wait([const EarthApi().bankLoans()]);
       if (!mounted) return;
       final rawLoans = results[0]['loans'];
       setState(() {
@@ -502,9 +514,6 @@ class _BankCreditCardState extends State<_BankCreditCard> {
                 .map((r) => Map<String, dynamic>.from(r))
                 .toList()
             : const [];
-        _risk = results[1]['projection'] is Map
-            ? Map<String, dynamic>.from(results[1]['projection'] as Map)
-            : const {};
         _loading = false;
       });
     } catch (error) {
@@ -525,12 +534,19 @@ class _BankCreditCardState extends State<_BankCreditCard> {
       final quote = await const EarthApi().bankLoanQuote(
           requestedUnits: result['amount']!,
           termDays: int.parse(result['term']!));
-      final approved =
-          quote['quote'] is Map && (quote['quote'] as Map)['eligible'] == true;
-      if (!approved) {
-        throw Exception((quote['quote'] as Map?)?['reason'] ??
-            'The bank declined this request');
+      final quoteData = quote['quote'] is Map
+          ? Map<String, dynamic>.from(quote['quote'] as Map)
+          : const <String, dynamic>{};
+      if (quoteData['eligible'] != true) {
+        throw Exception(
+            quoteData['reason'] ?? 'The bank declined this request');
       }
+      if (!mounted) return;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (_) => _LoanOfferDialog(quote: quoteData),
+      );
+      if (accepted != true || !mounted) return;
       await widget.action(() => const EarthApi()
           .originateBankLoan(
               requestedUnits: result['amount']!,
@@ -543,9 +559,18 @@ class _BankCreditCardState extends State<_BankCreditCard> {
   }
 
   Future<void> _repay(Map<String, dynamic> loan) async {
+    final principal = asDoubleOr(loan['outstanding_principal_units'], 0);
+    final interest = asDoubleOr(loan['accrued_interest_units'], 0);
+    final total = principal + interest;
+    final amount = await showDialog<String>(
+      context: context,
+      builder: (_) => _LoanRepaymentDialog(
+          totalDue: total, availableToSpend: widget.availableToSpend),
+    );
+    if (amount == null || !mounted) return;
     try {
       await widget.action(() => const EarthApi()
-          .repayBankLoan(loan['id'].toString())
+          .repayBankLoan(loan['id'].toString(), amountUnits: amount)
           .then((_) => const EarthApi().world()));
       await _load();
     } catch (error) {
@@ -560,11 +585,12 @@ class _BankCreditCardState extends State<_BankCreditCard> {
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(
-              'Borrow against eligible House cashflow and collateral. Rates, limits, collateral and settlement remain server-authoritative.',
+              'Borrow against eligible House cashflow and collateral. Review the bank offer before accepting.',
               style: context.widgetFooterStyle),
           const SizedBox(height: 12),
           if (_error != null)
-            Text(_error!, style: TextStyle(color: context.warningColor)),
+            Text('Bank service is temporarily unavailable. Please try again.',
+                style: TextStyle(color: context.warningColor)),
           if (_loading) const LinearProgressIndicator(),
           if (!_loading && _loans.isEmpty)
             const Text('No active loans. Request a quote before borrowing.',
@@ -572,19 +598,19 @@ class _BankCreditCardState extends State<_BankCreditCard> {
           for (final loan in _loans)
             Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Row(children: [
-                  Expanded(
-                      child: Text(
-                          '${loan['status'] ?? 'UNKNOWN'} · outstanding ${loan['outstanding_principal_units'] ?? '0'} C · due day ${loan['maturity_game_day'] ?? '—'}')),
-                  TextButton(
-                      onPressed:
-                          loan['status'] == 'PAID' ? null : () => _repay(loan),
-                      child: const Text('REPAY'))
-                ])),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                          child: Text(
+                              '${loan['status'] ?? 'UNKNOWN'} · principal ${loan['outstanding_principal_units'] ?? '0'} C\nInterest ${loan['accrued_interest_units'] ?? '0'} C · ${(loan['rate_bps'] ?? '—')} bps · due day ${loan['maturity_game_day'] ?? '—'}')),
+                      TextButton(
+                          onPressed: loan['status'] == 'PAID'
+                              ? null
+                              : () => _repay(loan),
+                          child: const Text('REPAY'))
+                    ])),
           const SizedBox(height: 10),
-          Text(
-              'Bank capital buffer: ${_risk['capitalBufferUnits'] ?? '—'} C · defaulted loans: ${_risk['defaultedLoanCount'] ?? '0'}',
-              style: context.captionStyle),
           const SizedBox(height: 12),
           Align(
               alignment: Alignment.centerLeft,
@@ -645,6 +671,152 @@ class _LoanDialogState extends State<_LoanDialog> {
       );
 }
 
+class _LoanOfferDialog extends StatelessWidget {
+  final Map<String, dynamic> quote;
+  const _LoanOfferDialog({required this.quote});
+
+  @override
+  Widget build(BuildContext context) {
+    final requested = quote['requestedUnits'] ?? '0';
+    final interest = quote['estimatedInterestUnits'] ?? '—';
+    final total = quote['estimatedTotalRepaymentUnits'] ?? '—';
+    final rate = quote['rateBps'] ?? '—';
+    return AlertDialog(
+      title: const Text('LOAN OFFER'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        _offerRow('You receive', '$requested C'),
+        _offerRow('Estimated financing cost', '$interest C'),
+        _offerRow('Estimated total repayment', '$total C'),
+        _offerRow('Rate', '$rate bps'),
+        _offerRow('Term', '${quote['termDays'] ?? '—'} game days'),
+        _offerRow('Maturity', 'Day ${quote['maturityGameDay'] ?? '—'}'),
+        const SizedBox(height: 12),
+        const Text(
+            'The loan is created only after you explicitly accept this offer.',
+            style: TextStyle(fontSize: 12)),
+      ]),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL')),
+        FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ACCEPT LOAN')),
+      ],
+    );
+  }
+
+  Widget _offerRow(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Row(children: [
+          Expanded(child: Text(label)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+      );
+}
+
+class _LoanRepaymentDialog extends StatefulWidget {
+  final double totalDue;
+  final double availableToSpend;
+  const _LoanRepaymentDialog(
+      {required this.totalDue, required this.availableToSpend});
+
+  @override
+  State<_LoanRepaymentDialog> createState() => _LoanRepaymentDialogState();
+}
+
+class _LoanRepaymentDialogState extends State<_LoanRepaymentDialog> {
+  late final TextEditingController _amount;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = TextEditingController(text: widget.totalDue.toStringAsFixed(0));
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = double.tryParse(_amount.text.trim()) ?? 0;
+    final valid = value > 0 &&
+        value <= widget.totalDue &&
+        value <= widget.availableToSpend;
+    return AlertDialog(
+      title: const Text('REPAY LOAN'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(
+            'Available to spend: ${formatWholeNumber(widget.availableToSpend)} C'),
+        Text('Total due: ${formatWholeNumber(widget.totalDue)} C'),
+        TextField(
+          controller: _amount,
+          onChanged: (_) => setState(() {}),
+          keyboardType: TextInputType.number,
+          decoration:
+              const InputDecoration(labelText: 'Payment amount (CREDIT)'),
+        ),
+        if (!valid)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+                'Enter an amount within the available balance and total due.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+          ),
+      ]),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL')),
+        FilledButton(
+            onPressed: valid
+                ? () => Navigator.pop(context, value.toStringAsFixed(0))
+                : null,
+            child: const Text('CONFIRM PAYMENT')),
+      ],
+    );
+  }
+}
+
+class _FinanceActivityCard extends StatelessWidget {
+  final List<Map<String, dynamic>> transactions;
+  const _FinanceActivityCard({required this.transactions});
+
+  @override
+  Widget build(BuildContext context) {
+    return EarthSection(
+      title: 'ACTIVITY',
+      showSurface: true,
+      child: transactions.isEmpty
+          ? const Text('No recorded House transactions yet.',
+              style: TextStyle(color: mutedColor))
+          : Column(
+              children: transactions.take(20).map((tx) {
+                final delta = asDouble(tx['delta_units']);
+                final display = delta == null
+                    ? '—'
+                    : '${delta >= 0 ? '+' : ''}${(delta / 100).toStringAsFixed(2)} C';
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title:
+                      Text(tx['transaction_kind']?.toString() ?? 'Transaction'),
+                  subtitle: Text('Day ${tx['game_day'] ?? '—'}'),
+                  trailing: Text(display,
+                      style: TextStyle(
+                          color: delta != null && delta < 0
+                              ? Colors.redAccent
+                              : Colors.tealAccent)),
+                );
+              }).toList(),
+            ),
+    );
+  }
+}
+
 class _BankDepositsCard extends StatefulWidget {
   final List<Map<String, dynamic>> deposits;
   final double liquidCredits;
@@ -665,7 +837,6 @@ class _BankDepositsCard extends StatefulWidget {
 }
 
 class _BankDepositsCardState extends State<_BankDepositsCard> {
-  static const double _dailyRate = 0.001; // 0.1% per game day baseline
   static const List<int> _terms = [1, 7, 30, 90];
 
   final TextEditingController _amountController =
@@ -681,9 +852,6 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
 
   double get _enteredAmount =>
       double.tryParse(_amountController.text.trim()) ?? 0.0;
-  double get _estimatedInterest =>
-      _enteredAmount * _dailyRate * _selectedTermDays;
-
   Future<void> _showDepositReviewDialog(BuildContext context) async {
     final amount = _enteredAmount;
     final termDays = _selectedTermDays;
@@ -691,7 +859,6 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     final remainingCredits = widget.liquidCredits - amount;
     final isAffordable = widget.liquidCredits >= amount && amount > 0;
     final deficit = amount - widget.liquidCredits;
-    final estInterest = amount * _dailyRate * termDays;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -738,7 +905,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                           '${formatWholeNumber(amount)} C',
                           isBold: true),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Remaining liquid credits',
+                      _reviewRow(dialogContext, 'Available after deposit',
                           '${formatWholeNumber(remainingCredits < 0 ? 0 : remainingCredits)} C',
                           color: remainingCredits < 0
                               ? context.errorColor
@@ -759,17 +926,9 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                           formatGameDateTime(
                               maturityDay, widget.currentMinute)),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Estimated interest',
-                          '~${estInterest.toStringAsFixed(2)} C',
+                      _reviewRow(dialogContext, 'Interest',
+                          'Variable; realized at maturity',
                           color: context.successColor),
-                      const Divider(height: 18, color: Colors.white10),
-                      _reviewRow(
-                        dialogContext,
-                        'Expected payout (est.)',
-                        '~${(amount + estInterest).toStringAsFixed(2)} C',
-                        isBold: true,
-                        color: EarthResourceColors.credits,
-                      ),
                     ],
                   ),
                 ),
@@ -793,7 +952,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                           child: Text(
                             amount <= 0
                                 ? 'Please enter a valid deposit amount greater than 0.'
-                                : 'Insufficient Liquid credits. You need ${formatWholeNumber(deficit)} more Credits.',
+                                : 'Insufficient available CREDIT. You need ${formatWholeNumber(deficit)} more C.',
                             style: context.captionStyle
                                 .copyWith(color: context.errorColor),
                           ),
@@ -804,7 +963,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   const SizedBox(height: 12),
                 ],
                 Text(
-                  '• Variable yield: returns depend on realized bank income and settlement.\n• Idempotent execution: unique correlation token attached to transaction.',
+                  'Returns depend on realized bank income and settlement. The bank records the realized amount when the deposit matures.',
                   style: context.captionStyle
                       .copyWith(color: context.mutedColor, height: 1.35),
                 ),
@@ -860,7 +1019,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Deposit failed: $e'),
+            content: const Text('Deposit failed. Please try again.'),
             backgroundColor: context.errorColor,
           ),
         );
@@ -980,7 +1139,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Withdrawal failed: $e'),
+              content: const Text('Withdrawal failed. Please try again.'),
               backgroundColor: context.errorColor,
             ),
           );
@@ -1020,10 +1179,13 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           asIntOr(d['maturity_game_day'], widget.currentDay + 1);
       return status == 'active' && widget.currentDay < maturityDay;
     }).toList();
-    final totalPrincipal = widget.deposits
-        .fold<double>(0.0, (sum, d) => sum + asDoubleOr(d['principal'], 0));
-    final totalAccruedInterest = widget.deposits.fold<double>(
+    final activePrincipal = activeDeposits.fold<double>(
+        0.0, (sum, d) => sum + asDoubleOr(d['principal'], 0));
+    final activeAccruedInterest = activeDeposits.fold<double>(
         0.0, (sum, d) => sum + asDoubleOr(d['accrued_interest'], 0));
+    final maturedAwaitingWithdrawal = widget.deposits.where((d) {
+      return d['status']?.toString().toLowerCase() == 'matured';
+    }).fold<double>(0.0, (sum, d) => sum + asDoubleOr(d['principal'], 0));
 
     return EarthPanel(
       title: 'GLOBAL CORPORATE BANK',
@@ -1037,8 +1199,9 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           _buildOverviewSection(
             context,
             liquidCredits: widget.liquidCredits,
-            totalPrincipal: totalPrincipal,
-            accruedInterest: totalAccruedInterest,
+            totalPrincipal: activePrincipal,
+            accruedInterest: activeAccruedInterest,
+            maturedAwaitingWithdrawal: maturedAwaitingWithdrawal,
             activeDepositCount: activeDeposits.length,
           ),
           const SizedBox(height: 20),
@@ -1063,6 +1226,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     required double liquidCredits,
     required double totalPrincipal,
     required double accruedInterest,
+    required double maturedAwaitingWithdrawal,
     required int activeDepositCount,
   }) {
     return Column(
@@ -1074,7 +1238,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
             Text('OVERVIEW',
                 style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
             const EarthBadge(
-              label: 'GLOBAL BANK v1',
+              label: 'SAVINGS',
               variant: EarthBadgeVariant.neutral,
             ),
           ],
@@ -1086,22 +1250,28 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
             final tiles = [
               _metricBox(
                   context,
-                  'Liquid credits',
+                  'Available to spend',
                   '${formatWholeNumber(liquidCredits)} C',
                   Icons.account_balance_wallet_outlined,
                   EarthResourceColors.credits),
               _metricBox(
                   context,
-                  'Deposited principal',
+                  'Active principal',
                   '${formatWholeNumber(totalPrincipal)} C',
                   Icons.lock_clock_outlined,
                   context.primaryColor),
               _metricBox(
                   context,
-                  'Accrued interest',
+                  'Active accrued interest',
                   '${accruedInterest >= 0 ? '+' : ''}${accruedInterest.toStringAsFixed(2)} C',
                   Icons.trending_up,
                   context.successColor),
+              _metricBox(
+                  context,
+                  'Matured awaiting withdrawal',
+                  '${formatWholeNumber(maturedAwaitingWithdrawal)} C',
+                  Icons.download_done_outlined,
+                  context.secondaryColor),
               _metricBox(context, 'Active deposits', '$activeDepositCount',
                   Icons.receipt_long_outlined, context.secondaryColor),
             ];
@@ -1203,7 +1373,6 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
   Widget _buildDepositFundsSection(BuildContext context) {
     final amount = _enteredAmount;
     final termDays = _selectedTermDays;
-    final estReturn = amount * _dailyRate * termDays;
     final maturityDay = widget.currentDay + termDays;
 
     return Column(
@@ -1248,12 +1417,12 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                             Wrap(
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                Text('Estimated interest: ',
+                                Text('Yield: ',
                                     style: context.bodyStyle.copyWith(
                                         color: context.mutedColor,
                                         fontSize: 12)),
                                 Text(
-                                  '+${estReturn.toStringAsFixed(2)} C (~0.1%/day)',
+                                  'Variable; realized at maturity',
                                   style: context.bodyStyle.copyWith(
                                       color: context.successColor,
                                       fontWeight: FontWeight.bold,
@@ -1289,12 +1458,12 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                                     crossAxisAlignment:
                                         WrapCrossAlignment.center,
                                     children: [
-                                      Text('Estimated interest: ',
+                                      Text('Yield: ',
                                           style: context.bodyStyle.copyWith(
                                               color: context.mutedColor,
                                               fontSize: 12)),
                                       Text(
-                                        '+${estReturn.toStringAsFixed(2)} C (~0.1%/day)',
+                                        'Variable; realized at maturity',
                                         style: context.bodyStyle.copyWith(
                                             color: context.successColor,
                                             fontWeight: FontWeight.bold,
