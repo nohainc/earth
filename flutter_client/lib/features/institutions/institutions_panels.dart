@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
@@ -187,12 +188,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   Map<String, dynamic>? _selected;
   String? _expandedId;
   bool _loading = true;
+  String? _error;
+  Timer? _searchDebounce;
   int _searchGeneration = 0;
 
-  bool get _isMember =>
-      widget.state.membership?['corporation_id'] != null ||
-      widget.state.membership?['organization_id'] != null ||
-      widget.state.membership?['territory_id'] != null;
+  bool get _isMember => widget.state.membership?['corporation_id'] != null;
 
   @override
   void initState() {
@@ -203,9 +203,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   @override
   void didUpdateWidget(covariant CorporationDirectoryPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.state.json, widget.state.json) ||
-        oldWidget.state.membership?['corporation_id'] !=
-            widget.state.membership?['corporation_id']) {
+    if (oldWidget.state.membership?['corporation_id'] !=
+        widget.state.membership?['corporation_id']) {
       _load();
     } else if (widget.selectedCorporationId != null &&
         widget.selectedCorporationId != oldWidget.selectedCorporationId &&
@@ -220,6 +219,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -235,6 +235,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final generation = ++_searchGeneration;
     setState(() {
       _loading = true;
+      _error = null;
       if (fallback.isNotEmpty && _corporations.isEmpty) {
         _corporations = fallback;
         _selected = fallback.first;
@@ -275,6 +276,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             _selected = _corporations.first;
             widget.onSelectCorporation?.call(_selected!);
           }
+          _error = fallback.isNotEmpty
+              ? 'Live directory unavailable — showing cached world data.'
+              : 'Live directory unavailable.';
           _loading = false;
         });
       }
@@ -287,6 +291,32 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     if (id == null) return;
     await widget
         .action(() => const EarthApi().joinCorporation(corporationId: id));
+  }
+
+  void _scheduleSearch() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _load);
+  }
+
+  String _admissionLabel(Map<String, dynamic> row) {
+    switch ((row['admission_policy']?.toString() ?? 'OPEN').toUpperCase()) {
+      case 'REQUEST':
+        return 'REQUEST TO JOIN';
+      case 'INVITE_ONLY':
+      case 'INVITE':
+        return 'INVITE REQUIRED';
+      case 'CLOSED':
+        return 'CLOSED';
+      default:
+        return 'JOIN';
+    }
+  }
+
+  bool _canJoin(Map<String, dynamic> row, bool isAffiliated) {
+    if (_isMember || isAffiliated) return false;
+    final policy =
+        (row['admission_policy']?.toString() ?? 'OPEN').toUpperCase();
+    return policy == 'OPEN' || policy == 'REQUEST';
   }
 
   Future<void> _confirmLeave(BuildContext context) async {
@@ -318,7 +348,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'This will remove you from $name and its current city. Your businesses and personal assets remain yours.',
+                'This will remove you from $name and its current Corporation affiliation. Your businesses and personal assets remain yours.',
                 style: context.widgetFooterStyle,
               ),
               const SizedBox(height: 12),
@@ -466,12 +496,13 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
   Widget _buildExpandedCorporationDetails(
       BuildContext context, Map<String, dynamic> row, bool isAffiliated) {
-    final id = row['id']?.toString() ?? '';
-    final name = row['name']?.toString() ?? id;
-    final city = row['capital_city_name']?.toString() ?? 'Capital City';
     final members = asIntOr(row['member_count'] ?? row['members'], 0);
-    final cityCount = asIntOr(row['city_count'], 1);
     final treasury = asDouble(row['treasury']) ?? 0.0;
+    final territory =
+        row['primary_territory_name']?.toString() ?? 'Territory not reported';
+    final privateCapacity = asIntOr(row['private_slot_capacity'], 0);
+    final privateUsed = asIntOr(row['private_slots_used'], 0);
+    final capacityAvailable = math.max(0, privateCapacity - privateUsed);
     final admissionPolicy =
         (row['admission_policy'] ?? 'open').toString().toUpperCase();
 
@@ -479,10 +510,6 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         ? Map<String, dynamic>.from(row['rules'] as Map)
         : const <String, dynamic>{};
 
-    final incomeTaxBps =
-        asIntOr(rules['incomeTaxBps'] ?? rules['income_tax_bps'], -1);
-    final salesTaxBps =
-        asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], -1);
     final corporateTaxBps =
         asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], -1);
     final propertyTaxBps =
@@ -493,8 +520,6 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         : (widget.state.technology['corporationSharedPatents'] is List
             ? widget.state.technology['corporationSharedPatents'] as List
             : const <dynamic>[]);
-
-    final canAdoptCity = isAffiliated;
 
     final leftColumn = [
       _buildAttributeRow(
@@ -507,15 +532,17 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       _buildAttributeRow(
         context,
         icon: Icons.home_work_outlined,
-        label: 'PROPERTY LEVY',
+        label: 'LOCAL TAX',
         value: '${(propertyTaxBps / 100).toStringAsFixed(1)}%',
         accentColor: context.primaryColor,
       ),
       _buildAttributeRow(
         context,
         icon: Icons.science_outlined,
-        label: 'SHARED PATENTS',
-        value: '${sharedPatents.length}',
+        label: 'TECHNOLOGY',
+        value: sharedPatents.isEmpty
+            ? 'Not reported'
+            : '${sharedPatents.length} shared',
         accentColor: context.secondaryColor,
       ),
     ];
@@ -531,8 +558,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       _buildAttributeRow(
         context,
         icon: Icons.hub_outlined,
-        label: 'CHARTERED CITIES',
-        value: '$cityCount',
+        label: 'TERRITORIES',
+        value: '${asIntOr(row['territory_count'], 0)}',
         accentColor: context.secondaryColor,
       ),
     ];
@@ -556,14 +583,34 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               ...leftColumn,
               ...rightColumn,
             ],
+            const SizedBox(height: 8),
+            _buildAttributeRow(context,
+                icon: Icons.location_on_outlined,
+                label: 'PRIMARY TERRITORY',
+                value: territory,
+                accentColor: context.primaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.groups_outlined,
+                label: 'MEMBERS',
+                value: '$members Houses',
+                accentColor: context.secondaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.grid_view_outlined,
+                label: 'PRIVATE CAPACITY',
+                value: privateCapacity > 0
+                    ? '$capacityAvailable available'
+                    : 'Not reported',
+                accentColor: context.goldColor),
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: [
-                if (!_isMember && !isAffiliated)
+                if (_canJoin(row, isAffiliated))
                   EarthButton(
-                    label: 'JOIN CORPORATION',
+                    label: admissionPolicy == 'REQUEST'
+                        ? 'REQUEST TO JOIN'
+                        : 'JOIN',
                     icon: Icons.login,
                     variant: EarthButtonVariant.primary,
                     onPressed: widget.busy ? null : () => _join(row),
@@ -703,19 +750,15 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
     final id = row['id']?.toString() ?? '';
     final name = row['name']?.toString() ?? id;
-    final city = row['capital_city_name']?.toString() ?? 'Capital City';
     final members = asIntOr(row['member_count'] ?? row['members'], 0);
-    final cityCount = asIntOr(row['city_count'], 1);
-    final treasury = asDouble(row['treasury']) ?? 0.0;
+    final territory =
+        row['primary_territory_name']?.toString() ?? 'Territory not reported';
+    final admission = _admissionLabel(row);
 
     final rules = row['rules'] is Map
         ? Map<String, dynamic>.from(row['rules'] as Map)
         : const <String, dynamic>{};
 
-    final incomeTaxBps =
-        asIntOr(rules['incomeTaxBps'] ?? rules['income_tax_bps'], 200);
-    final salesTaxBps =
-        asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], 100);
     final corporateTaxBps =
         asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], 250);
 
@@ -796,9 +839,16 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Flexible(
-                          child: _nodeMiniStat(context, 'Capital', city),
-                        ),
+                        if (isAffiliated)
+                          const EarthBadge(
+                              label: 'YOUR CORPORATION',
+                              variant: EarthBadgeVariant.primary),
+                        if (!isAffiliated)
+                          EarthBadge(
+                              label: admission,
+                              variant: admission == 'JOIN'
+                                  ? EarthBadgeVariant.secondary
+                                  : EarthBadgeVariant.neutral),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -808,14 +858,10 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        _nodeMiniStat(context, 'Cities', '$cityCount'),
-                        _nodeMiniStat(context, 'Citizens', '$members'),
-                        _nodeMiniStat(context, 'Corp Tax',
+                        _nodeMiniStat(context, 'Houses', '$members'),
+                        _nodeMiniStat(context, 'Territory', territory),
+                        _nodeMiniStat(context, 'Local Tax',
                             '${(corporateTaxBps / 100).toStringAsFixed(1)}%'),
-                        _nodeMiniStat(context, 'Income Tax',
-                            '${(incomeTaxBps / 100).toStringAsFixed(1)}%'),
-                        _nodeMiniStat(context, 'Market Fee',
-                            '${(salesTaxBps / 100).toStringAsFixed(1)}%'),
                       ],
                     ),
                   ],
@@ -849,9 +895,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                         },
                       ),
                     ),
-                    if (!_isMember && !isAffiliated)
+                    if (_canJoin(row, isAffiliated))
                       EarthButton(
-                        label: 'JOIN',
+                        label: admission,
                         variant: isSelected
                             ? EarthButtonVariant.primary
                             : EarthButtonVariant.secondary,
@@ -887,26 +933,18 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         : const <String, dynamic>{};
 
     final currentCorpName = current['name']?.toString();
-    final allTerritories = widget.state.territories.isNotEmpty
-        ? widget.state.territories
-        : (widget.state.rankings['territories'] is List
-            ? (widget.state.rankings['territories'] as List)
-            : (widget.state.rankings['cities'] is List
-                ? (widget.state.rankings['cities'] as List)
-                : const <dynamic>[]));
-
     final cockpit = EarthPageCockpit(
-      status: 'PLANETARY COMMONS',
+      status: 'WORLD · CORPORATIONS',
       statusColor: context.primaryColor,
-      infoTitle: 'ORGANIZATION DIRECTORY & CHARTER ARCHITECTURE',
+      infoTitle: 'HOW CORPORATIONS WORK',
       infoDescription:
-          '• Sovereign Enterprise Alliances: Organizations coordinate corporate equity, commercial joint ventures, technology pools, and dividend distribution.\n\n• Subsidiarity & Geography: Organizations operate across territorial commons without superseding territorial local sovereignty.\n\n• Shareholder Democratic Franchise: Every member votes on organization leadership, charter updates, and venture participation.',
-      title: 'ORGANIZATION DIRECTORY',
+          'Corporations are local polities and economic communities. They govern Territories, local policy, infrastructure, technology adoption, and House membership.',
+      title: 'CORPORATION DIRECTORY',
       subtitle:
-          'Registered corporate entities, commercial syndicates, and cooperatives across Earth',
+          'Compare local policies, Territories, technology, and membership conditions.',
       metrics: [
         CockpitMetric(
-          label: 'Organizations',
+          label: 'Corporations',
           value: '${_corporations.length}',
           icon: Icons.domain_outlined,
           color: context.primaryColor,
@@ -920,9 +958,10 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           color: context.secondaryColor,
         ),
         CockpitMetric(
-          label: 'Territories',
-          value: '${allTerritories.length}',
-          icon: Icons.location_on_outlined,
+          label: 'Open to join',
+          value:
+              '${_corporations.where((r) => (r['admission_policy']?.toString() ?? 'OPEN').toUpperCase() == 'OPEN').length}',
+          icon: Icons.login,
           color: context.goldColor,
         ),
       ],
@@ -936,13 +975,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildUniversalCharterTopic(context),
-            const SizedBox(height: 24),
             if (widget.showMemberSummary && _isMember) ...[
               _memberView(current),
               const SizedBox(height: 32),
               Text(
-                'ALL ORGANIZATIONS',
+                'ALL CORPORATIONS',
                 style:
                     context.topicTitleStyle.copyWith(color: context.mutedColor),
               ),
@@ -959,7 +996,6 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final name = current['name']?.toString() ?? 'your corporation';
     final territory = current['primary_territory_name']?.toString() ??
         current['territory_name']?.toString() ??
-        current['capital_city_name']?.toString() ??
         widget.state.membership?['territory_name']?.toString() ??
         widget.state.membership?['territory_id']?.toString() ??
         'territory';
@@ -995,14 +1031,14 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                                   .copyWith(color: context.primaryColor)),
                         ),
                         const EarthBadge(
-                          label: 'MEMBER JURISDICTION',
+                          label: 'YOUR CORPORATION',
                           variant: EarthBadgeVariant.primary,
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'You are affiliated with $name. Your residency is registered in its primary territory: $territory ($members houses · ${treasury.toStringAsFixed(0)} C treasury reserves).',
+                      'Your House belongs to $name and resides in its primary Territory: $territory ($members Houses · ${treasury.toStringAsFixed(0)} C treasury reserves).',
                       style:
                           context.bodyStyle.copyWith(color: context.inkColor),
                     ),
@@ -1047,35 +1083,48 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: EarthSearchInput(
-                controller: _search,
-                hintText:
-                    'Search corporations by name or chartered jurisdiction...',
-                onChanged: (_) => _load(),
-                onClear: _load,
-              ),
-            ),
+        LayoutBuilder(builder: (context, constraints) {
+          final action = EarthButton(
+            label: 'FOUND CORPORATION',
+            icon: Icons.add_business_outlined,
+            onPressed: _isMember || widget.busy
+                ? null
+                : () => showFormationComposer(context, widget.action),
+          );
+          final search = EarthSearchInput(
+            controller: _search,
+            hintText: 'Search corporations by name or Territory...',
+            onChanged: (_) => _scheduleSearch(),
+            onClear: _load,
+          );
+          if (constraints.maxWidth < 620) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [search, const SizedBox(height: 10), action],
+            );
+          }
+          return Row(children: [
+            Expanded(child: search),
             const SizedBox(width: 10),
-            EarthButton(
-              label: '+ FOUND CORPORATION',
-              icon: Icons.add_business_outlined,
-              onPressed: _isMember || widget.busy
-                  ? null
-                  : () => showFormationComposer(context, widget.action),
-            ),
-          ],
-        ),
+            action
+          ]);
+        }),
         SizedBox(height: context.spacingTitleOffset),
+        if (_error != null) ...[
+          Row(children: [
+            Expanded(
+                child: Text(_error!,
+                    style: context.widgetFooterStyle
+                        .copyWith(color: context.warningColor))),
+            TextButton(onPressed: _load, child: const Text('RETRY')),
+          ]),
+          const SizedBox(height: 8),
+        ],
         if (_loading)
           Center(child: CircularProgressIndicator(color: context.primaryColor))
         else if (_corporations.isEmpty)
           const EarthEmptyState(
-            message:
-                'No corporations found matching your search. You can found a new one from your capital city.',
+            message: 'No corporations found matching your search.',
             icon: Icons.domain_disabled_outlined,
           )
         else

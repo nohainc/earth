@@ -37,10 +37,15 @@ export async function listCorporations(repository: PostgresRepository, search = 
   const term = `%${search.trim().replace(/[%_]/g, '')}%`;
   const result = await repository.query(`
     SELECT c.id, i.name, i.status, c.status AS corporation_status,
-           c.admission_policy,
+           c.charter_version, c.admission_policy,
+           COALESCE((c.tax_charter->>'corporateTaxBps')::INTEGER, 0) AS local_tax_bps,
            (SELECT COUNT(*)::integer FROM territories t WHERE t.corporation_id = c.id AND t.status = 'ACTIVE') AS territory_count,
            (SELECT COUNT(*)::integer FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_count,
            (SELECT t.id FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_id,
+           (SELECT t.name FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_name,
+           (SELECT s.private_slot_capacity FROM territory_capacity_state s JOIN territories t ON t.id = s.territory_id WHERE t.corporation_id = c.id AND t.is_primary = TRUE ORDER BY s.game_day DESC LIMIT 1) AS private_slot_capacity,
+           (SELECT s.private_slots_used FROM territory_capacity_state s JOIN territories t ON t.id = s.territory_id WHERE t.corporation_id = c.id AND t.is_primary = TRUE ORDER BY s.game_day DESC LIMIT 1) AS private_slots_used,
+           (SELECT COUNT(*)::integer FROM organization_technology_adoptions a WHERE a.organization_id = c.id AND a.status = 'ADOPTED') AS technology_count,
            COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE'), 0)::TEXT AS treasury,
            COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'OPERATIONS' AND a.status = 'ACTIVE'), 0)::TEXT AS operating_budget,
            COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'RESERVE' AND a.status = 'ACTIVE'), 0)::TEXT AS reserve

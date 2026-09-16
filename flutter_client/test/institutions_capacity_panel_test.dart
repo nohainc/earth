@@ -163,9 +163,8 @@ void main() {
     await tester.tap(aetherRow, warnIfMissed: false);
     await tester.pumpAndSettle();
 
-    // Verify organization charter principles and inline expansion reveals details
-    expect(find.text('ORGANIZATION CHARTER PRINCIPLES'), findsOneWidget);
-    expect(find.text('Commercial Subsidiarity'), findsOneWidget);
+    // Verify the Corporation Directory expansion presents decision-relevant facts.
+    expect(find.text('ADMISSION POLICY'), findsOneWidget);
   });
 
   testWidgets(
@@ -337,15 +336,13 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('ORGANIZATION DIRECTORY'), findsOneWidget);
+    expect(find.text('CORPORATION DIRECTORY'), findsOneWidget);
     expect(find.text('ACTIVE AFFILIATION: Carthage Dynamics'), findsOneWidget);
     expect(find.text('VIEW CONSTITUTION & TAX CHARTER'), findsOneWidget);
-    expect(find.text('ALL ORGANIZATIONS'), findsOneWidget);
+    expect(find.text('ALL CORPORATIONS'), findsOneWidget);
 
     expect(find.text('Carthage Dynamics'), findsWidgets);
-    expect(find.textContaining('2.5%'), findsWidgets);
-    expect(find.textContaining('1.0%'), findsWidgets);
-    expect(find.textContaining('1.8%'), findsWidgets);
+    expect(find.textContaining('3.0%'), findsWidgets);
 
     final charterBtn = find.text('CHARTER & PERKS').first;
     await tester.ensureVisible(charterBtn);
