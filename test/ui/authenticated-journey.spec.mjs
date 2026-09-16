@@ -464,11 +464,11 @@ test.describe.serial('authenticated player journeys', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openConstitution(page);
 
-    const codeHeader = page.getByText(/CONSTITUTION CODE/i);
+    const codeHeader = page.getByText(/CONSTITUTIONAL STATUTES/i);
     const historyHeader = page.getByText(/CONSTITUTIONAL HISTORY/i);
     await expect(codeHeader.first()).toBeVisible();
     await expect(historyHeader.first()).toBeVisible();
-    await expect(page.getByText('A later permitted override replaces the value before it.', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Rule Precedence: Earth Baseline/i)).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(hasHorizontalOverflow).toBe(false);
@@ -477,9 +477,10 @@ test.describe.serial('authenticated player journeys', () => {
   test('Constitution has a clear live-data or empty-state outcome for rules and history', async () => {
     await openConstitution(page);
 
-    const rulesIndicator = page.getByText('Constitutional rules are unavailable until the rule registry is applied.', { exact: true })
+    const rulesIndicator = page.getByText(/CONSTITUTION UNAVAILABLE/i)
+      .or(page.getByText(/The constitutional rule registry is unavailable/i))
       .or(page.getByText('Default:', { exact: false }));
-    const historyIndicator = page.getByText('No constitutional or charter changes have been recorded yet.', { exact: true })
+    const historyIndicator = page.getByText(/No constitutional or charter amendments have been recorded yet/i)
       .or(page.getByText('Game day', { exact: false }));
 
     await expect(rulesIndicator.first()).toBeVisible();

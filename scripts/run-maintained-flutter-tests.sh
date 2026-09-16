@@ -10,6 +10,7 @@ flutter test \
   test/buildings_hub_screen_test.dart \
   test/comm_link_dialog_test.dart \
   test/communities_panel_test.dart \
+  test/constitution_panel_test.dart \
   test/daily_summary_test.dart \
   test/dashboard_and_command_center_test.dart \
   test/decision_queue_test.dart \
