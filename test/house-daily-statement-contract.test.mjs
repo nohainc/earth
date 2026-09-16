@@ -25,3 +25,11 @@ test('daily House statements are refreshed only after required settlement work',
   assert.match(summary, /earth_refresh_house_daily_statements/);
   assert.match(scheduler, /endOfDaySnapshots:[\s\S]*refreshHouseDailyStatementsInTransaction/);
 });
+
+test('Daily Briefing exposes the statement as a player-facing V2 contract', () => {
+  assert.match(summary, /version: 2/);
+  assert.match(summary, /resourceDeltas/);
+  assert.match(summary, /severity: 'warning'/);
+  assert.match(summary, /actionLabel: 'REVIEW FINANCE'/);
+  assert.doesNotMatch(summary, /code: 'taxes_paid'/);
+});

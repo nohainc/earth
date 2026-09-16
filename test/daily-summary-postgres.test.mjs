@@ -18,7 +18,7 @@ test('House Daily Summary derives deterministic values from V2 records', async (
   };
 
   const result = await getHouseDailySummary(repository, 'HOUSE-1');
-  assert.equal(result.version, 1);
+  assert.equal(result.version, 2);
   assert.equal(result.currentGameDay, 5);
   assert.equal(result.summaryDay, 4);
   assert.deepEqual(result.financial, {
@@ -33,5 +33,6 @@ test('House Daily Summary derives deterministic values from V2 records', async (
   assert.equal(result.statement?.netCreditUnits, '60');
   assert.equal(result.buildings.completed.length, 1);
   assert.equal(result.alerts[0].read, false);
-  assert.deepEqual(result.highlights, [{ code: 'taxes_paid', reason: 'Recorded tax payments totaled 5 CREDIT on game day 4.' }]);
+  assert.deepEqual(result.highlights, []);
+  assert.deepEqual(result.resources.deltas, [{ resource: 'FOOD', produced: 2, consumed: 1, net: 1 }]);
 });

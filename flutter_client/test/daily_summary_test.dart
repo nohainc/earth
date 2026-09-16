@@ -188,17 +188,17 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('SINCE YOUR LAST VISIT'), findsOneWidget);
-    expect(find.text('158000.00 CR'), findsOneWidget);
-    expect(find.text('+5600.00 CR'), findsOneWidget);
-    expect(
-        find.textContaining('+3.67% since previous day close'), findsOneWidget);
+    expect(find.text('DAY 185 RESULTS'), findsOneWidget);
+    expect(find.text('+9430 CR'), findsNWidgets(2));
+    expect(find.text('+14250 CR'), findsNWidgets(3));
+    expect(find.text('-4820 CR'), findsNWidgets(2));
     expect(find.text('WHAT REQUIRES ATTENTION'), findsOneWidget);
     expect(find.text('Capitalize on Energy Rally'), findsOneWidget);
 
     // Click directive action button
     final directiveBtn = find.byKey(const Key('btn-directive-rec_energy'));
     expect(directiveBtn, findsOneWidget);
+    await tester.ensureVisible(directiveBtn);
     await tester.tap(directiveBtn);
     await tester.pump();
 
