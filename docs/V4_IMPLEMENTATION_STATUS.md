@@ -332,8 +332,8 @@ unallocated demand without inventing client-side service state.
 
 - Focused V4 regression and mobility/resolution checks: passing.
 - API contract generation and schema-contract check: passing.
-- Migration order: 72 contiguous active migrations. Corporation dynamics now writes a replay-safe daily operating snapshot derived from canonical territories, affiliations, buildings, service allocations, research projects, and organization financial state; it does not mutate balances or create a competing ledger authority. Institution financial snapshots are recomputed set-wise at day close from Economy V2 balances, ledger flows, budget authority, and obligations. Patent grants and public-domain transitions now run as a required database-authoritative settlement step.
+- Migration order: 78 contiguous active migrations. Corporation dynamics now writes a replay-safe daily operating snapshot derived from canonical territories, affiliations, buildings, service allocations, research projects, and organization financial state; it does not mutate balances or create a competing ledger authority. Institution financial snapshots are recomputed set-wise at day close from Economy V2 balances, ledger flows, budget authority, and obligations. Patent grants and public-domain transitions now run as a required database-authoritative settlement step.
 - Baseline freeze checksum: passing.
-- Live PostgreSQL replay/concurrency certification and Flutter SDK tests remain
-  environment-gated; the installed Flutter toolchain cannot write its protected
-  cache in this workspace.
+- Local PostgreSQL schema/invariant checks, maintained V4 Flutter tests, and
+  release canaries pass. Remote PostgreSQL replay/concurrency, production
+  readiness, and rollback still require the configured production environment.

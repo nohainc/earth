@@ -1,10 +1,10 @@
 # EARTH — Current Project State
 
-> Last updated: 2026-09-11 · Development baseline: see `ARCHITECTURE_BASELINE.md`.
+> Last updated: 2026-09-16 · Development baseline: see `ARCHITECTURE_BASELINE.md`.
 
 ---
 
-## ✅ In Production (live on PlanetScale PostgreSQL + Cloudflare Workers)
+## ✅ Implemented in the current codebase
 
 - Identity, sessions, MFA, rate limiting, email verification, account recovery
 - World clock, lifecycle, succession, inheritance, estate liquidation
@@ -21,9 +21,9 @@
 - Daily Summary, net-worth history, market OHLC
 - Transactional outbox delivery (emails via Cloudflare Email Service)
 - Flutter Web client fully functional at `/app`
-- Migration head 341; canonical schema and manifest are reconciled through
-  migration 341. Economy V2 and related V2 systems remain in development and
-  shadow-reconciliation/cutover work is not yet a production release gate.
+- Migration head 78; local canonical schema and manifest are reconciled through
+  migration 78. Production deployment still requires the remote database,
+  readiness, canary, and rollback gates described in `RELEASE_REHEARSAL.md`.
 
 ---
 
@@ -32,8 +32,9 @@
 - **`index.ts` route extraction** — 2,371 lines; route groups for AI, house, read-models extracted (2026-08-29); communities, corporations, cities, finance, contracts, governance, market, lifecycle still in index.ts
 - **`scheduler-postgres.ts`** — contains long inline SQL; resumable V2 settlement now provisions future entry partitions before daily work
 - **`objectives.ts`** — all target thresholds (`100000`, `50000`, `25`, etc.) hardcoded; should be loaded from `world_rules` table
-- **Economy V2 migration** — interactive and daily paths are being dual-written while shadow reconciliation compares legacy and V2 balances/deltas before cutover
-- **Economy V2 final cutover** — not ready; `npm run db:verify:economy-cutover` currently reports remaining legacy production callers and must pass before archival/removal
+- **Economy V2 archival** — the current cutover verifier reports no legacy
+  production callers; archival/removal remains a separate reviewed forward
+  migration and is not performed automatically.
 
 ---
 
@@ -59,7 +60,10 @@ Flutter Web → Cloudflare Worker (cloudflare/src/index.ts)
            → MarketCoordinator Durable Object (WebSocket fan-out only — no state)
 ```
 
-**Authority rule**: PostgreSQL is the only authoritative store. Flutter is an untrusted presentation shell. During Economy V2 migration, legacy balances remain the compatibility authority while V2 postings, partition lifecycle, and shadow reconciliation are validated.
+**Authority rule**: PostgreSQL is the only authoritative store. Flutter is an
+untrusted presentation shell. Economy V2 ledger tables and projections are the
+active runtime authority; retired legacy accounting paths are not release
+dependencies.
 
 ---
 
@@ -81,5 +85,5 @@ Flutter Web → Cloudflare Worker (cloudflare/src/index.ts)
 - 80% line coverage required before merge (documented; not yet CI-enforced)
 - `npm run db:verify:canonical` checks the fresh-install schema against the manifest and migration head
 - Run: `npm run qa:<feature>` or `npm test`
-- Flutter: `npm run flutter:test` (172 tests pass)
+- Flutter: `npm run test:flutter:v4` (59 maintained V4 tests pass)
 - DB invariants: `npm run db:verify:invariants` (requires `DATABASE_URL`)
