@@ -1739,20 +1739,15 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
               'Compare Houses across independent, published performance dimensions.',
           metrics: [
             CockpitMetric(
-                label: 'Dimensions',
+                label: 'Categories',
                 value: '${codes.length}',
                 icon: Icons.stacked_bar_chart_outlined,
                 color: context.primaryColor),
             CockpitMetric(
-                label: 'Updated Day',
-                value: gameDay,
-                icon: Icons.calendar_today_outlined,
-                color: context.secondaryColor),
-            CockpitMetric(
-                label: 'Houses',
+                label: 'Total Houses',
                 value:
                     '${widget.state.rankings['populationSize'] ?? (rows.isEmpty ? '—' : rows.first['population_size'] ?? '—')}',
-                icon: Icons.list_alt_outlined,
+                icon: Icons.shield_outlined,
                 color: context.goldColor),
           ],
         ),
@@ -1809,7 +1804,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
         ),
         const SizedBox(height: 16),
         EarthSection(
-          title: '${title.toUpperCase()} · UPDATED DAY $gameDay',
+          title: title.toUpperCase(),
           showHeader: true,
           showSurface: false,
           child: rows.isEmpty
