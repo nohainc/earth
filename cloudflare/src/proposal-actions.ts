@@ -98,7 +98,10 @@ const handlers = new Map<string, ProposalActionHandler>([
 ]);
 
 export function proposalActionHandler(actionType: unknown): ProposalActionHandler {
-  return handlers.get(String(actionType || 'generic')) ?? genericHandler;
+  const normalized = String(actionType || 'generic');
+  const handler = handlers.get(normalized);
+  if (!handler) throw new Error(`Unregistered proposal action handler: ${normalized}`);
+  return handler;
 }
 
 export function validateProposalActionSnapshot(action: Record<string, unknown>): ProposalActionHandler {

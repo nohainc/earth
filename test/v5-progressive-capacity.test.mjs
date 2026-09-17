@@ -124,6 +124,12 @@ test('V4 and V5 share strict one-House voting semantics', () => {
   assert.equal(evaluateOneHouseVote({ support: 1, oppose: 0, abstain: 1, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).passed, true);
 });
 
+test('proposal execution rejects unregistered action handlers', async () => {
+  const actions = await readFile(new URL('../cloudflare/src/proposal-actions.ts', import.meta.url), 'utf8');
+  assert.match(actions, /Unregistered proposal action handler/);
+  assert.doesNotMatch(actions, /handlers\.get\([^\n]+\) \?\?/);
+});
+
 test('V5 constitutional rules enforce typed values and authority inheritance', () => {
   assert.deepEqual(DEFAULT_V5_GOVERNANCE_RULE, { quorumBps: 2500, approvalBps: 5000, votingPeriodDays: 3, implementationDelayDays: 0 });
   assert.ok(CONSTITUTIONAL_RULE_DEFINITIONS.some((rule) => rule.code === 'EARTH.CAPACITY.STANDARD'));
