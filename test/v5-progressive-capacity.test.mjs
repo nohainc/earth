@@ -724,9 +724,18 @@ test('V5 world catalog exposes authored building research economics', async () =
 
 test('V5 capacity statement replay preserves the persisted obligation status', async () => {
   const settlement = await readFile(new URL('../cloudflare/src/v5-capacity-settlement-postgres.ts', import.meta.url), 'utf8');
-  assert.match(settlement, /const statementDelinquency = statement\.status === 'PAID' \? 'CURRENT' : 'ARREARS'/);
+  assert.match(settlement, /const statementDelinquency = delinquency\?\.status \?\? \(statement\.status === 'PAID' \? 'CURRENT' : 'ARREARS'\)/);
   assert.match(settlement, /statementDelinquency, baseRateResolution\.ruleSetId/);
   assert.doesNotMatch(settlement, /result === 'PAID' \? 'CURRENT' : result === 'PARTIAL' \? 'ARREARS'/);
+});
+
+test('V5 capacity statement schema accepts canonical House delinquency states', async () => {
+  const migration = await readFile(new URL('../db/migrations/112_v5_capacity_statement_delinquency_status.sql', import.meta.url), 'utf8');
+  const manifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.migrationVersion, 112);
+  for (const status of ['CURRENT', 'ARREARS', 'GRACE', 'EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED']) {
+    assert.match(migration, new RegExp(`'${status}'`));
+  }
 });
 
 test('V5 Territory containers reconcile with exact counts and monotonic sequences', async () => {

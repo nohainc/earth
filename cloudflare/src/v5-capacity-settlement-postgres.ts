@@ -184,7 +184,7 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
         // Replays return EXISTING from recordObligation. The persisted
         // obligation status, rather than that replay marker, is the source
         // of truth for the statement projection.
-        const statementDelinquency = statement.status === 'PAID' ? 'CURRENT' : 'ARREARS';
+        const statementDelinquency = delinquency?.status ?? (statement.status === 'PAID' ? 'CURRENT' : 'ARREARS');
         await tx.query(`INSERT INTO house_capacity_statements_v5
           (house_id, corporation_id, game_day, residential_units, building_units, total_units, base_rate_units,
            progressive_schedule_id, assessed_rent_units, paid_rent_units, arrears_units, delinquency_status, rules_version)
