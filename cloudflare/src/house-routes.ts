@@ -45,6 +45,8 @@ export async function handleHouseRoutes(
   }
 
   if (url.pathname === '/api/house/residency/quote' && request.method === 'GET') {
+    return Response.json({ ok: false, error: 'Territory-specific residence moves are retired in V5; House capacity is pooled.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for historical/admin callers. */
     const viewer = await currentHuman(request, env);
     const territoryId = url.searchParams.get('territoryId')?.trim();
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -57,6 +59,8 @@ export async function handleHouseRoutes(
   }
 
   if (url.pathname === '/api/house/residency/move' && request.method === 'POST') {
+    return Response.json({ ok: false, error: 'Territory-specific residence moves are retired in V5; House capacity is pooled.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for historical/admin callers. */
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const parsed = await parseJsonBody<{ territoryId?: string; correlationId?: string }>(request);

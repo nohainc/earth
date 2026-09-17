@@ -916,6 +916,16 @@ test('Legacy Corporation mutation endpoints are retired after V5 cutover', async
   assert.match(registry, /path: '\/api\/corporations\/\{id\}\/membership'.*status: 'RETIRED'/);
 });
 
+test('V5 House UI and routes do not offer Territory-specific residence changes', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/house-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  const panel = await readFile(new URL('../flutter_client/lib/features/institutions/territory_commons_panel.dart', import.meta.url), 'utf8');
+  const renderedPanel = panel.slice(panel.indexOf('  @override\n  Widget build'));
+  assert.match(routes, /Territory-specific residence moves are retired in V5/);
+  assert.match(registry, /path: '\/api\/house\/residency\/move'.*status: 'RETIRED'/);
+  assert.doesNotMatch(renderedPanel, /ACQUIRE USE RIGHT|RELOCATE RESIDENCE|RELEASE USE RIGHT/);
+});
+
 test('V5 operations UI has no dead legacy real-estate dialog path', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   assert.doesNotMatch(buildings, /real_estate_dialogs\.dart/);

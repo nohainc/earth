@@ -343,60 +343,36 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final residency = widget.data['residency'] is Map
-        ? Map<String, dynamic>.from(widget.data['residency'] as Map)
-        : const <String, dynamic>{};
-    final rights = (widget.data['rights'] as List<dynamic>?) ?? const [];
     final statement = widget.data['commons'] is Map
         ? Map<String, dynamic>.from(widget.data['commons'] as Map)
         : const <String, dynamic>{};
-    final territory = residency['currentTerritoryId'] ??
-        residency['territoryId'] ??
-        widget.data['territoryId'];
-    final rentPolicy = widget.data['rentPolicy'] is Map
-        ? Map<String, dynamic>.from(widget.data['rentPolicy'] as Map)
-        : const <String, dynamic>{};
-    final rentPerSlot =
-        int.tryParse((rentPolicy['rentPerSlotUnits'] ?? '').toString()) ?? 0;
-    final maxTermDays =
-        int.tryParse((rentPolicy['maxTermDays'] ?? '').toString()) ?? 365;
-    final rulesVersion = rentPolicy['rulesVersion']?.toString() ?? '—';
     final policy = statement['policy'] is Map
         ? Map<String, dynamic>.from(statement['policy'] as Map)
         : const <String, dynamic>{};
 
-    int totalSlots = 0;
-    for (final r in rights) {
-      if (r is Map && r['status'] == 'ACTIVE') {
-        totalSlots +=
-            (int.tryParse(r['slot_quantity']?.toString() ?? '0') ?? 0);
-      }
-    }
-
     return EarthSection(
-      title: 'TERRITORY COMMONS & LEASES',
+      title: 'EARTH PHYSICAL CAPACITY CONTEXT',
       showSurface: false,
       infoBulletPoints: const [
-        'Territory capacity is a time-bounded use right, separate from building ownership.',
-        'Rent funds the governing commons account; it is not a login reward.',
-        'Commons dividends are declared by the governing authority and paid only from collected rent.',
+        'Earth owns physical capacity; V5 Houses and Corporations use a pooled capacity model.',
+        'Territory records remain available as historical or physical context, not as a separate political or lease authority.',
+        'Capacity rent and obligations are shown in the V5 House and Corporation finance read models.',
       ],
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (_isLoading) const LinearProgressIndicator(),
         EarthMetricGrid(
           metrics: [
             EarthMetricTile(
-              label: 'PRIMARY RESIDENCY',
-              value: territory?.toString().toUpperCase() ?? 'NOT RECORDED',
+              label: 'CAPACITY MODEL',
+              value: 'POOLED / EARTH',
               icon: Icons.location_on_outlined,
               accentColor: context.primaryColor,
             ),
             EarthMetricTile(
-              label: 'ACTIVE LEASE SLOTS',
-              value: '$totalSlots SLOTS',
-              icon: Icons.grid_view_outlined,
-              accentColor:
-                  totalSlots > 0 ? context.successColor : context.warningColor,
+              label: 'TERRITORY RECORDS',
+              value: 'READ ONLY',
+              icon: Icons.history_outlined,
+              accentColor: context.secondaryColor,
             ),
             EarthMetricTile(
               label: 'DIVIDEND RATE',
@@ -409,59 +385,8 @@ class _TerritoryCommonsPanelState extends State<TerritoryCommonsPanel> {
           ],
         ),
         const SizedBox(height: 16),
-        Row(
-          children: [
-            FilledButton.icon(
-              onPressed:
-                  territory == null || widget.api == null || rentPerSlot <= 0
-                      ? null
-                      : () => _showAcquireRightDialog(
-                            context,
-                            territory.toString(),
-                            rentPerSlot: rentPerSlot,
-                            maxTermDays: maxTermDays,
-                            rulesVersion: rulesVersion,
-                          ),
-              icon: const Icon(Icons.add_home_work_outlined),
-              label: const Text('ACQUIRE USE RIGHT'),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: territory == null || widget.api == null
-                  ? null
-                  : () => _showRelocateDialog(context, territory.toString()),
-              icon: const Icon(Icons.directions_walk_outlined),
-              label: const Text('RELOCATE RESIDENCE'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text('YOUR ACTIVE USE RIGHTS', style: context.topicTitleStyle),
-        const SizedBox(height: 6),
-        if (rights.isEmpty)
-          Text(
-              'No active private use rights. Acquire slots before starting private construction projects.',
-              style: context.widgetFooterStyle)
-        else
-          ...rights.whereType<Map>().map((right) {
-            final rightId = right['id']?.toString() ?? '';
-            final status = right['status']?.toString() ?? 'ACTIVE';
-            return Card(
-              margin: const EdgeInsets.symmetric(vertical: 4),
-              child: ListTile(
-                title: Text('${right['slot_quantity'] ?? 0} private slots',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                    'Rent: ${right['rent_per_game_day_units'] ?? '—'} CR/day · Ends: Day ${right['effective_to_game_day'] ?? 'open'}'),
-                trailing: status == 'ACTIVE'
-                    ? OutlinedButton(
-                        onPressed: () => _releaseRight(rightId),
-                        child: const Text('RELEASE'),
-                      )
-                    : Chip(label: Text(status)),
-              ),
-            );
-          }),
+        Text('No Territory use-right or relocation action is required in V5.',
+            style: context.widgetFooterStyle),
         const SizedBox(height: 16),
         Text('COMMONS POLICY & ACCOUNTING STATUS',
             style: context.topicTitleStyle),
