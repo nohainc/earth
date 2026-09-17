@@ -19,7 +19,10 @@ type Building = {
 function ageBurden(building: Building, day: number): bigint {
   const age = day >= Number(building.last_major_rebuild_game_day) ? BigInt(day - Number(building.last_major_rebuild_game_day)) : 0n;
   const overdue = age > BigInt(building.design_life_days) ? age - BigInt(building.design_life_days) : 0n;
-  return overdue === 0n ? 10000n : Math.min(BigInt(building.maximum_burden_bps), 10000n + overdue * BigInt(building.overdue_burden_bps_per_day));
+  if (overdue === 0n) return 10000n;
+  const calculated = 10000n + overdue * BigInt(building.overdue_burden_bps_per_day);
+  const maxBurden = BigInt(building.maximum_burden_bps);
+  return calculated < maxBurden ? calculated : maxBurden;
 }
 type Account = { id: string; asset_id: number; account_type: string; balance_units: string };
 type Shard = { shard?: number; shardCount?: number };
@@ -97,9 +100,14 @@ function utilizationFor(building: Building, available: Map<number, bigint>, dema
     const assetId = ASSET_IDS[code];
     const total = demand.get(assetId) ?? 0n;
     const availableUnits = available.get(assetId) ?? 0n;
-    if (total > 0n) utilization = Math.min(utilization, (availableUnits * 10000n) / total);
+    if (total > 0n) {
+      const ratio = (availableUnits * 10000n) / total;
+      if (ratio < utilization) utilization = ratio;
+    } else {
+      utilization = 0n;
+    }
   }
-  return utilization;
+  return utilization < 0n ? 0n : utilization > 10000n ? 10000n : utilization;
 }
 
 async function settlePrivateHouse(tx: PostgresRepository, day: number, houseEconomicId: string, buildings: Building[], modifiers: ModifierResolver): Promise<number> {
@@ -193,61 +201,150 @@ async function settlePrivateHouse(tx: PostgresRepository, day: number, houseEcon
   return buildings.length;
 }
 
-async function settlePublicBuilding(tx: PostgresRepository, day: number, building: Building): Promise<void> {
-  const cost = (nonNegativeUnits(building.operating_credit_units) * ageBurden(building, day)) / 10000n;
-  if (cost > 0n) {
-    const treasury = await account(tx, building.owner_economic_id, ASSET_IDS.CREDIT, 'TREASURY');
-    const beneficiary = await account(tx, PUBLIC_INFRASTRUCTURE_OWNER, ASSET_IDS.CREDIT, 'SYSTEM_ACCOUNT');
-    if (!beneficiary) throw new Error('Missing public infrastructure settlement account');
-    await post(tx, day, `building:${building.id}:${day}:public-credit`, 'CORPORATION_PUBLIC_SPENDING', 'CORPORATION', building.id, [
-      { accountId: treasury.id, assetId: ASSET_IDS.CREDIT, delta: -cost, reason: 'public_infrastructure_operating_expense' },
-      { accountId: beneficiary.id, assetId: ASSET_IDS.CREDIT, delta: cost, reason: 'public_infrastructure_operating_expense' },
-    ]);
-  }
-  const inputs = catalogUnits(building.operating_input_units);
-  const outputs = catalogUnits(building.operating_output_units);
-  if (Object.keys(inputs).length > 0 || Object.keys(outputs).length > 0) {
-    const inputEntries: Array<{ accountId: string; assetId: number; delta: bigint; reason: string }> = [];
-    const outputEntries: Array<{ accountId: string; assetId: number; delta: bigint; reason: string }> = [];
-    for (const [code, required] of Object.entries(inputs)) {
+async function findAccount(tx: PostgresRepository, ownerEconomicId: string, assetId: number, accountType: string): Promise<Account | null> {
+  const result = await tx.query<Account>(
+    `SELECT id::TEXT, asset_id, account_type, balance_units::TEXT
+       FROM economic_accounts
+      WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = $3 AND status = 'ACTIVE'
+      FOR UPDATE`, [ownerEconomicId, assetId, accountType],
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function settlePublicBuilding(tx: PostgresRepository, day: number, building: Building, modifiers?: ModifierResolver): Promise<void> {
+  const resolvedModifiers = modifiers ?? (await loadModifierResolver(tx, day));
+  await settlePublicCorporation(tx, day, building.owner_economic_id, [building], resolvedModifiers);
+}
+
+async function settlePublicCorporation(tx: PostgresRepository, day: number, corpEconomicId: string, buildings: Building[], modifiers: ModifierResolver): Promise<number> {
+  const available = new Map<number, bigint>();
+  const demand = new Map<number, bigint>();
+  const inventoryAccounts = new Map<number, Account>();
+
+  for (const building of buildings) {
+    for (const [code, required] of Object.entries(adjustedInputUnits(building, modifiers))) {
       if (required <= 0n) continue;
       const assetId = ASSET_IDS[code];
-      if (!assetId || assetId === ASSET_IDS.CREDIT) continue;
-      const inv = await tx.query<Account>(
-        `SELECT id::TEXT, asset_id, account_type, balance_units::TEXT
-           FROM economic_accounts
-          WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE'
-          FOR UPDATE`, [building.owner_economic_id, assetId],
-      );
-      if (inv.rows[0]) {
-        const available = BigInt(inv.rows[0].balance_units);
-        const consumed = available < required ? available : required;
-        if (consumed > 0n) {
-          const sink = await account(tx, RESOURCE_CONSUMPTION_OWNER, assetId, 'SYSTEM_ACCOUNT');
-          inputEntries.push({ accountId: inv.rows[0].id, assetId, delta: -consumed, reason: 'public_infrastructure_operating_input' });
-          inputEntries.push({ accountId: sink.id, assetId, delta: consumed, reason: 'public_infrastructure_operating_input' });
-        }
-      }
+      if (!assetId || assetId === ASSET_IDS.CREDIT) throw new Error(`Public building has invalid resource input ${code}`);
+      demand.set(assetId, (demand.get(assetId) ?? 0n) + required);
     }
-    for (const [code, output] of Object.entries(outputs)) {
-      if (output <= 0n) continue;
-      const assetId = ASSET_IDS[code];
-      if (!assetId || assetId === ASSET_IDS.CREDIT) continue;
-      const inv = await tx.query<Account>(
-        `SELECT id::TEXT, asset_id, account_type, balance_units::TEXT
-           FROM economic_accounts
-          WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE'
-          FOR UPDATE`, [building.owner_economic_id, assetId],
-      );
-      if (inv.rows[0]) {
-        const source = await account(tx, RESOURCE_PRODUCTION_OWNER, assetId, 'SYSTEM_ACCOUNT');
-        outputEntries.push({ accountId: source.id, assetId, delta: -output, reason: 'public_infrastructure_operating_output' });
-        outputEntries.push({ accountId: inv.rows[0].id, assetId, delta: output, reason: 'public_infrastructure_operating_output' });
-      }
-    }
-    if (inputEntries.length) await post(tx, day, `building:${building.id}:${day}:public-consume`, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', building.owner_economic_id, inputEntries);
-    if (outputEntries.length) await post(tx, day, `building:${building.id}:${day}:public-produce`, 'RESOURCE_PRODUCTION', 'SYSTEM_PRODUCTION', building.owner_economic_id, outputEntries);
   }
+
+  for (const assetId of demand.keys()) {
+    const inv = await findAccount(tx, corpEconomicId, assetId, 'INVENTORY');
+    if (inv) {
+      available.set(assetId, BigInt(inv.balance_units));
+      inventoryAccounts.set(assetId, inv);
+    } else {
+      available.set(assetId, 0n);
+    }
+  }
+
+  const inputEntries: Array<{ accountId: string; assetId: number; delta: bigint; reason: string }> = [];
+  const outputEntries: Array<{ accountId: string; assetId: number; delta: bigint; reason: string }> = [];
+  const journals: Array<{ building: Building; utilization: bigint; inputs: Record<string, string>; outputs: Record<string, string>; shortages: Record<string, string>; limiting: string[]; credit: bigint; status: string }> = [];
+  const consumed = new Map<number, bigint>();
+  const produced = new Map<number, bigint>();
+
+  for (const building of buildings) {
+    const utilization = utilizationFor(building, available, demand, modifiers);
+    const inputs: Record<string, string> = {};
+    const outputs: Record<string, string> = {};
+    const shortages: Record<string, string> = {};
+    const limiting: string[] = [];
+
+    for (const [code, required] of Object.entries(adjustedInputUnits(building, modifiers))) {
+      const units = (required * utilization) / 10000n;
+      if (units < required) shortages[code] = (required - units).toString();
+      const total = demand.get(ASSET_IDS[code]) ?? 0n;
+      if (total > 0n && (available.get(ASSET_IDS[code]) ?? 0n) * 10000n / total === utilization) limiting.push(code);
+      if (units <= 0n) continue;
+      const assetId = ASSET_IDS[code];
+      inputs[code] = units.toString();
+      consumed.set(assetId, (consumed.get(assetId) ?? 0n) + units);
+    }
+
+    for (const [code, output] of Object.entries(catalogUnits(building.operating_output_units))) {
+      if (utilization <= 0n) continue;
+      const assetId = ASSET_IDS[code];
+      if (!assetId || assetId === ASSET_IDS.CREDIT) throw new Error(`Public building has invalid resource output ${code}`);
+      let inv = inventoryAccounts.get(assetId);
+      if (!inv) {
+        inv = (await findAccount(tx, corpEconomicId, assetId, 'INVENTORY')) ?? undefined;
+        if (inv) inventoryAccounts.set(assetId, inv);
+      }
+      if (!inv) continue;
+      const operated = (output * utilization) / 10000n;
+      const units = applyConditionStack(operated, modifiers('SUPPLY_MULTIPLIER', code, building.territory_id, building.owner_economic_id));
+      if (units <= 0n) continue;
+      outputs[code] = units.toString();
+      produced.set(assetId, (produced.get(assetId) ?? 0n) + units);
+    }
+
+    const credit = (nonNegativeUnits(building.operating_credit_units) * utilization * ageBurden(building, day)) / 100000000n;
+    journals.push({
+      building,
+      utilization,
+      inputs,
+      outputs,
+      shortages,
+      limiting,
+      credit,
+      status: utilization === 10000n ? 'OPERATED' : utilization === 0n ? 'STARVED' : 'PARTIAL',
+    });
+  }
+
+  for (const [assetId, units] of consumed) {
+    if (units <= 0n) continue;
+    const inv = inventoryAccounts.get(assetId) ?? await account(tx, corpEconomicId, assetId, 'INVENTORY');
+    const sink = await account(tx, RESOURCE_CONSUMPTION_OWNER, assetId, 'SYSTEM_ACCOUNT');
+    inputEntries.push({ accountId: inv.id, assetId, delta: -units, reason: 'public_infrastructure_operating_input' });
+    inputEntries.push({ accountId: sink.id, assetId, delta: units, reason: 'public_infrastructure_operating_input' });
+  }
+
+  for (const [assetId, units] of produced) {
+    if (units <= 0n) continue;
+    const inv = inventoryAccounts.get(assetId) ?? await account(tx, corpEconomicId, assetId, 'INVENTORY');
+    const source = await account(tx, RESOURCE_PRODUCTION_OWNER, assetId, 'SYSTEM_ACCOUNT');
+    outputEntries.push({ accountId: source.id, assetId, delta: -units, reason: 'public_infrastructure_operating_output' });
+    outputEntries.push({ accountId: inv.id, assetId, delta: units, reason: 'public_infrastructure_operating_output' });
+  }
+
+  if (inputEntries.length) {
+    await post(tx, day, `building-corp:${corpEconomicId}:${day}:consume`, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', corpEconomicId, inputEntries);
+  }
+  if (outputEntries.length) {
+    await post(tx, day, `building-corp:${corpEconomicId}:${day}:produce`, 'RESOURCE_PRODUCTION', 'SYSTEM_PRODUCTION', corpEconomicId, outputEntries);
+  }
+
+  const credit = journals.reduce((sum, row) => sum + row.credit, 0n);
+  if (credit > 0n) {
+    const treasury = await account(tx, corpEconomicId, ASSET_IDS.CREDIT, 'TREASURY');
+    const beneficiary = await account(tx, PUBLIC_INFRASTRUCTURE_OWNER, ASSET_IDS.CREDIT, 'SYSTEM_ACCOUNT');
+    await post(tx, day, `building-corp:${corpEconomicId}:${day}:credit`, 'CORPORATION_PUBLIC_SPENDING', 'CORPORATION', corpEconomicId, [
+      { accountId: treasury.id, assetId: ASSET_IDS.CREDIT, delta: -credit, reason: 'public_infrastructure_operating_expense' },
+      { accountId: beneficiary.id, assetId: ASSET_IDS.CREDIT, delta: credit, reason: 'public_infrastructure_operating_expense' },
+    ]);
+  }
+
+  for (const row of journals) {
+    await tx.query(
+      `INSERT INTO building_settlement_journals
+        (building_id, house_economic_id, game_day, utilization_bps, input_units, output_units, operating_credit_units, status, limiting_resources, shortage_units)
+       VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB,$7,$8,$9::JSONB,$10::JSONB)
+       ON CONFLICT (building_id, game_day) DO UPDATE
+         SET utilization_bps = EXCLUDED.utilization_bps,
+             input_units = EXCLUDED.input_units,
+             output_units = EXCLUDED.output_units,
+             operating_credit_units = EXCLUDED.operating_credit_units,
+             status = EXCLUDED.status,
+             limiting_resources = EXCLUDED.limiting_resources,
+             shortage_units = EXCLUDED.shortage_units`,
+      [row.building.id, corpEconomicId, day, row.utilization.toString(), JSON.stringify(row.inputs), JSON.stringify(row.outputs), row.credit.toString(), row.status, JSON.stringify(row.limiting), JSON.stringify(row.shortages)],
+    );
+  }
+
+  return buildings.length;
 }
 
 export type BuildingSettlementResult = { privateBuildings: number; publicBuildings: number; territoriesRefreshed: number };
@@ -276,21 +373,30 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
   );
   const modifiers = await loadModifierResolver(tx, day);
   const territories = new Set<string>();
+  const corporations = new Map<string, Building[]>();
   const houses = new Map<string, Building[]>();
-  let publicBuildings = 0;
   for (const building of buildings.rows) {
     if (building.territory_id) territories.add(building.territory_id);
     if (building.ownership_scope === 'PUBLIC') {
-      await settlePublicBuilding(tx, day, building);
-      publicBuildings += 1;
+      const group = corporations.get(building.owner_economic_id) ?? [];
+      group.push(building);
+      corporations.set(building.owner_economic_id, group);
     } else {
       const group = houses.get(building.owner_economic_id) ?? [];
       group.push(building);
       houses.set(building.owner_economic_id, group);
     }
   }
+  let publicBuildings = 0;
+  for (const [corpEconomicId, corpBuildings] of corporations) {
+    publicBuildings += await settlePublicCorporation(tx, day, corpEconomicId, corpBuildings, modifiers);
+  }
   let privateBuildings = 0;
-  for (const [houseEconomicId, houseBuildings] of houses) privateBuildings += await settlePrivateHouse(tx, day, houseEconomicId, houseBuildings, modifiers);
-  for (const territoryId of territories) await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [territoryId, day]);
+  for (const [houseEconomicId, houseBuildings] of houses) {
+    privateBuildings += await settlePrivateHouse(tx, day, houseEconomicId, houseBuildings, modifiers);
+  }
+  for (const territoryId of territories) {
+    await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [territoryId, day]);
+  }
   return { privateBuildings, publicBuildings, territoriesRefreshed: territories.size };
 }

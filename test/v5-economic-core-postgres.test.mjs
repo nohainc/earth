@@ -562,50 +562,55 @@ test('PostgreSQL V5 Economic Core Phase 1: Corporation can buy and sell resource
   }
 });
 
-test('PostgreSQL V5 Economic Core Phase 1: Public buildings read and mutate Corporation inventory during settlement', async () => {
+test('PostgreSQL V5 Economic Core Phase 2: Public building zero inputs produce zero output (STARVED)', async () => {
   const client = await connectTo(connectionString);
   const repository = new PostgresRepository(client);
-  const testCorpId = `CORP-PUB-${Date.now()}`;
+  const testCorpId = `CORP-PUB-ZERO-${Date.now()}`;
   const testEconId = `ECON-${testCorpId}`;
-  const testBuildingId = `BLD-PUB-${Date.now()}`;
-  const testTerritoryId = `TERR-PUB-${Date.now()}`;
+  const testBuildingId = `BLD-PUB-ZERO-${Date.now()}`;
+  const testTerritoryId = `TERR-PUB-ZERO-${Date.now()}`;
 
   try {
     await repository.transaction(async (tx) => {
-      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [testCorpId, `Pub Test Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [testCorpId, `Zero Input Corp ${Date.now()}`]);
       await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [testCorpId]);
       await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [testCorpId, testEconId]);
       await tx.query('SELECT earth_provision_corporation_economy($1)', [testEconId]);
 
-      // Seed Corporation Treasury and Material Inventory
+      // Seed Treasury but 0 Energy and 0 Compute inventory
       const treasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [testEconId])).rows[0];
       await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [treasury.id]);
 
-      const matInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
-      await tx.query(`UPDATE economic_accounts SET balance_units = 500000 WHERE id = $1`, [matInv.id]);
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Zero Territory', 'ACTIVE', true)`, [testTerritoryId, testCorpId]);
 
-      // Insert Territory
-      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Pub Territory', 'ACTIVE', true)`, [testTerritoryId, testCorpId]);
-
-      // Insert Public Building (e.g. PUBLIC-MEDICAL-T1) owned by Corporation
+      // EXTRACTION-REFINING-T1 requires 12 Energy, 1 Compute, produces 30 Material
       await tx.query(`
         INSERT INTO buildings (
           id, catalog_id, owner_economic_id, territory_id, status, construction_state,
           installed_generation, catalog_definition_version, technology_definition_version,
           operating_mode, started_game_day, last_major_rebuild_game_day
         ) VALUES (
-          $1, 'PUBLIC-MEDICAL-T1', $2, $3, 'ACTIVE', 'ACTIVE',
+          $1, 'EXTRACTION-REFINING-T1', $2, $3, 'ACTIVE', 'ACTIVE',
           1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1
         )
       `, [testBuildingId, testEconId, testTerritoryId]);
 
-      // Run settlement for Day 2
       const res = await settleBuildingUpkeepAndRevenueV2(tx, 2);
-      assert.ok(res.publicBuildings >= 1, 'At least 1 public building settled');
+      assert.ok(res.publicBuildings >= 1);
 
-      // Verify Corporation Treasury paid operating credit
-      const updatedTreasury = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [treasury.id])).rows[0];
-      assert.ok(BigInt(updatedTreasury.balance_units) < 100000n, 'Treasury must have decreased from operating cost');
+      // Check Material inventory remains 0 (zero output)
+      const matInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      assert.equal(matInv.balance_units, '0', 'Zero inputs must produce zero output');
+
+      // Check settlement journal
+      const journal = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = 2`, [testBuildingId])).rows[0];
+      assert.ok(journal, 'Settlement journal must be recorded');
+      assert.equal(journal.status, 'STARVED');
+      assert.equal(journal.utilization_bps, 0);
+      assert.deepEqual(journal.output_units, {});
+      assert.deepEqual(journal.input_units, {});
+      assert.equal(journal.operating_credit_units, '0');
+      assert.ok(journal.shortage_units.ENERGY || journal.shortage_units.COMPUTE, 'Shortage units must be recorded');
     });
   } finally {
     await client.query('DELETE FROM building_settlement_journals WHERE building_id = $1', [testBuildingId]);
@@ -613,8 +618,8 @@ test('PostgreSQL V5 Economic Core Phase 1: Public buildings read and mutate Corp
     await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [testTerritoryId]);
     await client.query('DELETE FROM territories WHERE id = $1', [testTerritoryId]);
     await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [testEconId]);
-    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [testBuildingId, `building:${testBuildingId}:%`]);
-    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [testBuildingId, `building:${testBuildingId}:%`]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [testEconId, `building-corp:${testEconId}:%`]);
     await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [testEconId]);
     await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [testEconId]);
     await client.query('DELETE FROM corporations WHERE id = $1', [testCorpId]);
@@ -623,7 +628,321 @@ test('PostgreSQL V5 Economic Core Phase 1: Public buildings read and mutate Corp
   }
 });
 
-test('PostgreSQL V5 Economic Core Phase 1: Architecture integrity report passes with 0 failures', async () => {
+test('PostgreSQL V5 Economic Core Phase 2: Public building partial inputs produce proportional output (PARTIAL)', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testCorpId = `CORP-PUB-PART-${Date.now()}`;
+  const testEconId = `ECON-${testCorpId}`;
+  const testBuildingId = `BLD-PUB-PART-${Date.now()}`;
+  const testTerritoryId = `TERR-PUB-PART-${Date.now()}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [testCorpId, `Part Input Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [testCorpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [testCorpId, testEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [testEconId]);
+
+      // EXTRACTION-REFINING-T2 requires 26 Energy, 2 Compute, produces 69 Material, operating credit 1680
+      // Provide 13 Energy (50%) and 10 Compute (500%)
+      const treasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [treasury.id]);
+
+      const energyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 13 WHERE id = $1`, [energyInv.id]);
+
+      const computeInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 10 WHERE id = $1`, [computeInv.id]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Part Territory', 'ACTIVE', true)`, [testTerritoryId, testCorpId]);
+
+      await tx.query(`
+        INSERT INTO buildings (
+          id, catalog_id, owner_economic_id, territory_id, status, construction_state,
+          installed_generation, catalog_definition_version, technology_definition_version,
+          operating_mode, started_game_day, last_major_rebuild_game_day
+        ) VALUES (
+          $1, 'EXTRACTION-REFINING-T2', $2, $3, 'ACTIVE', 'ACTIVE',
+          1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1
+        )
+      `, [testBuildingId, testEconId, testTerritoryId]);
+
+      const res = await settleBuildingUpkeepAndRevenueV2(tx, 2);
+      assert.ok(res.publicBuildings >= 1);
+
+      // Check Material produced is proportional: (69 * 5000) / 10000 = 34
+      const matInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      assert.equal(matInv.balance_units, '34', 'Partial inputs must produce proportional 50% output (34 units)');
+
+      // Check Energy consumed = 13 (so balance becomes 0)
+      const remEnergy = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [energyInv.id])).rows[0];
+      assert.equal(remEnergy.balance_units, '0', 'Consumed 13 units of Energy');
+
+      // Check Compute consumed = 1 (balance becomes 9)
+      const remCompute = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [computeInv.id])).rows[0];
+      assert.equal(remCompute.balance_units, '9', 'Consumed 1 unit of Compute');
+
+      // Check Treasury operating cost = (1680 * 5000 * 10000) / 100000000 = 840
+      const remTreasury = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [treasury.id])).rows[0];
+      assert.equal(remTreasury.balance_units, String(100000 - 840), 'Operating credit charged proportionally');
+
+      // Check journal
+      const journal = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = 2`, [testBuildingId])).rows[0];
+      assert.ok(journal);
+      assert.equal(journal.status, 'PARTIAL');
+      assert.equal(journal.utilization_bps, 5000);
+      assert.deepEqual(journal.limiting_resources, ['ENERGY']);
+      assert.equal(journal.shortage_units.ENERGY, '13');
+      assert.equal(journal.shortage_units.COMPUTE, '1');
+    });
+  } finally {
+    await client.query('DELETE FROM building_settlement_journals WHERE building_id = $1', [testBuildingId]);
+    await client.query('DELETE FROM buildings WHERE id = $1', [testBuildingId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [testEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [testCorpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [testCorpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 2: Public building full inputs produce full output (OPERATED)', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testCorpId = `CORP-PUB-FULL-${Date.now()}`;
+  const testEconId = `ECON-${testCorpId}`;
+  const testBuildingId = `BLD-PUB-FULL-${Date.now()}`;
+  const testTerritoryId = `TERR-PUB-FULL-${Date.now()}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [testCorpId, `Full Input Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [testCorpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [testCorpId, testEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [testEconId]);
+
+      // EXTRACTION-REFINING-T1 requires 12 Energy, 1 Compute, produces 30 Material, operating credit 800
+      const treasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [treasury.id]);
+
+      const energyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 50 WHERE id = $1`, [energyInv.id]);
+
+      const computeInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 10 WHERE id = $1`, [computeInv.id]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Full Territory', 'ACTIVE', true)`, [testTerritoryId, testCorpId]);
+
+      await tx.query(`
+        INSERT INTO buildings (
+          id, catalog_id, owner_economic_id, territory_id, status, construction_state,
+          installed_generation, catalog_definition_version, technology_definition_version,
+          operating_mode, started_game_day, last_major_rebuild_game_day
+        ) VALUES (
+          $1, 'EXTRACTION-REFINING-T1', $2, $3, 'ACTIVE', 'ACTIVE',
+          1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1
+        )
+      `, [testBuildingId, testEconId, testTerritoryId]);
+
+      const res = await settleBuildingUpkeepAndRevenueV2(tx, 2);
+      assert.ok(res.publicBuildings >= 1);
+
+      // Check Material produced is 100% full: 30 units
+      const matInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      assert.equal(matInv.balance_units, '30', 'Full inputs must produce full 100% output (30 units)');
+
+      // Check Energy consumed = 12 (balance becomes 38)
+      const remEnergy = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [energyInv.id])).rows[0];
+      assert.equal(remEnergy.balance_units, '38', 'Energy decreased by 12');
+
+      // Check Compute consumed = 1 (balance becomes 9)
+      const remCompute = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [computeInv.id])).rows[0];
+      assert.equal(remCompute.balance_units, '9', 'Compute decreased by 1');
+
+      // Check Treasury operating cost = 800
+      const remTreasury = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [treasury.id])).rows[0];
+      assert.equal(remTreasury.balance_units, String(100000 - 800), 'Operating credit charged at 100%');
+
+      // Check journal
+      const journal = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = 2`, [testBuildingId])).rows[0];
+      assert.ok(journal);
+      assert.equal(journal.status, 'OPERATED');
+      assert.equal(journal.utilization_bps, 10000);
+      assert.deepEqual(journal.shortage_units, {});
+    });
+  } finally {
+    await client.query('DELETE FROM building_settlement_journals WHERE building_id = $1', [testBuildingId]);
+    await client.query('DELETE FROM buildings WHERE id = $1', [testBuildingId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [testEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [testCorpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [testCorpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 2: Missing output inventory account prevents output safely', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testCorpId = `CORP-PUB-NOINV-${Date.now()}`;
+  const testEconId = `ECON-${testCorpId}`;
+  const testBuildingId = `BLD-PUB-NOINV-${Date.now()}`;
+  const testTerritoryId = `TERR-PUB-NOINV-${Date.now()}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [testCorpId, `No Inv Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [testCorpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [testCorpId, testEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [testEconId]);
+
+      // Seed Treasury with Credits
+      const treasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [treasury.id]);
+
+      // Delete Material Inventory account (asset 2)
+      await tx.query(`DELETE FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [testEconId]);
+
+      // Seed Energy & Compute
+      const energyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 50 WHERE id = $1`, [energyInv.id]);
+
+      const computeInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 10 WHERE id = $1`, [computeInv.id]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'No Inv Territory', 'ACTIVE', true)`, [testTerritoryId, testCorpId]);
+
+      await tx.query(`
+        INSERT INTO buildings (
+          id, catalog_id, owner_economic_id, territory_id, status, construction_state,
+          installed_generation, catalog_definition_version, technology_definition_version,
+          operating_mode, started_game_day, last_major_rebuild_game_day
+        ) VALUES (
+          $1, 'EXTRACTION-REFINING-T1', $2, $3, 'ACTIVE', 'ACTIVE',
+          1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1
+        )
+      `, [testBuildingId, testEconId, testTerritoryId]);
+
+      const res = await settleBuildingUpkeepAndRevenueV2(tx, 2);
+      assert.ok(res.publicBuildings >= 1);
+
+      // Journal output_units must be empty because inventory account was missing
+      const journal = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = 2`, [testBuildingId])).rows[0];
+      assert.ok(journal);
+      assert.deepEqual(journal.output_units, {}, 'Missing output inventory account must prevent output');
+    });
+  } finally {
+    await client.query('DELETE FROM building_settlement_journals WHERE building_id = $1', [testBuildingId]);
+    await client.query('DELETE FROM buildings WHERE id = $1', [testBuildingId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [testEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [testCorpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [testCorpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 2: Multi-building Corporation resource sharing is proportional and inventory remains non-negative', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testCorpId = `CORP-PUB-MULTI-${Date.now()}`;
+  const testEconId = `ECON-${testCorpId}`;
+  const testBuildingId1 = `BLD-PUB-M1-${Date.now()}`;
+  const testBuildingId2 = `BLD-PUB-M2-${Date.now()}`;
+  const testTerritoryId = `TERR-PUB-MULTI-${Date.now()}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [testCorpId, `Multi Input Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [testCorpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [testCorpId, testEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [testEconId]);
+
+      // Seed Treasury with Credits
+      const treasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [treasury.id]);
+
+      // 2x EXTRACTION-REFINING-T1 demands: 24 Energy, 2 Compute total
+      // Provide 12 Energy (50% of 24) and 10 Compute (500% of 2)
+      const energyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 12 WHERE id = $1`, [energyInv.id]);
+
+      const computeInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 10 WHERE id = $1`, [computeInv.id]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Multi Territory', 'ACTIVE', true)`, [testTerritoryId, testCorpId]);
+
+      for (const bId of [testBuildingId1, testBuildingId2]) {
+        await tx.query(`
+          INSERT INTO buildings (
+            id, catalog_id, owner_economic_id, territory_id, status, construction_state,
+            installed_generation, catalog_definition_version, technology_definition_version,
+            operating_mode, started_game_day, last_major_rebuild_game_day
+          ) VALUES (
+            $1, 'EXTRACTION-REFINING-T1', $2, $3, 'ACTIVE', 'ACTIVE',
+            1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1
+          )
+        `, [bId, testEconId, testTerritoryId]);
+      }
+
+      const res = await settleBuildingUpkeepAndRevenueV2(tx, 2);
+      assert.ok(res.publicBuildings >= 2);
+
+      // Total material produced: 2 * ((30 * 5000) / 10000) = 2 * 15 = 30
+      const matInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [testEconId])).rows[0];
+      assert.equal(matInv.balance_units, '30', 'Two buildings each produced 15 units of Material');
+
+      // Energy balance must be exactly 0 (never negative)
+      const remEnergy = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [energyInv.id])).rows[0];
+      assert.equal(remEnergy.balance_units, '0', 'Energy balance exact zero, non-negative');
+
+      // Compute consumed: 2 * ((1 * 5000) / 10000) = 0, so compute remains 10
+      const remCompute = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [computeInv.id])).rows[0];
+      assert.equal(remCompute.balance_units, '10');
+
+      // Check both journals have 5000 bps utilization
+      for (const bId of [testBuildingId1, testBuildingId2]) {
+        const journal = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = 2`, [bId])).rows[0];
+        assert.ok(journal);
+        assert.equal(journal.utilization_bps, 5000);
+        assert.equal(journal.status, 'PARTIAL');
+        assert.deepEqual(journal.limiting_resources, ['ENERGY']);
+      }
+    });
+  } finally {
+    for (const bId of [testBuildingId1, testBuildingId2]) {
+      await client.query('DELETE FROM building_settlement_journals WHERE building_id = $1', [bId]);
+      await client.query('DELETE FROM buildings WHERE id = $1', [bId]);
+    }
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [testEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [testEconId, `building-corp:${testEconId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [testEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [testCorpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [testCorpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 2: Architecture integrity report passes with 0 failures', async () => {
   const client = await connectTo(connectionString);
   try {
     const report = await client.query(
