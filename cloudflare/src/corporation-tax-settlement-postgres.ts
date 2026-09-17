@@ -97,8 +97,8 @@ export async function settleCorporationIncomeTax(
       arrears += 1;
     } else {
       const posted = (await tx.query<{ transaction_id: string }>(`
-        SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','TAX_COLLECTION',$3,'corporation-tax-constitution-v5',$4::JSONB) AS transaction_id
-      `, [`corporation-tax-payment:${correlationId}`, day, corporation.id, JSON.stringify([
+        SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','TAX_COLLECTION',$3,$4,$5::JSONB) AS transaction_id
+      `, [`corporation-tax-payment:${correlationId}`, day, corporation.id, corporation.tax_rule_version, JSON.stringify([
         { account_id: corporationAccount.id, asset_id: 1, delta_units: (-amount).toString() },
         { account_id: earthAccount.id, asset_id: 1, delta_units: amount.toString() },
       ])])).rows[0];
