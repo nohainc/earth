@@ -9,7 +9,7 @@ function budgetCategory(category: string): string {
 }
 
 export async function getCorporationFiscalState(repository: PostgresRepository, corporationId: string): Promise<Record<string, unknown>> {
-  const [corporation, accounts, budgets, taxes] = await Promise.all([
+  const [corporation, accounts, budgets, taxes, constitution] = await Promise.all([
     repository.query('SELECT c.id, i.name, c.status, c.admission_policy, c.tax_charter, c.tax_charter_version, c.tax_charter_updated_game_day FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1', [corporationId]),
     repository.query(`SELECT a.id::TEXT AS account_id, a.account_type, a.balance_units::TEXT AS balance_units
       FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
@@ -21,9 +21,16 @@ export async function getCorporationFiscalState(repository: PostgresRepository, 
     repository.query(`SELECT r.* FROM tax_rule_versions r
       WHERE r.scope = 'CORPORATION' AND r.beneficiary_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1)
       ORDER BY r.category, r.effective_from_game_day DESC`, [corporationId]),
+    repository.query(`SELECT rules_json, version_ids, game_day
+        FROM resolved_constitution_snapshots_v5
+       WHERE authority_type = 'CORPORATION' AND authority_id = $1
+         AND game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD')`, [corporationId]),
   ]);
   if (!corporation.rows[0]) throw new Error('Corporation not found');
-  return { corporation: corporation.rows[0], accounts: accounts.rows, budgets: budgets.rows, taxRules: taxes.rows, fiscalLayers: ['EARTH', 'CORPORATION'] };
+  const canonical = constitution.rows[0] ?? null;
+  const constitutionalTaxRules = canonical ? Object.fromEntries(Object.entries(canonical.rules_json ?? {}).filter(([code]) => code.includes('.TAX') || code === 'CORPORATION.HOUSE_INCOME_TAX')) : {};
+  const constitutionalTaxVersionIds = canonical ? Object.fromEntries(Object.entries(canonical.version_ids ?? {}).filter(([code]) => code.includes('.TAX') || code === 'CORPORATION.HOUSE_INCOME_TAX')) : {};
+  return { corporation: corporation.rows[0], accounts: accounts.rows, budgets: budgets.rows, constitutionalTaxRules, constitutionalTaxVersionIds, taxRules: taxes.rows, taxRulesSource: canonical ? 'constitution-snapshot-v5' : 'legacy-tax-rule-versions-bridge', fiscalLayers: ['EARTH', 'CORPORATION'] };
 }
 
 export async function spendCorporationBudget(
