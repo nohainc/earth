@@ -11,6 +11,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
   const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"))
     .rows[0];
   const gameDay = Number(world?.game_day ?? 0);
+  const assessedGameDay = Math.max(1, gameDay - 1);
   const [migration, earthPolicy, corporationCoverage, admissionCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation] = await Promise.all([
     repository.query<ReadinessRow>('SELECT COALESCE(MAX(version), 0)::TEXT AS count FROM earth_schema_migrations'),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
@@ -19,13 +20,15 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
        AND rules_json ? 'EARTH.CAPACITY.STANDARD'
        AND rules_json ? 'EARTH.CAPACITY.BASE_RATE'
        AND rules_json ? 'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE'
-       AND rules_json ? 'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'`, [gameDay]),
+       AND rules_json ? 'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'`, [assessedGameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM corporations c
      WHERE c.status = 'ACTIVE'
        AND EXISTS (SELECT 1 FROM resolved_constitution_snapshots_v5 s
                     WHERE s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1
-                      AND s.rules_json ? 'CORPORATION.HOUSE_CAPACITY.BASE_RATE')`, [gameDay]),
+                      AND s.rules_json ? 'CORPORATION.HOUSE_CAPACITY.BASE_RATE'
+                      AND s.rules_json ? 'CORPORATION.TAX.INCOME_RATE'
+                      AND s.rules_json ? 'CORPORATION.TAX.CORPORATE_RATE')`, [assessedGameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM corporations c
      WHERE c.status = 'ACTIVE'
@@ -47,12 +50,15 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
       FROM daily_settlement_runs WHERE status = 'failed' AND game_day >= $1`, [Math.max(1, gameDay - 2)]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM resolved_constitution_snapshots_v5
-     WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [Math.max(1, gameDay - 1)]),
+     WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1
+       AND rules_json ? 'EARTH.CAPACITY.STANDARD'
+       AND rules_json ? 'EARTH.TAX.BASIC_LEVY_RATE'
+       AND rules_json ? 'EARTH.MARKET.TRANSACTION_TAX_RATE'`, [assessedGameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM corporations c
      WHERE c.status = 'ACTIVE'
        AND EXISTS (SELECT 1 FROM resolved_constitution_snapshots_v5 s
-                    WHERE s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1)`, [Math.max(1, gameDay - 1)]),
+                    WHERE s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1)`, [assessedGameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM constitutional_rule_definitions_v5 WHERE active = TRUE`),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
@@ -74,6 +80,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
     allActiveCorporationsHaveConstitutionSnapshot: Number(corporationSnapshots.rows[0]?.count ?? 0) === activeCorporations,
     constitutionalDefinitionsPresent: Number(definitions.rows[0]?.count ?? 0) > 0,
     taxReconciliationClean: Number(taxReconciliation.rows[0]?.count ?? 0) === 1,
+    assessedEarthTaxRulesAvailable: Number(earthSnapshot.rows[0]?.count ?? 0) === 1,
     noRecentFailedSettlementRuns: Number(failedRuns.rows[0]?.count ?? 0) === 0,
     shadowOnlyUntilExplicitEnablement: true,
   };
@@ -96,6 +103,8 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
       corporationConstitutionSnapshots: Number(corporationSnapshots.rows[0]?.count ?? 0),
       constitutionalDefinitions: Number(definitions.rows[0]?.count ?? 0),
       cleanTaxReconciliationRuns: Number(taxReconciliation.rows[0]?.count ?? 0),
+      assessedGameDay,
+      assessedEarthTaxRules: Number(earthSnapshot.rows[0]?.count ?? 0),
     },
     generatedFrom: 'postgres-canonical-facts-v5',
     mutationEnabled: false,
