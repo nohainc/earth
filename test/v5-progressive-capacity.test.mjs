@@ -147,6 +147,14 @@ test('succession policy reads only typed Earth Constitution rules', async () => 
   assert.match(migration, /jsonb_typeof\(r\.value_json\) = 'object'/);
 });
 
+test('V4 compatibility proposals snapshot authority-scoped Constitution governance rules', async () => {
+  const source = await readFile(new URL('../cloudflare/src/governance-v4-postgres.ts', import.meta.url), 'utf8');
+  assert.match(source, /resolveEffectiveConstitution/);
+  assert.match(source, /const rulePrefix = input\.subjectType === 'EARTH' \? 'EARTH\.GOVERNANCE' : 'CORPORATION\.GOVERNANCE'/);
+  assert.match(source, /constitutionalValue\('POLICY_QUORUM_BPS'/);
+  assert.doesNotMatch(source, /\.\.\.\(input\.ruleSnapshot \?\? \{\}\)/);
+});
+
 test('Constitution amendment preview applies typed changes and restores Earth defaults when clearing overrides', () => {
   const preview = previewConstitutionAmendment({
     currentRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 4000n },
@@ -190,8 +198,8 @@ test('V4 ballot authorization uses an exact persisted electorate snapshot', asyn
 
 test('V4 ballot totals cannot be inflated by duplicate casts', async () => {
   const source = await readFile(new URL('../cloudflare/src/governance-v4-postgres.ts', import.meta.url), 'utf8');
-  assert.match(source, /governance_ballots_v4[\s\S]*ON CONFLICT \(proposal_id, house_id\) DO NOTHING/);
-  assert.match(source, /if \(ballot\.rowCount !== 1\) throw new Error\('Ballot already recorded'\)/);
+  assert.match(source, /governance_ballots_v4[\s\S]*ON CONFLICT \(proposal_id, house_id\) DO UPDATE/);
+  assert.match(source, /if \(ballot\.rowCount !== 1\) throw new Error\('Ballot could not be recorded'\)/);
 });
 
 test('proposal execution rejects unregistered action handlers', async () => {

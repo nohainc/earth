@@ -3,6 +3,7 @@ import { createGameEvent } from './game-events-postgres.ts';
 import type { VotingMethod } from './governance-voting.ts';
 import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
+import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 
 const ACTIONS = new Set(['ORGANIZATION_BUDGET_SPEND', 'TAX_RULE', 'PUBLIC_PROJECT', 'RESEARCH_FUNDING', 'CHARTER_CHANGE', 'WORLD_CONDITION', 'ORGANIZATION_TECHNOLOGY_ADOPTION']);
 const VOTING_METHODS = new Set<VotingMethod>(['ONE_HOUSE_ONE_VOTE', 'DELEGATED', 'SHARE_WEIGHTED', 'QUADRATIC_VOICE']);
@@ -110,12 +111,21 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
              AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)
         ) AS frozen_electorate`, [input.subjectId, votingStart])
       : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'");
+    const constitutional = await resolveEffectiveConstitution(tx, {
+      gameDay: submitted,
+      corporationId: input.subjectType === 'ORGANIZATION' ? input.subjectId ?? undefined : undefined,
+    });
+    const rulePrefix = input.subjectType === 'EARTH' ? 'EARTH.GOVERNANCE' : 'CORPORATION.GOVERNANCE';
+    const constitutionalValue = (suffix: string, fallback: number): number => {
+      const value = constitutional.rules[`${rulePrefix}.${suffix}`];
+      const parsed = Number(value ?? fallback);
+      return Number.isSafeInteger(parsed) ? parsed : fallback;
+    };
     const rule = {
-      quorumBps: 5000,
-      approvalBps: 5000,
-      votingPeriodDays: 2,
-      implementationDelayDays: 1,
-      ...(input.ruleSnapshot ?? {}),
+      quorumBps: constitutionalValue('POLICY_QUORUM_BPS', 5000),
+      approvalBps: constitutionalValue('POLICY_APPROVAL_BPS', 5000),
+      votingPeriodDays: constitutionalValue('VOTING_PERIOD_DAYS', 2),
+      implementationDelayDays: constitutionalValue('IMPLEMENTATION_DELAY_DAYS', 1),
       electorateSnapshotGameDay: votingStart,
       electorateSize: Number(electorate.rows[0]?.count ?? 0),
     };
@@ -150,8 +160,9 @@ export async function castGovernanceVoteV4(repository: PostgresRepository, input
     const day = await currentDay(tx);
     if (day > proposal.voting_end_game_day) throw new Error('Governance voting deadline has passed');
     const houseId = await canVote(tx, input.humanId, input.proposalId);
-    const ballot = await tx.query(`INSERT INTO governance_ballots_v4 (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (proposal_id, house_id) DO NOTHING`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);
-    if (ballot.rowCount !== 1) throw new Error('Ballot already recorded');
+    const ballot = await tx.query(`INSERT INTO governance_ballots_v4 (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (proposal_id, house_id) DO UPDATE SET choice = EXCLUDED.choice, cast_by_human_id = EXCLUDED.cast_by_human_id, cast_game_day = EXCLUDED.cast_game_day, correlation_id = EXCLUDED.correlation_id`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);
+    if (ballot.rowCount !== 1) throw new Error('Ballot could not be recorded');
     const totals = await tx.query<{ support: string; oppose: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'SUPPORT')::TEXT AS support, COUNT(*) FILTER (WHERE choice = 'OPPOSE')::TEXT AS oppose FROM governance_ballots_v4 WHERE proposal_id = $1`, [input.proposalId]);
     await tx.query('UPDATE governance_proposals_v4 SET support_votes = $1, oppose_votes = $2 WHERE id = $3', [totals.rows[0]?.support ?? '0', totals.rows[0]?.oppose ?? '0', input.proposalId]);
     return { ok: true, proposalId: input.proposalId, houseId, choice: input.choice, correlationId: input.correlationId };
