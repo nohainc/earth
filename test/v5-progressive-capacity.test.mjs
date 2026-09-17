@@ -834,6 +834,12 @@ test('V5 research cards do not synthesize next-tier economics', async () => {
   assert.doesNotMatch(technology, /Slot × Tier construction days/);
 });
 
+test('V5 generic governance proposals cannot carry executable targets', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
+  assert.match(routes, /Executable governance targets are retired/);
+  assert.match(routes, /status: 410/);
+});
+
 test('V5 construction review quotes and executes the pooled path for independent Houses', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   const confirm = buildings.slice(buildings.indexOf('Future<void> _confirmConstruction'));

@@ -238,6 +238,9 @@ export async function handleGovernanceRoutes(
     if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
     const targetCategory = body.target?.category?.trim() || null;
     const targetTaxAction = String(body.target?.value && typeof body.target.value === 'object' ? (body.target.value as Record<string, unknown>).actionType ?? '' : '').toUpperCase();
+    if (targetCategory) {
+      return Response.json({ ok: false, error: 'Executable governance targets are retired; submit a typed V5 Constitution proposal or use the dedicated operational workflow.' }, { status: 410 });
+    }
     if (targetCategory === 'tax' || ['TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(targetTaxAction)) {
       return Response.json({ ok: false, error: 'Legacy tax governance is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
     }
