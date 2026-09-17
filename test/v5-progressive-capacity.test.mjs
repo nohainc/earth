@@ -165,6 +165,11 @@ test('V4 and V5 share strict one-House voting semantics', () => {
   assert.equal(evaluateOneHouseVote({ support: 1, oppose: 0, abstain: 1, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).passed, true);
 });
 
+test('compatibility proposal resolution rejects approval ties like V5', async () => {
+  const source = await readFile(new URL('../cloudflare/src/governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(source, /input\.supportWeight > input\.opposeWeight/);
+});
+
 test('V4 proposal rules freeze the electorate denominator at creation', async () => {
   const source = await readFile(new URL('../cloudflare/src/governance-v4-postgres.ts', import.meta.url), 'utf8');
   assert.match(source, /electorateSnapshotGameDay/);

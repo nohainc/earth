@@ -86,6 +86,10 @@ test('proposal quorum uses human participation, while approval uses weighted vot
     voters: 100, eligibleHumans: 100, supportWeight: 60, opposeWeight: 40,
     quorum: 0.25, approvalThreshold: 0.6,
   }).passed, true);
+  assert.equal(evaluateProposalVote({
+    voters: 100, eligibleHumans: 100, supportWeight: 50, opposeWeight: 50,
+    quorum: 0.25, approvalThreshold: 0.5,
+  }).passed, false);
 });
 
 test('challengeProposal files constitutional challenge for passed proposal', async () => {
