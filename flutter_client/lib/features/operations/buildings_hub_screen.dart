@@ -3802,6 +3802,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             building: b,
             effectiveOutputAmount: 0,
             effectiveOperatingCost: 0,
+            resourceChanges: _settlementResourceChangesForBuilding(b),
           ),
           if (isPublicInvestment) ...[
             const SizedBox(height: 8),
@@ -4618,6 +4619,25 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       }
     }
     return reported.length == 6 ? reported : null;
+  }
+
+  Map<String, double>? _settlementResourceChangesForBuilding(
+      Map<String, dynamic> building) {
+    const keys = [
+      'credits',
+      'energy',
+      'food',
+      'materials',
+      'components',
+      'compute'
+    ];
+    final values = <String, double>{};
+    for (final key in keys) {
+      final value = asDouble(building['settlement_net_$key']);
+      if (value == null) return null;
+      values[key] = value;
+    }
+    return values;
   }
 
   Widget _buildNetResourceLine(

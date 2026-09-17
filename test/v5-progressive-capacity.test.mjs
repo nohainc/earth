@@ -672,6 +672,15 @@ test('V5 building UI does not fabricate settlement projections', async () => {
   assert.doesNotMatch(buildings, /\b8500\b|\b600\b|\b120\b/);
 });
 
+test('V5 building read model exposes latest settlement net resources', async () => {
+  const world = await readFile(new URL('../cloudflare/src/world-postgres.ts', import.meta.url), 'utf8');
+  for (const resource of ['credits', 'energy', 'food', 'materials', 'components', 'compute']) {
+    assert.match(world, new RegExp(`settlement_net_${resource}`));
+  }
+  assert.match(world, /latest\.status AS latest_settlement_status/);
+  assert.match(world, /FROM building_settlement_journals/);
+});
+
 test('V5 cutover rehearsal is fail-closed and produces evidence', async () => {
   const script = await readFile(new URL('../scripts/run-v5-cutover-rehearsal.mjs', import.meta.url), 'utf8');
   assert.match(script, /DATABASE_URL is required for a V5 cutover rehearsal/);

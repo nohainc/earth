@@ -47,12 +47,31 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                              c.service_type, c.service_capacity_units, c.slot_footprint,
                                              c.operating_credit_units,
                                              COALESCE(latest.utilization_bps, 10000) AS utilization_bps,
-                                             latest.game_day AS latest_settlement_game_day
+                                             latest.game_day AS latest_settlement_game_day,
+                                             latest.status AS latest_settlement_status,
+                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
+                                               (-latest.operating_credit_units)::TEXT END AS settlement_net_credits,
+                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
+                                               (COALESCE((latest.output_units ->> 'ENERGY')::BIGINT, 0) -
+                                                COALESCE((latest.input_units ->> 'ENERGY')::BIGINT, 0))::TEXT END AS settlement_net_energy,
+                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
+                                               (COALESCE((latest.output_units ->> 'FOOD')::BIGINT, 0) -
+                                                COALESCE((latest.input_units ->> 'FOOD')::BIGINT, 0))::TEXT END AS settlement_net_food,
+                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
+                                               (COALESCE((latest.output_units ->> 'MATERIAL')::BIGINT, 0) -
+                                                COALESCE((latest.input_units ->> 'MATERIAL')::BIGINT, 0))::TEXT END AS settlement_net_materials,
+                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
+                                               (COALESCE((latest.output_units ->> 'COMPONENTS')::BIGINT, 0) -
+                                                COALESCE((latest.input_units ->> 'COMPONENTS')::BIGINT, 0))::TEXT END AS settlement_net_components,
+                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
+                                               (COALESCE((latest.output_units ->> 'COMPUTE')::BIGINT, 0) -
+                                                COALESCE((latest.input_units ->> 'COMPUTE')::BIGINT, 0))::TEXT END AS settlement_net_compute
                                         FROM buildings b
                                         JOIN owner_registry o ON o.economic_id = b.owner_economic_id
                                         JOIN building_catalog c ON c.id = b.catalog_id
                                         LEFT JOIN LATERAL (
-                                          SELECT utilization_bps, game_day
+                                          SELECT utilization_bps, game_day, status,
+                                                 input_units, output_units, operating_credit_units
                                             FROM building_settlement_journals
                                            WHERE building_id = b.id
                                            ORDER BY game_day DESC
