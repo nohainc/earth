@@ -709,11 +709,13 @@ test('V5 Constitution client proposals use an explicit canonical effective day',
   assert.match(dashboard, /effectiveFromGameDay:/);
 });
 
-test('V5 client finance projections consume server policy multipliers', async () => {
+test('V5 client finance projections consume the authoritative server ledger', async () => {
   const finance = await readFile(new URL('../flutter_client/lib/features/finance/personal_finance_panel.dart', import.meta.url), 'utf8');
   const institutions = await readFile(new URL('../flutter_client/lib/features/institutions/institutions_panels.dart', import.meta.url), 'utf8');
-  assert.match(finance, /building\['output_multiplier'\]/);
-  assert.match(finance, /building\['cost_multiplier'\]/);
+  assert.match(finance, /projection\['incomeUnits'\]/);
+  assert.match(finance, /projection\['taxUnits'\]/);
+  assert.doesNotMatch(finance, /building\['output_multiplier'\]/);
+  assert.doesNotMatch(finance, /building\['cost_multiplier'\]/);
   assert.match(institutions, /building\['output_multiplier'\]/);
   assert.doesNotMatch(`${finance}\n${institutions}`, /high_output|eco_reserve|frugal/);
 });
