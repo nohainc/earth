@@ -275,6 +275,9 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     final scheduled = canonical['scheduledChanges'] is List
         ? (canonical['scheduledChanges'] as List).whereType<Map>().toList()
         : const <Map>[];
+    final history = canonical['history'] is List
+        ? (canonical['history'] as List).whereType<Map>().take(24).toList()
+        : const <Map>[];
     return Column(
       children: [
         EarthSection(
@@ -314,6 +317,27 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                   leading: Icon(Icons.schedule_outlined,
                       size: context.iconSize, color: context.primaryColor),
                   showDivider: change != scheduled.last,
+                );
+              }).toList(),
+            ),
+          ),
+        if (history.isNotEmpty)
+          EarthSection(
+            title: 'CONSTITUTION RULE HISTORY',
+            showSurface: false,
+            child: EarthDataList(
+              children: history.map((version) {
+                final value = version['value_json'] is Map
+                    ? _formatCanonicalValue(version['value_json'])
+                    : '—';
+                final status = version['status']?.toString() ?? '—';
+                final proposal = version['proposal_id']?.toString();
+                return EarthDataRow(
+                  title: version['rule_code']?.toString() ?? 'Rule',
+                  subtitle: 'DAY ${version['effective_from_game_day'] ?? '—'} · $status · $value${proposal == null ? '' : ' · $proposal'}',
+                  leading: Icon(Icons.history_edu_outlined,
+                      size: context.iconSize, color: context.primaryColor),
+                  showDivider: version != history.last,
                 );
               }).toList(),
             ),

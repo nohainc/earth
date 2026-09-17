@@ -73,13 +73,23 @@ void main() {
               'gameDay': 185,
               'rules': {'EARTH.CAPACITY.BASE_RATE': '1000'},
               'versionIds': {'EARTH.CAPACITY.BASE_RATE': 'CONST-V1'},
+              'history': [
+                {
+                  'rule_code': 'EARTH.CAPACITY.BASE_RATE',
+                  'value_json': {'value': '1000'},
+                  'effective_from_game_day': 1,
+                  'status': 'ACTIVE',
+                },
+              ],
             },
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('EARTH.CAPACITY.BASE_RATE'), findsOneWidget);
+    expect(find.text('EARTH.CAPACITY.BASE_RATE'), findsNWidgets(2));
     expect(find.text('1000 · CONST-V1'), findsOneWidget);
+    expect(find.text('CONSTITUTION RULE HISTORY'), findsOneWidget);
+    expect(find.textContaining('DAY 1 · ACTIVE'), findsOneWidget);
   });
 }
