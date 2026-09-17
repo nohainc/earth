@@ -668,6 +668,12 @@ test('V5 pooled construction accepts no Territory placement target', async () =>
   assert.match(route, /\/api\/v5\/buildings/);
 });
 
+test('V5 public construction requires Corporation governance authorization', async () => {
+  const service = await readFile(new URL('../cloudflare/src/v5-building-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /Public V5 construction requires Corporation governance authorization/);
+  assert.match(service, /role_code IN \('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER'\)/);
+});
+
 test('V5 building research uses authored catalog economics', async () => {
   const migration = await readFile(new URL('../db/migrations/091_v5_building_research_catalog_authority.sql', import.meta.url), 'utf8');
   const service = await readFile(new URL('../cloudflare/src/corporation-building-research-postgres.ts', import.meta.url), 'utf8');

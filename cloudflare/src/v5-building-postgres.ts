@@ -44,6 +44,12 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
     const blueprint = await catalog(tx, input.buildingType);
     const isPublic = blueprint.ownership_scope === 'PUBLIC';
     if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
+    if (isPublic && !(await tx.query(
+      `SELECT 1 FROM institution_governance_roles
+        WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
+          AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')`,
+      [owner.corporationId, input.ownerId],
+    )).rows[0]) throw new Error('Public V5 construction requires Corporation governance authorization');
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
     const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(world?.game_day ?? 1);
