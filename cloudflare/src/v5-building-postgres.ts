@@ -3,6 +3,7 @@ import { createGameEvent } from './game-events-postgres.ts';
 import { toJsonSafe } from './json-safe.ts';
 import { effectiveConstructionMinutes, loadConstructionRequirements } from './territory-capacity-postgres.ts';
 import { quoteV5HouseCapacityChange, quoteV5CorporationCapacityChange } from './v5-capacity-postgres.ts';
+import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 type Catalog = {
   id: string;
@@ -125,6 +126,8 @@ export async function purchaseV5Building(repository: PostgresRepository, input: 
     await tx.query(`INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day, commissioned_game_day, territory_right_id) VALUES ($1,$2,NULL,$3,'UNDER_CONSTRUCTION',$4,NULL,NULL)`, [buildingId, ownerEconomicId, blueprint.id, gameDay]);
     const completionDay = gameDay + Math.max(1, Math.ceil(duration.minutes / 1440));
     await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind) VALUES ($1,$2,$3,NULL,$4,$5,$6::JSONB,$7,$8,'IN_PROGRESS',$9,NULL,'V5_POOLED_CONSTRUCTION')`, [`PROJECT-${buildingId.slice(4)}`, buildingId, ownerEconomicId, blueprint.id, cost.toString(), JSON.stringify(Object.fromEntries(requirements.map((item) => [item.code, item.required_units]))), gameDay, completionDay, input.correlationId]);
+    if (isPublic) await rebuildV5CorporationSettlementProfile(tx, owner.corporationId!, gameDay);
+    else await refreshV5SettlementProfilesForHouse(tx, owner.houseId, gameDay);
     await createGameEvent(tx, { id: `BUILDING-V5-ACQUIRED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_ACQUIRED', gameDay, actorHumanId: input.ownerId, subjectType: 'BUILDING', subjectId: buildingId, title: `${blueprint.code} acquired under pooled Corporation capacity`, details: { buildingId, catalogId: blueprint.id, ownerEconomicId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE', capacityModel: 'V5_POOLED', territoryPlacement: null, effectiveConstructionMinutes: duration.minutes }, correlationId: input.correlationId });
     return { ok: true, status: 'UNDER_CONSTRUCTION', buildingId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE', capacity, project: toJsonSafe((await tx.query('SELECT * FROM construction_projects WHERE id = $1', [`PROJECT-${buildingId.slice(4)}`])).rows[0]), correlationId: input.correlationId };
   });

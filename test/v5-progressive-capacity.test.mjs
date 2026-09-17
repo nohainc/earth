@@ -909,11 +909,14 @@ test('V5 retires territory-bound building construction mutations', async () => {
 
 test('V5 construction review quotes and executes the pooled path for independent Houses', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/v5-building-postgres.ts', import.meta.url), 'utf8');
   const confirm = buildings.slice(buildings.indexOf('Future<void> _confirmConstruction'));
   assert.match(confirm, /quoteV5Building\(buildingType\)/);
   assert.match(confirm, /purchaseV5Building\(/);
   assert.doesNotMatch(confirm, /purchaseBuilding\(/);
   assert.match(confirm, /REPORTED AFTER GAME-DAY SETTLEMENT/);
+  assert.match(service, /refreshV5SettlementProfilesForHouse\(tx, owner\.houseId/);
+  assert.match(service, /rebuildV5CorporationSettlementProfile\(tx, owner\.corporationId/);
 });
 
 test('V5 Corporation client mutations do not fall back to Territory-bound endpoints', async () => {
