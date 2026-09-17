@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 108;
+export const EARTH_SCHEMA_VERSION = 109;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",

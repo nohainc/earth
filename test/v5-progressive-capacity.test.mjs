@@ -403,6 +403,14 @@ test('V5 tax statements consume assessed-day Constitution snapshots with provena
   assert.match(statement, /constitutionalTaxProvenance/);
 });
 
+test('V5 constitutional version ranges are protected against overlap in PostgreSQL', async () => {
+  const migration = await readFile(new URL('../db/migrations/109_constitution_version_overlap_guard.sql', import.meta.url), 'utf8');
+  assert.match(migration, /earth_guard_constitutional_version_overlap/);
+  assert.match(migration, /existing\.effective_from_game_day <=/);
+  assert.match(migration, /NEW\.effective_from_game_day <=/);
+  assert.match(migration, /constitutional_rule_versions_overlap_guard/);
+});
+
 test('legacy player-facing constitutional mutation routes are retired', async () => {
   const organizations = await readFile(new URL('../cloudflare/src/organizations-routes.ts', import.meta.url), 'utf8');
   const governance = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
