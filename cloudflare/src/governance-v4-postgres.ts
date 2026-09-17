@@ -59,6 +59,9 @@ export async function setOrganizationVotingSettings(repository: PostgresReposito
 
 function validateAction(actionType: string, actionSnapshot: Record<string, unknown>): void {
   if (!ACTIONS.has(actionType)) throw new Error('Unregistered governance action');
+  if (actionType === 'TAX_RULE' || actionType === 'CHARTER_CHANGE') {
+    throw new Error('Legacy constitutional governance action is retired; use a V5 Constitution amendment');
+  }
   if (actionType === 'ORGANIZATION_BUDGET_SPEND' && (!actionSnapshot.budgetLineId || !actionSnapshot.amountUnits || !actionSnapshot.destinationAccountId)) throw new Error('Budget action requires a line, amount, and destination');
   if (actionType === 'TAX_RULE' && (!actionSnapshot.category || actionSnapshot.rateBps === undefined)) throw new Error('Tax action requires category and rate');
   if ((actionType === 'PUBLIC_PROJECT' || actionType === 'RESEARCH_FUNDING') && !actionSnapshot.projectId) throw new Error('Project action requires projectId');

@@ -35,3 +35,9 @@ test('Earth V4 proposals also resolve canonical Constitution governance policy w
   const source = fs.readFileSync('cloudflare/src/governance-postgres.ts', 'utf8');
   assert.match(source, /institutionKind === 'CORPORATION' \|\| institutionKind === 'EARTH'/);
 });
+
+test('V4 service rejects legacy tax and charter constitutional actions', () => {
+  const source = fs.readFileSync('cloudflare/src/governance-v4-postgres.ts', 'utf8');
+  assert.match(source, /actionType === 'TAX_RULE' \|\| actionType === 'CHARTER_CHANGE'/);
+  assert.match(source, /Legacy constitutional governance action is retired/);
+});
