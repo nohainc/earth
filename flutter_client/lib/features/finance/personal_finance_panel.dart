@@ -27,47 +27,17 @@ class PersonalFinancePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maintenance = _map(personalFinanceData['lifeMaintenance']);
-    final taxes = _map(personalFinanceData['taxes']);
-    final taxRules = (taxes['rules'] as List? ?? const [])
-        .whereType<Map>()
-        .map((rule) => Map<String, dynamic>.from(rule))
-        .toList();
-    final viewerId = state.human['id']?.toString();
-    final privateBuildings = state.buildings
-        .whereType<Map>()
-        .where((building) =>
-            building['ownership_class']?.toString() == 'private' &&
-            building['owner_id']?.toString() == viewerId &&
-            building['status']?.toString() == 'active')
-        .map((building) => Map<String, dynamic>.from(building))
-        .toList();
     final bank = _map(personalFinanceData['bank']);
     final bankDeposits = (bank['deposits'] as List? ?? const [])
         .whereType<Map>()
         .map((deposit) => Map<String, dynamic>.from(deposit))
         .toList();
-    final investmentDividend = bankDeposits.fold<double>(
-        0,
-        (total, deposit) =>
-            total +
-            asDoubleOr(deposit['principal'], 0) *
-                asDoubleOr(deposit['daily_rate'], 0));
-    final buildingChange = _buildingResourceChange(privateBuildings);
-    final preparedBuildingChange =
-        _addChanges(buildingChange, {'credits': investmentDividend});
-    final basicRule = taxRules
-        .where((rule) => rule['category']?.toString() == 'basic_income')
-        .firstOrNull;
-    final basicRate = asDoubleOr(basicRule?['rate'], 0);
     final projection = _map(
         personalFinanceData['summary'] ?? personalFinanceData['projection']);
     final projectedIncome = _creditUnits(projection['incomeUnits']);
     final projectedTax = _creditUnits(projection['taxUnits']);
-    final grossCredits = projectedIncome ?? preparedBuildingChange['credits']!;
-    final incomeTax =
-        projectedTax ?? (grossCredits > 0 ? grossCredits * basicRate : 0.0);
-    final finalChange =
-        _addChanges(preparedBuildingChange, {'credits': -incomeTax});
+    final grossCredits = projectedIncome;
+    final incomeTax = projectedTax;
     final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
     final protected =
         asDouble(_map(personalFinanceData['protectedMinimum'])['credits']);
@@ -77,8 +47,10 @@ class PersonalFinancePanel extends StatelessWidget {
     final serverAvailableToSpend = asDouble(liquidity['availableToSpendUnits']);
     final availableToSpend = serverAvailableToSpend ?? 0.0;
     final availableToSpendKnown = serverAvailableToSpend != null;
-    final netDailyCredits = grossCredits - incomeTax;
-    final netSign = netDailyCredits >= 0 ? '+' : '';
+    final netDailyCredits = grossCredits != null && incomeTax != null
+        ? grossCredits - incomeTax
+        : null;
+    final netSign = netDailyCredits != null && netDailyCredits >= 0 ? '+' : '';
 
     final rawClock = state.clock;
     final parsedDay = asInt(rawClock['day']) ??
@@ -110,16 +82,17 @@ class PersonalFinancePanel extends StatelessWidget {
         ),
         CockpitMetric(
           label: 'Daily Cashflow',
-          value: '$netSign${formatWholeNumber(netDailyCredits)}',
+          value: netDailyCredits == null
+              ? 'UNAVAILABLE'
+              : '$netSign${formatWholeNumber(netDailyCredits)}',
           icon: Icons.trending_up_outlined,
-          color: netDailyCredits >= 0
+          color: netDailyCredits != null && netDailyCredits >= 0
               ? context.successColor
               : context.warningColor,
         ),
         CockpitMetric(
           label: 'Daily Tax',
-          value:
-              '${formatWholeNumber(incomeTax)} (${(basicRate * 100).toStringAsFixed(0)}%)',
+          value: incomeTax == null ? 'UNAVAILABLE' : formatWholeNumber(incomeTax),
           icon: Icons.receipt_long_outlined,
           color: context.secondaryColor,
         ),
@@ -150,15 +123,15 @@ class PersonalFinancePanel extends StatelessWidget {
               style: context.widgetFooterStyle),
         if (liquidity['nextSettlementGameDay'] != null)
           const SizedBox(height: 8),
-        _allResourcesLine(finalChange, emphasize: true),
+        if (netDailyCredits == null)
+          const Text('The authoritative ledger statement is unavailable.',
+              style: TextStyle(color: mutedColor, fontSize: 11))
+        else
+          _creditStatementLine(netDailyCredits, emphasize: true),
         const SizedBox(height: 24),
         _CreditIncomeSummaryCard(
-          buildingCredits: buildingChange['credits']!,
-          investmentDividend: investmentDividend,
           grossCredits: grossCredits,
-          taxRate: basicRate,
           taxAmount: incomeTax,
-          netCredits: grossCredits - incomeTax,
         ),
         const SizedBox(height: 24),
         _BankDepositsCard(
@@ -206,18 +179,6 @@ class PersonalFinancePanel extends StatelessWidget {
     return units == null ? null : units / 100;
   }
 
-  static Map<String, double> _profileChange(Map<String, dynamic> profile) => {
-        'credits':
-            asDoubleOr(profile['credits_delta'] ?? profile['credits'], 0),
-        'energy': asDoubleOr(profile['energy_delta'] ?? profile['energy'], 0),
-        'food': asDoubleOr(profile['food_delta'] ?? profile['food'], 0),
-        'materials':
-            asDoubleOr(profile['materials_delta'] ?? profile['materials'], 0),
-        'components':
-            asDoubleOr(profile['components_delta'] ?? profile['components'], 0),
-        'compute':
-            asDoubleOr(profile['compute_delta'] ?? profile['compute'], 0),
-      };
   static String _number(double value) => value.abs() >= 100
       ? value.abs().toStringAsFixed(0)
       : value
@@ -271,135 +232,14 @@ class PersonalFinancePanel extends StatelessWidget {
                 fontWeight: FontWeight.w800)),
       ]);
 
-  static Map<String, double> _emptyChanges() => {
-        'credits': 0,
-        'energy': 0,
-        'food': 0,
-        'materials': 0,
-        'components': 0,
-        'compute': 0
-      };
-  static Map<String, double> _addChanges(
-      Map<String, double> left, Map<String, double> right) {
-    final result = _emptyChanges();
-    for (final key in result.keys) {
-      result[key] = (left[key] ?? 0) + (right[key] ?? 0);
-    }
-    return result;
-  }
-
-  static Map<String, double> _withoutZeroes(Map<String, double> values) =>
-      Map.fromEntries(values.entries.where((entry) => entry.value != 0));
-
-  static Map<String, double> _buildingResourceChange(
-      List<Map<String, dynamic>> buildings) {
-    final changes = _emptyChanges();
-    double rounded(double value) => (value * 10).ceil() / 10;
-    for (final building in buildings) {
-      final outputMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
-      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
-
-      for (final key in [
-        'credits',
-        'energy',
-        'food',
-        'materials',
-        'components',
-        'compute'
-      ]) {
-        double outVal = asDoubleOr(building['output_$key'], 0);
-        if (outVal == 0 &&
-            building['resource_output_type']?.toString() == key) {
-          outVal = asDoubleOr(building['resource_output_amount'], 0);
-        } else if (outVal == 0 &&
-            key == 'credits' &&
-            (building['resource_output_type']?.toString() == 'credits' ||
-                building['resource_output_type'] == null)) {
-          outVal = asDoubleOr(building['resource_output_amount'], 0);
-        }
-
-        double upkeepVal = asDoubleOr(building['upkeep_$key'], 0);
-        double opVal = asDoubleOr(building['operating_$key'], 0);
-        if (key == 'credits' && opVal == 0) {
-          opVal = asDoubleOr(building['daily_operating_credits'], 0);
-        }
-
-        final net = (outVal * outputMultiplier) -
-            ((upkeepVal + opVal) * costMultiplier);
-        changes[key] =
-            (changes[key] ?? 0) + (key == 'credits' ? net : rounded(net));
-      }
-    }
-    return changes;
-  }
-
-  static double _investmentDividend(
-      List<Map<String, dynamic>> buildings, List<Map<String, dynamic>> shares) {
-    var total = 0.0;
-    for (final building in buildings) {
-      final holding = shares
-          .where((share) =>
-              share['building_id']?.toString() == building['id']?.toString())
-          .firstOrNull;
-      if (holding == null) continue;
-      final yieldMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
-      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
-      final gross =
-          asDoubleOr(building['resource_output_amount'], 0) * yieldMultiplier;
-      final cost =
-          asDoubleOr(building['daily_operating_credits'], 0) * costMultiplier;
-      total += (gross - cost).clamp(0, double.infinity) *
-          asDoubleOr(holding['shares_owned'], 0) /
-          asDoubleOr(holding['total_shares_issued'], 0)
-              .clamp(1, double.infinity);
-    }
-    return total;
-  }
-
-  static Widget _allResourcesLine(Map<String, double> changes,
-      {bool emphasize = false}) {
-    final icons = {
-      'credits': Icons.account_balance_wallet_outlined,
-      'energy': Icons.bolt_rounded,
-      'food': Icons.eco_outlined,
-      'materials': Icons.terrain_outlined,
-      'components': Icons.precision_manufacturing_outlined,
-      'compute': Icons.memory_rounded
-    };
-    const order = [
-      'credits',
-      'energy',
-      'food',
-      'materials',
-      'components',
-      'compute'
-    ];
+  static Widget _creditStatementLine(double value, {bool emphasize = false}) {
+    final sign = value > 0 ? '+' : value < 0 ? '-' : '';
     return Center(
-      child: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: order.map((key) {
-            final value = changes[key] ?? 0.0;
-            final color = value < 0
-                ? Colors.redAccent
-                : value > 0
-                    ? Colors.tealAccent
-                    : mutedColor;
-            return SizedBox(
-                width: 62,
-                child: Column(children: [
-                  Icon(icons[key],
-                      size: emphasize ? 18 : 16,
-                      color: EarthResourceMeta.forCommodity(key).color),
-                  Text(
-                      '${value > 0 ? '+' : value < 0 ? '-' : ''}${_number(value)}',
-                      style: TextStyle(
-                          color: color,
-                          fontSize: emphasize ? 13 : 12,
-                          fontWeight: FontWeight.w800)),
-                ]));
-          }).toList()),
+      child: Text('$sign${_number(value)} C recorded net ledger flow',
+          style: TextStyle(
+              color: value < 0 ? Colors.redAccent : Colors.tealAccent,
+              fontSize: emphasize ? 14 : 12,
+              fontWeight: FontWeight.w800)),
     );
   }
 
@@ -1813,32 +1653,22 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
 }
 
 class _CreditIncomeSummaryCard extends StatelessWidget {
-  final double buildingCredits;
-  final double investmentDividend;
-  final double grossCredits;
-  final double taxRate;
-  final double taxAmount;
-  final double netCredits;
+  final double? grossCredits;
+  final double? taxAmount;
 
   const _CreditIncomeSummaryCard({
-    required this.buildingCredits,
-    required this.investmentDividend,
     required this.grossCredits,
-    required this.taxRate,
     required this.taxAmount,
-    required this.netCredits,
   });
 
   @override
   Widget build(BuildContext context) => CreditIncomeSummaryCard(
-        grossItems: [
-          CreditIncomeLineItem('Private buildings', buildingCredits),
-          CreditIncomeLineItem('Bank deposit interest', investmentDividend),
-        ],
-        deductionItems: [
-          CreditIncomeLineItem(
-              'Income tax ${(taxRate * 100).toStringAsFixed(0)}%', taxAmount)
-        ],
+        grossItems: grossCredits == null
+            ? const []
+            : [CreditIncomeLineItem('Recorded ledger income', grossCredits!)],
+        deductionItems: taxAmount == null
+            ? const []
+            : [CreditIncomeLineItem('Recorded taxes', taxAmount!)],
       );
 
   /* Widget build(BuildContext context) {
