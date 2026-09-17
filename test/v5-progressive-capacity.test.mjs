@@ -724,6 +724,12 @@ test('V5 command overview converts PostgreSQL bigint values at the JSON boundary
   assert.match(overview, /Number\(delinquencyRow\.consecutive_missed_days/);
 });
 
+test('V5 world snapshot converts PostgreSQL bigint values at the JSON boundary', async () => {
+  const world = await readFile(new URL('../cloudflare/src/world-postgres.ts', import.meta.url), 'utf8');
+  assert.match(world, /PostgreSQL BIGINT values must have one explicit JSON wire representation/);
+  assert.match(world, /return toJsonSafe\(\{/);
+});
+
 test('V5 corporation lifecycle supports name reuse, leadership delegation, and graceful dissolution', async () => {
   const founding = await readFile(new URL('../cloudflare/src/v5-founding-postgres.ts', import.meta.url), 'utf8');
   assert.match(founding, /lower\(name\) = lower\(\$1\) AND status = \\'ACTIVE\\'/);

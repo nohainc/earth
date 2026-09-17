@@ -10,6 +10,16 @@ import { assetUnitScale, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { marketFeeRate } from './market-rules.ts';
 
+/** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
+function toJsonSafe<T>(value: T): T {
+  if (typeof value === 'bigint') return value.toString() as T;
+  if (Array.isArray(value)) return value.map((item) => toJsonSafe(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toJsonSafe(item)])) as T;
+  }
+  return value;
+}
+
 export async function worldSnapshot(repository: PostgresRepository, viewerId?: string, viewerHouseId?: string): Promise<Record<string, unknown>> {
   const [world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
     repository.query("SELECT id, game_day, game_minute, world_seed, status FROM world_state WHERE id = 'WORLD'"),
@@ -285,7 +295,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     market: Object.values(marketProducts),
     buildings: buildings.rows,
   });
-  return {
+  return toJsonSafe({
     ok: true,
     viewerId: viewerId ?? null,
     world: world.rows[0] ?? null,
@@ -341,5 +351,5 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
           condition.exposure === 'YOUR_TERRITORY' || condition.exposure === 'WORLDWIDE').length,
       },
     },
-  };
+  });
 }
