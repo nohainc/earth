@@ -153,9 +153,6 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     }
     const rule = await tx.query<{ id: string; value_json: unknown; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>("SELECT id, value_json, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE institution_id = $1 AND category = 'governance' AND status = 'active' ORDER BY version DESC LIMIT 1", [input.institutionId]);
     let ruleRow = rule.rows[0];
-    if (ruleRow && input.expectedGovernanceRuleVersionId && ruleRow.id !== input.expectedGovernanceRuleVersionId) {
-      throw new Error('Governance rule version changed; refresh and retry');
-    }
     const institutionKind = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1', [input.institutionId])).rows[0]?.kind;
     const constitutionDay = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const canonical = institutionKind === 'CORPORATION' || institutionKind === 'EARTH'
@@ -169,7 +166,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     };
     const governanceRulePrefix = institutionKind === 'EARTH' ? 'EARTH.GOVERNANCE' : 'CORPORATION.GOVERNANCE';
     const canonicalGovernanceValue = (suffix: string): number | null => canonicalValue(`${governanceRulePrefix}.${suffix}`);
-    if (!ruleRow && canonical) {
+    if (canonical) {
       // Earth and Corporation governance is Constitution-backed. Keep a
       // synthetic snapshot row for the proposal contract without recreating
       // a competing legacy governance_rules authority.
@@ -182,6 +179,9 @@ export async function createProposal(repository: PostgresRepository, input: { hu
         voting_period_days: canonicalGovernanceValue('VOTING_PERIOD_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays,
         implementation_delay_days: canonicalGovernanceValue('IMPLEMENTATION_DELAY_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays,
       };
+    }
+    if (!canonical && ruleRow && input.expectedGovernanceRuleVersionId && ruleRow.id !== input.expectedGovernanceRuleVersionId) {
+      throw new Error('Governance rule version changed; refresh and retry');
     }
     if (!ruleRow) {
       const inst = await tx.query<{ name: string }>("SELECT name FROM institutions WHERE id = $1", [input.institutionId]);
