@@ -40,5 +40,6 @@ test('Proposal V2 exposes typed tax amendment actions', () => {
     assert.match(finance, new RegExp(action));
   }
   assert.match(finance, /STALE_CONFLICT/);
-  assert.match(finance, /earth_create_tax_rule_version/);
+  assert.match(finance, /Legacy tax rule execution is retired/);
+  assert.doesNotMatch(finance, /earth_create_tax_rule_version/);
 });

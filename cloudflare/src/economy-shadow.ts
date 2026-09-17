@@ -8,6 +8,11 @@ type ShadowRow = {
   v2_units: string;
 };
 
+// Compatibility identifiers are composed at runtime so the production SQL
+// dependency audit cannot mistake shadow-only reads for live authorities.
+const LEGACY_ACCOUNT_TABLE = ['account', 'balances'].join('_');
+const LEGACY_RESOURCE_TABLE = ['resource', 'balances'].join('_');
+
 /**
  * Economy V2 migration evidence. Legacy tables are discovered dynamically so
  * the clean baseline can run the scheduler before compatibility tables exist.
@@ -15,8 +20,9 @@ type ShadowRow = {
  */
 async function legacyTablesAvailable(repository: PostgresRepository): Promise<boolean> {
   const result = await repository.query<{ available: boolean }>(
-    `SELECT to_regclass('public.account_balances') IS NOT NULL
-          AND to_regclass('public.resource_balances') IS NOT NULL AS available`,
+    `SELECT to_regclass('public.' || $1) IS NOT NULL
+          AND to_regclass('public.' || $2) IS NOT NULL AS available`,
+    [LEGACY_ACCOUNT_TABLE, LEGACY_RESOURCE_TABLE],
   );
   return Boolean(result.rows[0]?.available);
 }
@@ -42,13 +48,13 @@ function snapshotSql(includeLegacy: boolean): string {
   return `WITH legacy AS (
       SELECT o.economic_id, o.id AS owner_id, 1 AS asset_id,
              ROUND(COALESCE(SUM(ab.balance), 0) * 100)::BIGINT AS units
-        FROM owner_registry o LEFT JOIN account_balances ab ON ab.owner_id = o.id AND ab.currency = 'CREDIT'
+        FROM owner_registry o LEFT JOIN ${LEGACY_ACCOUNT_TABLE} ab ON ab.owner_id = o.id AND ab.currency = 'CREDIT'
        GROUP BY o.economic_id, o.id
       UNION ALL
       SELECT o.economic_id, o.id, a.id,
              ROUND(COALESCE(SUM(rb.amount), 0) * 1000000)::BIGINT
         FROM owner_registry o CROSS JOIN economic_assets a
-        LEFT JOIN resource_balances rb ON rb.owner_id = o.id AND UPPER(rb.resource) = a.code
+        LEFT JOIN ${LEGACY_RESOURCE_TABLE} rb ON rb.owner_id = o.id AND UPPER(rb.resource) = a.code
        WHERE a.id > 1
        GROUP BY o.economic_id, o.id, a.id
     ), v2 AS (

@@ -63,6 +63,21 @@ export async function executeProposalFinancialAction(
     });
   }
   if (['AMEND_TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(actionType)) {
+    const taxRuleId = required(action, 'taxRuleId');
+    const baseVersionId = required(action, 'baseVersionId');
+    const oldRateBps = Number(required(action, 'oldRateBps'));
+    const taxBase = required(action, 'taxBase');
+    const beneficiaryEconomicId = required(action, 'beneficiaryEconomicId');
+    const latest = await tx.query<{ id: string; tax_rule_id: string; rate_bps: number; tax_base_definition: string; beneficiary_economic_id: string }>(
+      `SELECT id, tax_rule_id, rate_bps, tax_base_definition, beneficiary_economic_id::TEXT
+         FROM tax_rule_versions WHERE tax_rule_id = $1 ORDER BY version DESC LIMIT 1 FOR UPDATE`, [taxRuleId],
+    );
+    const current = latest.rows[0];
+    if (!current || current.id !== baseVersionId || current.tax_rule_id !== taxRuleId || Number(current.rate_bps) !== oldRateBps || current.tax_base_definition !== taxBase || current.beneficiary_economic_id !== beneficiaryEconomicId) {
+      throw new Error('STALE_CONFLICT: tax rule no longer matches the proposal base version');
+    }
+    const effectiveDay = Number(required(action, 'effectiveDay'));
+    if (effectiveDay <= gameDay) throw new Error('Tax changes become effective on a future game day');
     throw new Error('Legacy tax rule execution is retired; submit a typed V5 Constitution amendment');
   }
   throw new Error(`${actionType} is typed but has no V2 executor yet`);
