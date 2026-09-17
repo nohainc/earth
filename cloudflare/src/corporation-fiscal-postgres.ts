@@ -2,6 +2,16 @@ import type { PostgresRepository } from './repository.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
+import { getActiveV5StandardCapacity, getV5CorporationCapacity } from './v5-capacity-postgres.ts';
+
+function toJsonSafe<T>(value: T): T {
+  if (typeof value === 'bigint') return value.toString() as T;
+  if (Array.isArray(value)) return value.map((item) => toJsonSafe(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toJsonSafe(item)])) as T;
+  }
+  return value;
+}
 
 function budgetCategory(category: string): string {
   const normalized = category.trim().toUpperCase().replace(/[-\s]+/g, '_');
@@ -9,7 +19,7 @@ function budgetCategory(category: string): string {
 }
 
 export async function getCorporationFiscalState(repository: PostgresRepository, corporationId: string): Promise<Record<string, unknown>> {
-  const [corporation, accounts, budgets, constitution] = await Promise.all([
+  const [corporation, accounts, budgets, constitution, v5Capacity] = await Promise.all([
     repository.query('SELECT c.id, i.name, c.status, c.admission_policy, c.tax_charter, c.tax_charter_version, c.tax_charter_updated_game_day FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1', [corporationId]),
     repository.query(`SELECT a.id::TEXT AS account_id, a.account_type, a.balance_units::TEXT AS balance_units
       FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
@@ -22,6 +32,9 @@ export async function getCorporationFiscalState(repository: PostgresRepository, 
         FROM resolved_constitution_snapshots_v5
        WHERE authority_type = 'CORPORATION' AND authority_id = $1
          AND game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD')`, [corporationId]),
+    getActiveV5StandardCapacity(repository)
+      .then((policy) => getV5CorporationCapacity(repository, corporationId, policy.standardTerritoryCapacity))
+      .catch(() => null),
   ]);
   if (!corporation.rows[0]) throw new Error('Corporation not found');
   const canonical = constitution.rows[0] ?? null;
@@ -36,6 +49,8 @@ export async function getCorporationFiscalState(repository: PostgresRepository, 
     taxRules: [],
     taxRulesSource: canonical ? 'constitution-snapshot-v5' : 'unavailable-canonical-snapshot',
     canonicalTaxSnapshotAvailable: Boolean(canonical),
+    capacity: toJsonSafe(v5Capacity),
+    capacitySource: v5Capacity ? 'postgres-v5-structural-settlement-profile' : 'unavailable-canonical-capacity-read-model',
     fiscalLayers: ['EARTH', 'CORPORATION'],
   };
 }

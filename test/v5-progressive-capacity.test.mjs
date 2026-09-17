@@ -473,6 +473,8 @@ test('V5 Corporation fiscal read model does not expose legacy tax-rule authority
   const fiscal = await readFile(new URL('../cloudflare/src/corporation-fiscal-postgres.ts', import.meta.url), 'utf8');
   assert.match(fiscal, /canonicalTaxSnapshotAvailable/);
   assert.match(fiscal, /unavailable-canonical-snapshot/);
+  assert.match(fiscal, /getV5CorporationCapacity/);
+  assert.match(fiscal, /capacitySource/);
   assert.doesNotMatch(fiscal, /SELECT r\.\* FROM tax_rule_versions/);
   assert.doesNotMatch(fiscal, /legacy-tax-rule-versions-bridge/);
 });
