@@ -123,10 +123,10 @@ export async function getV5CorporationCapacity(repository: PostgresRepository, c
 export async function getV5EarthCapacity(repository: PostgresRepository, gameDay?: number): Promise<Record<string, unknown>> {
   const policy = await getActiveV5StandardCapacity(repository, gameDay);
   const [houses, corporations, capacityRevenue, treasury, programCommitments] = await Promise.all([
-    repository.query<{ house_count: string; independent_count: string; occupied_units: string }>(
+    repository.query<{ house_count: string; independent_count: string; independent_occupied_units: string }>(
       `SELECT COUNT(*)::TEXT AS house_count,
               COUNT(*) FILTER (WHERE corporation_id IS NULL)::TEXT AS independent_count,
-              COALESCE(SUM(total_capacity_units), 0)::TEXT AS occupied_units
+              COALESCE(SUM(total_capacity_units) FILTER (WHERE corporation_id IS NULL), 0)::TEXT AS independent_occupied_units
          FROM v5_house_settlement_profiles p
          JOIN houses h ON h.id = p.house_id AND h.status = 'ACTIVE'`,
     ),
@@ -171,7 +171,7 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
   const revenue = capacityRevenue.rows[0] ?? { assessed: '0', paid: '0', arrears: '0', game_day: '0' };
   const earthAccounts = Object.fromEntries(treasury.rows.map((row) => [row.account_type.toLowerCase(), row.balance_units]));
   const commitments = programCommitments.rows[0] ?? { authorized: '0', committed: '0', spent: '0' };
-  const independentUnits = BigInt(house?.occupied_units ?? '0');
+  const independentUnits = BigInt(house?.independent_occupied_units ?? '0');
   const corporationUnits = BigInt(corporation?.occupied_units ?? '0');
   return {
     gameDay: policy.gameDay,

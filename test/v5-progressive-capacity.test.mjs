@@ -247,6 +247,7 @@ test('V5 exposes an Earth-wide capacity read model alongside House and Corporati
   const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
   assert.match(capacity, /getV5EarthCapacity/);
   assert.match(capacity, /independentOccupiedUnits/);
+  assert.match(capacity, /SUM\(total_capacity_units\) FILTER \(WHERE corporation_id IS NULL\)/);
   assert.match(capacity, /requiredTerritoryUnits/);
   assert.match(capacity, /houseCapacityRevenuePaidUnits/);
   assert.match(capacity, /earthCapacityExpensePaidUnits/);
