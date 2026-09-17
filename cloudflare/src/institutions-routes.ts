@@ -232,6 +232,8 @@ export async function handleInstitutionRoutes(
 
   const corporationTaxCharterMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/tax-charter$/);
   if (corporationTaxCharterMatch && request.method === 'POST') {
+    return Response.json({ ok: false, error: 'Direct Corporation tax mutation is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for migration/admin callers, not the player route. */
     const parsed = await parseJsonBody<{ incomeTaxBps?: number; salesTaxBps?: number; corporateTaxBps?: number; propertyTaxBps?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
@@ -277,6 +279,8 @@ export async function handleInstitutionRoutes(
 
   const corporationAdmissionMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/admission-policy$/);
   if (corporationAdmissionMatch && request.method === 'POST') {
+    return Response.json({ ok: false, error: 'Direct admission-policy mutation is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for migration/admin callers, not the player route. */
     const parsed = await parseJsonBody<{ policy?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const policy = parsed.value.policy === 'approval' ? 'approval' : parsed.value.policy === 'open' ? 'open' : null;

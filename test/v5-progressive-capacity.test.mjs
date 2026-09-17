@@ -5,6 +5,7 @@ import { calculateProgressiveCharge, validateProgressiveBrackets } from '../clou
 import { aggregateCorporationCapacity, calculateHouseCapacity, quoteCapacityChange, requiredTerritoryUnits } from '../cloudflare/src/v5-capacity.ts';
 import { previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
 import { runV5ShadowSimulation } from '../cloudflare/src/v5-shadow-simulation.ts';
+import { CONSTITUTIONAL_RULE_DEFINITIONS, DEFAULT_V5_GOVERNANCE_RULE, resolveConstitutionalRuleSet, validateConstitutionalRuleValue } from '../cloudflare/src/v5-constitution.ts';
 
 const brackets = [
   { ordinal: 1, lowerBound: 0n, upperBound: 1n, multiplierNumerator: 1n, multiplierDenominator: 1n },
@@ -113,6 +114,83 @@ test('V5 governance validates future policies and previews proposed brackets', (
   assert.equal(preview.length, 3);
   assert.equal(preview[0].delta, 0n);
   assert.ok(preview[2].delta > 0n);
+});
+
+test('V5 constitutional rules enforce typed values and authority inheritance', () => {
+  assert.deepEqual(DEFAULT_V5_GOVERNANCE_RULE, { quorumBps: 2500, approvalBps: 5000, votingPeriodDays: 3, implementationDelayDays: 0 });
+  assert.ok(CONSTITUTIONAL_RULE_DEFINITIONS.some((rule) => rule.code === 'EARTH.CAPACITY.STANDARD'));
+  validateConstitutionalRuleValue('EARTH.CAPACITY.STANDARD', 10n);
+  validateConstitutionalRuleValue('CORPORATION.ADMISSION_POLICY', 'OPEN');
+  validateConstitutionalRuleValue('EARTH.CAPACITY.PROGRESSIVE_SCHEDULE', brackets);
+  assert.throws(() => validateConstitutionalRuleValue('EARTH.CAPACITY.STANDARD', 0n), /Invalid value/);
+  assert.throws(() => validateConstitutionalRuleValue('CORPORATION.ADMISSION_POLICY', 'PUBLIC'), /Invalid value/);
+  const earth = {
+    'EARTH.CAPACITY.BASE_RATE': 100n,
+    'CORPORATION.HOUSE_CAPACITY.BASE_RATE': 50n,
+    'CORPORATION.ADMISSION_POLICY': 'OPEN',
+  };
+  const corporation = {
+    'CORPORATION.HOUSE_CAPACITY.BASE_RATE': 75n,
+    'CORPORATION.ADMISSION_POLICY': 'INVITE_ONLY',
+  };
+  const resolved = resolveConstitutionalRuleSet({ earth, corporation });
+  assert.equal(resolved['CORPORATION.HOUSE_CAPACITY.BASE_RATE'], 75n);
+  assert.equal(resolved['CORPORATION.ADMISSION_POLICY'], 'INVITE_ONLY');
+  assert.equal(resolveConstitutionalRuleSet({ earth })['CORPORATION.HOUSE_CAPACITY.BASE_RATE'], 50n);
+});
+
+test('V5 governance snapshots and strict decision semantics are persisted in the migration', async () => {
+  const migration = await readFile(new URL('../db/migrations/094_v5_governance_snapshots.sql', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(migration, /electorate_snapshot_game_day/);
+  assert.match(migration, /governance_rule_snapshot/);
+  assert.match(migration, /base_version_snapshot/);
+  assert.match(service, /abstain_votes/);
+  assert.match(service, /support > oppose/);
+  assert.match(service, /electorate_size/);
+  assert.match(service, /joined_game_day <=/);
+});
+
+test('V5 constitutional amendments are typed, policy-group scoped change sets', async () => {
+  const governance = await readFile(new URL('../cloudflare/src/v5-governance.ts', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../db/migrations/095_constitution_kernel.sql', import.meta.url), 'utf8');
+  assert.match(governance, /CONSTITUTION_AMENDMENT/);
+  assert.match(governance, /validateConstitutionalRuleValue/);
+  assert.match(service, /constitutional_change_sets_v5/);
+  assert.match(service, /groups\.size !== 1/);
+  assert.match(service, /status = 'RETIRED'/);
+  assert.match(service, /CORPORATION\.ADMISSION_POLICY/);
+  assert.match(migration, /CREATE TABLE constitutional_change_sets_v5/);
+});
+
+test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
+  const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
+  const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  assert.match(phases, /required\('constitution_snapshots'/);
+  assert.match(scheduler, /materializeResolvedConstitutionSnapshot/);
+  assert.match(scheduler, /FROM corporations WHERE status = 'ACTIVE'/);
+  assert.match(kernel, /resolved_constitution_snapshots_v5/);
+});
+
+test('V5 capacity settlement consumes resolved Constitution values before legacy policy fallback', async () => {
+  const settlement = await readFile(new URL('../cloudflare/src/v5-capacity-settlement-postgres.ts', import.meta.url), 'utf8');
+  const quotes = await readFile(new URL('../cloudflare/src/v5-capacity-postgres.ts', import.meta.url), 'utf8');
+  assert.match(settlement, /resolved_constitution_snapshots_v5/);
+  assert.match(quotes, /resolved_constitution_snapshots_v5/);
+  assert.match(settlement, /EARTH\.CAPACITY\.STANDARD/);
+  assert.match(settlement, /CORPORATION\.HOUSE_CAPACITY\.BASE_RATE/);
+});
+
+test('legacy player-facing constitutional mutation routes are retired', async () => {
+  const organizations = await readFile(new URL('../cloudflare/src/organizations-routes.ts', import.meta.url), 'utf8');
+  const governance = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
+  const institutions = await readFile(new URL('../cloudflare/src/institutions-routes.ts', import.meta.url), 'utf8');
+  assert.match(organizations, /Direct Charter mutation is retired/);
+  assert.match(governance, /Direct voting-setting mutation is retired/);
+  assert.match(institutions, /Direct Corporation tax mutation is retired/);
+  assert.match(institutions, /Direct admission-policy mutation is retired/);
 });
 
 test('V5 resolution cases preserve Houses and release only selected building capacity', async () => {

@@ -27,7 +27,7 @@ export async function handleGovernanceRoutes(
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/governance/v5/proposals' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ subjectType?: 'EARTH' | 'CORPORATION'; subjectId?: string | null; actionType?: 'EARTH_CAPACITY_POLICY' | 'CORPORATION_HOUSE_RATE' | 'PROGRESSIVE_SCHEDULE' | 'CORPORATION_ADMISSION_POLICY'; payload?: Record<string, unknown>; title?: string; body?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ subjectType?: 'EARTH' | 'CORPORATION'; subjectId?: string | null; actionType?: 'CONSTITUTION_AMENDMENT' | 'EARTH_CAPACITY_POLICY' | 'CORPORATION_HOUSE_RATE' | 'PROGRESSIVE_SCHEDULE' | 'CORPORATION_ADMISSION_POLICY'; payload?: Record<string, unknown>; title?: string; body?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId || !parsed.value.subjectType || !parsed.value.actionType || !parsed.value.payload || !parsed.value.title?.trim()) return Response.json({ ok: false, error: 'Subject, action, payload, title, and idempotency key are required' }, { status: 400 });
@@ -84,6 +84,8 @@ export async function handleGovernanceRoutes(
     return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
   }
   if (methodMatch && request.method === 'POST') {
+    return Response.json({ ok: false, error: 'Direct voting-setting mutation is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for migration/admin callers, not the player route. */
     const parsed = await parseJsonBody<{ votingMethod?: 'ONE_HOUSE_ONE_VOTE' | 'DELEGATED' | 'SHARE_WEIGHTED' | 'QUADRATIC_VOICE'; voiceCycleDays?: number; voicePerCycle?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);

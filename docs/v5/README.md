@@ -28,6 +28,10 @@ because it is specified here.
 8. The phase/task section in `docs/v5/V5_AI_EXECUTION_PLAYBOOK.md`
 9. The relevant current source, migration, tests, and read models
 
+The current Constitution & Governance Kernel implementation is documented in
+`V5_CONSTITUTION_GOVERNANCE_KERNEL.md`. It describes the implemented migration
+slice and the remaining V5 cutover work.
+
 For UI work also read:
 
 10. `docs/v5/V5_UI_MIGRATION_MATRIX.md`

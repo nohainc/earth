@@ -208,6 +208,8 @@ export async function handleOrganizationRoutes(request: Request, env: Env, url: 
     catch (error) { return errorResponse(error, undefined, 'Organization charter is invalid.'); }
   }
   if (charterMatch && request.method === 'POST' && charterMatch[2] === 'amend') {
+    return Response.json({ ok: false, error: 'Direct Charter mutation is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for migration/admin callers, not the player route. */
     const parsed = await parseJsonBody<{ charter?: unknown; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);

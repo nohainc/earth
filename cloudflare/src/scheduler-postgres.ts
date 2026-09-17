@@ -34,6 +34,7 @@ import { settleV5CapacityInTransaction } from './v5-capacity-settlement-postgres
 import { reconcileV5TerritoryContainersInTransaction } from './v5-territory-containers-postgres.ts';
 import { activateDueV5GovernancePoliciesInTransaction } from './v5-governance-postgres.ts';
 import { rebuildV5SettlementProfilesInShard, settleV5CorporationSettlementProfiles } from './v5-settlement-profiles-postgres.ts';
+import { materializeResolvedConstitutionSnapshot } from './constitutional-kernel-postgres.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -46,6 +47,12 @@ const noOpPhase = async (_context: DailySettlementPhaseContext): Promise<unknown
 const OWNER_SHARD_COUNT = 16;
 const settlementPhases = createDailySettlementPhaseRegistry({
   v5PolicyActivation: async ({ tx, day }) => activateDueV5GovernancePoliciesInTransaction(tx, day),
+  constitutionSnapshots: async ({ tx, day }) => {
+    await materializeResolvedConstitutionSnapshot(tx, { authorityType: 'EARTH', authorityId: 'EARTH', gameDay: day });
+    const corporations = (await tx.query<{ id: string }>("SELECT id FROM corporations WHERE status = 'ACTIVE' ORDER BY id")).rows;
+    for (const corporation of corporations) await materializeResolvedConstitutionSnapshot(tx, { authorityType: 'CORPORATION', authorityId: corporation.id, gameDay: day });
+    return { earth: 1, corporations: corporations.length };
+  },
   activateSuccessors: async ({ tx, day }) => ({ activated: await activatePendingHouseSuccessors(tx, day) }),
   preparePartitions: noOpPhase,
   rebuildProfiles: async ({ tx, day, shard, shardCount }) => rebuildV5SettlementProfilesInShard(tx, day, shard ?? 0, shardCount ?? OWNER_SHARD_COUNT),

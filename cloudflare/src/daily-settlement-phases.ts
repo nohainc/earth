@@ -19,6 +19,7 @@ export type DailySettlementPhase = {
 
 export type DailySettlementPhaseHandlers = {
   v5PolicyActivation: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  constitutionSnapshots: (context: DailySettlementPhaseContext) => Promise<unknown>;
   activateSuccessors: (context: DailySettlementPhaseContext) => Promise<unknown>;
   preparePartitions: (context: DailySettlementPhaseContext) => Promise<unknown>;
   rebuildProfiles: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -77,6 +78,7 @@ export function createDailySettlementPhaseRegistry(
   return [
     required('v5_policy_activation', 4, 'all', handlers.v5PolicyActivation),
     required('succession_activation', 5, 'all', handlers.activateSuccessors),
+    required('constitution_snapshots', 6, 'all', handlers.constitutionSnapshots),
     deferred('prepare_partitions', 10, 'all', handlers.preparePartitions),
     required('profile_rebuild', 20, 'owner-shards', handlers.rebuildProfiles),
     required('profile_settlement', 30, 'all', handlers.profileSettlement),

@@ -19,7 +19,17 @@ async function activePolicy(tx: PostgresRepository, day: number): Promise<Policy
     FROM v5_capacity_policy_versions WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
       AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
     ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day])).rows[0];
-  return row ? { id: row.id, earthBaseRate: BigInt(row.earth_base_capacity_rate_units), standardCapacity: BigInt(row.standard_territory_capacity_units), corporationScheduleId: row.earth_corporation_schedule_id, houseScheduleId: row.earth_house_schedule_id, version: Number(row.version) } : null;
+  if (!row) return null;
+  const snapshot = (await tx.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [day])).rows[0];
+  const rules = snapshot?.rules_json ?? {};
+  return {
+    id: snapshot?.id ?? row.id,
+    earthBaseRate: BigInt(String(rules['EARTH.CAPACITY.BASE_RATE'] ?? row.earth_base_capacity_rate_units)),
+    standardCapacity: BigInt(String(rules['EARTH.CAPACITY.STANDARD'] ?? row.standard_territory_capacity_units)),
+    corporationScheduleId: String(rules['EARTH.CAPACITY.PROGRESSIVE_SCHEDULE'] ?? row.earth_corporation_schedule_id),
+    houseScheduleId: String(rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'] ?? row.earth_house_schedule_id),
+    version: Number(row.version),
+  };
 }
 
 async function account(tx: PostgresRepository, economicId: string, types: string[], lock = false): Promise<{ id: string; balance: bigint } | null> {
@@ -211,6 +221,9 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
 }
 
 async function corporationBaseRate(tx: PostgresRepository, corporationId: string, day: number): Promise<bigint | null> {
+  const snapshot = (await tx.query<{ rules_json: Record<string, unknown> }>(`SELECT rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [corporationId, day])).rows[0];
+  const snapshotRate = snapshot?.rules_json?.['CORPORATION.HOUSE_CAPACITY.BASE_RATE'];
+  if (snapshotRate !== undefined) return BigInt(String(snapshotRate));
   const row = (await tx.query<{ rate: string }>(`SELECT house_base_capacity_rate_units::TEXT AS rate FROM corporation_capacity_policy_versions
     WHERE corporation_id = $1 AND status = 'ACTIVE' AND effective_from_game_day <= $2
       AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)

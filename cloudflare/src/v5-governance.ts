@@ -1,6 +1,8 @@
 import { calculateProgressiveCharge, validateProgressiveBrackets, type ProgressiveBracket } from './v5-progressive.ts';
+import { validateConstitutionalRuleValue } from './v5-constitution.ts';
 
 export type V5GovernanceActionType =
+  | 'CONSTITUTION_AMENDMENT'
   | 'EARTH_CAPACITY_POLICY'
   | 'CORPORATION_HOUSE_RATE'
   | 'PROGRESSIVE_SCHEDULE'
@@ -19,6 +21,7 @@ export type V5GovernanceAction = {
   scheduleCode?: string;
   scheduleBasisType?: 'EARTH_CORPORATION_CAPACITY' | 'CORPORATION_HOUSE_CAPACITY' | 'HOUSE_INCOME_TAX';
   brackets?: ProgressiveBracket[];
+  changes?: Array<{ ruleCode: string; value?: unknown; clearOverride?: boolean; baseVersionId?: string }>;
 };
 
 export type ProgressivePolicyPreview = {
@@ -41,6 +44,17 @@ export function validateV5FutureEffectiveDay(effectiveFromGameDay: number, curre
 
 export function validateV5GovernanceAction(action: V5GovernanceAction, currentGameDay: number): void {
   validateV5FutureEffectiveDay(action.effectiveFromGameDay, currentGameDay);
+  if (action.actionType === 'CONSTITUTION_AMENDMENT') {
+    if (!action.changes?.length) throw new Error('Constitution amendment requires at least one rule change');
+    const codes = new Set<string>();
+    for (const change of action.changes) {
+      if (!change.ruleCode?.trim() || codes.has(change.ruleCode)) throw new Error('Constitution amendment contains duplicate or missing rule codes');
+      codes.add(change.ruleCode);
+      if (change.clearOverride) continue;
+      validateConstitutionalRuleValue(change.ruleCode, change.value);
+    }
+    return;
+  }
   if (action.actionType === 'EARTH_CAPACITY_POLICY') {
     positiveInteger(action.earthBaseRateUnits, 'EARTH base capacity rate');
     if (!action.standardTerritoryCapacityUnits || action.standardTerritoryCapacityUnits <= 0n) throw new Error('Standard Territory capacity must be positive');

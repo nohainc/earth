@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
+import { DEFAULT_V5_GOVERNANCE_RULE, getConstitutionalRuleDefinition } from './v5-constitution.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -29,6 +30,10 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
       const row = item as Record<string, unknown>;
       return { ordinal: Number(row.ordinal), lowerBound: bigintPayload(row.lowerBound, 'Bracket lower bound'), upperBound: row.upperBound == null ? null : bigintPayload(row.upperBound, 'Bracket upper bound'), multiplierNumerator: bigintPayload(row.multiplierNumerator, 'Bracket numerator'), multiplierDenominator: bigintPayload(row.multiplierDenominator, 'Bracket denominator') };
     }) : undefined,
+    changes: Array.isArray(payload.changes) ? payload.changes.map((item) => {
+      const row = item as Record<string, unknown>;
+      return { ruleCode: String(row.ruleCode ?? ''), value: row.value, clearOverride: row.clearOverride === true, baseVersionId: row.baseVersionId == null ? undefined : String(row.baseVersionId) };
+    }) : undefined,
   };
   return action;
 }
@@ -42,10 +47,13 @@ async function canPropose(tx: PostgresRepository, humanId: string, subjectType: 
   return human;
 }
 
-async function canVote(tx: PostgresRepository, humanId: string, proposal: { subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null }): Promise<string> {
+async function canVote(tx: PostgresRepository, humanId: string, proposal: { subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; electorate_snapshot_game_day: number }): Promise<string> {
   const human = (await tx.query<{ house_id: string }>("SELECT house_id FROM humans WHERE id = $1 AND status = 'ACTIVE'", [humanId])).rows[0];
   if (!human) throw new Error('Active Human not found');
-  if (proposal.subject_type === 'CORPORATION' && !(await tx.query(`SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'`, [human.house_id, proposal.subject_id])).rows[0]) throw new Error('Corporation membership is required to vote');
+  if (proposal.subject_type === 'EARTH') {
+    const eligible = (await tx.query("SELECT 1 FROM houses WHERE id = $1 AND status = 'ACTIVE'", [human.house_id])).rows[0];
+    if (!eligible) throw new Error('House is not in the frozen Earth electorate');
+  } else if (!(await tx.query(`SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE' AND joined_game_day <= $3 AND (left_game_day IS NULL OR left_game_day >= $3)`, [human.house_id, proposal.subject_id, proposal.electorate_snapshot_game_day])).rows[0]) throw new Error('House was not in the frozen Corporation electorate');
   return human.house_id;
 }
 
@@ -54,15 +62,17 @@ export async function listV5GovernanceProposals(repository: PostgresRepository, 
     SELECT p.id, p.subject_type, p.subject_id, p.action_type, p.payload,
            p.status, p.submitted_game_day, p.voting_start_game_day,
            p.voting_end_game_day, p.effective_from_game_day,
-           p.support_votes, p.oppose_votes, p.quorum_met,
-           GREATEST(1, CEIL((SELECT COUNT(*) FROM houses h WHERE h.status = 'ACTIVE') * 0.25))::INTEGER AS quorum_required,
+           p.support_votes, p.oppose_votes, p.abstain_votes, p.quorum_met,
+           p.quorum_bps, p.approval_bps, p.electorate_snapshot_game_day,
+           p.electorate_size, p.governance_rule_snapshot, p.base_version_snapshot,
+           GREATEST(1, CEIL(p.electorate_size * p.quorum_bps / 10000.0))::INTEGER AS quorum_required,
            (b.proposal_id IS NOT NULL) AS viewer_voted,
            b.choice AS viewer_choice
       FROM v5_governance_proposals p
       LEFT JOIN v5_governance_ballots b
         ON b.proposal_id = p.id
        AND b.house_id = (SELECT house_id FROM humans WHERE id = $1)
-     WHERE p.status IN ('VOTING','PASSED')
+     WHERE p.status IN ('VOTING','PASSED','SCHEDULED')
        AND (p.subject_type = 'EARTH'
         OR (p.subject_type = 'CORPORATION' AND p.subject_id IN (
              SELECT corporation_id FROM house_affiliations
@@ -76,7 +86,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
   return repository.transaction(async (tx) => {
     const prior = (await tx.query('SELECT * FROM v5_governance_proposals WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior) return { ok: true, alreadyProcessed: true, proposal: prior, correlationId: input.correlationId };
-    if (input.subjectType === 'EARTH' && input.actionType === 'CORPORATION_HOUSE_RATE' || input.subjectType === 'CORPORATION' && input.actionType === 'EARTH_CAPACITY_POLICY') throw new Error('Policy subject and action scope do not match');
+    if (input.subjectType === 'EARTH' && ['CORPORATION_HOUSE_RATE', 'CORPORATION_ADMISSION_POLICY'].includes(input.actionType) || input.subjectType === 'CORPORATION' && input.actionType === 'EARTH_CAPACITY_POLICY') throw new Error('Policy subject and action scope do not match');
     await canPropose(tx, input.humanId, input.subjectType, input.subjectId);
     const day = await currentDay(tx);
     const action = actionFromPayload(input.actionType, input.payload);
@@ -84,10 +94,47 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     if (input.actionType === 'CORPORATION_HOUSE_RATE' || input.actionType === 'CORPORATION_ADMISSION_POLICY') {
       if (!input.subjectId || action.corporationId !== input.subjectId) throw new Error('Corporation action must target its proposal Corporation');
     }
+    if (input.actionType === 'CONSTITUTION_AMENDMENT') {
+      const changes = action.changes ?? [];
+      const groups = new Set<string>();
+      for (const change of changes) {
+        const rule = getConstitutionalRuleDefinition(change.ruleCode);
+        groups.add(rule.policyGroup);
+        if (input.subjectType === 'EARTH' && rule.authorityModel === 'CORPORATION_LOCAL') throw new Error('Corporation-local rule cannot be amended at Earth scope');
+        if (input.subjectType === 'CORPORATION' && rule.authorityModel === 'EARTH_LOCKED') throw new Error('Earth-locked rule cannot be amended at Corporation scope');
+        if (change.clearOverride && rule.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
+      }
+      if (groups.size !== 1) throw new Error('A Constitution amendment must contain one policy group');
+    }
+    const scope = input.subjectType === 'CORPORATION' ? `CORPORATION:${input.subjectId}` : 'EARTH';
+    const policyGroup = input.actionType === 'EARTH_CAPACITY_POLICY' ? 'EARTH:CAPACITY_POLICY'
+      : input.actionType === 'CORPORATION_HOUSE_RATE' ? `${scope}:HOUSE_CAPACITY_POLICY`
+        : input.actionType === 'CORPORATION_ADMISSION_POLICY' ? `${scope}:ADMISSION_POLICY`
+          : input.actionType === 'CONSTITUTION_AMENDMENT' ? `${scope}:${getConstitutionalRuleDefinition(String((action.changes ?? [])[0]?.ruleCode ?? 'CONSTITUTION')).policyGroup}`
+            : `${scope}:PROGRESSIVE_SCHEDULE`;
+    if ((await tx.query(`SELECT 1 FROM v5_governance_proposals WHERE subject_type = $1 AND subject_id IS NOT DISTINCT FROM $2 AND policy_group = $3 AND status IN ('VOTING','PASSED','SCHEDULED') LIMIT 1`, [input.subjectType, input.subjectId, policyGroup])).rows[0]) throw new Error('An active proposal already exists for this policy group');
+    const votingStart = day + 1;
+    const electorate = input.subjectType === 'CORPORATION'
+      ? await tx.query<{ count: string }>(`SELECT COUNT(DISTINCT house_id)::TEXT AS count FROM house_affiliations WHERE corporation_id = $1 AND status = 'ACTIVE' AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)`, [input.subjectId, votingStart])
+      : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'", []);
+    const electorateSize = Number(electorate.rows[0]?.count ?? 0);
+    const governanceRuleSnapshot = { ...DEFAULT_V5_GOVERNANCE_RULE };
+    const baseVersionSnapshot: Record<string, unknown> = { capturedAtGameDay: day };
+    let proposalPayload = input.payload;
+    if (input.actionType === 'CONSTITUTION_AMENDMENT') {
+      const authorityType = input.subjectType;
+      const authorityId = input.subjectType === 'EARTH' ? 'EARTH' : String(input.subjectId);
+      const codes = (action.changes ?? []).map((change) => change.ruleCode);
+      const currentVersions = (await tx.query<{ rule_code: string; id: string }>(`SELECT rule_code, id FROM constitutional_rule_versions_v5 WHERE authority_type = $1 AND authority_id = $2 AND status = 'ACTIVE' AND effective_to_game_day IS NULL AND rule_code = ANY($3::TEXT[])`, [authorityType, authorityId, codes])).rows;
+      for (const version of currentVersions) baseVersionSnapshot[version.rule_code] = version.id;
+      const changes = (action.changes ?? []).map((change) => ({ ...change, baseVersionId: change.baseVersionId ?? (baseVersionSnapshot[change.ruleCode] as string | undefined) }));
+      proposalPayload = { ...input.payload, changes };
+    }
     const proposalId = `V5-GOV-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const effective = action.effectiveFromGameDay;
-    await tx.query(`INSERT INTO v5_governance_proposals (id, subject_type, subject_id, action_type, payload, status, submitted_game_day, voting_start_game_day, voting_end_game_day, effective_from_game_day, created_by_human_id, correlation_id)
-      VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$6 + 1,$6 + 3,$7,$8,$9)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(input.payload), day, effective, input.humanId, input.correlationId]);
+    await tx.query(`INSERT INTO v5_governance_proposals (id, subject_type, subject_id, action_type, payload, status, submitted_game_day, voting_start_game_day, voting_end_game_day, effective_from_game_day, created_by_human_id, correlation_id, quorum_bps, approval_bps, electorate_snapshot_game_day, electorate_size, governance_rule_snapshot, base_version_snapshot, policy_group)
+      VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$7 + 2,$8,$9,$10,$11,$12,$7,$13,$14::JSONB,$15::JSONB,$16)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
+    if (input.actionType === 'CONSTITUTION_AMENDMENT') await tx.query(`INSERT INTO constitutional_change_sets_v5 (proposal_id, authority_type, authority_id, policy_group, changes, base_version_snapshot) VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB)`, [proposalId, input.subjectType, input.subjectType === 'EARTH' ? 'EARTH' : input.subjectId, policyGroup, JSON.stringify((proposalPayload as Record<string, unknown>).changes), JSON.stringify(baseVersionSnapshot)]);
     await createGameEvent(tx, { id: `V5-GOV-CREATED-${proposalId}`, category: 'GOVERNANCE', eventType: 'V5_POLICY_PROPOSAL_CREATED', gameDay: day, actorHumanId: input.humanId, subjectType: input.subjectType, subjectId: input.subjectId ?? 'EARTH', title: input.title.trim(), details: { proposalId, actionType: input.actionType, effectiveFromGameDay: effective, body: input.body?.trim() ?? '' }, correlationId: input.correlationId });
     return { ok: true, proposal: (await tx.query('SELECT * FROM v5_governance_proposals WHERE id = $1', [proposalId])).rows[0], correlationId: input.correlationId };
   });
@@ -95,15 +142,15 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
 
 export async function castV5GovernanceVote(repository: PostgresRepository, input: { humanId: string; proposalId: string; choice: 'SUPPORT' | 'OPPOSE' | 'ABSTAIN'; correlationId: string }) {
   return repository.transaction(async (tx) => {
-    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; voting_end_game_day: number; status: string }>('SELECT subject_type, subject_id, voting_end_game_day, status FROM v5_governance_proposals WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
+    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; voting_end_game_day: number; electorate_snapshot_game_day: number; status: string }>('SELECT subject_type, subject_id, voting_end_game_day, electorate_snapshot_game_day, status FROM v5_governance_proposals WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
     if (!proposal || proposal.status !== 'VOTING') throw new Error('V5 governance proposal is not open for voting');
     const day = await currentDay(tx);
     if (day < proposal.voting_end_game_day - 2 || day > proposal.voting_end_game_day) throw new Error('V5 governance voting is not open');
     const houseId = await canVote(tx, input.humanId, proposal);
     await tx.query(`INSERT INTO v5_governance_ballots (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)
       ON CONFLICT (proposal_id, house_id) DO UPDATE SET choice = EXCLUDED.choice, cast_by_human_id = EXCLUDED.cast_by_human_id, cast_game_day = EXCLUDED.cast_game_day, correlation_id = EXCLUDED.correlation_id`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);
-    const totals = (await tx.query<{ support: string; oppose: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'SUPPORT')::TEXT AS support, COUNT(*) FILTER (WHERE choice = 'OPPOSE')::TEXT AS oppose FROM v5_governance_ballots WHERE proposal_id = $1`, [input.proposalId])).rows[0];
-    await tx.query('UPDATE v5_governance_proposals SET support_votes = $1, oppose_votes = $2 WHERE id = $3', [totals?.support ?? '0', totals?.oppose ?? '0', input.proposalId]);
+    const totals = (await tx.query<{ support: string; oppose: string; abstain: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'SUPPORT')::TEXT AS support, COUNT(*) FILTER (WHERE choice = 'OPPOSE')::TEXT AS oppose, COUNT(*) FILTER (WHERE choice = 'ABSTAIN')::TEXT AS abstain FROM v5_governance_ballots WHERE proposal_id = $1`, [input.proposalId])).rows[0];
+    await tx.query('UPDATE v5_governance_proposals SET support_votes = $1, oppose_votes = $2, abstain_votes = $3 WHERE id = $4', [totals?.support ?? '0', totals?.oppose ?? '0', totals?.abstain ?? '0', input.proposalId]);
     return { ok: true, proposalId: input.proposalId, houseId, choice: input.choice, correlationId: input.correlationId };
   });
 }
@@ -115,17 +162,18 @@ export async function resolveV5GovernanceProposal(repository: PostgresRepository
     if (proposal.status !== 'VOTING') return { ok: true, alreadyProcessed: true, proposal };
     const day = await currentDay(tx);
     if (day <= Number(proposal.voting_end_game_day)) throw new Error('V5 governance voting period is still open');
-    const electorate = proposal.subject_type === 'CORPORATION'
-      ? await tx.query<{ count: string }>('SELECT COUNT(*)::TEXT AS count FROM house_affiliations WHERE corporation_id = $1 AND status = \'ACTIVE\'', [proposal.subject_id])
-      : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'");
-    const voters = Number(proposal.support_votes) + Number(proposal.oppose_votes);
-    const eligible = Math.max(1, Number(electorate.rows[0]?.count ?? 0));
-    const quorumMet = voters * 4 >= eligible;
-    const passed = quorumMet && Number(proposal.support_votes) >= Number(proposal.oppose_votes) && Number(proposal.support_votes) > 0;
-    const status = passed ? 'PASSED' : 'REJECTED';
-    await tx.query('UPDATE v5_governance_proposals SET status = $1, quorum_met = $2 WHERE id = $3', [status, quorumMet, proposalId]);
-    if (passed) await tx.query(`INSERT INTO v5_governance_activation_queue (proposal_id, action_type, payload, effective_from_game_day) VALUES ($1,$2,$3::JSONB,$4) ON CONFLICT (proposal_id) DO NOTHING`, [proposalId, proposal.action_type, JSON.stringify(proposal.payload), proposal.effective_from_game_day]);
-    return { ok: true, proposalId, status, quorumMet, supportVotes: Number(proposal.support_votes), opposeVotes: Number(proposal.oppose_votes), effectiveFromGameDay: passed ? Number(proposal.effective_from_game_day) : null };
+    const support = Number(proposal.support_votes); const oppose = Number(proposal.oppose_votes); const abstain = Number(proposal.abstain_votes);
+    const electorateSize = Number(proposal.electorate_size);
+    const quorumMet = electorateSize > 0 && (support + oppose + abstain) * 10000 >= electorateSize * Number(proposal.quorum_bps);
+    const decisive = support + oppose;
+    const passed = quorumMet && decisive > 0 && support > oppose && support * 10000 >= decisive * Number(proposal.approval_bps);
+    const status = passed ? 'SCHEDULED' : 'REJECTED';
+    await tx.query('UPDATE v5_governance_proposals SET status = $1, quorum_met = $2 WHERE id = $3', [passed ? 'PASSED' : status, quorumMet, proposalId]);
+    if (passed) {
+      await tx.query(`INSERT INTO v5_governance_activation_queue (proposal_id, action_type, payload, effective_from_game_day) VALUES ($1,$2,$3::JSONB,$4) ON CONFLICT (proposal_id) DO NOTHING`, [proposalId, proposal.action_type, JSON.stringify(proposal.payload), proposal.effective_from_game_day]);
+      await tx.query("UPDATE v5_governance_proposals SET status = 'SCHEDULED' WHERE id = $1", [proposalId]);
+    }
+    return { ok: true, proposalId, status, quorumMet, supportVotes: support, opposeVotes: oppose, abstainVotes: abstain, effectiveFromGameDay: passed ? Number(proposal.effective_from_game_day) : null };
   });
 }
 
@@ -138,7 +186,29 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
   const payload = row.payload;
   const effective = Number(row.effective_from_game_day);
   const action = actionFromPayload(row.action_type as ProposalAction['actionType'], payload);
-  if (row.action_type === 'CORPORATION_ADMISSION_POLICY') {
+  if (row.action_type === 'CONSTITUTION_AMENDMENT') {
+    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null }>('SELECT subject_type, subject_id FROM v5_governance_proposals WHERE id = $1', [row.proposal_id])).rows[0];
+    if (!proposal) throw new Error('Constitution amendment proposal not found');
+    const authorityType = proposal.subject_type;
+    const authorityId = authorityType === 'EARTH' ? 'EARTH' : String(proposal.subject_id);
+    const base = (await tx.query<{ base_version_snapshot: Record<string, string> }>('SELECT base_version_snapshot FROM constitutional_change_sets_v5 WHERE proposal_id = $1', [row.proposal_id])).rows[0]?.base_version_snapshot ?? {};
+    for (const change of action.changes ?? []) {
+      if (base[change.ruleCode]) {
+        const current = (await tx.query<{ id: string }>(`SELECT id FROM constitutional_rule_versions_v5 WHERE rule_code = $1 AND authority_type = $2 AND authority_id = $3 AND status = 'ACTIVE' AND effective_to_game_day IS NULL`, [change.ruleCode, authorityType, authorityId])).rows[0];
+        if (current?.id !== base[change.ruleCode]) throw new Error(`STALE constitutional amendment: ${change.ruleCode}`);
+      }
+      if (change.clearOverride) {
+        await tx.query(`UPDATE constitutional_rule_versions_v5 SET status = 'RETIRED', effective_to_game_day = $3 WHERE rule_code = $1 AND authority_type = 'CORPORATION' AND authority_id = $2 AND status = 'ACTIVE' AND effective_to_game_day IS NULL`, [change.ruleCode, authorityId, effective - 1]);
+        continue;
+      }
+      const prior = (await tx.query<{ version: number }>('SELECT COALESCE(MAX(version), 0) + 1 AS version FROM constitutional_rule_versions_v5 WHERE rule_code = $1 AND authority_type = $2 AND authority_id = $3', [change.ruleCode, authorityType, authorityId])).rows[0];
+      await tx.query(`UPDATE constitutional_rule_versions_v5 SET status = 'RETIRED', effective_to_game_day = $4 WHERE rule_code = $1 AND authority_type = $2 AND authority_id = $3 AND status = 'ACTIVE' AND effective_to_game_day IS NULL`, [change.ruleCode, authorityType, authorityId, effective - 1]);
+      await tx.query(`INSERT INTO constitutional_rule_versions_v5 (id, rule_code, authority_type, authority_id, version, value_json, effective_from_game_day, status, proposal_id) VALUES ($1,$2,$3,$4,$5,$6::JSONB,$7,'ACTIVE',$8)`, [`CONST-${row.proposal_id}-${change.ruleCode}`, change.ruleCode, authorityType, authorityId, Number(prior?.version ?? 1), JSON.stringify({ value: change.value }), effective, row.proposal_id]);
+      if (change.ruleCode === 'CORPORATION.ADMISSION_POLICY' && authorityType === 'CORPORATION') {
+        await tx.query('UPDATE corporations SET admission_policy = $1 WHERE id = $2', [String(change.value), authorityId]);
+      }
+    }
+  } else if (row.action_type === 'CORPORATION_ADMISSION_POLICY') {
     const corporationId = String(action.corporationId);
     await tx.query("UPDATE corporations SET admission_policy = $1 WHERE id = $2", [action.admissionPolicy, corporationId]);
     await tx.query("UPDATE v5_corporation_admission_policy_versions SET status = 'RETIRED', effective_to_game_day = $2 WHERE corporation_id = $1 AND status = 'ACTIVE'", [corporationId, effective - 1]);
@@ -166,14 +236,14 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
     await tx.query("UPDATE progressive_policy_schedules SET status = 'ACTIVE' WHERE id = $1", [scheduleId]);
   }
   await tx.query("UPDATE v5_governance_activation_queue SET status = 'APPLIED', applied_game_day = $2 WHERE proposal_id = $1", [row.proposal_id, day]);
-  await tx.query("UPDATE v5_governance_proposals SET status = 'EXECUTED' WHERE id = $1", [row.proposal_id]);
+  await tx.query("UPDATE v5_governance_proposals SET status = 'ACTIVATED' WHERE id = $1", [row.proposal_id]);
 }
 
 export async function activateDueV5GovernancePoliciesInTransaction(tx: PostgresRepository, day: number) {
   const rows = (await tx.query<{ proposal_id: string; action_type: string; payload: Record<string, unknown>; effective_from_game_day: number }>(`SELECT proposal_id, action_type, payload, effective_from_game_day FROM v5_governance_activation_queue WHERE status = 'PENDING' AND effective_from_game_day <= $1 ORDER BY effective_from_game_day, proposal_id FOR UPDATE`, [day])).rows;
   let applied = 0; let failed = 0;
   for (const row of rows) {
-    try { await applyActivation(tx, row, day); applied += 1; } catch (error) { failed += 1; await tx.query("UPDATE v5_governance_activation_queue SET status = 'FAILED', error_message = $2 WHERE proposal_id = $1", [row.proposal_id, error instanceof Error ? error.message : 'Activation failed']); }
+    try { await applyActivation(tx, row, day); applied += 1; } catch (error) { failed += 1; const message = error instanceof Error ? error.message : 'Activation failed'; const stale = message.startsWith('STALE'); await tx.query(`UPDATE v5_governance_activation_queue SET status = $2, error_message = $3 WHERE proposal_id = $1`, [row.proposal_id, stale ? 'STALE' : 'FAILED', message]); if (stale) await tx.query("UPDATE v5_governance_proposals SET status = 'STALE' WHERE id = $1", [row.proposal_id]); }
   }
   return { ok: true, day, applied, failed };
 }
