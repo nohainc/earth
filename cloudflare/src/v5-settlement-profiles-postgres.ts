@@ -40,7 +40,7 @@ export async function rebuildV5HouseSettlementProfile(
        (house_id, corporation_id, residential_capacity_units, productive_capacity_units,
         total_capacity_units, active_building_count, profile_version, source_game_day,
         dirty, dirty_reason)
-     VALUES ($1, $2, CASE WHEN $7 = 'ACTIVE' THEN 1 ELSE 0 END, $3, CASE WHEN $7 = 'ACTIVE' THEN 1 ELSE 0 END + $3, $4, $5, $6, FALSE, NULL)
+     VALUES ($1, $2, CASE WHEN $7 = 'ACTIVE' THEN 1::BIGINT ELSE 0::BIGINT END, $3::BIGINT, CASE WHEN $7 = 'ACTIVE' THEN 1::BIGINT ELSE 0::BIGINT END + $3::BIGINT, $4, $5, $6, FALSE, NULL)
      ON CONFLICT (house_id) DO UPDATE SET corporation_id = EXCLUDED.corporation_id,
        residential_capacity_units = EXCLUDED.residential_capacity_units,
        productive_capacity_units = EXCLUDED.productive_capacity_units,
