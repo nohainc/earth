@@ -2433,6 +2433,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     return false;
   }
 
+  bool _hasAuthoritativeCatalogEconomics(Map<String, dynamic> item) {
+    return asInt(item['tier']) != null &&
+        asInt(item['slot_footprint'] ?? item['slotFootprint']) != null &&
+        asInt(item['cost_credits'] ?? item['baseCreditCost']) != null &&
+        asInt(item['cost_materials'] ?? item['baseMaterialCost']) != null &&
+        asInt(item['construction_days']) != null;
+  }
+
   Widget _buildCatalogTab(
     BuildContext context, {
     required List<dynamic> catalog,
@@ -2443,14 +2451,21 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
         .where((item) {
-      final bType = (item['building_type'] ?? item['type'])?.toString();
-      return bType != 'private-estate-plot' && bType != 'urban-district-module';
-    }).toList();
+          final bType = (item['building_type'] ?? item['type'])?.toString();
+          return bType != 'private-estate-plot' &&
+              bType != 'urban-district-module';
+        })
+        .toList();
+
+    // Construction decisions must never be based on fabricated client-side
+    // economics. Incomplete catalog rows remain unavailable until the server
+    // publishes the complete authoritative blueprint.
+    allCatalogMaps.removeWhere((item) => !_hasAuthoritativeCatalogEconomics(item));
 
     // Only display root blueprints (tier 1 or prev_catalog_id is null) in the catalog blueprints view
     final rootBlueprints = allCatalogMaps.where((item) {
       final prevId = item['prev_catalog_id'];
-      final tier = asIntOr(item['tier'], 1);
+      final tier = asInt(item['tier'])!;
       return (prevId == null || prevId.toString().isEmpty) && tier == 1;
     }).toList();
 
@@ -2496,8 +2511,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         widget.state.resources['material']);
 
     rootBlueprints.sort((a, b) {
-      final aCost = asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 0);
-      final bCost = asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 0);
+      final aCost = asDouble(a['cost_credits'] ?? a['baseCreditCost'])!;
+      final bCost = asDouble(b['cost_credits'] ?? b['baseCreditCost'])!;
       final costCompare = aCost.compareTo(bCost);
       if (costCompare != 0) return costCompare;
       return (a['name']?.toString() ?? 'Blueprint')
@@ -2605,7 +2620,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   'private';
               final role = economicRole(item);
               final footprint =
-                  asIntOr(item['slot_footprint'] ?? item['slotFootprint'], 1);
+                  asInt(item['slot_footprint'] ?? item['slotFootprint'])!;
 
               // Group count: total upgrades/tiers available in the catalog for this building type
               final groupBuildings = allCatalogMaps
@@ -2615,9 +2630,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
               // Costs (24-resource vector)
               final creditCost =
-                  asIntOr(item['cost_credits'] ?? item['baseCreditCost'], 0);
-              final matCost = asIntOr(
-                  item['cost_materials'] ?? item['baseMaterialCost'], 0);
+                  asInt(item['cost_credits'] ?? item['baseCreditCost'])!;
+              final matCost = asInt(
+                  item['cost_materials'] ?? item['baseMaterialCost'])!;
               final compCost = asIntOr(item['cost_components'], 0);
               final computeCost = asIntOr(item['cost_compute'], 0);
 
@@ -2895,7 +2910,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                   color: Colors.amber,
                                 ),
                                 Text(
-                                  '${math.max(1, asIntOr(item['construction_days'], footprint * asIntOr(item['tier'], 1)))}d',
+                                  '${asInt(item['construction_days'])!}d',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -3087,14 +3102,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 child: InkWell(
                                   onTap: isCivicOrInvest
                                       ? () {
-                                          final cDays = math.max(
-                                            1,
-                                            asIntOr(
-                                              item['construction_days'],
-                                              footprint *
-                                                  asIntOr(item['tier'], 1),
-                                            ),
-                                          );
+                                          final cDays =
+                                              asInt(item['construction_days'])!;
                                           _showCivicProposalDialog(
                                             context,
                                             buildingName: name.trim(),
@@ -3109,14 +3118,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                         }
                                       : canBuild
                                           ? () {
-                                              final cDays = math.max(
-                                                1,
-                                                asIntOr(
-                                                  item['construction_days'],
-                                                  footprint *
-                                                      asIntOr(item['tier'], 1),
-                                                ),
-                                              );
+                                              final cDays =
+                                                  asInt(item['construction_days'])!;
                                               final cNetYields = <(
                                                 IconData,
                                                 Color,

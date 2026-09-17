@@ -818,6 +818,13 @@ test('V5 upgrade review is quote-only and does not derive tier economics in Flut
   assert.doesNotMatch(dialog, /getVal|dailyOperatingCredits|dailyOutputCredits|baseCreditCost|upgradeCreditCost.*asIntOr/);
 });
 
+test('V5 building catalog fails closed when authoritative construction economics are incomplete', async () => {
+  const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  assert.match(buildings, /_hasAuthoritativeCatalogEconomics/);
+  assert.match(buildings, /allCatalogMaps\.removeWhere\(\(item\) => !_hasAuthoritativeCatalogEconomics/);
+  assert.doesNotMatch(buildings, /item\['construction_days'\], footprint \*\s+asIntOr/);
+});
+
 test('V5 construction review quotes and executes the pooled path for independent Houses', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   const confirm = buildings.slice(buildings.indexOf('Future<void> _confirmConstruction'));
