@@ -13,12 +13,19 @@ test('daily settlement has one ordered canonical phase registry', () => {
   assert.equal(phases.find((phase) => phase.id === 'profile_rebuild')?.shardMode, 'owner-shards');
 
   const requiredOrder = [
-    'succession_activation', 'prepare_partitions', 'profile_rebuild', 'profile_settlement',
-    'ip_license_billing', 'life_maintenance', 'building_settlement', 'basic_levy',
-    'corporation_income_tax', 'global_bank', 'bank_health',
-    'territory_capacity_projections', 'corporation_dynamics',
+    'v5_policy_activation', 'succession_activation', 'constitution_snapshots',
+    'prepare_partitions', 'profile_rebuild', 'profile_settlement',
+    'patent_expirations', 'ip_license_billing', 'life_maintenance',
+    'construction_completion', 'territory_lease_settlement',
+    'commons_dividend_settlement', 'building_settlement', 'basic_levy',
+    'corporation_income_tax', 'public_tax_assessment', 'tax_reconciliation',
+    'global_bank', 'bank_health', 'mandatory_budget_payments',
+    'scheduled_budget_payments', 'territory_capacity_projections',
+    'v5_capacity_assessment', 'v5_territory_containers', 'corporation_dynamics',
+    'house_needs_services', 'perishable_resource_decay', 'research_and_progress',
+    'global_programs', 'public_projects',
     'budget_dividend_eligibility', 'financial_states', 'lifecycle', 'post_succession_access_refresh',
-    'financial_projections', 'rankings_snapshot', 'end_of_day_snapshots',
+    'institution_dissolution', 'financial_projections', 'rankings_snapshot', 'end_of_day_snapshots',
   ];
   const indexes = requiredOrder.map((id) => phases.findIndex((phase) => phase.id === id));
   assert.ok(indexes.every((index) => index >= 0));
