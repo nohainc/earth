@@ -62,7 +62,10 @@ export async function handleReadModelRoutes(
     try {
       const result = await withRepository(env, (repository) => getV5Overview(repository, viewer.house_id));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      // The overview aggregates canonical capacity facts, which may contain
+      // bigint values even though individual sub-read models are wire-safe.
+      // Normalize the complete envelope before Response.json serializes it.
+      return Response.json({ ...toJsonSafe(result), persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 overview unavailable' }, { status: 400 });
     }
