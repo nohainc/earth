@@ -180,21 +180,14 @@ class _NewsPanelState extends State<NewsPanel> {
                         _filter = 'all';
                       })),
               _buildTabButton(context,
-                  title: 'ORGANIZATIONS',
+                  title: 'CORPORATIONS',
                   icon: Icons.domain_outlined,
                   isSelected: _filter == 'organization',
                   onTap: () => setState(() {
                         _filter = 'organization';
                       })),
               _buildTabButton(context,
-                  title: 'TERRITORY',
-                  icon: Icons.location_city_outlined,
-                  isSelected: _filter == 'territory',
-                  onTap: () => setState(() {
-                        _filter = 'territory';
-                      })),
-              _buildTabButton(context,
-                  title: 'WORLD',
+                  title: 'GLOBAL (EARTH)',
                   icon: Icons.public_outlined,
                   isSelected: _filter == 'world',
                   onTap: () => setState(() {

@@ -26,7 +26,7 @@ Future<void> showBuildingAcquisitionDialog(
         backgroundColor: context.panelColor,
         title: const Text('Construction Catalog Unavailable'),
         content: const Text(
-            'No authoritative private building blueprints are available for this Territory right now.'),
+            'No authoritative private building blueprints are available right now.'),
         actions: [
           EarthButton(
             label: 'CLOSE',
@@ -276,12 +276,11 @@ Future<void> showBuildingAcquisitionDialog(
                   : () async {
                       EarthAudioEngine.instance.playClick();
                       Navigator.of(dialogContext).pop();
-                      await action(() => const EarthApi().purchaseBuilding(
+                      await action(() => const EarthApi().purchaseV5Building(
                             buildingType: selectedType,
                             name: nameCtrl.text.trim().isEmpty
                                 ? 'Facility'
                                 : nameCtrl.text.trim(),
-                            territoryId: territoryId,
                           ));
                     },
             ),

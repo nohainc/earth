@@ -149,6 +149,8 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'GET', path: '/api/v5/corporations/{id}/receivership', owner: 'FinanceRoutes', auth: 'HOUSE_SELF', service: 'listV5CorporationReceivershipCases', status: 'ACTIVE' },
   { method: 'POST', path: '/api/v5/corporations/{id}/receivership/{id}/restructure', owner: 'FinanceRoutes', auth: 'HOUSE_SELF', service: 'submitV5CorporationRestructuringPlan', status: 'ACTIVE' },
   { method: 'POST', path: '/api/v5/corporations/{id}/invites', owner: 'InstitutionRoutes', auth: 'INSTITUTION_ROLE', service: 'issueV5CorporationInvite', status: 'ACTIVE' },
+  { method: 'POST', path: '/api/v5/corporations/{id}/leadership/delegate', owner: 'InstitutionRoutes', auth: 'INSTITUTION_ROLE', service: 'delegateV5CorporationLeadership', status: 'ACTIVE' },
+  { method: 'POST', path: '/api/v5/corporations/{id}/dissolution/schedule', owner: 'InstitutionRoutes', auth: 'INSTITUTION_ROLE', service: 'scheduleV5CorporationDissolution', status: 'ACTIVE' },
   { method: 'POST', path: '/api/territories/{id}/commons', owner: 'BuildingRoutes', auth: 'INSTITUTION_ROLE', service: 'declareCommonsDividend', status: 'ACTIVE' },
   { method: 'GET', path: '/api/real-estate/rights', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'listTerritoryRights', status: 'ACTIVE' },
   { method: 'POST', path: '/api/real-estate/rights', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'acquireTerritoryRight', status: 'ACTIVE' },

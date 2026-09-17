@@ -19,3 +19,5 @@ coverage/
 .wrangler/
 failures/
 test/failures/
+.DS_Store
+*.DS_Store

@@ -99,10 +99,126 @@ export async function leaveV5Corporation(repository: PostgresRepository, input: 
     if (prior) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, correlationId: input.correlationId };
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     await tx.query(`UPDATE house_affiliations SET status = 'LEFT', left_game_day = $2 WHERE id = $1`, [affiliation.id, day]);
+    
+    // Check if the leaving human held executive leadership roles
+    const execRoles = await tx.query<{ id: number; role_code: string }>(
+      `SELECT id, role_code FROM institution_governance_roles
+        WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'`,
+      [input.corporationId, input.humanId],
+    );
+    if (execRoles.rows.length > 0) {
+      // Find another active member human to succeed leadership
+      const successor = (await tx.query<{ id: string }>(
+        `SELECT h.id FROM humans h
+           JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.corporation_id = $1 AND ha.status = 'ACTIVE'
+          WHERE h.status = 'ACTIVE' AND h.id <> $2
+          ORDER BY ha.joined_game_day ASC, h.created_at ASC LIMIT 1`,
+        [input.corporationId, input.humanId],
+      )).rows[0];
+      
+      if (successor) {
+        // Transfer roles to successor
+        for (const role of execRoles.rows) {
+          await tx.query(`UPDATE institution_governance_roles SET status = 'INACTIVE' WHERE id = $1`, [role.id]);
+          await tx.query(
+            `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status)
+             VALUES ($1, $2, $3, 'ACTIVE')`,
+            [input.corporationId, successor.id, role.role_code],
+          );
+        }
+      } else {
+        // 0 members remaining - mark corporation as dissolved and release active name lock
+        await tx.query(`UPDATE institution_governance_roles SET status = 'INACTIVE' WHERE institution_id = $1 AND human_id = $2`, [input.corporationId, input.humanId]);
+        await tx.query(`UPDATE corporations SET status = 'DISSOLVED' WHERE id = $1`, [input.corporationId]);
+        await tx.query(`UPDATE institutions SET status = 'DISSOLVED' WHERE id = $1`, [input.corporationId]);
+      }
+    }
+
     await createAffiliationEvent(tx, { id: `V5-LEAVE-${input.correlationId}`, humanId: input.humanId, institutionType: 'CORPORATION', institutionId: input.corporationId, action: 'left', gameDay: day, reason: 'v5_voluntary_departure', correlationId: input.correlationId });
     await enqueueOutbox(tx, { eventKey: `v5-membership-leave:${input.correlationId}`, topic: 'institutions', aggregateType: 'CORPORATION', aggregateId: input.corporationId, payload: { type: 'HOUSE_CORPORATION_LEFT', houseId: house.houseId, corporationId: input.corporationId, gameDay: day } });
     return { ok: true, status: 'LEFT', houseId: house.houseId, corporationId: input.corporationId, gameDay: day, correlationId: input.correlationId };
   });
+}
+
+export async function delegateV5CorporationLeadership(repository: PostgresRepository, input: { humanId: string; corporationId: string; targetHumanId: string; correlationId: string }) {
+  return repository.transaction(async (tx) => {
+    const role = (await tx.query(`SELECT 1 FROM institution_governance_roles WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE' AND role_code = 'CORPORATION_EXECUTIVE'`, [input.corporationId, input.humanId])).rows[0];
+    if (!role) throw new Error('Corporation executive authorization is required');
+    const targetMember = (await tx.query(
+      `SELECT 1 FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.corporation_id = $1 AND ha.status = 'ACTIVE' WHERE h.id = $2 AND h.status = 'ACTIVE'`,
+      [input.corporationId, input.targetHumanId],
+    )).rows[0];
+    if (!targetMember) throw new Error('Target human must be an active member of this Corporation');
+    
+    // Transfer executive and treasurer roles
+    await tx.query(
+      `UPDATE institution_governance_roles SET status = 'INACTIVE'
+        WHERE institution_id = $1 AND human_id = $2 AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')`,
+      [input.corporationId, input.humanId],
+    );
+    await tx.query(
+      `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status)
+       VALUES ($1, $2, 'CORPORATION_EXECUTIVE', 'ACTIVE'), ($1, $2, 'CORPORATION_TREASURER', 'ACTIVE')`,
+      [input.corporationId, input.targetHumanId],
+    );
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    await enqueueOutbox(tx, { eventKey: `v5-leadership-delegate:${input.correlationId}`, topic: 'institutions', aggregateType: 'CORPORATION', aggregateId: input.corporationId, payload: { type: 'CORPORATION_LEADERSHIP_DELEGATED', previousHumanId: input.humanId, newHumanId: input.targetHumanId, corporationId: input.corporationId, gameDay: day } });
+    return { ok: true, corporationId: input.corporationId, previousHumanId: input.humanId, newHumanId: input.targetHumanId, gameDay: day };
+  });
+}
+
+export async function scheduleV5CorporationDissolution(repository: PostgresRepository, input: { humanId: string; corporationId: string; reason?: string; transitionDays?: number; correlationId: string }) {
+  return repository.transaction(async (tx) => {
+    const role = (await tx.query(`SELECT 1 FROM institution_governance_roles WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE' AND role_code = 'CORPORATION_EXECUTIVE'`, [input.corporationId, input.humanId])).rows[0];
+    if (!role) throw new Error('Corporation executive authorization is required');
+    const existing = (await tx.query<{ id: string; effective_game_day: string; status: string }>(
+      `SELECT id, effective_game_day::TEXT, status FROM v5_corporation_dissolution_schedules WHERE corporation_id = $1 AND status = 'PENDING'`,
+      [input.corporationId],
+    )).rows[0];
+    if (existing) return { ok: true, alreadyScheduled: true, scheduleId: existing.id, effectiveGameDay: Number(existing.effective_game_day), status: existing.status };
+    
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const transitionDays = input.transitionDays ?? 3;
+    const effectiveDay = day + transitionDays;
+    const id = `V5-DISSOLVE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    
+    await tx.query(
+      `INSERT INTO v5_corporation_dissolution_schedules
+        (id, corporation_id, initiated_by_human_id, initiated_game_day, effective_game_day, reason, status, correlation_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7)`,
+      [id, input.corporationId, input.humanId, day, effectiveDay, input.reason ?? 'Voluntary Corporation Dissolution', input.correlationId],
+    );
+    await enqueueOutbox(tx, { eventKey: `v5-dissolution-schedule:${input.correlationId}`, topic: 'institutions', aggregateType: 'CORPORATION', aggregateId: input.corporationId, payload: { type: 'CORPORATION_DISSOLUTION_SCHEDULED', corporationId: input.corporationId, initiatedByHumanId: input.humanId, effectiveGameDay: effectiveDay, gameDay: day } });
+    return { ok: true, scheduleId: id, corporationId: input.corporationId, initiatedGameDay: day, effectiveGameDay: effectiveDay, transitionDays, status: 'PENDING' };
+  });
+}
+
+export async function executePendingV5CorporationDissolutionsInTransaction(tx: PostgresRepository, day: number): Promise<{ executed: number }> {
+  const pending = (await tx.query<{ id: string; corporation_id: string }>(
+    `SELECT id, corporation_id FROM v5_corporation_dissolution_schedules
+      WHERE status = 'PENDING' AND effective_game_day <= $1 FOR UPDATE`,
+    [day],
+  )).rows;
+  
+  for (const schedule of pending) {
+    // Release all active member houses
+    const members = (await tx.query<{ id: string; house_id: string }>(
+      `SELECT id, house_id FROM house_affiliations WHERE corporation_id = $1 AND status = 'ACTIVE' FOR UPDATE`,
+      [schedule.corporation_id],
+    )).rows;
+    for (const member of members) {
+      await tx.query(`UPDATE house_affiliations SET status = 'LEFT', left_game_day = $2 WHERE id = $1`, [member.id, day]);
+    }
+    // Deactivate governance roles
+    await tx.query(`UPDATE institution_governance_roles SET status = 'INACTIVE' WHERE institution_id = $1`, [schedule.corporation_id]);
+    // Set corporation and institution to DISSOLVED
+    await tx.query(`UPDATE corporations SET status = 'DISSOLVED' WHERE id = $1`, [schedule.corporation_id]);
+    await tx.query(`UPDATE institutions SET status = 'DISSOLVED' WHERE id = $1`, [schedule.corporation_id]);
+    // Mark schedule as EXECUTED
+    await tx.query(`UPDATE v5_corporation_dissolution_schedules SET status = 'EXECUTED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [schedule.id]);
+    await enqueueOutbox(tx, { eventKey: `v5-dissolution-executed:${schedule.id}`, topic: 'institutions', aggregateType: 'CORPORATION', aggregateId: schedule.corporation_id, payload: { type: 'CORPORATION_DISSOLVED', corporationId: schedule.corporation_id, gameDay: day } });
+  }
+  return { executed: pending.length };
 }
 
 export async function decideV5MembershipApplication(repository: PostgresRepository, input: { humanId: string; corporationId: string; applicationId: string; decision: 'APPROVED' | 'REJECTED'; reason?: string }) {

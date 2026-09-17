@@ -105,6 +105,34 @@ export async function handleInstitutionRoutes(
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation invite creation failed' }, { status: 409 }); }
   }
 
+  const v5DelegateLeadership = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/leadership\/delegate$/);
+  if (v5DelegateLeadership && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ targetHumanId?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.targetHumanId) return Response.json({ ok: false, error: 'Target human ID and idempotency key are required' }, { status: 400 });
+    try {
+      const { delegateV5CorporationLeadership } = await import('./v5-membership-postgres.ts');
+      const result = await withRepository(env, (repository) => delegateV5CorporationLeadership(repository, { humanId: viewer.id, corporationId: v5DelegateLeadership[1], targetHumanId: parsed.value.targetHumanId!, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Leadership delegation failed' }, { status: 409 }); }
+  }
+
+  const v5ScheduleDissolution = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/dissolution\/schedule$/);
+  if (v5ScheduleDissolution && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ reason?: string; transitionDays?: number; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId) return Response.json({ ok: false, error: 'Idempotency key is required' }, { status: 400 });
+    try {
+      const { scheduleV5CorporationDissolution } = await import('./v5-membership-postgres.ts');
+      const result = await withRepository(env, (repository) => scheduleV5CorporationDissolution(repository, { humanId: viewer.id, corporationId: v5ScheduleDissolution[1], reason: parsed.value.reason, transitionDays: parsed.value.transitionDays, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation dissolution scheduling failed' }, { status: 409 }); }
+  }
+
   const institutionBudgetMatch = url.pathname.match(/^\/api\/institutions\/([^/]+)\/budget(?:\/(lines|commitments|fiscal-summary|financial-projection))?$/);
   if (institutionBudgetMatch && request.method === 'GET') {
     const institutionId = institutionBudgetMatch[1];

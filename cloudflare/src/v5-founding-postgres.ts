@@ -29,7 +29,7 @@ export async function quoteV5CorporationFounding(repository: PostgresRepository,
     const founderContext = await founder(tx, humanId);
     const world = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const policy = await foundingPolicy(tx, world);
-    const existing = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1)', [normalized])).rows[0];
+    const existing = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1) AND status = \'ACTIVE\'', [normalized])).rows[0];
     return { ok: true, eligible: !existing, blockers: existing ? ['Corporation name is already in use'] : [], name: normalized, foundingPolicyVersion: policy.version, foundingFeeUnits: policy.fee.toString(), initialTreasuryReserveUnits: policy.reserve.toString(), initialHouseBaseCapacityRateUnits: policy.initialHouseRate.toString(), firstResidentialCapacityUnits: '1', earthCapacityPolicy: await getActiveV5StandardCapacity(tx, world), founderHouseId: founderContext.house_id, effectiveGameDay: world };
   });
 }
@@ -41,7 +41,7 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
     const normalized = input.name.trim();
     if (normalized.length < 3 || normalized.length > 80) throw new Error('Corporation name must be between 3 and 80 characters');
     const house = await founder(tx, input.humanId);
-    const duplicate = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1)', [normalized])).rows[0];
+    const duplicate = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1) AND status = \'ACTIVE\'', [normalized])).rows[0];
     if (duplicate) throw new Error('Corporation name already exists');
     const dayRow = (await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
     const day = Number(dayRow?.game_day ?? 1);

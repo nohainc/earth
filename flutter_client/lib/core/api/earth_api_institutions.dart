@@ -48,6 +48,23 @@ extension EarthApiInstitutions on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
+  Future<Map<String, dynamic>> delegateV5CorporationLeadership({required String corporationId, required String targetHumanId, String? correlationId}) async {
+    final response = await _request('/api/v5/corporations/$corporationId/leadership/delegate', method: 'POST', body: {
+      'targetHumanId': targetHumanId,
+      'correlationId': correlationId ?? newClientCorrelationId('v5-delegate-leadership'),
+    });
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> scheduleV5CorporationDissolution({required String corporationId, String? reason, int? transitionDays, String? correlationId}) async {
+    final response = await _request('/api/v5/corporations/$corporationId/dissolution/schedule', method: 'POST', body: {
+      if (reason != null) 'reason': reason,
+      if (transitionDays != null) 'transitionDays': transitionDays,
+      'correlationId': correlationId ?? newClientCorrelationId('v5-schedule-dissolution'),
+    });
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<List<Map<String, dynamic>>> listCorporations({String? search}) async {
     final query = search == null || search.trim().isEmpty
         ? ''

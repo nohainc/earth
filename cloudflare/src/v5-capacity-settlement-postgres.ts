@@ -126,6 +126,8 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
   const policy = await activePolicy(tx, day - 1);
   if (day <= 1 || !policy) return { ok: true, day, assessedDay: day - 1, skipped: !policy, houses: 0, corporations: 0, paid: 0, partial: 0, arrears: 0 };
   const assessedDay = day - 1;
+  const { executePendingV5CorporationDissolutionsInTransaction } = await import('./v5-membership-postgres.ts');
+  await executePendingV5CorporationDissolutionsInTransaction(tx, assessedDay);
   const [houseSchedule, corporationSchedule] = await Promise.all([loadSchedule(tx, policy.houseScheduleId), loadSchedule(tx, policy.corporationScheduleId)]);
   const members = (await tx.query<Member>(`SELECT ha.house_id AS "houseId", ha.corporation_id AS "corporationId", ho.economic_id AS "houseEconomicId", co.economic_id AS "corporationEconomicId",
       COALESCE((SELECT SUM(bc.slot_footprint) FROM buildings b JOIN building_catalog bc ON bc.id = b.catalog_id WHERE b.owner_economic_id = ho.economic_id AND b.status = 'ACTIVE'), 0)::TEXT AS "buildingUnits"

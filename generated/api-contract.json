@@ -969,6 +969,22 @@
     },
     {
       "method": "POST",
+      "path": "/api/v5/corporations/{id}/leadership/delegate",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "delegateV5CorporationLeadership",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/{id}/dissolution/schedule",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "scheduleV5CorporationDissolution",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
       "path": "/api/territories/{id}/commons",
       "owner": "BuildingRoutes",
       "auth": "INSTITUTION_ROLE",
