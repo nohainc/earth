@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { calculateProgressiveCharge, validateProgressiveBrackets } from '../cloudflare/src/v5-progressive.ts';
 import { aggregateCorporationCapacity, calculateHouseCapacity, quoteCapacityChange, requiredTerritoryUnits } from '../cloudflare/src/v5-capacity.ts';
-import { previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
+import { previewConstitutionAmendment, previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
 import { runV5ShadowSimulation } from '../cloudflare/src/v5-shadow-simulation.ts';
 import { CONSTITUTIONAL_RULE_DEFINITIONS, resolveConstitutionalRuleSet, validateConstitutionalRuleValue } from '../cloudflare/src/v5-constitution.ts';
 import { evaluateOneHouseVote } from '../cloudflare/src/governance-decision.ts';
@@ -117,6 +117,17 @@ test('V5 governance validates future policies and previews proposed brackets', (
   assert.ok(preview[2].delta > 0n);
 });
 
+test('Constitution amendment preview applies typed changes and restores Earth defaults when clearing overrides', () => {
+  const preview = previewConstitutionAmendment({
+    currentRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 4000n },
+    fallbackRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 2500n },
+    changes: [{ ruleCode: 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS', clearOverride: true }],
+  });
+  assert.equal(preview.changes[0].currentValue, 4000n);
+  assert.equal(preview.changes[0].proposedValue, 2500n);
+  assert.equal(preview.proposedRules['CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS'], 2500n);
+});
+
 test('V4 and V5 share strict one-House voting semantics', () => {
   assert.equal(evaluateOneHouseVote({ support: 1, oppose: 1, abstain: 2, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).quorumMet, true);
   assert.equal(evaluateOneHouseVote({ support: 1, oppose: 1, abstain: 2, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).passed, false);
@@ -227,7 +238,9 @@ test('V5 Constitution read model exposes resolved values, provenance, and histor
   assert.match(kernel, /effective_to_game_day/);
   assert.match(kernel, /Keep Constitution responses JSON-safe/);
   assert.match(kernel, /rules: toJsonSafe\(resolved\.rules\)/);
+  assert.match(kernel, /scheduledChanges/);
   assert.match(route, /governance\/v5\/constitution/);
+  assert.match(route, /constitution\/preview/);
   assert.match(client, /getV5Constitution/);
 });
 

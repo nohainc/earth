@@ -1,5 +1,5 @@
 import { calculateProgressiveCharge, validateProgressiveBrackets, type ProgressiveBracket } from './v5-progressive.ts';
-import { validateConstitutionalRuleValue } from './v5-constitution.ts';
+import { getConstitutionalRuleDefinition, validateConstitutionalRuleValue, type EffectiveRuleSet } from './v5-constitution.ts';
 
 export type V5GovernanceActionType =
   | 'CONSTITUTION_AMENDMENT'
@@ -28,6 +28,19 @@ export type ProgressivePolicyPreview = {
   current: { quantity: bigint; totalCharge: bigint; marginalCharge: bigint };
   proposed: { quantity: bigint; totalCharge: bigint; marginalCharge: bigint };
   delta: bigint;
+};
+
+export type ConstitutionAmendmentPreview = {
+  currentRules: EffectiveRuleSet;
+  proposedRules: EffectiveRuleSet;
+  changes: Array<{
+    ruleCode: string;
+    articleCode: string;
+    policyGroup: string;
+    currentValue: unknown;
+    proposedValue: unknown;
+    clearedOverride: boolean;
+  }>;
 };
 
 function positiveInteger(value: unknown, field: string): bigint {
@@ -72,6 +85,46 @@ export function validateV5GovernanceAction(action: V5GovernanceAction, currentGa
   }
   if (!action.scheduleCode?.trim() || !action.authorityInstitutionId?.trim() || !action.scheduleBasisType || !action.brackets?.length) throw new Error('Progressive schedule code, authority, basis, and brackets are required');
   validateProgressiveBrackets(action.brackets);
+}
+
+/**
+ * Build the canonical, side-effect-free impact view for a Constitution
+ * amendment. Callers provide the already-resolved rule set for the target
+ * authority; this keeps preview semantics identical to activation semantics
+ * without allowing the preview endpoint to become a mutation path.
+ */
+export function previewConstitutionAmendment(input: {
+  currentRules: Readonly<EffectiveRuleSet>;
+  fallbackRules?: Readonly<EffectiveRuleSet>;
+  changes: ReadonlyArray<{ ruleCode: string; value?: unknown; clearOverride?: boolean }>;
+}): ConstitutionAmendmentPreview {
+  if (input.changes.length === 0) throw new Error('Constitution amendment requires at least one rule change');
+  const proposedRules: EffectiveRuleSet = { ...input.currentRules };
+  const seen = new Set<string>();
+  const changes = input.changes.map((change) => {
+    const ruleCode = change.ruleCode?.trim();
+    if (!ruleCode || seen.has(ruleCode)) throw new Error('Constitution amendment contains duplicate or missing rule codes');
+    seen.add(ruleCode);
+    const definition = getConstitutionalRuleDefinition(ruleCode);
+    const currentValue = input.currentRules[ruleCode];
+    if (change.clearOverride) {
+      const fallbackValue = input.fallbackRules?.[ruleCode];
+      if (fallbackValue === undefined) delete proposedRules[ruleCode];
+      else proposedRules[ruleCode] = fallbackValue;
+    } else {
+      validateConstitutionalRuleValue(ruleCode, change.value);
+      proposedRules[ruleCode] = change.value as EffectiveRuleSet[string];
+    }
+    return {
+      ruleCode,
+      articleCode: definition.articleCode,
+      policyGroup: definition.policyGroup,
+      currentValue,
+      proposedValue: proposedRules[ruleCode],
+      clearedOverride: Boolean(change.clearOverride),
+    };
+  });
+  return { currentRules: { ...input.currentRules }, proposedRules, changes };
 }
 
 export function previewProgressivePolicyChange(input: {

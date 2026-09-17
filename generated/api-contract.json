@@ -913,6 +913,14 @@
     },
     {
       "method": "POST",
+      "path": "/api/governance/v5/constitution/preview",
+      "owner": "GovernanceRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "previewConstitutionAmendment",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
       "path": "/api/governance/v5/proposals/{id}/vote",
       "owner": "GovernanceRoutes",
       "auth": "HUMAN_SELF",

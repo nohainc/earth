@@ -14,6 +14,9 @@ import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
 import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVotingSettings, resolveGovernanceProposalV4, setOrganizationVotingSettings } from './governance-v4-postgres.ts';
 import { castV5GovernanceVote, createV5GovernanceProposal, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
 import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
+import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
+import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { previewConstitutionAmendment } from './v5-governance.ts';
 
 export async function handleGovernanceRoutes(
   request: Request,
@@ -21,6 +24,34 @@ export async function handleGovernanceRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/governance/v5/constitution/preview' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ corporationId?: string | null; changes?: Array<{ ruleCode?: string; value?: unknown; clearOverride?: boolean }> }>(request);
+    if (!parsed.ok) return parsed.response;
+    const corporationId = parsed.value.corporationId?.trim() || undefined;
+    if (!parsed.value.changes?.length) return Response.json({ ok: false, error: 'At least one Constitution change is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, async (repository) => {
+        if (corporationId) {
+          const allowed = (await repository.query(`SELECT 1 FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.corporation_id = $2 AND h.status = 'ACTIVE' AND ha.status = 'ACTIVE'`, [viewer.id, corporationId])).rows[0];
+          if (!allowed) throw new Error('Corporation membership is required to preview its Constitution');
+        }
+        const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
+        const gameDay = Number(world?.game_day ?? 1);
+        const current = await resolveEffectiveConstitution(repository, { corporationId, gameDay });
+        const earth = corporationId ? await resolveEffectiveConstitution(repository, { gameDay }) : undefined;
+        for (const change of parsed.value.changes!) {
+          const definition = getConstitutionalRuleDefinition(String(change.ruleCode ?? ''));
+          if (!corporationId && definition.authorityModel === 'CORPORATION_LOCAL') throw new Error('Corporation-local rule cannot be previewed at Earth scope');
+          if (corporationId && definition.authorityModel === 'EARTH_LOCKED') throw new Error('Earth-locked rule cannot be previewed at Corporation scope');
+          if (corporationId && change.clearOverride && definition.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
+        }
+        const preview = previewConstitutionAmendment({ currentRules: current.rules, fallbackRules: earth?.rules, changes: parsed.value.changes!.map((change) => ({ ruleCode: String(change.ruleCode ?? ''), value: change.value, clearOverride: change.clearOverride })) });
+        return { ...preview, gameDay, corporationId: corporationId ?? null, versionIds: current.versionIds, generatedFrom: 'postgres-constitutional-kernel-v5-preview' };
+      });
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return new Response(JSON.stringify({ ok: true, ...result }, (_, value) => typeof value === 'bigint' ? value.toString() : value), { headers: { 'content-type': 'application/json; charset=utf-8' } });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Constitution preview failed' }, { status: 400 }); }
+  }
   if (url.pathname === '/api/governance/v5/constitution' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
       const corporationId = url.searchParams.get('corporationId')?.trim() || undefined;

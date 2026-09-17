@@ -92,19 +92,39 @@ export async function getConstitutionReadModel(
   input: { gameDay: number; corporationId?: string },
 ): Promise<Record<string, unknown>> {
   const resolved = await resolveEffectiveConstitution(repository, input);
-  const history = (await repository.query(`
+  const [definitionsResult, historyResult, scheduledResult] = await Promise.all([
+    repository.query(`
+      SELECT rule_code, article_code, value_type, authority_model, policy_group,
+             amendment_class, allowed_values, validation_schema, active
+        FROM constitutional_rule_definitions_v5
+       WHERE active = TRUE
+       ORDER BY article_code, rule_code`),
+    repository.query(`
     SELECT rule_code, authority_type, authority_id, version, value_json,
            effective_from_game_day, effective_to_game_day, status, proposal_id
       FROM constitutional_rule_versions_v5
      WHERE (authority_type = 'EARTH' AND authority_id = 'EARTH')
         OR (authority_type = 'CORPORATION' AND authority_id = $1)
-     ORDER BY rule_code, effective_from_game_day DESC, version DESC`, [input.corporationId ?? ''])).rows;
+     ORDER BY rule_code, effective_from_game_day DESC, version DESC`, [input.corporationId ?? '']),
+    repository.query(`
+      SELECT rule_code, authority_type, authority_id, version, value_json,
+             effective_from_game_day, proposal_id
+        FROM constitutional_rule_versions_v5
+       WHERE effective_from_game_day > $1
+         AND status = 'ACTIVE'
+         AND ((authority_type = 'EARTH' AND authority_id = 'EARTH')
+           OR (authority_type = 'CORPORATION' AND authority_id = $2))
+       ORDER BY effective_from_game_day, rule_code, version`, [input.gameDay, input.corporationId ?? '']),
+  ]);
+  const history = historyResult.rows;
   return {
     gameDay: input.gameDay,
     corporationId: input.corporationId ?? null,
     rules: toJsonSafe(resolved.rules),
     versionIds: resolved.versionIds,
+    definitions: toJsonSafe(definitionsResult.rows),
     history: toJsonSafe(history),
+    scheduledChanges: toJsonSafe(scheduledResult.rows),
     generatedFrom: 'postgres-constitutional-kernel-v5',
   };
 }

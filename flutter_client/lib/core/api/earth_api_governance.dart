@@ -32,6 +32,17 @@ extension EarthApiGovernance on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
+  Future<Map<String, dynamic>> previewV5ConstitutionAmendment({
+    String? corporationId,
+    required List<Map<String, dynamic>> changes,
+  }) async {
+    final response = await _request('/api/governance/v5/constitution/preview', method: 'POST', body: {
+      if (corporationId != null) 'corporationId': corporationId,
+      'changes': changes,
+    });
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<Map<String, dynamic>> voteV5Proposal(
       String proposalId, String choice) async {
     final response = await _request(
