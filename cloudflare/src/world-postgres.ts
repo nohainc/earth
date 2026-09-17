@@ -9,6 +9,7 @@ import { listCorporationBuildingResearch } from './corporation-building-research
 import { assetUnitScale, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { marketFeeRate } from './market-rules.ts';
+import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 
 /** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -198,6 +199,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   const serviceStatus = Object.fromEntries(serviceAssessments.rows.filter((row) => row.game_day === latestServiceDay).map((row) => [row.need_code, row.risk_level === 'NORMAL' ? 'normal' : row.risk_level === 'WATCH' ? 'basic' : 'critical']));
   const gameDay = Number(world.rows[0]?.game_day ?? 1);
   const gameMinute = Number(world.rows[0]?.game_minute ?? 0);
+  const constitution = await getConstitutionReadModel(repository, {
+    gameDay,
+    corporationId: corporation.rows[0]?.id,
+  });
   const house = viewer.rows[0] ?? null;
   const resources = Object.fromEntries(accounts.rows
     .filter((row: any) => row.code !== 'CREDIT')
@@ -336,7 +341,12 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
       corporation_id: territory.corporation_id ?? null,
       corporation_name: territory.corporation_name ?? null,
     } : null,
-    governance: { proposals: proposals.rows, rules: governanceRules.rows },
+    governance: {
+      proposals: proposals.rows,
+      rules: constitution.rules,
+      constitution,
+      legacyRules: governanceRules.rows,
+    },
     districtZoning: capacity ?? {},
     decisionQueue,
     rankings,
