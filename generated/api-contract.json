@@ -1413,7 +1413,7 @@
       "owner": "GovernanceRoutes",
       "auth": "INSTITUTION_ROLE",
       "service": "amendRules",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",

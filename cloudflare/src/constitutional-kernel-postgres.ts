@@ -36,7 +36,10 @@ async function rulesFor(
   return { values, versionIds };
 }
 
-/** Resolves Earth plus optional Corporation overrides for one game day. */
+/**
+ * @mutation-boundary read-only
+ * Resolves Earth plus optional Corporation overrides for one game day.
+ */
 export async function resolveEffectiveConstitution(
   repository: PostgresRepository,
   input: { corporationId?: string; gameDay: number },
@@ -48,7 +51,10 @@ export async function resolveEffectiveConstitution(
   return { rules, versionIds: { ...earth.versionIds, ...corporation.versionIds }, gameDay: input.gameDay };
 }
 
-/** Materializes the resolved rule set once per authority and game day for settlement reuse. */
+/**
+ * @mutation-boundary caller-owned-transaction deterministic-settlement
+ * Materializes the resolved rule set once per authority and game day for settlement reuse.
+ */
 export async function materializeResolvedConstitutionSnapshot(
   tx: PostgresRepository,
   input: { authorityType: 'EARTH' | 'CORPORATION'; authorityId: string; gameDay: number },

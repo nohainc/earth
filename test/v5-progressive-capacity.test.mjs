@@ -216,6 +216,7 @@ test('legacy player-facing constitutional mutation routes are retired', async ()
   const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
   assert.match(organizations, /Direct Charter mutation is retired/);
   assert.match(governance, /Direct voting-setting mutation is retired/);
+  assert.match(governance, /Direct rule mutation is retired/);
   assert.match(institutions, /Direct Corporation tax mutation is retired/);
   assert.match(institutions, /Direct admission-policy mutation is retired/);
   assert.match(registry, /charter\/amend[^\n]+status: 'RETIRED'/);

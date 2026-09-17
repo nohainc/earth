@@ -9,7 +9,6 @@ import {
 import {
   createProposalPostgres,
   castVotePostgres,
-  updateRulePostgres,
 } from './governance-postgres.ts';
 import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
 import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVotingSettings, resolveGovernanceProposalV4, setOrganizationVotingSettings } from './governance-v4-postgres.ts';
@@ -248,21 +247,7 @@ export async function handleGovernanceRoutes(
   }
 
   if (url.pathname === '/api/governance/rules' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ ruleId?: string; version?: string; active?: boolean; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.value;
-    const ruleId = body.ruleId?.trim() ?? '';
-    const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!ruleId || !correlationId) return Response.json({ ok: false, error: 'Rule ID and correlation ID are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) =>
-        updateRulePostgres(repository, { humanId: viewer.id, ruleId, version: body.version, active: body.active, correlationId }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Rule update failed' }, { status: 409 });
-    }
+    return Response.json({ ok: false, error: 'Direct rule mutation is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
   }
 
   return null;
