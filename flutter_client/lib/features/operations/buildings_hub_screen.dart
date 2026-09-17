@@ -299,7 +299,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     BuildContext context, {
     required String buildingName,
     required String buildingType,
-    required String cityId,
     required int creditCost,
     required int materialCost,
     required int footprint,
@@ -313,8 +312,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             : 'Build $buildingName');
     final body = TextEditingController(
         text: publicInvestment
-            ? 'City proposal to construct $buildingName as a public investment project. Construction cost: ${formatWholeNumber(creditCost)} C and $materialCost Materials; footprint: $footprint spaces. After construction is active, citizens can purchase shares.'
-            : 'City proposal to procure $buildingName for municipal service. Construction cost: ${formatWholeNumber(creditCost)} C and $materialCost Materials; footprint: $footprint spaces.');
+            ? 'Corporation-governed public construction for $buildingName. The Corporation Treasury will fund the pooled-capacity project.'
+            : 'Corporation-governed civic construction for $buildingName. The Corporation Treasury will fund the pooled-capacity project.');
     final iconColor =
         publicInvestment ? Colors.lightBlueAccent : Colors.purpleAccent;
 
@@ -376,9 +375,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                publicInvestment
-                    ? 'The city will vote before construction begins. Shares become available once the project is active.'
-                    : 'The city council will vote on this municipal proposal before construction begins.',
+                'Corporation governance authorization is required before this pooled-capacity project can begin.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -507,8 +504,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             onPressed: () => Navigator.pop(dialogContext),
           ),
           EarthButton(
-            label: 'SUBMIT PROPOSAL',
-            icon: Icons.how_to_vote_outlined,
+            label: 'AUTHORIZE PROJECT',
+            icon: Icons.account_balance_outlined,
             variant: EarthButtonVariant.primary,
             onPressed: () async {
               if (title.text.trim().length < 8 ||
@@ -516,16 +513,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 return;
               }
               try {
-                await widget.action(() => const EarthApi().createProposal(
-                      title.text.trim(),
-                      body.text.trim(),
-                      institutionId: cityId,
-                      targetCategory: 'megaproject_procurement',
-                      targetValue: {
-                        'buildingType': buildingType,
-                        if (publicInvestment)
-                          'ownershipClass': 'public_investment',
-                      },
+                await widget.action(() => const EarthApi().purchaseV5Building(
+                      buildingType: buildingType,
+                      name: title.text.trim(),
                     ));
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
               } catch (error) {
@@ -626,7 +616,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       showHeader: false,
       infoBulletPoints: const [
         'Buildings are the productive assets of the economy: they use resources, provide services, and generate returns.',
-        'Private buildings belong to you and generate personal income. Civic buildings belong to a territory and distribute surplus according to territorial rules.',
+        'Private buildings belong to you and generate personal income. Public and civic buildings are Corporation-governed assets that consume pooled capacity and follow Earth and Corporation fiscal rules.',
         'Operating policy affects output and upkeep. Automatic upkeep keeps routine maintenance out of the main decision loop.',
       ],
       trailing: null,
@@ -685,7 +675,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 isIndependent ? context.warningColor : context.primaryColor,
             infoTitle: 'REAL ESTATE & INFRASTRUCTURE ARCHITECTURE',
             infoDescription:
-                '• Private Buildings: Belong to you. Their output goes to your account, while upkeep and operating costs are paid by you.\n\n• Civic Buildings: Belong to a territory or are co-funded through public shares. They expand territorial capacity and services, while surplus is distributed according to active territorial rules.',
+                '• Private Buildings: Belong to you. Their output goes to your account, while upkeep and operating costs are paid by you.\n\n• Public and Civic Buildings: Are Corporation-governed pooled-capacity assets. Construction, operation, and surplus follow authoritative Earth and Corporation rules; Territory records describe physical placement only.',
             title: 'BUILDINGS & REAL ESTATE',
             subtitle:
                 'Productive property assets, personal estate capacity, and municipal civic zoning across Earth',
@@ -3108,7 +3098,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                             context,
                                             buildingName: name.trim(),
                                             buildingType: bType,
-                                            cityId: cityId ?? '',
                                             creditCost: creditCost,
                                             materialCost: matCost,
                                             footprint: footprint,
@@ -3262,7 +3251,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                                 context,
                                                 buildingName: name,
                                                 buildingType: bType,
-                                                cityId: cityId ?? '',
                                                 creditCost: creditCost,
                                                 materialCost: matCost,
                                                 capacityCost: footprint,
@@ -3766,7 +3754,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                       buildingName:
                                           '${nextTierCatalog['name'] ?? name} (Tier ${tier + 1})',
                                       buildingType: bType,
-                                      cityId: cityId,
                                       creditCost: nextCreditCost,
                                       materialCost: nextMatCost,
                                       footprint: nextFootprint,

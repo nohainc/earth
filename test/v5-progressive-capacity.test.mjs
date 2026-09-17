@@ -674,6 +674,18 @@ test('V5 public construction requires Corporation governance authorization', asy
   assert.match(service, /role_code IN \('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER'\)/);
 });
 
+test('V5 civic construction dialog submits the Corporation-owned pooled path', async () => {
+  const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  const dialogStart = buildings.indexOf('Future<void> _showCivicProposalDialog');
+  const dialogEnd = buildings.indexOf('\n  @override\n  Widget build', dialogStart);
+  assert.ok(dialogStart >= 0 && dialogEnd > dialogStart);
+  const dialog = buildings.slice(dialogStart, dialogEnd);
+  assert.match(dialog, /Corporation governance authorization is required/);
+  assert.match(dialog, /purchaseV5Building\(/);
+  assert.doesNotMatch(dialog, /createProposal\(/);
+  assert.doesNotMatch(dialog, /city council|City proposal|territorial rules/i);
+});
+
 test('V5 building research uses authored catalog economics', async () => {
   const migration = await readFile(new URL('../db/migrations/091_v5_building_research_catalog_authority.sql', import.meta.url), 'utf8');
   const service = await readFile(new URL('../cloudflare/src/corporation-building-research-postgres.ts', import.meta.url), 'utf8');
