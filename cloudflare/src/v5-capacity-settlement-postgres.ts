@@ -181,6 +181,10 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
       await applyHouseProductiveStatus(tx, member.houseId, delinquency?.status ?? 'CURRENT');
       const statement = (await tx.query<{ assessed_units: string; paid_units: string; status: string }>(`SELECT assessed_units::TEXT, paid_units::TEXT, status FROM v5_capacity_obligations WHERE capacity_level = 'HOUSE' AND house_id = $1 AND game_day = $2 ORDER BY created_at DESC LIMIT 1`, [member.houseId, assessedDay])).rows[0];
       if (statement) {
+        // Replays return EXISTING from recordObligation. The persisted
+        // obligation status, rather than that replay marker, is the source
+        // of truth for the statement projection.
+        const statementDelinquency = statement.status === 'PAID' ? 'CURRENT' : 'ARREARS';
         await tx.query(`INSERT INTO house_capacity_statements_v5
           (house_id, corporation_id, game_day, residential_units, building_units, total_units, base_rate_units,
            progressive_schedule_id, assessed_rent_units, paid_rent_units, arrears_units, delinquency_status, rules_version)
@@ -189,8 +193,8 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
             residential_units = EXCLUDED.residential_units, building_units = EXCLUDED.building_units,
             total_units = EXCLUDED.total_units, base_rate_units = EXCLUDED.base_rate_units,
             progressive_schedule_id = EXCLUDED.progressive_schedule_id, assessed_rent_units = EXCLUDED.assessed_rent_units,
-            paid_rent_units = EXCLUDED.paid_rent_units, arrears_units = EXCLUDED.arrears_units,
-            delinquency_status = EXCLUDED.delinquency_status, rules_version = EXCLUDED.rules_version`, [member.houseId, member.corporationId, assessedDay, member.buildingUnits.toString(), usage.toString(), baseRate.toString(), houseSchedule.id, statement.assessed_units, statement.paid_units, (BigInt(statement.assessed_units) - BigInt(statement.paid_units)).toString(), result === 'PAID' ? 'CURRENT' : result === 'PARTIAL' ? 'ARREARS' : 'ARREARS', baseRateResolution.ruleSetId]);
+          paid_rent_units = EXCLUDED.paid_rent_units, arrears_units = EXCLUDED.arrears_units,
+            delinquency_status = EXCLUDED.delinquency_status, rules_version = EXCLUDED.rules_version`, [member.houseId, member.corporationId, assessedDay, member.buildingUnits.toString(), usage.toString(), baseRate.toString(), houseSchedule.id, statement.assessed_units, statement.paid_units, (BigInt(statement.assessed_units) - BigInt(statement.paid_units)).toString(), statementDelinquency, baseRateResolution.ruleSetId]);
       }
       if (result !== 'EXISTING') { houseAssessments += 1; if (result === 'PAID') paid += 1; else if (result === 'PARTIAL') partial += 1; else arrears += 1; }
     }

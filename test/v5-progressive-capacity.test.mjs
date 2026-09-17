@@ -713,6 +713,13 @@ test('V5 world catalog exposes authored building research economics', async () =
   assert.match(technology, /bp\['research_duration_game_days'\]/);
 });
 
+test('V5 capacity statement replay preserves the persisted obligation status', async () => {
+  const settlement = await readFile(new URL('../cloudflare/src/v5-capacity-settlement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(settlement, /const statementDelinquency = statement\.status === 'PAID' \? 'CURRENT' : 'ARREARS'/);
+  assert.match(settlement, /statementDelinquency, baseRateResolution\.ruleSetId/);
+  assert.doesNotMatch(settlement, /result === 'PAID' \? 'CURRENT' : result === 'PARTIAL' \? 'ARREARS'/);
+});
+
 test('V5 Territory containers reconcile with exact counts and monotonic sequences', async () => {
   const containers = await readFile(new URL('../cloudflare/src/v5-territory-containers-postgres.ts', import.meta.url), 'utf8');
   assert.match(containers, /const required = BigInt\(state\.required_territory_units\)/);
