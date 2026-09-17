@@ -233,6 +233,8 @@ test('V5 Corporation admission consumes the canonical Constitution rule', async 
   assert.match(membership, /CORPORATION\.ADMISSION_POLICY/);
   assert.match(founding, /INSERT INTO constitutional_rule_versions_v5/);
   assert.match(founding, /CORPORATION\.ADMISSION_POLICY/);
+  assert.match(founding, /CORPORATION\.HOUSE_CAPACITY\.BASE_RATE/);
+  assert.doesNotMatch(founding, /INSERT INTO corporation_capacity_policy_versions/);
   assert.match(membership, /CORPORATION\.HOUSE_CAPACITY\.BASE_RATE/);
   assert.match(membership, /EARTH\.CAPACITY\.HOUSE_PROGRESSIVE_SCHEDULE/);
 });

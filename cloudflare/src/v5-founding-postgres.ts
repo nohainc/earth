@@ -58,9 +58,14 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
       VALUES ($1, 'CORPORATION.ADMISSION_POLICY', 'CORPORATION', $2, 1,
               $3::JSONB, $4, 'ACTIVE')`,
       [`V5-CONST-CORP-ADMISSION-${id}-1`, id, JSON.stringify({ value: input.admissionPolicy }), day]);
+    await tx.query(`INSERT INTO constitutional_rule_versions_v5
+      (id, rule_code, authority_type, authority_id, version, value_json,
+       effective_from_game_day, status)
+      VALUES ($1, 'CORPORATION.HOUSE_CAPACITY.BASE_RATE', 'CORPORATION', $2, 1,
+              $3::JSONB, $4, 'ACTIVE')`,
+      [`V5-CONST-CORP-HOUSE-RATE-${id}-1`, id, JSON.stringify({ value: policy.initialHouseRate.toString() }), day]);
     await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1,'CORPORATION',$2)`, [id, economicId]);
     await tx.query('SELECT earth_provision_corporation_economy($1)', [economicId]);
-    await tx.query(`INSERT INTO corporation_capacity_policy_versions (id, corporation_id, version, house_base_capacity_rate_units, house_schedule_id, effective_from_game_day, status) SELECT $1,$2,1,$3,earth_house_schedule_id,$4,'ACTIVE' FROM v5_capacity_policy_versions WHERE status = 'ACTIVE' AND effective_from_game_day <= $4 ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [`V5-CORP-RATE-${id}`, id, policy.initialHouseRate.toString(), day]);
     await tx.query(
       `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status)
        VALUES ($1, $2, 'CORPORATION_EXECUTIVE', 'ACTIVE'), ($1, $2, 'CORPORATION_TREASURER', 'ACTIVE')`,
