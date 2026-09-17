@@ -662,11 +662,14 @@ test('V5 tax amendment UI does not fabricate economic consequences', async () =>
   assert.match(dialogs, /canonical Constitution service validates this amendment/);
 });
 
-test('V5 building client projections consume server policy multipliers', async () => {
+test('V5 building UI does not fabricate settlement projections', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
-  assert.match(buildings, /building\['output_multiplier'\]/);
-  assert.match(buildings, /building\['cost_multiplier'\]/);
-  assert.doesNotMatch(buildings, /high_output|eco_reserve|frugal/);
+  assert.match(buildings, /SERVER SETTLEMENT REQUIRED/);
+  assert.match(buildings, /settlement_net_/);
+  assert.doesNotMatch(buildings, /building\['output_multiplier'\]/);
+  assert.doesNotMatch(buildings, /building\['cost_multiplier'\]/);
+  assert.doesNotMatch(buildings, /Legacy fallback if output_|Legacy fallback if input_/);
+  assert.doesNotMatch(buildings, /\b8500\b|\b600\b|\b120\b/);
 });
 
 test('V5 cutover rehearsal is fail-closed and produces evidence', async () => {

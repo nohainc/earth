@@ -1604,7 +1604,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         building: const {},
                         effectiveOutputAmount: 0,
                         effectiveOperatingCost: 0,
-                        resourceChanges: _resourceChangesForBuildings(items)),
+                        resourceChanges: _resourceChangesForBuildings(items),
+                        settlementReadModelExpected: true),
                   ),
                   const SizedBox(height: 12),
                   if (isOwner && !isEstatePlot)
@@ -1786,23 +1787,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final category = currentSpec['category']?.toString() ?? 'commercial';
     final footprint = asIntOr(
         currentSpec['slot_footprint'] ?? currentSpec['slotFootprint'], 1);
-    final creditCost = asIntOr(
-        currentSpec['cost_credits'] ?? currentSpec['baseCreditCost'], 8500);
-    final materialCost = asIntOr(
-        currentSpec['cost_materials'] ?? currentSpec['baseMaterialCost'], 120);
-    final dailyYield = asDoubleOr(
-        currentSpec['output_credits'] ??
-            currentSpec['dailyCreditRevenue'] ??
-            currentSpec['dailyOutputCredits'],
-        600);
-    final opCost = asDoubleOr(
-        currentSpec['operating_credits'] ??
-            currentSpec['dailyOperatingCredits'] ??
-            currentSpec['dailyStaffingCredits'],
-        100);
-    final netDailyProfit = dailyYield - opCost;
-    final paybackDays = asIntOr(currentSpec['estimatedPaybackDays'],
-        (creditCost / (netDailyProfit > 0 ? netDailyProfit : 1)).round());
+    final creditCost = asInt(currentSpec['cost_credits']);
+    final materialCost = asInt(currentSpec['cost_materials']);
+    final dailyYield = asDouble(currentSpec['output_credits']);
+    final opCost = asDouble(currentSpec['operating_credits']);
+    final netDailyProfit = dailyYield != null && opCost != null
+        ? dailyYield - opCost
+        : null;
+    final paybackDays = asInt(currentSpec['estimatedPaybackDays']);
     final sensitivity =
         currentSpec['resourceSensitivity']?.toString().toUpperCase() ??
             'MEDIUM';
@@ -1814,16 +1806,18 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
     final hasEnoughSlots = availablePrivateSlots >= footprint;
     final hasEnoughPop = reqPop == 0 || population >= reqPop;
-    final hasEnoughCredits =
-        creditsAvailable == null || creditsAvailable >= creditCost;
-    final hasEnoughMaterials =
-        materialsAvailable == null || materialsAvailable >= materialCost;
+    final hasEnoughCredits = creditCost != null &&
+        (creditsAvailable == null || creditsAvailable >= creditCost);
+    final hasEnoughMaterials = materialCost != null &&
+        (materialsAvailable == null || materialsAvailable >= materialCost);
     final canConstruct = _hasActiveCorporation
-        ? true
+        ? creditCost != null && materialCost != null
         : hasEnoughSlots &&
             hasEnoughPop &&
             hasEnoughCredits &&
-            hasEnoughMaterials;
+            hasEnoughMaterials &&
+            creditCost != null &&
+            materialCost != null;
 
     return Container(
       padding: EdgeInsets.all(context.cardPadding),
@@ -1861,36 +1855,19 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               final bName = b['name']?.toString() ?? bType;
               final bSpace =
                   asIntOr(b['slot_footprint'] ?? b['slotFootprint'], 1);
-              final bCost =
-                  asIntOr(b['cost_credits'] ?? b['baseCreditCost'], 8500);
-              final bOutput = asDoubleOr(
-                  b['output_credits'] ??
-                      b['dailyCreditRevenue'] ??
-                      b['dailyOutputCredits'],
-                  0);
-              final bUpkeep = asDoubleOr(
-                  b['operating_credits'] ??
-                      b['dailyOperatingCredits'] ??
-                      b['dailyStaffingCredits'],
-                  0);
-              final bResourceType =
-                  (b['resource_output_type'] ?? b['dailyOutputResourceType'])
-                      ?.toString();
-              final bResourceAmount = asDoubleOr(
-                  b['output_energy'] ??
-                      b['output_food'] ??
-                      b['output_materials'] ??
-                      b['output_components'] ??
-                      b['output_compute'] ??
-                      b['dailyOutputResourceAmount'],
-                  0);
+              final bCost = asInt(b['cost_credits']);
+              final bOutput = asDouble(b['output_credits']);
+              final bUpkeep = asDouble(b['operating_credits']);
+              final bResourceType = b['resource_output_type']?.toString();
+              final bResourceAmount = asDouble(
+                  bResourceType == null ? null : b['output_$bResourceType']);
               final cardHasCapacity = availablePrivateSlots >= bSpace;
-              final cardHasCredits =
-                  creditsAvailable == null || creditsAvailable >= bCost;
-              final cardHasMaterials = materialsAvailable == null ||
-                  materialsAvailable >=
-                      asIntOr(
-                          b['cost_materials'] ?? b['baseMaterialCost'], 120);
+              final cardHasCredits = bCost != null &&
+                  (creditsAvailable == null || creditsAvailable >= bCost);
+              final bMaterialCost = asInt(b['cost_materials']);
+              final cardHasMaterials = bMaterialCost != null &&
+                  (materialsAvailable == null ||
+                      materialsAvailable >= bMaterialCost);
               final cardCanBuild =
                   cardHasCapacity && cardHasCredits && cardHasMaterials;
               final isSel = _plannerSelectedBlueprint == bType;
@@ -1923,30 +1900,35 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         Text(bName, style: context.widgetTitleStyle),
                         const SizedBox(height: 4),
                         Text(
-                            '$bSpace capacity space${bSpace > 1 ? 's' : ''} · ${formatWholeNumber(bCost)} CRD',
+                            '$bSpace capacity space${bSpace > 1 ? 's' : ''} · ${bCost == null ? 'SERVER QUOTE REQUIRED' : '${formatWholeNumber(bCost)} CRD'}',
                             style: context.widgetFooterStyle),
                         const SizedBox(height: 4),
                         Text(
-                          bResourceAmount > 0 &&
+                          bResourceAmount != null &&
+                                  bResourceAmount > 0 &&
                                   bResourceType != null &&
                                   bResourceType != 'credits'
                               ? 'Output: +${bResourceAmount.toStringAsFixed(1)} ${bResourceType.toUpperCase()}/day'
-                              : 'Net: ${bOutput - bUpkeep >= 0 ? '+' : ''}${formatWholeNumber(bOutput - bUpkeep)} CRD/day',
+                              : bOutput != null && bUpkeep != null
+                                  ? 'Net: ${bOutput - bUpkeep >= 0 ? '+' : ''}${formatWholeNumber(bOutput - bUpkeep)} CRD/day'
+                                  : 'Net: SERVER QUOTE REQUIRED',
                           style: context.bodyStyle.copyWith(
-                            color: bResourceAmount > 0 &&
+                            color: bResourceAmount != null &&
+                                    bResourceAmount > 0 &&
                                     bResourceType != null &&
                                     bResourceType != 'credits'
                                 ? context.secondaryColor
-                                : bOutput - bUpkeep >= 0
+                                : bOutput != null && bUpkeep != null &&
+                                        bOutput - bUpkeep >= 0
                                     ? context.successColor
                                     : context.dangerColor,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Operating cost: -${formatWholeNumber(bUpkeep)} CRD/day',
+                          'Operating cost: ${bUpkeep == null ? 'SERVER QUOTE REQUIRED' : '-${formatWholeNumber(bUpkeep)} CRD/day'}',
                           style: context.widgetFooterStyle.copyWith(
-                            color: bUpkeep > 0
+                            color: bUpkeep != null && bUpkeep > 0
                                 ? context.warningColor
                                 : context.mutedColor,
                           ),
@@ -2010,15 +1992,17 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   metrics: [
                     EarthMetricTile(
                       label: 'ESTIMATED PAYBACK',
-                      value: '~ $paybackDays DAYS',
+                      value: paybackDays == null ? 'UNAVAILABLE' : '~ $paybackDays DAYS',
                       icon: Icons.timer_outlined,
-                      accentColor: paybackDays <= 15
+                      accentColor: paybackDays != null && paybackDays <= 15
                           ? context.successColor
                           : context.primaryColor,
                     ),
                     EarthMetricTile(
                       label: 'PROJECTED NET DAILY',
-                      value: '+${formatWholeNumber(netDailyProfit)} CRD',
+                                      value: netDailyProfit == null
+                                          ? 'UNAVAILABLE'
+                                          : '+${formatWholeNumber(netDailyProfit)} CRD',
                       icon: Icons.trending_up,
                       accentColor: context.successColor,
                     ),
@@ -2068,15 +2052,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           _buildRequirementItem(
                             context,
                             creditsAvailable == null
-                                ? 'Credits: ${formatWholeNumber(creditCost)} required'
-                                : 'Credits: ${formatWholeNumber(creditCost)} required · ${formatWholeNumber(creditsAvailable)} available',
+                                ? creditCost == null
+                                    ? 'Credits: SERVER QUOTE REQUIRED'
+                                    : 'Credits: ${formatWholeNumber(creditCost ?? 0)} required'
+                                : creditCost == null
+                                    ? 'Credits: SERVER QUOTE REQUIRED'
+                                    : 'Credits: ${formatWholeNumber(creditCost ?? 0)} required · ${formatWholeNumber(creditsAvailable)} available',
                             hasEnoughCredits,
                           ),
                           _buildRequirementItem(
                             context,
                             materialsAvailable == null
-                                ? 'Materials: $materialCost required'
-                                : 'Materials: $materialCost required · ${formatWholeNumber(materialsAvailable)} available',
+                                ? materialCost == null
+                                    ? 'Materials: SERVER QUOTE REQUIRED'
+                                    : 'Materials: $materialCost required'
+                                : materialCost == null
+                                    ? 'Materials: SERVER QUOTE REQUIRED'
+                                    : 'Materials: $materialCost required · ${formatWholeNumber(materialsAvailable)} available',
                             hasEnoughMaterials,
                           ),
                           if (reqPop > 0)
@@ -2108,14 +2100,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               final pNetYields =
                                   <(IconData, Color, String, bool)>[];
                               pNetYields.add((
-                                netDailyProfit >= 0
+                                netDailyProfit != null && netDailyProfit >= 0
                                     ? Icons.trending_up
                                     : Icons.trending_down,
-                                netDailyProfit >= 0
+                                netDailyProfit != null && netDailyProfit >= 0
                                     ? context.successColor
                                     : context.dangerColor,
-                                '${netDailyProfit >= 0 ? '+' : ''}${formatWholeNumber(netDailyProfit)} C',
-                                netDailyProfit >= 0,
+                                netDailyProfit == null
+                                    ? 'SERVER QUOTE REQUIRED'
+                                    : '${netDailyProfit >= 0 ? '+' : ''}${formatWholeNumber(netDailyProfit)} C',
+                                netDailyProfit != null && netDailyProfit >= 0,
                               ));
 
                               void addPlannerNet(String key, String label,
@@ -2196,8 +2190,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 buildingName: name,
                                 buildingType: _plannerSelectedBlueprint,
                                 cityId: cityId,
-                                creditCost: creditCost,
-                                materialCost: materialCost,
+                                creditCost: creditCost ?? 0,
+                                materialCost: materialCost ?? 0,
                                 capacityCost: footprint,
                                 remainingCapacity:
                                     availablePrivateSlots - footprint,
@@ -2885,35 +2879,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               addOutput('compute', 'COMPUTE', Icons.memory_rounded,
                   EarthResourceColors.compute);
 
-              // Legacy fallback if output_* was 0
-              if (outputs.isEmpty) {
-                final legacyOutType = item['resourceOutputType']?.toString() ??
-                    item['resource_output_type']?.toString();
-                final legacyOutAmount = asDoubleOr(
-                    item['resourceOutputAmount'] ??
-                        item['resource_output_amount'],
-                    0);
-                final legacyCreditRevenue = asDoubleOr(
-                    item['dailyCreditRevenue'] ?? item['daily_credit_revenue'],
-                    0);
-                if (legacyCreditRevenue > 0) {
-                  outputs.add((
-                    Icons.account_balance_wallet_outlined,
-                    EarthResourceColors.credits,
-                    '${formatWholeNumber(legacyCreditRevenue)} CRD / DAY'
-                  ));
-                }
-                if (legacyOutType != null &&
-                    legacyOutType != 'credits' &&
-                    legacyOutAmount > 0) {
-                  outputs.add((
-                    EarthResourceMeta.forCommodity(legacyOutType).icon,
-                    EarthResourceMeta.forCommodity(legacyOutType).color,
-                    '${legacyOutAmount.toStringAsFixed(1)} ${legacyOutType.toUpperCase()} / DAY',
-                  ));
-                }
-              }
-
               // Inputs / Upkeep (24-resource vector)
               final inputs = <(IconData, Color, String)>[];
               void addInput(
@@ -2949,30 +2914,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               addInput('compute', 'COMPUTE', Icons.memory_rounded,
                   EarthResourceColors.compute);
 
-              // Legacy fallback if input_* was 0
-              if (inputs.isEmpty) {
-                final legacyInType = item['resourceInputType']?.toString() ??
-                    item['resource_input_type']?.toString();
-                final legacyInAmount = asDoubleOr(
-                    item['resourceInputAmount'] ??
-                        item['resource_input_amount'],
-                    0);
-                if (legacyInType != null && legacyInAmount > 0) {
-                  inputs.add((
-                    EarthResourceMeta.forCommodity(legacyInType).icon,
-                    EarthResourceMeta.forCommodity(legacyInType).color,
-                    '-${legacyInAmount.toStringAsFixed(1)} ${legacyInType.toUpperCase()}',
-                  ));
-                }
-              }
-
               final operatingCredits = asDoubleOr(
-                  item['operating_credits'] ??
-                      item['operatingCostCredits'] ??
-                      item['operating_cost_credits'] ??
-                      item['dailyOperatingCredits'] ??
-                      item['daily_operating_credits'] ??
-                      item['dailyStaffingCredits'],
+                  item['operating_credits'],
                   0);
               final operatingEnergy = asDoubleOr(
                   item['operating_energy'] ??
@@ -3000,11 +2943,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                       item['operating_cost_compute'],
                   0);
 
-              final outCreditsVal = asDoubleOr(
-                  item['output_credits'] ??
-                      item['dailyCreditRevenue'] ??
-                      item['daily_credit_revenue'],
-                  0);
+              final outCreditsVal = asDoubleOr(item['output_credits'], 0);
 
               final isPublicInvest = ownership == 'public_investment';
               final isCivicMunicipal = ownership == 'civic';
@@ -3705,15 +3644,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final isOwner = b['owner_id']?.toString() == viewerId;
     final isCivic = ownershipClass == 'civic';
 
-    final resOutType = b['resource_output_type']?.toString();
-    final resOutAmt = asDoubleOr(b['resource_output_amount'], 0);
-    final opCost = asDoubleOr(b['daily_operating_credits'], 0);
-    final isCreditOutput = resOutType == 'credits' || resOutType == null;
-    final policyCostMultiplier = asDoubleOr(b['cost_multiplier'], 1.0);
-    final effectiveOpCost = opCost * policyCostMultiplier;
-    final policyYieldMultiplier = asDoubleOr(b['output_multiplier'], 1.0);
-    final effectiveOutputAmount = resOutAmt * policyYieldMultiplier;
-    final effectiveOutput = isCreditOutput ? effectiveOutputAmount : 0.0;
     final isPublicInvestment = ownershipClass == 'public_investment';
     Map<String, dynamic>? investmentHolding;
     if (investmentShares != null) {
@@ -3862,16 +3792,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           _buildBuildingEconomicsSummary(
             context,
             building: b,
-            effectiveOutputAmount: effectiveOutputAmount,
-            effectiveOperatingCost: effectiveOpCost,
+            effectiveOutputAmount: 0,
+            effectiveOperatingCost: 0,
             isActive: bActive,
           ),
           const SizedBox(height: 10),
           _buildNetResourceLine(
             context,
             building: b,
-            effectiveOutputAmount: effectiveOutputAmount,
-            effectiveOperatingCost: effectiveOpCost,
+            effectiveOutputAmount: 0,
+            effectiveOperatingCost: 0,
           ),
           if (isPublicInvestment) ...[
             const SizedBox(height: 8),
@@ -3883,11 +3813,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   'Purchase shares from the Public Projects & Dividends market section.',
                   style: context.widgetFooterStyle),
           ],
-          if (!isCreditOutput)
-            Text(
-              'Net CRD shows only the credit operating margin; physical output is shown separately.',
-              style: context.widgetFooterStyle,
-            ),
           const SizedBox(height: 6),
 
           // Management actions
@@ -4595,7 +4520,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         building: const {},
         effectiveOutputAmount: 0,
         effectiveOperatingCost: 0,
-        resourceChanges: _resourceChangesForBuildings(buildings));
+        resourceChanges: _resourceChangesForBuildings(buildings),
+        settlementReadModelExpected: true);
   }
 
   Widget _buildInvestmentPortfolioSummary(
@@ -4670,65 +4596,28 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     });
   }
 
-  Map<String, double> _resourceChangesForBuildings(
+  Map<String, double>? _resourceChangesForBuildings(
       List<Map<String, dynamic>> buildings) {
-    final changes = <String, double>{
-      'credits': 0,
-      'energy': 0,
-      'food': 0,
-      'materials': 0,
-      'components': 0,
-      'compute': 0,
-    };
-    for (final building in buildings) {
-      // Inactive and under-construction buildings produce no income and incur no daily operating/upkeep costs
-      if (!_isBuildingActive(building)) {
-        continue;
-      }
-
-      final policy = building['operating_policy']?.toString() ?? 'balanced';
-      final outputMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
-      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
-      double rounded(double value) => (value * 10).ceil() / 10;
-
-      for (final key in [
-        'credits',
-        'energy',
-        'food',
-        'materials',
-        'components',
-        'compute'
-      ]) {
-        // Output calculation (support 24-field vector with legacy fallback)
-        double outVal = asDoubleOr(building['output_$key'], 0);
-        if (outVal == 0 &&
-            building['resource_output_type']?.toString() == key) {
-          outVal = asDoubleOr(building['resource_output_amount'], 0);
-        } else if (outVal == 0 &&
-            key == 'credits' &&
-            (building['resource_output_type']?.toString() == 'credits' ||
-                building['resource_output_type'] == null)) {
-          outVal = asDoubleOr(building['resource_output_amount'], 0);
-        }
-
-        // Upkeep & Operating calculation (support 24-field vector with legacy fallback)
-        double upkeepVal = asDoubleOr(building['upkeep_$key'], 0);
-        double opVal = asDoubleOr(building['operating_$key'], 0);
-        if (key == 'credits' && opVal == 0) {
-          opVal = asDoubleOr(building['daily_operating_credits'], 0);
-        }
-
-        final netDelta = (outVal * outputMultiplier) -
-            ((upkeepVal + opVal) * costMultiplier);
-        if (key == 'credits') {
-          changes['credits'] = changes['credits']! + netDelta;
-        } else {
-          changes[key] =
-              changes[key]! + (key == 'credits' ? netDelta : rounded(netDelta));
-        }
+    // Net production is produced by the game-day settlement. The client must
+    // not reconstruct it from catalog fields or policy multipliers because
+    // that can disagree with the authoritative settlement journal.
+    final reported = <String, double>{};
+    for (final key in [
+      'credits',
+      'energy',
+      'food',
+      'materials',
+      'components',
+      'compute'
+    ]) {
+      final field = 'settlement_net_$key';
+      if (buildings.any((building) => building[field] != null)) {
+        if (buildings.any((building) => building[field] == null)) return null;
+        reported[key] = buildings.fold<double>(
+            0, (sum, building) => sum + (asDouble(building[field]) ?? 0));
       }
     }
-    return changes;
+    return reported.length == 6 ? reported : null;
   }
 
   Widget _buildNetResourceLine(
@@ -4737,61 +4626,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required double effectiveOutputAmount,
     required double effectiveOperatingCost,
     Map<String, double>? resourceChanges,
+    bool settlementReadModelExpected = false,
   }) {
-    final isBuildingActive = _isBuildingActive(building);
-
-    final outputType =
-        building['resource_output_type']?.toString() ?? 'credits';
-    final isCreditOutput = outputType == 'credits';
-    final values = resourceChanges ??
-        (!isBuildingActive
-            ? <String, double>{
-                'credits': 0,
-                'energy': 0,
-                'food': 0,
-                'materials': 0,
-                'components': 0,
-                'compute': 0,
-              }
-            : <String, double>{
-                'credits': (asDoubleOr(building['output_credits'],
-                        isCreditOutput ? effectiveOutputAmount : 0)) -
-                    (asDoubleOr(building['operating_credits'],
-                            effectiveOperatingCost) +
-                        asDoubleOr(building['upkeep_credits'], 0)),
-                'energy': asDoubleOr(building['output_energy'],
-                        outputType == 'energy' ? effectiveOutputAmount : 0) -
-                    (asDoubleOr(building['upkeep_energy'], 0) +
-                        asDoubleOr(building['operating_energy'], 0)),
-                'food': asDoubleOr(building['output_food'],
-                        outputType == 'food' ? effectiveOutputAmount : 0) -
-                    (asDoubleOr(building['upkeep_food'], 0) +
-                        asDoubleOr(building['operating_food'], 0)),
-                'materials': asDoubleOr(
-                        building['output_materials'],
-                        (outputType == 'material' || outputType == 'materials')
-                            ? effectiveOutputAmount
-                            : 0) -
-                    (asDoubleOr(building['upkeep_materials'], 0) +
-                        asDoubleOr(building['operating_materials'], 0)),
-                'components': asDoubleOr(
-                        building['output_components'],
-                        outputType == 'components'
-                            ? effectiveOutputAmount
-                            : 0) -
-                    (asDoubleOr(building['upkeep_components'], 0) +
-                        asDoubleOr(building['operating_components'], 0)),
-                'compute': asDoubleOr(building['output_compute'],
-                        outputType == 'compute' ? effectiveOutputAmount : 0) -
-                    (asDoubleOr(building['upkeep_compute'], 0) +
-                        asDoubleOr(building['operating_compute'], 0)),
-              });
-    if (resourceChanges == null &&
-        isBuildingActive &&
-        !isCreditOutput &&
-        asDoubleOr(building['output_$outputType'], 0) == 0) {
-      values[outputType] = (values[outputType] ?? 0) + effectiveOutputAmount;
+    if (settlementReadModelExpected && resourceChanges == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text('NET PRODUCTION: UNAVAILABLE · A GAME-DAY SETTLEMENT IS REQUIRED',
+            style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+      );
     }
+    if (resourceChanges == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text('NET PRODUCTION: SERVER SETTLEMENT REQUIRED',
+            style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+      );
+    }
+    final values = resourceChanges!;
     final icons = <String, IconData>{
       'credits': Icons.account_balance_wallet_outlined,
       'energy': Icons.bolt_rounded,
@@ -4855,18 +4706,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final outputType = building['resource_output_type']?.toString();
     final hasPhysicalOutput =
         outputType != null && outputType.isNotEmpty && outputType != 'credits';
-    final outputLabel =
-        hasPhysicalOutput ? outputType.toUpperCase() : 'SERVICE CAPACITY';
-    final output = isActive ? effectiveOutputAmount : 0.0;
     final status = !isActive
         ? 'Inactive'
         : hasPhysicalOutput
             ? 'Operational'
             : 'Operational · revenue requires customers';
-    String amount(double value) => value >= 100
-        ? formatWholeNumber(value)
-        : value.toStringAsFixed(value == value.roundToDouble() ? 0 : 1);
-
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(context.cardPadding * .75),
@@ -4882,7 +4726,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           _buildingClarityMetric(
             context,
             label: 'Production',
-            value: '${amount(output)} $outputLabel/day',
+            value: 'UNAVAILABLE · SERVER SETTLEMENT REQUIRED',
             icon: hasPhysicalOutput
                 ? Icons.factory_outlined
                 : Icons.room_service_outlined,
@@ -4891,7 +4735,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           _buildingClarityMetric(
             context,
             label: 'Operating cost',
-            value: '${amount(effectiveOperatingCost)} C/day',
+            value: 'UNAVAILABLE · SERVER SETTLEMENT REQUIRED',
             icon: Icons.payments_outlined,
             color: context.warningColor,
           ),
