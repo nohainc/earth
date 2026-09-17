@@ -97,7 +97,18 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
     await canGovern(tx, input.humanId, input.subjectType, input.subjectId);
     validateAction(input.actionType, input.actionSnapshot);
     const submitted = await currentDay(tx);
-    const rule = { quorumBps: 5000, approvalBps: 5000, votingPeriodDays: 2, implementationDelayDays: 1, ...(input.ruleSnapshot ?? {}) };
+    const electorate = input.subjectType === 'ORGANIZATION'
+      ? await tx.query<{ count: string }>("SELECT COUNT(DISTINCT house_id)::TEXT AS count FROM organization_memberships WHERE organization_id = $1 AND status = 'ACTIVE'", [input.subjectId])
+      : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'");
+    const rule = {
+      quorumBps: 5000,
+      approvalBps: 5000,
+      votingPeriodDays: 2,
+      implementationDelayDays: 1,
+      ...(input.ruleSnapshot ?? {}),
+      electorateSnapshotGameDay: submitted,
+      electorateSize: Number(electorate.rows[0]?.count ?? 0),
+    };
     const proposalId = `GOV4-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     await tx.query(`INSERT INTO governance_proposals_v4 (id, subject_type, subject_id, title, body, action_type, action_snapshot, rule_snapshot, submitted_game_day, voting_start_game_day, voting_end_game_day, execution_game_day, correlation_id, created_by_human_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8::JSONB,$9,$9,$10,$11,$12,$13)`, [proposalId, input.subjectType, input.subjectId, input.title.trim(), input.body?.trim() ?? '', input.actionType, JSON.stringify(input.actionSnapshot), JSON.stringify(rule), submitted, submitted + 1, submitted + 1 + Number(rule.votingPeriodDays) + Number(rule.implementationDelayDays), input.correlationId, input.humanId]);
     await createGameEvent(tx, { id: `GOV4-CREATED-${proposalId}`, category: 'GOVERNANCE', eventType: 'GOVERNANCE_PROPOSAL_CREATED', gameDay: submitted, actorHumanId: input.humanId, subjectType: input.subjectType, subjectId: input.subjectId ?? 'EARTH', title: input.title.trim(), details: { proposalId, actionType }, correlationId: input.correlationId });
@@ -126,9 +137,9 @@ export async function resolveGovernanceProposalV4(repository: PostgresRepository
     if (proposal.status !== 'VOTING') return { ok: true, alreadyProcessed: true, proposal };
     const day = await currentDay(tx);
     if (day <= Number(proposal.voting_end_game_day)) throw new Error('Voting period is still open');
-    const electorate = proposal.subject_type === 'ORGANIZATION' ? await tx.query('SELECT COUNT(*)::INTEGER AS count FROM organization_memberships WHERE organization_id = $1 AND status = \'ACTIVE\'', [proposal.subject_id]) : await tx.query("SELECT COUNT(*)::INTEGER AS count FROM houses WHERE status = 'ACTIVE'");
     const ballots = await tx.query<{ abstain: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'ABSTAIN')::TEXT AS abstain FROM governance_ballots_v4 WHERE proposal_id = $1`, [proposalId]);
-    const decision = evaluateOneHouseVote({ support: Number(proposal.support_votes), oppose: Number(proposal.oppose_votes), abstain: Number(ballots.rows[0]?.abstain ?? 0), electorateSize: Number(electorate.rows[0]?.count ?? 0), quorumBps: Number(object(proposal.rule_snapshot).quorumBps ?? 5000), approvalBps: Number(object(proposal.rule_snapshot).approvalBps ?? 5000) });
+    const ruleSnapshot = object(proposal.rule_snapshot);
+    const decision = evaluateOneHouseVote({ support: Number(proposal.support_votes), oppose: Number(proposal.oppose_votes), abstain: Number(ballots.rows[0]?.abstain ?? 0), electorateSize: Number(ruleSnapshot.electorateSize ?? 0), quorumBps: Number(ruleSnapshot.quorumBps ?? 5000), approvalBps: Number(ruleSnapshot.approvalBps ?? 5000) });
     const { quorumMet, passed } = decision;
     const status = passed ? 'PASSED' : 'REJECTED';
     await tx.query('UPDATE governance_proposals_v4 SET status = $1 WHERE id = $2', [status, proposalId]);
