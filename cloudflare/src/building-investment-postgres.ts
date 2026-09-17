@@ -33,7 +33,7 @@ async function getCorporationBuildingActionContext(repository: PostgresRepositor
     JOIN humans h ON h.id = $2 AND h.status = 'ACTIVE'
     JOIN house_affiliations affiliation ON affiliation.house_id = h.house_id
       AND affiliation.corporation_id = owner.id AND affiliation.status = 'ACTIVE'
-    WHERE b.id = $1 AND b.status = 'ACTIVE'
+    WHERE b.id = $1 AND b.status IN ('ACTIVE','UNDER_CONSTRUCTION')
     FOR UPDATE`, [buildingId, humanId])).rows[0];
   if (!row) throw new Error('Building not found or not owned by the active Corporation');
   const authorized = await repository.query(
@@ -109,6 +109,31 @@ async function upgradeCorporationBuilding(repository: PostgresRepository, input:
   });
 }
 
+async function quoteCorporationBuildingDemolition(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
+    const capacity = await quoteV5CorporationCapacityChange(tx, building.corporation_id, -BigInt(building.slot_footprint), day);
+    return { ok: true, eligible: true, buildingId: building.id, ownerType: 'CORPORATION', footprintReleased: building.slot_footprint, capacity, status: 'ACTIVE_OR_UNDER_CONSTRUCTION', generatedFrom: 'postgres-canonical-corporation-demolition-quote-v5' };
+  });
+}
+
+async function decommissionCorporationBuilding(repository: PostgresRepository, input: { buildingId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
+    if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: input.buildingId, status: 'INACTIVE', correlationId: input.correlationId };
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
+    const capacity = await quoteV5CorporationCapacityChange(tx, building.corporation_id, -BigInt(building.slot_footprint), day);
+    const result = await tx.query<{ id: string }>("UPDATE buildings SET status = 'INACTIVE' WHERE id = $1 AND status IN ('ACTIVE','UNDER_CONSTRUCTION') RETURNING id", [input.buildingId]);
+    if (!result.rows[0]) throw new Error('Building is already inactive');
+    await tx.query("UPDATE construction_projects SET status = 'CANCELLED', cancelled_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId, day]);
+    await rebuildV5CorporationSettlementProfile(tx, building.corporation_id, day);
+    await createGameEvent(tx, { id: `BUILDING-DECOMMISSIONED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_DECOMMISSIONED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: input.buildingId, title: 'Corporation building decommissioned', details: { buildingId: input.buildingId, ownerType: 'CORPORATION', capacityModel: 'V5_POOLED', territoryPlacement: null }, correlationId: input.correlationId });
+    return { ok: true, status: 'INACTIVE', buildingId: input.buildingId, ownerType: 'CORPORATION', v5Capacity: capacity, correlationId: input.correlationId };
+  });
+}
+
 export async function quoteBuildingUpgrade(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
   const owner = (await repository.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
     `SELECT owner.owner_type
@@ -152,6 +177,10 @@ export async function quoteBuildingUpgrade(repository: PostgresRepository, input
 }
 
 export async function quoteBuildingDemolition(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
+  const owner = (await repository.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
+    `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
+  )).rows[0];
+  if (owner?.owner_type === 'CORPORATION') return quoteCorporationBuildingDemolition(repository, input);
   return repository.transaction(async (tx) => {
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const building = await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
@@ -218,6 +247,10 @@ export async function quoteBuildingOperatingMode(repository: PostgresRepository,
 }
 
 export async function decommissionBuilding(repository: PostgresRepository, input: { buildingId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
+  const owner = (await repository.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
+    `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
+  )).rows[0];
+  if (owner?.owner_type === 'CORPORATION') return decommissionCorporationBuilding(repository, input);
   return repository.transaction(async (tx) => {
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const building = (await tx.query<{ id: string; territory_id: string | null; house_id: string; slot_footprint: string }>(`SELECT b.id, b.territory_id, h.house_id, c.slot_footprint::TEXT FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE' JOIN humans h ON h.house_id = o.id AND h.id = $2 AND h.status = 'ACTIVE' JOIN building_catalog c ON c.id = b.catalog_id WHERE b.id = $1 AND b.status IN ('ACTIVE','UNDER_CONSTRUCTION') FOR UPDATE`, [input.buildingId, input.humanId])).rows[0];
