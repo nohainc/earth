@@ -1,20 +1,23 @@
 import type { PostgresRepository } from './repository.ts';
-import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
+import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 
 async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: string, day: number): Promise<{ units: bigint; ruleVersion: string | null; transitionDays: number }> {
-  const rule = await tx.query<{ id: string; value_json: unknown }>(
-    `SELECT id, value_json FROM governance_rules
-      WHERE institution_id = 'EARTH' AND category = 'succession' AND status = 'active'
-        AND effective_from_game_day <= $1
-        AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
-      ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day],
-  );
-  if (!rule.rows[0]) return { units: 0n, ruleVersion: null, transitionDays: 1 };
-  const value = typeof rule.rows[0].value_json === 'string'
-    ? fromNanoMarkup<Record<string, unknown>>(rule.rows[0].value_json)
-    : (rule.rows[0].value_json as Record<string, unknown> ?? {});
+  const ruleRows = (await tx.query<{ id: string; rule_code: string; value_json: Record<string, unknown> }>(
+    `SELECT DISTINCT ON (rule_code) id, rule_code, value_json
+       FROM constitutional_rule_versions_v5
+      WHERE authority_type = 'EARTH' AND authority_id = 'EARTH'
+        AND rule_code = ANY($1::TEXT[])
+        AND status IN ('ACTIVE', 'RETIRED')
+        AND effective_from_game_day <= $2
+        AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)
+      ORDER BY rule_code, effective_from_game_day DESC, version DESC`,
+    [['EARTH.SUCCESSION.COST_UNITS', 'EARTH.SUCCESSION.COST_BPS', 'EARTH.SUCCESSION.TRANSITION_DAYS'], day],
+  )).rows;
+  if (!ruleRows.length) return { units: 0n, ruleVersion: null, transitionDays: 1 };
+  const values = new Map(ruleRows.map((row) => [row.rule_code, row.value_json?.value]));
+  const ruleVersion = ruleRows.map((row) => row.id).sort().join('|');
   const accounts = await tx.query<{ owner_id: string; account_id: string; balance_units: string }>(
     `SELECT o.id AS owner_id, a.id::TEXT AS account_id, a.balance_units::TEXT AS balance_units
        FROM owner_registry o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
@@ -26,20 +29,20 @@ async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: stri
   const ouc = accounts.rows.find((account) => account.owner_id === 'EARTH');
   if (!house || !ouc) throw new Error('Succession cost requires House and EARTH CREDIT accounts');
   const balance = BigInt(house.balance_units);
-  const fixedUnits = BigInt(String(value.successionCostUnits ?? 0));
-  const costBps = BigInt(String(value.successionCostBps ?? 0));
-  const transitionDays = Math.max(0, Math.min(7, Math.trunc(Number(value.successionTransitionDays ?? 1))));
+  const fixedUnits = BigInt(String(values.get('EARTH.SUCCESSION.COST_UNITS') ?? 0));
+  const costBps = BigInt(String(values.get('EARTH.SUCCESSION.COST_BPS') ?? 0));
+  const transitionDays = Math.max(0, Math.min(7, Math.trunc(Number(values.get('EARTH.SUCCESSION.TRANSITION_DAYS') ?? 1))));
   const requested = fixedUnits > 0n ? fixedUnits : (balance * costBps) / 10000n;
   const units = requested > 0n ? (requested < balance ? requested : balance) : 0n;
   if (units === 0n) return { units, ruleVersion: rule.rows[0].id, transitionDays };
   await tx.query(
     `SELECT transaction_id FROM earth_post_transaction($1,$2,0,'SUCCESSION_COST','HOUSE',$3,$4,$5::jsonb)`,
-    [`succession-cost:${houseId}:${day}`, day, houseId, rule.rows[0].id, JSON.stringify([
+    [`succession-cost:${houseId}:${day}`, day, houseId, ruleVersion, JSON.stringify([
       { account_id: house.account_id, asset_id: 1, delta_units: (-units).toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
       { account_id: ouc.account_id, asset_id: 1, delta_units: units.toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
     ])],
   );
-  return { units, ruleVersion: rule.rows[0].id, transitionDays };
+  return { units, ruleVersion, transitionDays };
 }
 
 export async function clearSuccessor(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {

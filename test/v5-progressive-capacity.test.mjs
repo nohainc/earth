@@ -135,6 +135,18 @@ test('Earth and Corporation governance use distinct constitutional rule namespac
   assert.match(governance, /const prefix = subjectType === 'EARTH' \? 'EARTH\.GOVERNANCE' : 'CORPORATION\.GOVERNANCE'/);
 });
 
+test('succession policy reads only typed Earth Constitution rules', async () => {
+  const lifecycle = await readFile(new URL('../cloudflare/src/lifecycle-postgres.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../db/migrations/116_earth_succession_policy_rules.sql', import.meta.url), 'utf8');
+  const start = lifecycle.indexOf('async function applyOptionalSuccessionCost');
+  const end = lifecycle.indexOf('export async function clearSuccessor', start);
+  assert.notEqual(start, -1);
+  assert.doesNotMatch(lifecycle.slice(start, end), /FROM governance_rules/);
+  assert.match(lifecycle.slice(start, end), /constitutional_rule_versions_v5/);
+  assert.match(migration, /EARTH\.SUCCESSION\.COST_UNITS/);
+  assert.match(migration, /jsonb_typeof\(r\.value_json\) = 'object'/);
+});
+
 test('Constitution amendment preview applies typed changes and restores Earth defaults when clearing overrides', () => {
   const preview = previewConstitutionAmendment({
     currentRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 4000n },
@@ -868,7 +880,7 @@ test('V5 capacity statement replay preserves the persisted obligation status', a
 test('V5 capacity statement schema accepts canonical House delinquency states', async () => {
   const migration = await readFile(new URL('../db/migrations/112_v5_capacity_statement_delinquency_status.sql', import.meta.url), 'utf8');
   const manifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.migrationVersion, 115);
+  assert.equal(manifest.migrationVersion, 116);
   for (const status of ['CURRENT', 'ARREARS', 'GRACE', 'EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED']) {
     assert.match(migration, new RegExp(`'${status}'`));
   }
