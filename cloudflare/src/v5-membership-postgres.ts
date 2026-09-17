@@ -4,6 +4,7 @@ import { enqueueOutbox } from './outbox-postgres.ts';
 import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
 import { calculateProgressiveCharge } from './v5-progressive.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 
 type HouseContext = { houseId: string; currentCorporationId: string | null; buildingUnits: bigint };
 
@@ -24,11 +25,14 @@ async function houseContext(tx: PostgresRepository, humanId: string): Promise<Ho
   return { houseId: row.house_id, currentCorporationId: row.corporation_id, buildingUnits: BigInt(buildings.rows[0]?.units ?? '0') };
 }
 
-async function corporation(tx: PostgresRepository, corporationId: string) {
+async function corporation(tx: PostgresRepository, corporationId: string, gameDay: number) {
   const row = (await tx.query<{ id: string; name: string; admission_policy: string }>(`SELECT c.id, i.name, c.admission_policy
     FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1 AND c.status = 'ACTIVE' FOR UPDATE`, [corporationId])).rows[0];
   if (!row) throw new Error('Corporation not found or inactive');
-  const policy = row.admission_policy.toUpperCase();
+  const constitution = await resolveEffectiveConstitution(tx, { corporationId, gameDay });
+  const policy = String(
+    constitution.rules['CORPORATION.ADMISSION_POLICY'] ?? row.admission_policy,
+  ).toUpperCase();
   if (!['OPEN', 'APPROVAL', 'INVITE_ONLY'].includes(policy)) throw new Error('Corporation has an unsupported V5 admission policy');
   return { ...row, admissionPolicy: policy as 'OPEN' | 'APPROVAL' | 'INVITE_ONLY' };
 }
@@ -53,8 +57,8 @@ async function v5Pricing(tx: PostgresRepository, corporationId: string, building
 export async function quoteV5CorporationMembership(repository: PostgresRepository, humanId: string, corporationId: string) {
   return repository.transaction(async (tx) => {
     const house = await houseContext(tx, humanId);
-    const corp = await corporation(tx, corporationId);
     const world = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const corp = await corporation(tx, corporationId, world);
     return { ok: true, corporationId, corporationName: corp.name, admissionPolicy: corp.admissionPolicy, currentCorporationId: house.currentCorporationId, eligible: house.currentCorporationId === null, capacity: await v5Pricing(tx, corporationId, house.buildingUnits, world) };
   });
 }
@@ -62,8 +66,8 @@ export async function quoteV5CorporationMembership(repository: PostgresRepositor
 export async function applyV5CorporationMembership(repository: PostgresRepository, input: { humanId: string; corporationId: string; correlationId: string; inviteToken?: string }) {
   return repository.transaction(async (tx) => {
     const house = await houseContext(tx, input.humanId);
-    const corp = await corporation(tx, input.corporationId);
     const world = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const corp = await corporation(tx, input.corporationId, world);
     if (house.currentCorporationId === input.corporationId) return { ok: true, alreadyMember: true, corporationId: input.corporationId };
     if (house.currentCorporationId) throw new Error('House already belongs to an active Corporation');
     if (corp.admissionPolicy === 'APPROVAL') {
