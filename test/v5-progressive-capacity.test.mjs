@@ -494,9 +494,12 @@ test('legacy governance rules read path is Constitution-backed', async () => {
 
 test('world governance read model uses the canonical Constitution authority', async () => {
   const world = await readFile(new URL('../cloudflare/src/world-postgres.ts', import.meta.url), 'utf8');
+  const readModel = await readFile(new URL('../cloudflare/src/read-postgres.ts', import.meta.url), 'utf8');
   assert.match(world, /getConstitutionReadModel/);
   assert.match(world, /rules: constitution\.rules/);
   assert.match(world, /legacyRules: governanceRules\.rows/);
+  assert.match(readModel, /listGovernanceRules[\s\S]*getConstitutionReadModel/);
+  assert.doesNotMatch(readModel.slice(readModel.indexOf('export async function listGovernanceRules')), /FROM governance_rules/);
 });
 
 test('V5 Corporation fiscal read model does not expose legacy tax-rule authority', async () => {

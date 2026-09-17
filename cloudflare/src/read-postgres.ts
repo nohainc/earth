@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository';
 import { mapTechnologyCatalogRow } from './technology-postgres.ts';
 import { listRankings as listRankingsSnapshot } from './rankings-postgres.ts';
 import { priceUnitsToDisplayPrice } from './market-units.ts';
+import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 
 export { listEvents } from './read-models/events-read.ts';
 export { listHistory } from './read-models/events-read.ts';
@@ -79,7 +80,8 @@ export async function listGovernanceProposals(repository: PostgresRepository): P
 }
 
 export async function listGovernanceRules(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  return { rules: (await repository.query("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC")).rows };
+  const day = Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return getConstitutionReadModel(repository, { gameDay: day });
 }
 
 export async function getServiceStatus(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
