@@ -61,9 +61,10 @@ counterparty accounting and are reconciled with the Economy V2 ledger.
 
 ### CONST-OWNER-001 — Property and ownership
 
-Houses, Cities, and Corporations may own economic assets only through the
-canonical owner/economic-account model. A read projection is never an
-independent balance authority.
+Houses and Corporations may own economic assets only through the canonical
+owner/economic-account model. Territory is physical geography and capacity,
+not an independent economic owner or governing authority. A read projection is
+never an independent balance authority.
 
 ### CONST-HOUSE-001 — House continuity
 
@@ -99,23 +100,28 @@ Budget is spending authority. Treasury is cash. A commitment is a promise.
 Spending is an actual Economy V2 transfer. Grants are transfers between
 institutions and are not recipient spending merely because they increase cash.
 
-### CONST-CITY-001 — Cities
+### CONST-CAPACITY-001 — Territory capacity
 
-Cities are public institutions. Financial distress is handled through defined
-stress, receivership, and recovery rules. Ordinary lack of cash does not
-silently delete a City or erase its residents and obligations.
+EARTH owns the physical Territory capacity framework. Every House consumes one
+protected residential capacity unit, and private or public buildings consume
+their authored physical footprint. Capacity charges use the effective,
+versioned marginal progressive schedule for the settlement game day. Territory
+does not have an independent constitution, tax system, membership layer, or
+political authority.
 
 ### CONST-CORP-001 — Corporations
 
-Corporations are collective economic institutions. Distress, restructuring,
-liquidation, creditor priority, and dissolution follow explicit rules and
-preserve accounting history.
+Corporations are local civic and economic institutions operating within the
+EARTH framework. They may govern Corporation-local rules through the canonical
+proposal and voting process. Distress, restructuring, liquidation, creditor
+priority, and dissolution follow explicit rules and preserve accounting history.
 
 ### CONST-GOV-001 — Governance
 
 Rules and institutional authority change only through authorized governance
-procedures. Historical decisions, ballots, and rule versions are immutable
-records.
+procedures. Constitutional policy values are typed, immutable, effective-dated
+versions resolved for the settlement game day. Historical decisions, ballots,
+rule versions, and resolved Constitution snapshots are immutable records.
 
 ### CONST-RESEARCH-001 — Research
 

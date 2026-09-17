@@ -18,7 +18,7 @@ remain in `GAME_ECONOMY_SPEC.md` and subsystem contracts.
 | CONST-BUILDING-001 | Building V2 planner, effects, and journals | Building Economy V2 integration/property tests |
 | CONST-TAX-001 | Versioned tax rules and `tax_obligations` | Finance scenario and invariant tests |
 | CONST-BUDGET-001 | `institution_budget_lines`, commitments, generic spending engine | budget certification and concurrency tests |
-| CONST-CITY-001 | City fiscal stress/receivership state machine | city finance scenario tests |
+| CONST-CAPACITY-001 | V5 Territory capacity model, progressive capacity settlement, and physical-only Territory authority | V5 capacity invariants and settlement certification |
 | CONST-CORP-001 | Corporation distress, restructuring, liquidation, creditor waterfall | finance and institution scenario tests |
 | CONST-GOV-001 | Proposal state machine, immutable ballots/rule versions, role resolver | governance rule and proposal lifecycle tests |
 | CONST-RESEARCH-001 | `corporation_research_projects`, research capacity, V2 funding | Technology/IP scenario tests |

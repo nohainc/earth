@@ -42,4 +42,8 @@ test('constitutional compliance guard: House continuity keeps economic ownership
   assert.match(houseMortality, /human\.house_id/);
   assert.doesNotMatch(houseMortality, /account_balances|resource_balances/);
   assert.match(read('docs/CONSTITUTION.md'), /House property, contracts, debts, affiliations/);
+  const constitution = read('docs/CONSTITUTION.md');
+  assert.match(constitution, /CONST-CAPACITY-001 — Territory capacity/);
+  assert.match(constitution, /Territory\s+does not have an independent constitution/);
+  assert.doesNotMatch(constitution, /CONST-CITY-001 — Cities/);
 });
