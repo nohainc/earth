@@ -24,9 +24,9 @@ async function getHouseBuildingActionContext(repository: PostgresRepository, bui
 async function getCorporationBuildingActionContext(repository: PostgresRepository, buildingId: string, humanId: string) {
   const row = (await repository.query<{
     id: string; corporation_id: string; owner_economic_id: string; tier: number; family_code: string;
-    slot_footprint: string; construction_credit_units: string; construction_minutes: number;
+    slot_footprint: string; construction_credit_units: string; construction_minutes: number; operating_mode: string;
   }>(`SELECT b.id, owner.id AS corporation_id, b.owner_economic_id, c.tier, c.family_code,
-      c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes
+      c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes, b.operating_mode
     FROM buildings b
     JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id AND owner.owner_type = 'CORPORATION'
     JOIN building_catalog c ON c.id = b.catalog_id
@@ -134,6 +134,22 @@ async function decommissionCorporationBuilding(repository: PostgresRepository, i
   });
 }
 
+async function quoteCorporationBuildingOperatingMode(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
+    return { ok: true, buildingId: building.id, ownerType: 'CORPORATION', currentMode: building.operating_mode, allowedModes: ['CONSERVATIVE', 'BALANCED', 'GROWTH'], generatedFrom: 'postgres-canonical-corporation-policy-contract-v5' };
+  });
+}
+
+async function setCorporationBuildingOperatingMode(repository: PostgresRepository, input: { buildingId: string; humanId: string; mode: string; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
+    const result = await tx.query<{ id: string; operating_mode: string }>('UPDATE buildings SET operating_mode = $1 WHERE id = $2 RETURNING id, operating_mode', [input.mode, input.buildingId]);
+    await createGameEvent(tx, { id: `BUILDING-POLICY-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_OPERATING_POLICY_CHANGED', gameDay: Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1), actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: 'Corporation building operating policy changed', details: { buildingId: building.id, ownerType: 'CORPORATION', operatingMode: result.rows[0].operating_mode, capacityModel: 'V5_POOLED' }, correlationId: input.correlationId });
+    return { ok: true, ownerType: 'CORPORATION', building: result.rows[0], correlationId: input.correlationId };
+  });
+}
+
 export async function quoteBuildingUpgrade(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
   const owner = (await repository.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
     `SELECT owner.owner_type
@@ -230,6 +246,10 @@ export async function upgradeBuilding(repository: PostgresRepository, input: { b
 export async function setBuildingOperatingMode(repository: PostgresRepository, input: { buildingId: string; humanId: string; mode: string; correlationId: string }): Promise<Record<string, unknown>> {
   const mode = input.mode.toUpperCase();
   if (!['CONSERVATIVE', 'BALANCED', 'GROWTH'].includes(mode)) throw new Error('Invalid building operating mode');
+  const owner = (await repository.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
+    `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
+  )).rows[0];
+  if (owner?.owner_type === 'CORPORATION') return setCorporationBuildingOperatingMode(repository, { ...input, mode });
   const result = await repository.query<{ id: string; operating_mode: string }>(`UPDATE buildings b SET operating_mode = $1 FROM owner_registry o JOIN humans h ON h.house_id = o.id WHERE b.id = $2 AND o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE' AND h.id = $3 AND h.status = 'ACTIVE' RETURNING b.id, b.operating_mode`, [mode, input.buildingId, input.humanId]);
   if (!result.rows[0]) throw new Error('Building not found or not owned by the active House');
   return { ok: true, building: result.rows[0], correlationId: input.correlationId };
@@ -237,6 +257,10 @@ export async function setBuildingOperatingMode(repository: PostgresRepository, i
 
 /** Server-owned operating-policy preview. The client must not infer policy effects. */
 export async function quoteBuildingOperatingMode(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
+  const owner = (await repository.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
+    `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
+  )).rows[0];
+  if (owner?.owner_type === 'CORPORATION') return quoteCorporationBuildingOperatingMode(repository, input);
   const row = (await repository.query<{ id: string; operating_mode: string }>(`SELECT b.id, b.operating_mode
     FROM buildings b
     JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE'

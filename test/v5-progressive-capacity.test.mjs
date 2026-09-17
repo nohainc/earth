@@ -978,6 +978,14 @@ test('V5 Corporation building upgrades use Corporation governance and Treasury',
   assert.match(buildings, /upgradeBuilding\(buildingId: buildingId!/);
 });
 
+test('V5 Corporation building policies use Corporation governance', async () => {
+  const service = await readFile(new URL('../cloudflare/src/building-investment-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /setCorporationBuildingOperatingMode/);
+  assert.match(service, /quoteCorporationBuildingOperatingMode/);
+  assert.match(service, /BUILDING_OPERATING_POLICY_CHANGED/);
+  assert.match(service, /ownerType: 'CORPORATION', currentMode: building\.operating_mode/);
+});
+
 test('V5 building lifecycle routes cover policy, demolition, and capital actions', async () => {
   const routes = await readFile(new URL('../cloudflare/src/real-estate-routes.ts', import.meta.url), 'utf8');
   const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
