@@ -21,3 +21,9 @@ test('projection API exposes House, Corporation, and EARTH scopes', () => {
   assert.match(routes, /\/api\/finance\/projection/);
   for (const scope of ['HOUSE', 'CORPORATION', 'EARTH']) assert.match(routes, new RegExp(`scope === '${scope}'`));
 });
+
+test('House projections include the canonical V5 capacity fiscal read model', () => {
+  assert.match(source, /getV5HouseCapacity/);
+  assert.match(source, /capacitySource/);
+  assert.match(source, /unavailable-canonical-capacity-read-model/);
+});
