@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
@@ -62,7 +61,8 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
       {bool canonicalUnavailable = false}) {
     final allRules = _resolveAllRules();
     final serverRules = widget.state.json['constitutionalRules'];
-    final hasServerRules = serverRules is List && serverRules.isNotEmpty;
+    final hasServerRules =
+        !canonicalUnavailable && serverRules is List && serverRules.isNotEmpty;
     final query = _searchQuery.trim().toLowerCase();
 
     final filteredRules = allRules.where((rule) {
