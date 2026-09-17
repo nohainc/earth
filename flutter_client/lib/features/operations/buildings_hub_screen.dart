@@ -299,12 +299,15 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     BuildContext context, {
     required String buildingName,
     required String buildingType,
+    String? buildingId,
     bool publicInvestment = false,
   }) async {
     EarthAudioEngine.instance.playClick();
     final Map<String, dynamic> quote;
     try {
-      quote = await const EarthApi().quoteV5Building(buildingType);
+      quote = buildingId == null
+          ? await const EarthApi().quoteV5Building(buildingType)
+          : await const EarthApi().quoteBuildingUpgrade(buildingId: buildingId!);
     } catch (error) {
       _showBuildingFeedback(
           'Authoritative V5 construction quote unavailable: ${error.toString().replaceFirst('Exception: ', '')}');
@@ -312,8 +315,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     }
     final quotedCreditCost =
         int.tryParse(quote['creditCostUnits']?.toString() ?? '');
-    final quotedFootprint =
-        int.tryParse(quote['footprintUnits']?.toString() ?? '');
+    final quotedFootprint = int.tryParse(
+        (quote['footprintUnits'] ?? quote['targetFootprintUnits'])?.toString() ?? '');
     final quotedMinutes = int.tryParse(
         quote['effectiveConstructionMinutes']?.toString() ?? '');
     final resourceRequirements = (quote['resourceRequirements'] as List?)
@@ -339,8 +342,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final footprint = quotedFootprint;
     final title = TextEditingController(
         text: publicInvestment
-            ? 'Open investment project: $buildingName'
-            : 'Build $buildingName');
+            ? (buildingId == null
+                ? 'Open investment project: $buildingName'
+                : 'Authorize public upgrade for $buildingName')
+            : (buildingId == null
+                ? 'Build $buildingName'
+                : 'Authorize civic upgrade for $buildingName'));
     final body = TextEditingController(
         text: publicInvestment
             ? 'Corporation-governed public construction for $buildingName. The Corporation Treasury will fund the pooled-capacity project.'
@@ -377,9 +384,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    publicInvestment
-                        ? 'Propose Public Investment'
-                        : 'Propose Civic Building',
+                    buildingId != null
+                        ? 'Authorize Civic Upgrade'
+                        : publicInvestment
+                            ? 'Authorize Public Investment'
+                            : 'Authorize Civic Building',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -544,10 +553,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 return;
               }
               try {
-                await widget.action(() => const EarthApi().purchaseV5Building(
-                      buildingType: buildingType,
-                      name: title.text.trim(),
-                    ));
+                await widget.action(() => buildingId == null
+                    ? const EarthApi().purchaseV5Building(
+                        buildingType: buildingType,
+                        name: title.text.trim(),
+                      )
+                    : const EarthApi().upgradeBuilding(buildingId: buildingId!));
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
               } catch (error) {
                 _showBuildingFeedback(
@@ -3734,11 +3745,18 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               : () async {
                                   EarthAudioEngine.instance.playClick();
                                   if (isCivic || isPublicInvestment) {
+                                    final buildingId = b['id']?.toString();
+                                    if (buildingId == null || buildingId.isEmpty) {
+                                      _showBuildingFeedback(
+                                          'Authoritative building identity is unavailable.');
+                                      return;
+                                    }
                                     await _showCivicProposalDialog(
                                       context,
                                       buildingName:
                                           '$name (Tier ${tier + 1})',
                                       buildingType: bType,
+                                      buildingId: buildingId,
                                       publicInvestment: isPublicInvestment,
                                     );
                                   } else {

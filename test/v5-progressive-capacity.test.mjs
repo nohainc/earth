@@ -966,6 +966,18 @@ test('V5 building upgrades use pooled routes and null Territory project context'
   assert.match(service, /building\.owner_economic_id, null, next\.id/);
 });
 
+test('V5 Corporation building upgrades use Corporation governance and Treasury', async () => {
+  const service = await readFile(new URL('../cloudflare/src/building-investment-postgres.ts', import.meta.url), 'utf8');
+  const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  assert.match(service, /owner\.owner_type = 'CORPORATION'/);
+  assert.match(service, /quoteV5CorporationCapacityChange/);
+  assert.match(service, /account_type = 'TREASURY'/);
+  assert.match(service, /Corporation governance authorization is required/);
+  assert.match(service, /rebuildV5CorporationSettlementProfile/);
+  assert.match(buildings, /quoteBuildingUpgrade\(buildingId: buildingId!/);
+  assert.match(buildings, /upgradeBuilding\(buildingId: buildingId!/);
+});
+
 test('V5 building lifecycle routes cover policy, demolition, and capital actions', async () => {
   const routes = await readFile(new URL('../cloudflare/src/real-estate-routes.ts', import.meta.url), 'utf8');
   const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
