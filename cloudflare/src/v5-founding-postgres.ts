@@ -73,14 +73,6 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
       [id, input.humanId],
     );
     await tx.query(
-      `INSERT INTO governance_rules
-        (id, institution_id, name, category, quorum_threshold, approval_threshold,
-         voting_period_days, implementation_delay_days, version, status, created_by,
-         effective_from_game_day)
-       VALUES ($1, $2, $3, 'governance', 0.25, 0.50, 3, 1, 1, 'ACTIVE', $4, $5)`,
-      [`GOV-${id}-V5-BASELINE`, id, `${normalized} Governance Baseline`, input.humanId, day],
-    );
-    await tx.query(
       `INSERT INTO comm_channels (id, scope, scope_id, name, description)
        VALUES ($1, 'corporation', $2, $3, $4)`,
       [`channel-corporation-${id}`, id, normalized, `Private conversation for members of ${normalized}.`],

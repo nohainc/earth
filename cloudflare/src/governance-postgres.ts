@@ -169,6 +169,20 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     };
     const governanceRulePrefix = institutionKind === 'EARTH' ? 'EARTH.GOVERNANCE' : 'CORPORATION.GOVERNANCE';
     const canonicalGovernanceValue = (suffix: string): number | null => canonicalValue(`${governanceRulePrefix}.${suffix}`);
+    if (!ruleRow && canonical) {
+      // Earth and Corporation governance is Constitution-backed. Keep a
+      // synthetic snapshot row for the proposal contract without recreating
+      // a competing legacy governance_rules authority.
+      const prefix = institutionKind === 'EARTH' ? 'EARTH' : 'CORPORATION';
+      ruleRow = {
+        id: `V5-CONST-${prefix}-GOVERNANCE-${input.institutionId}-${constitutionDay}`,
+        value_json: {},
+        quorum_threshold: String((canonicalGovernanceValue('POLICY_QUORUM_BPS') ?? COMMON_GOVERNANCE_DEFAULTS.quorum * 10_000) / 10_000),
+        approval_threshold: String((canonicalGovernanceValue('POLICY_APPROVAL_BPS') ?? COMMON_GOVERNANCE_DEFAULTS.approvalThreshold * 10_000) / 10_000),
+        voting_period_days: canonicalGovernanceValue('VOTING_PERIOD_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays,
+        implementation_delay_days: canonicalGovernanceValue('IMPLEMENTATION_DELAY_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays,
+      };
+    }
     if (!ruleRow) {
       const inst = await tx.query<{ name: string }>("SELECT name FROM institutions WHERE id = $1", [input.institutionId]);
       const instName = inst.rows[0]?.name ?? input.institutionId;
