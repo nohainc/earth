@@ -52,6 +52,18 @@ export function assertConstitutionalAmendableRule(code: string): ConstitutionalR
 export type ConstitutionalRuleValue = boolean | bigint | number | string | ProgressiveBracket[];
 export type EffectiveRuleSet = Record<string, ConstitutionalRuleValue>;
 
+/**
+ * Earth-default Corporation rules have their own public code so a
+ * Corporation may override them, but their default value is supplied by the
+ * Earth rule with the same policy meaning. Keep this mapping explicit so
+ * inheritance cannot silently depend on duplicated seed rows.
+ */
+export function earthDefaultRuleCode(code: string): string | undefined {
+  if (code === 'CORPORATION.HOUSE_CAPACITY.BASE_RATE') return 'EARTH.CAPACITY.BASE_RATE';
+  if (code.startsWith('CORPORATION.GOVERNANCE.')) return code.replace('CORPORATION.GOVERNANCE.', 'EARTH.GOVERNANCE.');
+  return undefined;
+}
+
 export function getConstitutionalRuleDefinition(code: string): ConstitutionalRuleDefinition {
   const found = CONSTITUTIONAL_RULE_DEFINITIONS.find((item) => item.code === code);
   if (!found) throw new Error(`Unknown constitutional rule: ${code}`);
@@ -87,7 +99,10 @@ export function resolveConstitutionalRuleSet(input: {
     const earthValue = input.earth[rule.code];
     const corporationValue = input.corporation?.[rule.code];
     if (rule.authorityModel === 'EARTH_LOCKED' && earthValue !== undefined) resolved[rule.code] = earthValue;
-    else if (rule.authorityModel === 'EARTH_DEFAULT_CORPORATION_OVERRIDE' && (corporationValue !== undefined || earthValue !== undefined)) resolved[rule.code] = corporationValue ?? earthValue;
+    else if (rule.authorityModel === 'EARTH_DEFAULT_CORPORATION_OVERRIDE') {
+      const inheritedValue = earthValue ?? (earthDefaultRuleCode(rule.code) ? input.earth[earthDefaultRuleCode(rule.code)!] : undefined);
+      if (corporationValue !== undefined || inheritedValue !== undefined) resolved[rule.code] = corporationValue ?? inheritedValue;
+    }
     else if (corporationValue !== undefined) resolved[rule.code] = corporationValue;
   }
   return resolved;

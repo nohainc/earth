@@ -227,6 +227,7 @@ test('V5 constitutional rules enforce typed values and authority inheritance', (
   assert.throws(() => validateConstitutionalRuleValue('CORPORATION.ADMISSION_POLICY', 'PUBLIC'), /Invalid value/);
   const earth = {
     'EARTH.CAPACITY.BASE_RATE': 100n,
+    'EARTH.GOVERNANCE.POLICY_QUORUM_BPS': 2500n,
     'CORPORATION.HOUSE_CAPACITY.BASE_RATE': 50n,
     'CORPORATION.ADMISSION_POLICY': 'OPEN',
   };
@@ -238,6 +239,7 @@ test('V5 constitutional rules enforce typed values and authority inheritance', (
   assert.equal(resolved['CORPORATION.HOUSE_CAPACITY.BASE_RATE'], 75n);
   assert.equal(resolved['CORPORATION.ADMISSION_POLICY'], 'INVITE_ONLY');
   assert.equal(resolveConstitutionalRuleSet({ earth })['CORPORATION.HOUSE_CAPACITY.BASE_RATE'], 50n);
+  assert.equal(resolveConstitutionalRuleSet({ earth })['CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS'], 2500n);
 });
 
 test('V5 governance snapshots and strict decision semantics are persisted in the migration', async () => {

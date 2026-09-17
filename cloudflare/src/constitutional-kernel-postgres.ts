@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { CONSTITUTIONAL_RULE_DEFINITIONS, resolveConstitutionalRuleSet, type EffectiveRuleSet } from './v5-constitution.ts';
+import { CONSTITUTIONAL_RULE_DEFINITIONS, earthDefaultRuleCode, resolveConstitutionalRuleSet, type EffectiveRuleSet } from './v5-constitution.ts';
 
 type RuleRow = {
   id: string;
@@ -74,7 +74,13 @@ export async function resolveEffectiveConstitution(
     else if (corporation.values[definition.code] !== undefined) provenance[definition.code] = 'CORPORATION';
     else provenance[definition.code] = 'EARTH';
   }
-  return { rules, versionIds: { ...earth.versionIds, ...corporation.versionIds }, provenance, gameDay: input.gameDay };
+  const versionIds: Record<string, string> = { ...earth.versionIds, ...corporation.versionIds };
+  for (const definition of CONSTITUTIONAL_RULE_DEFINITIONS) {
+    if (definition.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE' || versionIds[definition.code]) continue;
+    const inheritedCode = earthDefaultRuleCode(definition.code);
+    if (inheritedCode && earth.versionIds[inheritedCode]) versionIds[definition.code] = earth.versionIds[inheritedCode];
+  }
+  return { rules, versionIds, provenance, gameDay: input.gameDay };
 }
 
 /**
