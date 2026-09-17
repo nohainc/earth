@@ -626,6 +626,11 @@ test('V5 building research confirmation uses a server quote', async () => {
   assert.match(panel, /required Map<String, dynamic> serverQuote/);
   assert.match(panel, /quotedCost/);
   assert.match(panel, /quotedDuration/);
+  const hub = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  assert.match(hub, /quoteResponse\['currentBlueprint'\]/);
+  assert.match(hub, /quoteResponse\['targetBlueprint'\]/);
+  assert.doesNotMatch(hub, /asDoubleOr\(match\[/);
+  assert.doesNotMatch(hub, /footprint \* currentTier|footprint \* targetTier/);
 });
 
 test('V5 building operations do not project progress from client time', async () => {

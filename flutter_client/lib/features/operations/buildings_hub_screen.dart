@@ -3866,48 +3866,47 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     targetTier = asIntOr(quoteResponse['targetTier'], targetTier);
     final currentTier = asIntOr(quoteResponse['currentTier'],
         asIntOr(building['tier'], 1));
+    final currentBlueprint = quoteResponse['currentBlueprint'] is Map
+        ? Map<String, dynamic>.from(quoteResponse['currentBlueprint'] as Map)
+        : const <String, dynamic>{};
     final serverTarget = quoteResponse['targetBlueprint'] is Map
         ? Map<String, dynamic>.from(quoteResponse['targetBlueprint'] as Map)
         : const <String, dynamic>{};
-    final footprint = math.max(
-        1,
-        asIntOr(serverTarget['slot_footprint'],
-            asIntOr(building['slot_footprint'], 1)));
     final ownership = building['ownership_class']?.toString() ?? 'private';
+    if (currentBlueprint.isEmpty || serverTarget.isEmpty) {
+      _showBuildingFeedback(
+          'The authoritative blueprint comparison is unavailable.');
+      return;
+    }
 
-    final match = catalog.whereType<Map>().firstWhere(
-          (c) => c['type'] == bType || c['building_type'] == bType,
-          orElse: () => <String, dynamic>{},
-        );
-    final baseCost = asDoubleOr(
-        match['construction_credit_units'] ??
-            match['cost_credits'] ??
-            match['baseCreditCost'],
-        0);
-    final costCredits = asDoubleOr(serverQuote['researchCostUnits'], 0);
-    final durationDays = asIntOr(serverQuote['durationDays'], 0);
+    final currentConstructionCost =
+        asDouble(currentBlueprint['construction_credit_units']);
+    final targetConstructionCost =
+        asDouble(serverTarget['construction_credit_units']);
+    final costCredits = asDouble(serverQuote['researchCostUnits']);
+    final durationDays = asInt(serverQuote['durationDays']);
+    if (costCredits == null || durationDays == null) {
+      _showBuildingFeedback('The authoritative research quote is incomplete.');
+      return;
+    }
 
     final isPrivate = ownership == 'private';
     final fundingSource =
         isPrivate ? 'your personal account' : 'your corporation treasury';
 
     // Real CapEx values
-    final costCreditsCur = baseCost;
-    final costCreditsNext = asDoubleOr(
-        serverTarget['construction_credit_units'] ??
-            serverTarget['cost_credits'],
-        baseCost);
+    final costCreditsCur = currentConstructionCost;
+    final costCreditsNext = targetConstructionCost;
 
     // Outputs
     final outputs = <(IconData, Color, String, double, double)>[];
     void addOutput(String key, String label, IconData icon, Color color) {
-      final raw = asDoubleOr(match['output_$key'], 0);
-      if (raw > 0) {
+      final raw = asDouble(currentBlueprint['output_$key']);
+      if (raw != null && raw > 0) {
         final cur = raw;
-        final next = asDoubleOr(
-            serverTarget['output_$key'] ?? serverTarget['output${key[0].toUpperCase()}${key.substring(1)}'],
-            raw);
-        outputs.add((icon, color, label, cur, next));
+        final next = asDouble(serverTarget['output_$key'] ??
+            serverTarget['output${key[0].toUpperCase()}${key.substring(1)}']);
+        if (next != null) outputs.add((icon, color, label, cur, next));
       }
     }
 
@@ -3926,13 +3925,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     // Upkeeps
     final upkeeps = <(IconData, Color, String, double, double)>[];
     void addUpkeep(String key, String label, IconData icon, Color color) {
-      final raw = asDoubleOr(match['upkeep_$key'], 0);
-      if (raw > 0) {
+      final raw = asDouble(currentBlueprint['upkeep_$key']);
+      if (raw != null && raw > 0) {
         final cur = raw;
-        final next = asDoubleOr(
-            serverTarget['upkeep_$key'] ?? serverTarget['upkeep${key[0].toUpperCase()}${key.substring(1)}'],
-            raw);
-        upkeeps.add((icon, color, label, cur, next));
+        final next = asDouble(serverTarget['upkeep_$key'] ??
+            serverTarget['upkeep${key[0].toUpperCase()}${key.substring(1)}']);
+        if (next != null) upkeeps.add((icon, color, label, cur, next));
       }
     }
 
@@ -3946,18 +3944,15 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     addUpkeep('compute', 'COMPUTE', Icons.memory_rounded,
         EarthResourceColors.compute);
 
-    final opCreditsBase = asDoubleOr(
-      match['operating_credits'] ??
-          match['dailyOperatingCredits'] ??
-          match['dailyStaffingCredits'] ??
-          match['daily_operating_credits'],
-      0,
+    final opCreditsBase = asDouble(
+      currentBlueprint['operating_credit_units'] ??
+          currentBlueprint['operating_credits'] ??
+          currentBlueprint['daily_operating_credits'],
     );
-    final opCreditsNext = asDoubleOr(
+    final opCreditsNext = asDouble(
         serverTarget['operating_credit_units'] ??
             serverTarget['operating_credits'] ??
-            serverTarget['operating_cost_credits'],
-        opCreditsBase);
+            serverTarget['operating_cost_credits']);
 
     String formatVal(double val) {
       if (val == val.roundToDouble()) return val.toInt().toString();
@@ -3968,17 +3963,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
     EarthAudioEngine.instance.playClick();
     // Construction days
-    final tierDaysCurrent = math.max(
-        1,
-        (asDoubleOr(match['construction_minutes'], footprint * currentTier * 1440) /
-                1440)
-            .ceil());
-    final tierDaysNext = math.max(
-        1,
-        (asDoubleOr(serverTarget['construction_minutes'],
-                    footprint * targetTier * 1440) /
-                1440)
-            .ceil());
+    final currentMinutes = asDouble(currentBlueprint['construction_minutes']);
+    final targetMinutes = asDouble(serverTarget['construction_minutes']);
+    final tierDaysCurrent = currentMinutes == null
+        ? null
+        : math.max(1, (currentMinutes / 1440).ceil());
+    final tierDaysNext = targetMinutes == null
+        ? null
+        : math.max(1, (targetMinutes / 1440).ceil());
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -4130,7 +4122,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             size: 13, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
                         Text(
-                          '${formatWholeNumber(costCreditsCur)} → ${formatWholeNumber(costCreditsNext)}',
+                          '${costCreditsCur == null ? '—' : formatWholeNumber(costCreditsCur)} → ${costCreditsNext == null ? '—' : formatWholeNumber(costCreditsNext)}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -4152,7 +4144,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             size: 13, color: Colors.amber),
                         const SizedBox(width: 4),
                         Text(
-                          '$tierDaysCurrent d → $tierDaysNext d',
+                          '${tierDaysCurrent == null ? '—' : '$tierDaysCurrent d'} → ${tierDaysNext == null ? '—' : '$tierDaysNext d'}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -4229,7 +4221,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     ],
 
                     // Operating expenses
-                    if (opCreditsBase > 0) ...[
+                    if (opCreditsBase != null &&
+                        opCreditsBase > 0 &&
+                        opCreditsNext != null) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -4290,7 +4284,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         }
         await widget.action(() => const EarthApi().createProposal(
               'Research $bName (Tier $targetTier)',
-              'Corporation proposal to research and unlock blueprints for $bName Tier $targetTier. Duration: $durationDays days, Estimated R&D funding: ${formatWholeNumber(costCredits)} C from corporation treasury.',
+              'Corporation proposal to research and unlock blueprints for $bName Tier $targetTier. Duration: $durationDays days, Authoritative R&D funding: ${formatWholeNumber(costCredits)} C from corporation treasury.',
               institutionId: corpId,
               targetCategory: 'technology',
               targetValue: {
