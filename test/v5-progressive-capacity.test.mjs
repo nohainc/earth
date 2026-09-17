@@ -466,6 +466,14 @@ test('legacy player-facing constitutional mutation routes are retired', async ()
   assert.match(governance, /Legacy tax governance is retired/);
 });
 
+test('V5 Corporation fiscal read model does not expose legacy tax-rule authority', async () => {
+  const fiscal = await readFile(new URL('../cloudflare/src/corporation-fiscal-postgres.ts', import.meta.url), 'utf8');
+  assert.match(fiscal, /canonicalTaxSnapshotAvailable/);
+  assert.match(fiscal, /unavailable-canonical-snapshot/);
+  assert.doesNotMatch(fiscal, /SELECT r\.\* FROM tax_rule_versions/);
+  assert.doesNotMatch(fiscal, /legacy-tax-rule-versions-bridge/);
+});
+
 test('V5 resolution cases preserve Houses and release only selected building capacity', async () => {
   const migration = await readFile(new URL('../db/migrations/085_v5_capacity_resolution_cases.sql', import.meta.url), 'utf8');
   assert.match(migration, /v5_capacity_resolution_cases/);
