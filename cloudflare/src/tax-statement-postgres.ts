@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
+import { getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 
 export async function getTaxStatement(repository: PostgresRepository, humanId: string) {
   const result = await repository.transaction(async (tx) => {
@@ -10,9 +10,9 @@ export async function getTaxStatement(repository: PostgresRepository, humanId: s
       tx.query(`SELECT r.id, r.tax_rule_id, r.category, r.rate_bps, r.version, r.tax_base_definition, r.base_reference, r.nexus_type, r.authority_type, r.authority_id, r.beneficiary_economic_id, r.effective_from_game_day, r.effective_to_game_day FROM tax_rule_versions r WHERE r.effective_from_game_day <= $1 AND (r.effective_to_game_day IS NULL OR r.effective_to_game_day >= $1) AND (r.authority_type = 'EARTH' OR (r.authority_type = 'TERRITORY_GOVERNANCE' AND r.authority_id = $2)) ORDER BY r.category, r.version DESC`, [day, house.territory_id]),
       tx.query(`SELECT id, obligation_type, principal_due_units::TEXT, interest_due_units::TEXT, paid_units::TEXT, due_game_day, status, rule_version, nexus_type, authority_type, authority_id, base_reference FROM financial_obligations WHERE debtor_economic_id = (SELECT o.economic_id FROM owner_registry o WHERE o.id = $1 AND o.owner_type = 'HOUSE') AND obligation_type = 'TAX' ORDER BY due_game_day DESC, id DESC`, [house.house_id]),
       tx.query(`SELECT id, tax_type, tax_base_units::TEXT, amount_units::TEXT, rule_version, game_day, status, nexus_type, authority_type, authority_id, base_reference FROM tax_obligations WHERE taxpayer_economic_id = (SELECT o.economic_id FROM owner_registry o WHERE o.id = $1 AND o.owner_type = 'HOUSE') ORDER BY game_day DESC, id DESC`, [house.house_id]),
-      resolveEffectiveConstitution(tx, { corporationId: house.corporation_id ?? undefined, gameDay: day }),
+      getResolvedConstitutionForDay(tx, { corporationId: house.corporation_id ?? undefined, gameDay: day }),
     ]);
-    return { houseId: house.house_id, territoryId: house.territory_id, corporationId: house.corporation_id, gameDay: day, constitutionalTaxRules: Object.fromEntries(Object.entries(constitution.rules).filter(([code]) => code.includes('.TAX') || code === 'EARTH.HOUSE_INCOME_TAX' || code === 'CORPORATION.HOUSE_INCOME_TAX')), constitutionalTaxVersionIds: Object.fromEntries(Object.entries(constitution.versionIds).filter(([code]) => code.includes('.TAX') || code === 'EARTH.HOUSE_INCOME_TAX' || code === 'CORPORATION.HOUSE_INCOME_TAX')), activeRules: rules.rows, financialObligations: obligations.rows, taxObligations: arrears.rows, generatedFrom: 'postgres-canonical-facts' };
+    return { houseId: house.house_id, territoryId: house.territory_id, corporationId: house.corporation_id, gameDay: day, constitutionSnapshotId: constitution.snapshotId, constitutionalTaxRules: Object.fromEntries(Object.entries(constitution.rules).filter(([code]) => code.includes('.TAX') || code === 'EARTH.HOUSE_INCOME_TAX' || code === 'CORPORATION.HOUSE_INCOME_TAX')), constitutionalTaxVersionIds: Object.fromEntries(Object.entries(constitution.versionIds).filter(([code]) => code.includes('.TAX') || code === 'EARTH.HOUSE_INCOME_TAX' || code === 'CORPORATION.HOUSE_INCOME_TAX')), constitutionalTaxProvenance: Object.fromEntries(Object.entries(constitution.provenance).filter(([code]) => code.includes('.TAX') || code === 'EARTH.HOUSE_INCOME_TAX' || code === 'CORPORATION.HOUSE_INCOME_TAX')), activeRules: rules.rows, financialObligations: obligations.rows, taxObligations: arrears.rows, generatedFrom: 'postgres-canonical-facts' };
   });
   return result;
 }

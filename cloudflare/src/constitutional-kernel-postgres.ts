@@ -109,6 +109,41 @@ export async function materializeResolvedConstitutionSnapshot(
   return { id: existing.id, versionIds: existing.version_ids };
 }
 
+/**
+ * Read the immutable day snapshot used by settlement. The resolver fallback is
+ * intentionally limited to days that have not been materialized yet (for
+ * example, a read immediately before the first settlement tick).
+ */
+export async function getResolvedConstitutionForDay(
+  repository: PostgresRepository,
+  input: { corporationId?: string; gameDay: number },
+): Promise<{ rules: EffectiveRuleSet; versionIds: Record<string, string>; provenance: Record<string, 'EARTH' | 'CORPORATION'>; snapshotId: string | null; gameDay: number }> {
+  const authorityType = input.corporationId ? 'CORPORATION' : 'EARTH';
+  const authorityId = input.corporationId ?? 'EARTH';
+  const snapshot = (await repository.query<{
+    id: string;
+    rules_json: EffectiveRuleSet;
+    version_ids: Record<string, string>;
+    provenance_json: Record<string, 'EARTH' | 'CORPORATION'>;
+  }>(
+    `SELECT id, rules_json, version_ids, provenance_json
+       FROM resolved_constitution_snapshots_v5
+      WHERE authority_type = $1 AND authority_id = $2 AND game_day = $3`,
+    [authorityType, authorityId, input.gameDay],
+  )).rows[0];
+  if (snapshot) {
+    return {
+      rules: snapshot.rules_json,
+      versionIds: snapshot.version_ids,
+      provenance: snapshot.provenance_json,
+      snapshotId: snapshot.id,
+      gameDay: input.gameDay,
+    };
+  }
+  const resolved = await resolveEffectiveConstitution(repository, input);
+  return { ...resolved, snapshotId: null };
+}
+
 export async function getConstitutionReadModel(
   repository: PostgresRepository,
   input: { gameDay: number; corporationId?: string },

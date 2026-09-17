@@ -358,7 +358,7 @@ test('House and Corporation fiscal read models expose canonical tax rules and pr
   const corporation = await readFile(new URL('../cloudflare/src/corporation-fiscal-postgres.ts', import.meta.url), 'utf8');
   assert.match(house, /constitutionalTaxRules/);
   assert.match(house, /constitutionalTaxVersionIds/);
-  assert.match(house, /resolveEffectiveConstitution/);
+  assert.match(house, /getResolvedConstitutionForDay/);
   assert.match(corporation, /taxRulesSource/);
   assert.match(corporation, /constitution-snapshot-v5/);
   assert.match(corporation, /constitutionalTaxVersionIds/);
@@ -387,10 +387,18 @@ test('V5 Constitution read model exposes resolved values, provenance, and histor
   assert.match(kernel, /rules: toJsonSafe\(resolved\.rules\)/);
   assert.match(kernel, /earthRules/);
   assert.match(kernel, /earthVersionIds/);
+  assert.match(kernel, /getResolvedConstitutionForDay/);
   assert.match(kernel, /scheduledChanges/);
   assert.match(route, /governance\/v5\/constitution/);
   assert.match(route, /constitution\/preview/);
   assert.match(client, /getV5Constitution/);
+});
+
+test('V5 tax statements consume assessed-day Constitution snapshots with provenance', async () => {
+  const statement = await readFile(new URL('../cloudflare/src/tax-statement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(statement, /getResolvedConstitutionForDay/);
+  assert.match(statement, /constitutionSnapshotId/);
+  assert.match(statement, /constitutionalTaxProvenance/);
 });
 
 test('legacy player-facing constitutional mutation routes are retired', async () => {
