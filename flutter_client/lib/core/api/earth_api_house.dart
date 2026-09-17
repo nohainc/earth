@@ -74,6 +74,16 @@ extension EarthApiHouse on EarthApi {
           };
   }
 
+  Future<Map<String, dynamic>> getHouseAutomation() async {
+    final response = await _request('/api/house/automation');
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{
+            'ok': false,
+            'error': 'Automation configuration unavailable'
+          };
+  }
+
   Future<Map<String, dynamic>> unlockHousePerk(String perkKey) async {
     final response = await _request(
       '/api/house/perks/unlock',

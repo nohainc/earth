@@ -20,9 +20,9 @@ test('V4 architecture freeze is present and aligned with the canonical model', (
 
 test('V4 documentation index identifies the architecture freeze as canonical', () => {
   const status = read('docs/DOCUMENT_STATUS.md');
-  assert.match(status, /`V4_TARGET_ARCHITECTURE\.md`\s*\|\s*CANONICAL/);
-  assert.match(status, /`V4_DOMAIN_MODEL\.md`\s*\|\s*CANONICAL/);
-  assert.match(status, /`V4_IMPLEMENTATION_STATUS\.md`\s*\|\s*CANONICAL/);
+  assert.match(status, /`V4_TARGET_ARCHITECTURE\.md`\s*\|\s*(?:CURRENT-)?CANONICAL/);
+  assert.match(status, /`V4_DOMAIN_MODEL\.md`\s*\|\s*(?:CURRENT-)?CANONICAL/);
+  assert.match(status, /`V4_IMPLEMENTATION_STATUS\.md`\s*\|\s*(?:CURRENT-)?CANONICAL/);
 });
 
 test('clean baseline and migration manifest remain frozen and contiguous', () => {
@@ -31,5 +31,8 @@ test('clean baseline and migration manifest remain frozen and contiguous', () =>
   assert.match(read('db/migrations/001_baseline.sha256'), /^[a-f0-9]{64}/);
   const manifest = JSON.parse(read('db/schema-manifest.json'));
   assert.equal(manifest.baseline, 'db/baseline/001_baseline.sql');
-  assert.equal(manifest.migrationVersion, 82);
+  const migrationHead = fs.readdirSync(path.join(root, 'db/migrations'))
+    .map((file) => Number(file.match(/^(\d+)_/)?.[1] ?? 0))
+    .reduce((max, version) => Math.max(max, version), 0);
+  assert.equal(manifest.migrationVersion, migrationHead);
 });

@@ -23,6 +23,8 @@ Future<void> showResearchComposerDialog(
       0;
   final budget = TextEditingController(text: initialCost.toString());
   String focus = 'efficiency';
+  Map<String, dynamic> serverQuote = const {};
+  bool quoteLoading = false;
   Map<String, dynamic> selectedEntry() => entries.firstWhere(
         (item) => item['name'].toString() == name,
         orElse: () => entries.first,
@@ -58,7 +60,10 @@ Future<void> showResearchComposerDialog(
                                   child: Text(item['name'].toString())))
                               .toList(),
                           onChanged: (value) {
-                            if (value != null) setState(() => name = value);
+                            if (value != null) {
+                              setState(() => serverQuote = const {});
+                              name = value;
+                            }
                           },
                           decoration: const InputDecoration(
                               labelText: 'Technology catalogue')),
@@ -98,6 +103,13 @@ Future<void> showResearchComposerDialog(
                               'Effects are defined by the approved technology catalogue.',
                         ),
                       ),
+                      if (serverQuote['ok'] == true) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Server quote: ${serverQuote['quote']?['researchCostUnits'] ?? '—'} units · ${serverQuote['quote']?['researchDurationGameDays'] ?? '—'} game days · completes on game day ${serverQuote['quote']?['completesGameDay'] ?? '—'}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
                     ]),
                   ),
                 ),
@@ -106,16 +118,44 @@ Future<void> showResearchComposerDialog(
                       onPressed: () => Navigator.pop(dialogContext),
                       child: const Text('Cancel')),
                   FilledButton(
-                      onPressed: () async {
+                      onPressed: quoteLoading
+                          ? null
+                          : () async {
+                              if (serverQuote['ok'] != true) {
+                                setState(() => quoteLoading = true);
+                                try {
+                                  final quote = await const EarthApi()
+                                      .quoteResearch(name);
+                                  if (dialogContext.mounted) {
+                                    setState(() {
+                                      serverQuote = quote;
+                                      quoteLoading = false;
+                                    });
+                                  }
+                                } catch (_) {
+                                  if (dialogContext.mounted) {
+                                    setState(() => quoteLoading = false);
+                                  }
+                                }
+                                return;
+                              }
                         final amount = double.tryParse(budget.text.trim());
-                        if (amount == null || amount < minimumBudget(name)) {
+                        final quotedCost = double.tryParse(serverQuote['quote']
+                                    is Map
+                                ? (serverQuote['quote'] as Map)['researchCostUnits']
+                                    ?.toString() ?? ''
+                                : '') ??
+                            0;
+                        if (amount == null || amount < quotedCost) {
                           return;
                         }
                         await action(() => const EarthApi()
                             .startResearch(name, amount, focus: focus));
                         if (dialogContext.mounted) Navigator.pop(dialogContext);
                       },
-                      child: const Text('Start')),
+                      child: Text(serverQuote['ok'] == true
+                          ? 'Start Research'
+                          : 'Get Server Quote')),
                 ],
               );
             },

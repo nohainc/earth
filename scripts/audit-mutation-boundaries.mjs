@@ -18,7 +18,7 @@ for (const name of names) {
 
   const hasTransaction = /(?:repository|repo|tx)\.transaction\(/.test(source);
   const hasExplicitBoundary = source.includes('@mutation-boundary caller-owned-transaction') || source.includes('@mutation-boundary atomic-sql');
-  const hasReplayBoundary = source.includes('correlationId') || source.includes('correlation_id') || source.includes('@mutation-boundary deterministic-settlement') || name === 'scheduler-postgres.ts' || name === 'roles-postgres.ts' || name === 'auth-postgres.ts' || name === 'outbox-postgres.ts';
+  const hasReplayBoundary = source.includes('correlationId') || source.includes('correlation_id') || source.includes('@mutation-boundary deterministic-settlement') || source.includes('@mutation-boundary read-only') || name === 'scheduler-postgres.ts' || name === 'roles-postgres.ts' || name === 'auth-postgres.ts' || name === 'outbox-postgres.ts';
   if (!hasTransaction && !hasExplicitBoundary && name !== 'financial-postgres.ts') failures.push(`${name}: mutation adapter has no explicit transaction boundary`);
   if (!hasReplayBoundary) failures.push(`${name}: mutation adapter has no visible idempotency/correlation boundary`);
   audited.push({ file: name, mutationFunctions, transaction: hasTransaction || hasExplicitBoundary || name === 'financial-postgres.ts', replayBoundary: hasReplayBoundary });

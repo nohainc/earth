@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
@@ -77,91 +76,20 @@ Future<bool?> showBuildingDetailUpgradeDialog(
               .whereType<Map>()
               .map((m) => Map<String, dynamic>.from(m))
               .toList()
-          : [
-              {
-                'tier': 1,
-                'name': '$bName (Standard)',
-                'upgradeCreditCost': 0,
-                'upgradeMaterialCost': 0,
-                'dailyCreditRevenue':
-                    asDoubleOr(building['resource_output_amount'], 600),
-                'dailyOperatingCredits':
-                    asDoubleOr(building['daily_operating_credits'], 80),
-                'upkeep_energy': asDoubleOr(building['upkeep_energy'], 0.5),
-                'upkeep_food': asDoubleOr(building['upkeep_food'], 0.25),
-                'upkeep_materials': asDoubleOr(building['upkeep_materials'], 0),
-                'upkeep_components':
-                    asDoubleOr(building['upkeep_components'], 0),
-                'upkeep_compute': asDoubleOr(building['upkeep_compute'], 0),
-                'operating_credits':
-                    asDoubleOr(building['daily_operating_credits'], 80),
-                'unlockedPerks': [
-                  'Autonomous Operations',
-                  'Local District Footprint'
-                ],
-                'description':
-                    'Base foundational tier (EARTH Open Technology).',
-              },
-              {
-                'tier': 2,
-                'name': '$bName (Advanced Tier 2)',
-                'upgradeCreditCost': 9500,
-                'upgradeMaterialCost': 120,
-                'upgradeComponentsCost': 20,
-                'construction_days': 2,
-                'dailyCreditRevenue':
-                    asDoubleOr(building['resource_output_amount'], 600) * 1.35,
-                'dailyOperatingCredits':
-                    asDoubleOr(building['daily_operating_credits'], 80) * 1.25,
-                'upkeep_energy':
-                    asDoubleOr(building['upkeep_energy'], 0.5) * 1.2,
-                'upkeep_food': asDoubleOr(building['upkeep_food'], 0.25) * 1.2,
-                'upkeep_materials':
-                    asDoubleOr(building['upkeep_materials'], 0) * 1.2,
-                'upkeep_components':
-                    asDoubleOr(building['upkeep_components'], 0) * 1.2,
-                'upkeep_compute':
-                    asDoubleOr(building['upkeep_compute'], 0) * 1.2,
-                'operating_credits':
-                    asDoubleOr(building['daily_operating_credits'], 80) * 1.25,
-                'unlockedPerks': [
-                  'Expanded Capacity (+35%)',
-                  'Logistics Automation'
-                ],
-                'requiredCityPopulation': 12,
-                'description': 'Upgraded engineering tier with enhanced yield.',
-              },
-              {
-                'tier': 3,
-                'name': '$bName (Master Tier 3)',
-                'upgradeCreditCost': 24000,
-                'upgradeMaterialCost': 280,
-                'upgradeComponentsCost': 45,
-                'upgradeComputeCost': 30,
-                'construction_days': 3,
-                'dailyCreditRevenue':
-                    asDoubleOr(building['resource_output_amount'], 600) * 2.10,
-                'dailyOperatingCredits':
-                    asDoubleOr(building['daily_operating_credits'], 80) * 1.80,
-                'upkeep_energy':
-                    asDoubleOr(building['upkeep_energy'], 0.5) * 1.6,
-                'upkeep_food': asDoubleOr(building['upkeep_food'], 0.25) * 1.6,
-                'upkeep_materials':
-                    asDoubleOr(building['upkeep_materials'], 0) * 1.6,
-                'upkeep_components':
-                    asDoubleOr(building['upkeep_components'], 0) * 1.6,
-                'upkeep_compute':
-                    asDoubleOr(building['upkeep_compute'], 0) * 1.6,
-                'operating_credits':
-                    asDoubleOr(building['daily_operating_credits'], 80) * 1.80,
-                'unlockedPerks': [
-                  'District Franchise Contracts',
-                  'Regional Multiplier (+15%)'
-                ],
-                'requiredCityPopulation': 25,
-                'description': 'Master-tier commercial installation.',
-              },
-            ];
+          : rawTiers is List
+              ? rawTiers.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+              : <Map<String, dynamic>>[];
+
+  final nextTier = currentTier + 1;
+  final quote = await const EarthApi().quoteBuildingUpgrade(buildingId: bId);
+  if (quote['eligible'] != true || nextTier > 5) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text((quote['blockers'] as List?)?.join(', ') ?? 'Upgrade quote unavailable')),
+      );
+    }
+    return false;
+  }
 
   if (bType == 'private-estate-plot') {
     if (researchedCatalogTiers.length <= 1) {
@@ -172,7 +100,6 @@ Future<bool?> showBuildingDetailUpgradeDialog(
     }
   }
 
-  final nextTier = currentTier + 1;
   final currentTierSpec = tiers.firstWhere(
     (t) => asIntOr(t['tier'], 0) == currentTier,
     orElse: () => <String, dynamic>{},
@@ -181,17 +108,17 @@ Future<bool?> showBuildingDetailUpgradeDialog(
     (t) => asIntOr(t['tier'], 0) == nextTier,
     orElse: () => <String, dynamic>{},
   );
-  final hasNextTier = nextTierSpec.isNotEmpty && currentTier < 4;
+  final targetCatalog = quote['targetCatalog'];
+  if (targetCatalog is Map) {
+    nextTierSpec.addAll(Map<String, dynamic>.from(targetCatalog));
+  }
+  final hasNextTier = nextTierSpec.isNotEmpty && currentTier < 5;
 
-  final upgradeCreditCost =
-      asIntOr(nextTierSpec['upgradeCreditCost'], 4800 * nextTier);
-  final upgradeMaterialCost =
-      asIntOr(nextTierSpec['upgradeMaterialCost'], 30 * nextTier);
-  final upgradeCompCost =
-      asIntOr(nextTierSpec['upgradeComponentsCost'], 20 * nextTier);
+  final upgradeCreditCost = asIntOr(quote['creditCostUnits'], 0);
+  final upgradeMaterialCost = asIntOr(nextTierSpec['cost_materials'], 0);
+  final upgradeCompCost = asIntOr(nextTierSpec['cost_components'], 0);
   final upgradeComputeCost = asIntOr(nextTierSpec['upgradeComputeCost'], 0);
-  final upgradeDays = math.max(
-      1, asIntOr(nextTierSpec['construction_days'], footprint * nextTier));
+  final upgradeDays = (asIntOr(quote['constructionMinutes'], 0) / 1440).ceil();
   final reqPop = asIntOr(nextTierSpec['requiredCityPopulation'], 0);
 
   // Helper to extract resource vector from spec or building
@@ -210,34 +137,29 @@ Future<bool?> showBuildingDetailUpgradeDialog(
       currentTierSpec,
       ['upkeep_energy', 'input_energy'],
       asDoubleOr(building['upkeep_energy'], 0));
-  final nextUpkeepEnergy = getVal(
-      nextTierSpec, ['upkeep_energy', 'input_energy'], currUpkeepEnergy * 1.2);
+  final nextUpkeepEnergy = getVal(nextTierSpec, ['upkeep_energy', 'input_energy']);
 
   final currUpkeepFood = getVal(currentTierSpec, ['upkeep_food', 'input_food'],
       asDoubleOr(building['upkeep_food'], 0));
-  final nextUpkeepFood =
-      getVal(nextTierSpec, ['upkeep_food', 'input_food'], currUpkeepFood * 1.2);
+  final nextUpkeepFood = getVal(nextTierSpec, ['upkeep_food', 'input_food']);
 
   final currUpkeepMat = getVal(
       currentTierSpec,
       ['upkeep_materials', 'input_materials'],
       asDoubleOr(building['upkeep_materials'], 0));
-  final nextUpkeepMat = getVal(nextTierSpec,
-      ['upkeep_materials', 'input_materials'], currUpkeepMat * 1.2);
+  final nextUpkeepMat = getVal(nextTierSpec, ['upkeep_materials', 'input_materials']);
 
   final currUpkeepComp = getVal(
       currentTierSpec,
       ['upkeep_components', 'input_components'],
       asDoubleOr(building['upkeep_components'], 0));
-  final nextUpkeepComp = getVal(nextTierSpec,
-      ['upkeep_components', 'input_components'], currUpkeepComp * 1.2);
+  final nextUpkeepComp = getVal(nextTierSpec, ['upkeep_components', 'input_components']);
 
   final currUpkeepCompute = getVal(
       currentTierSpec,
       ['upkeep_compute', 'input_compute'],
       asDoubleOr(building['upkeep_compute'], 0));
-  final nextUpkeepCompute = getVal(nextTierSpec,
-      ['upkeep_compute', 'input_compute'], currUpkeepCompute * 1.2);
+  final nextUpkeepCompute = getVal(nextTierSpec, ['upkeep_compute', 'input_compute']);
 
   // Current vs Next Operating Costs
   final currOpCredits = getVal(
@@ -247,33 +169,29 @@ Future<bool?> showBuildingDetailUpgradeDialog(
   final nextOpCredits = getVal(
       nextTierSpec,
       ['operating_credits', 'daily_operating_credits', 'dailyOperatingCredits'],
-      currOpCredits * 1.25);
+      0);
 
   final currOpEnergy =
       getVal(currentTierSpec, ['operating_energy', 'operatingCostEnergy'], 0);
-  final nextOpEnergy = getVal(nextTierSpec,
-      ['operating_energy', 'operatingCostEnergy'], currOpEnergy * 1.25);
+  final nextOpEnergy = getVal(nextTierSpec, ['operating_energy', 'operatingCostEnergy']);
 
   final currOpFood =
       getVal(currentTierSpec, ['operating_food', 'operatingCostFood'], 0);
-  final nextOpFood = getVal(
-      nextTierSpec, ['operating_food', 'operatingCostFood'], currOpFood * 1.25);
+  final nextOpFood = getVal(nextTierSpec, ['operating_food', 'operatingCostFood']);
 
   final currOpMat = getVal(
       currentTierSpec, ['operating_materials', 'operatingCostMaterials'], 0);
-  final nextOpMat = getVal(nextTierSpec,
-      ['operating_materials', 'operatingCostMaterials'], currOpMat * 1.25);
+  final nextOpMat = getVal(nextTierSpec, ['operating_materials', 'operatingCostMaterials']);
 
   final currOpComp = getVal(
       currentTierSpec, ['operating_components', 'operatingCostComponents'], 0);
-  final nextOpComp = getVal(nextTierSpec,
-      ['operating_components', 'operatingCostComponents'], currOpComp * 1.25);
+  final nextOpComp = getVal(nextTierSpec, ['operating_components', 'operatingCostComponents']);
 
   final currOpCompute =
       getVal(currentTierSpec, ['operating_compute', 'operatingCostCompute'], 0);
-  final nextOpCompute = getVal(nextTierSpec,
-      ['operating_compute', 'operatingCostCompute'], currOpCompute * 1.25);
+  final nextOpCompute = getVal(nextTierSpec, ['operating_compute', 'operatingCostCompute']);
 
+  if (!context.mounted) return false;
   return await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(

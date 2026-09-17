@@ -140,7 +140,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   title: territoryName,
                   subtitle: 'CURRENT RESIDENCY',
                   infoDescription:
-                      'Current territory facts available to this House. Open Territory to inspect services, capacity, and residency options.',
+                      'Current physical capacity-container facts available to this House. Open the overview to inspect capacity and residency context.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

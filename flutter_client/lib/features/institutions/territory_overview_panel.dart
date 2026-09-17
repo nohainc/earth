@@ -4,8 +4,7 @@ import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 
-/// Dedicated Territory overview. Membership and residency are deliberately
-/// shown as separate facts, matching the V4 institutional model.
+/// Read-only physical capacity-container overview for the V5 world model.
 class TerritoryOverviewPanel extends StatelessWidget {
   final EarthState state;
   final Map<String, dynamic> commonsData;
@@ -60,22 +59,14 @@ class TerritoryOverviewPanel extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       EarthPageCockpit(
         tag: 'SOCIETY',
-        status: id == null ? 'NO ACTIVE RESIDENCY' : 'PRIMARY RESIDENCY',
+        status: id == null ? 'NO RESIDENCY CONTEXT' : 'RESIDENCY CONTEXT',
         statusColor: context.primaryColor,
-        infoTitle: 'TERRITORY OVERVIEW',
+        infoTitle: 'PHYSICAL CAPACITY CONTAINERS',
         infoDescription:
-            'Territory is a scarce physical jurisdiction. Residency, organization membership, building ownership, and use rights are separate relationships. Capacity and prices come from the server snapshot.',
+            'Territory records are standardized physical capacity containers. Residency, Corporation affiliation, building ownership, and capacity use are separate relationships. Values come from the server snapshot.',
         title: name.toUpperCase(),
-        subtitle:
-            'Residency, capacity, governing authority, and local economic conditions',
-        actions: [
-          EarthButton(
-              label: 'MANAGE USE RIGHTS',
-              icon: Icons.key_outlined,
-              onPressed: onNavigate == null
-                  ? null
-                  : () => onNavigate!('territory-commons')),
-        ],
+        subtitle: 'Physical capacity, residency, and Corporation context',
+        actions: const [],
         metrics: [
           CockpitMetric(
               label: 'Residents',
@@ -91,17 +82,17 @@ class TerritoryOverviewPanel extends StatelessWidget {
       ),
       const SizedBox(height: 20),
       EarthSection(
-          title: 'JURISDICTION & CAPACITY',
+          title: 'RESIDENCY & CAPACITY CONTEXT',
           showSurface: true,
           child: Column(children: [
-            _row(context, 'PRIMARY RESIDENCY', name),
-            _row(context, 'GOVERNING AUTHORITY', governing ?? 'NOT REPORTED'),
+            _row(context, 'RESIDENCY CONTEXT', name),
+            _row(context, 'CORPORATION CONTEXT', governing ?? 'NOT REPORTED'),
             _row(context, 'HOUSE CAPACITY', _display(used, total)),
             _row(context, 'PRIVATE USE CAPACITY', _display(slotsUsed, slots)),
           ])),
       const SizedBox(height: 18),
       EarthSection(
-        title: 'EXPLORE ACTIVE TERRITORIES',
+        title: 'ACTIVE CAPACITY CONTAINERS',
         showSurface: true,
         child: availableTerritories.isEmpty
             ? Text('Territory directory is not available in this snapshot.',
@@ -130,34 +121,18 @@ class TerritoryOverviewPanel extends StatelessWidget {
       ),
       const SizedBox(height: 18),
       EarthSection(
-          title: 'WHAT YOU CAN DO HERE',
+          title: 'V5 CAPACITY MODEL',
           showSurface: true,
-          child: Wrap(spacing: 10, runSpacing: 10, children: [
-            OutlinedButton.icon(
-                onPressed: onNavigate == null
-                    ? null
-                    : () => onNavigate!('territory-commons'),
-                icon: const Icon(Icons.key_outlined),
-                label: const Text('Acquire or release use rights')),
-            OutlinedButton.icon(
-                onPressed:
-                    onNavigate == null ? null : () => onNavigate!('buildings'),
-                icon: const Icon(Icons.domain_outlined),
-                label: const Text('View productive assets')),
-            OutlinedButton.icon(
-                onPressed: onNavigate == null
-                    ? null
-                    : () => onNavigate!('communities'),
-                icon: const Icon(Icons.forum_outlined),
-                label: const Text('Find local communities')),
-          ])),
+          child: Text(
+              'Buildings consume House or Corporation pooled capacity. The number of physical containers is derived from occupied capacity and does not create a political or placement choice.',
+              style: context.widgetFooterStyle)),
       if (commonsData.isNotEmpty) ...[
         const SizedBox(height: 18),
         EarthSection(
             title: 'LOCAL COMMONS',
             showSurface: true,
             child: Text(
-                'Use-right and commons statements are available in Territories → Manage use rights.',
+                'Commons and use-right records are retained as historical/read-only context; they are not a V5 building-placement control.',
                 style: context.widgetFooterStyle)),
       ],
     ]);

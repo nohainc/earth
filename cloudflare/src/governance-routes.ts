@@ -13,6 +13,7 @@ import {
 } from './governance-postgres.ts';
 import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
 import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVotingSettings, resolveGovernanceProposalV4, setOrganizationVotingSettings } from './governance-v4-postgres.ts';
+import { castV5GovernanceVote, createV5GovernanceProposal, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
 
 export async function handleGovernanceRoutes(
   request: Request,
@@ -20,6 +21,43 @@ export async function handleGovernanceRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/governance/v5/proposals' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => listV5GovernanceProposals(repository, viewer.id));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+  if (url.pathname === '/api/governance/v5/proposals' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ subjectType?: 'EARTH' | 'CORPORATION'; subjectId?: string | null; actionType?: 'EARTH_CAPACITY_POLICY' | 'CORPORATION_HOUSE_RATE' | 'PROGRESSIVE_SCHEDULE' | 'CORPORATION_ADMISSION_POLICY'; payload?: Record<string, unknown>; title?: string; body?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.subjectType || !parsed.value.actionType || !parsed.value.payload || !parsed.value.title?.trim()) return Response.json({ ok: false, error: 'Subject, action, payload, title, and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => createV5GovernanceProposal(repository, { humanId: viewer.id, subjectType: parsed.value.subjectType!, subjectId: parsed.value.subjectId ?? null, actionType: parsed.value.actionType!, payload: parsed.value.payload!, title: parsed.value.title!, body: parsed.value.body, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 proposal creation failed' }, { status: 409 }); }
+  }
+  const v5Vote = url.pathname.match(/^\/api\/governance\/v5\/proposals\/([^/]+)\/vote$/);
+  if (v5Vote && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ choice?: 'SUPPORT' | 'OPPOSE' | 'ABSTAIN'; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.choice || !['SUPPORT', 'OPPOSE', 'ABSTAIN'].includes(parsed.value.choice)) return Response.json({ ok: false, error: 'Valid choice and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => castV5GovernanceVote(repository, { humanId: viewer.id, proposalId: v5Vote[1], choice: parsed.value.choice!, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 ballot failed' }, { status: 409 }); }
+  }
+  const v5Resolve = url.pathname.match(/^\/api\/governance\/v5\/proposals\/([^/]+)\/resolve$/);
+  if (v5Resolve && request.method === 'POST') {
+    try {
+      const result = await withRepository(env, (repository) => resolveV5GovernanceProposal(repository, v5Resolve[1]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 proposal resolution failed' }, { status: 409 }); }
+  }
+
   if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => repository.query(
       "SELECT id, institution_id, name, category, value_json, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days, version, status, effective_from_game_day, effective_to_game_day FROM governance_rules WHERE status = 'active' ORDER BY institution_id, category, version DESC",

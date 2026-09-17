@@ -32,7 +32,7 @@ class CivicStatusPanel extends StatelessWidget {
             : null) ??
         membership?['city_id'];
     final citizenship = membership?['corporation_name']?.toString() != null
-        ? 'Territory resident'
+        ? 'Corporation resident'
         : 'Independent citizen';
     final standing =
         human['standing'] ?? human['civic_standing'] ?? 'UNAVAILABLE';
@@ -48,7 +48,7 @@ class CivicStatusPanel extends StatelessWidget {
       infoBulletPoints: const [
         'Your current place in the civic system: residency, standing, voting access, and obligations.',
         'These details explain what you can do in governance today.',
-        'Territory commons, services, and organization memberships remain on Institutions and your House record.',
+        'Corporation services, pooled capacity, and organization memberships remain on Institutions and your House record.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,6 +98,169 @@ class CivicStatusPanel extends StatelessWidget {
   }
 }
 
+class V5GovernanceReviewPanel extends StatefulWidget {
+  final EarthState state;
+  final Future<void> Function(Future<EarthState> Function()) action;
+
+  const V5GovernanceReviewPanel({
+    super.key,
+    required this.state,
+    required this.action,
+  });
+
+  @override
+  State<V5GovernanceReviewPanel> createState() => _V5GovernanceReviewPanelState();
+}
+
+class _V5GovernanceReviewPanelState extends State<V5GovernanceReviewPanel> {
+  final EarthApi _api = const EarthApi();
+  List<Map<String, dynamic>> _proposals = const [];
+  bool _loading = true;
+  String? _error;
+  String _scope = 'ALL';
+  final Set<String> _busyIds = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final response = await _api.listV5Proposals();
+      final rows = response['proposals'];
+      if (rows is! List) throw Exception('V5 proposals unavailable');
+      if (!mounted) return;
+      setState(() {
+        _proposals = rows
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Future<void> _vote(String id, String choice) async {
+    if (_busyIds.contains(id)) return;
+    setState(() => _busyIds.add(id));
+    try {
+      await _api.voteV5Proposal(id, choice);
+      await widget.action(() => _api.world());
+      await _load();
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _proposals.where((proposal) {
+      if (_scope == 'ALL') return true;
+      return proposal['subject_type']?.toString().toUpperCase() == _scope;
+    }).toList(growable: false);
+
+    return EarthSection(
+      title: 'V5 GOVERNANCE · EARTH & CORPORATION',
+      showSurface: false,
+      infoBulletPoints: const [
+        'V5 decisions are scoped to Earth or your active Corporation affiliation.',
+        'The server determines eligibility, quorum, support, opposition, and effective day.',
+        'Territory governments are not a V5 authority scope.',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'ALL', label: Text('ALL')),
+              ButtonSegment(value: 'EARTH', label: Text('EARTH')),
+              ButtonSegment(value: 'CORPORATION', label: Text('CORPORATION')),
+            ],
+            selected: {_scope},
+            onSelectionChanged: (selection) =>
+                setState(() => _scope = selection.first),
+          ),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else if (_error != null)
+            Row(children: [
+              Expanded(child: Text(_error!, style: context.widgetFooterStyle)),
+              TextButton(onPressed: _load, child: const Text('RETRY')),
+            ])
+          else if (filtered.isEmpty)
+            const EarthEmptyState(
+                message: 'No active V5 decisions require review.',
+                icon: Icons.how_to_vote_outlined)
+          else
+            ...filtered.map((proposal) => _buildProposal(context, proposal)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProposal(BuildContext context, Map<String, dynamic> proposal) {
+    final id = proposal['id']?.toString() ?? '';
+    final subject = proposal['subject_type']?.toString().toUpperCase() ?? 'EARTH';
+    final status = proposal['status']?.toString().toUpperCase() ?? 'OPEN';
+    final choice = proposal['viewer_choice']?.toString().toUpperCase();
+    final support = proposal['support_votes'] ?? proposal['supportVotes'] ?? 0;
+    final oppose = proposal['oppose_votes'] ?? proposal['opposeVotes'] ?? 0;
+    final quorum = proposal['quorum_required'] ?? proposal['quorumRequired'] ?? '—';
+    final effective = proposal['effective_game_day'] ?? proposal['effectiveGameDay'] ?? '—';
+    final busy = _busyIds.contains(id);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: EdgeInsets.all(context.cardPadding),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Text(proposal['title']?.toString() ?? proposal['action_type']?.toString() ?? 'V5 proposal',
+                  style: context.widgetTitleStyle),
+            ),
+            Text(subject, style: context.widgetFooterStyle),
+          ]),
+          const SizedBox(height: 6),
+          Text(proposal['summary']?.toString() ?? proposal['description']?.toString() ?? 'Server-authored policy decision.',
+              style: context.widgetValueStyle),
+          const SizedBox(height: 10),
+          Text('Status $status · Support $support · Oppose $oppose · Quorum $quorum · Effective day $effective${choice == null ? '' : ' · Your vote: $choice'}',
+              style: context.widgetFooterStyle),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, children: [
+            FilledButton.tonal(
+              onPressed: id.isEmpty || busy ? null : () => _vote(id, 'SUPPORT'),
+              child: Text(busy ? 'SENDING…' : 'SUPPORT'),
+            ),
+            OutlinedButton(
+              onPressed: id.isEmpty || busy ? null : () => _vote(id, 'OPPOSE'),
+              child: const Text('OPPOSE'),
+            ),
+            TextButton(
+              onPressed: id.isEmpty || busy ? null : () => _vote(id, 'ABSTAIN'),
+              child: const Text('ABSTAIN'),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
 class ActiveGovernanceRulePanel extends StatelessWidget {
   final EarthState state;
   final String institutionId;
@@ -131,13 +294,13 @@ class ActiveGovernanceRulePanel extends StatelessWidget {
       child: rule == null
           ? const EarthEmptyState(
               message:
-                  'No active governance rule is published for this Territory.',
+                'No active governance rule is published for this institution scope.',
               icon: Icons.rule_outlined)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    '${rule['name'] ?? 'Territory governance rule'} · Version ${rule['version'] ?? '—'}',
+                    '${rule['name'] ?? 'Institution governance rule'} · Version ${rule['version'] ?? '—'}',
                     style: context.widgetTitleStyle),
                 const SizedBox(height: 10),
                 EarthMetricGrid(metrics: [
@@ -254,7 +417,7 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this, initialIndex: 0);
+    _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final now = DateTime.now();
       if (mounted) setState(() => _now = now);
@@ -275,28 +438,12 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
         institutionId == 'WORLD') {
       return 'WORLD';
     }
-    final territoryIds = widget.state.territories
-        .whereType<Map>()
-        .map((row) => row['id']?.toString())
-        .whereType<String>()
-        .toSet();
-    final cityInstId = widget.state.institutions['city'] is Map
-        ? widget.state.institutions['city']['id']?.toString()
-        : null;
-    final terrInstId = widget.state.institutions['territory'] is Map
-        ? widget.state.institutions['territory']['id']?.toString()
-        : null;
-    if (territoryIds.contains(institutionId) ||
-        institutionId == cityInstId ||
-        institutionId == terrInstId ||
-        institutionId.toUpperCase().startsWith('TERR-') ||
-        institutionId.toUpperCase().startsWith('CITY-')) {
-      return 'TERRITORY';
-    }
     if (institutionId.toUpperCase().startsWith('CORP-')) {
       return 'CORPORATION';
     }
-    return 'TERRITORY';
+    // Territory records are physical capacity containers in V5, never a
+    // third political/governance scope.
+    return 'WORLD';
   }
 
   List<Map<String, dynamic>> _proposalsForScope(String scope) {
@@ -348,7 +495,6 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
   Widget build(BuildContext context) {
     final worldCount = _proposalsForScope('WORLD').length;
     final corpCount = _proposalsForScope('CORPORATION').length;
-    final territoryCount = _proposalsForScope('TERRITORY').length;
 
     return EarthSection(
       title: 'PROPOSALS',
@@ -362,16 +508,15 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildScopeTabs(context, territoryCount, corpCount, worldCount),
+          _buildScopeTabs(context, corpCount, worldCount),
           SizedBox(height: context.spacingTitleOffset),
           AnimatedBuilder(
             animation: _tabController,
             builder: (context, _) {
               final scope = switch (_tabController.index) {
-                0 => 'TERRITORY',
-                1 => 'CORPORATION',
-                2 => 'WORLD',
-                _ => 'TERRITORY',
+                0 => 'CORPORATION',
+                1 => 'WORLD',
+                _ => 'CORPORATION',
               };
               return _ProposalTabContent(
                 key: ValueKey(scope),
@@ -391,7 +536,7 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
   }
 
   Widget _buildScopeTabs(
-      BuildContext context, int territoryCount, int corpCount, int worldCount) {
+      BuildContext context, int corpCount, int worldCount) {
     return AnimatedBuilder(
       animation: _tabController,
       builder: (context, _) => Container(
@@ -401,11 +546,9 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
           border: Border.all(color: context.subtleBorderColor),
         ),
         child: Row(children: [
-          _scopeTab(context, 0, 'TERRITORY ($territoryCount)',
-              Icons.location_on_outlined),
-          _scopeTab(context, 1, 'CORPORATION ($corpCount)',
+          _scopeTab(context, 0, 'CORPORATION ($corpCount)',
               Icons.account_balance_outlined),
-          _scopeTab(context, 2, 'WORLD ($worldCount)', Icons.public_outlined),
+          _scopeTab(context, 1, 'EARTH ($worldCount)', Icons.public_outlined),
         ]),
       ),
     );

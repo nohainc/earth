@@ -29,6 +29,13 @@ extension EarthApiWorld on EarthApi {
       (await _request('/api/command-center?limit=$limit'))
           as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> v5Overview() async {
+    final response = await _request('/api/v5/command/overview');
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{'ok': false, 'error': 'Invalid V5 overview response'};
+  }
+
   Future<void> markNotificationRead(String id) async {
     await _request('/api/notifications/$id/read', method: 'POST');
   }

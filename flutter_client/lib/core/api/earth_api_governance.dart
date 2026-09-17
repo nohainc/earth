@@ -1,6 +1,27 @@
 part of 'earth_api.dart';
 
 extension EarthApiGovernance on EarthApi {
+  Future<Map<String, dynamic>> listV5Proposals() async {
+    final response = await _request('/api/governance/v5/proposals');
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{'ok': false, 'error': 'V5 proposals unavailable'};
+  }
+
+  Future<Map<String, dynamic>> voteV5Proposal(
+      String proposalId, String choice) async {
+    final response = await _request(
+        '/api/governance/v5/proposals/$proposalId/vote',
+        method: 'POST',
+        body: {
+          'choice': choice,
+          'correlationId': newClientCorrelationId('VOTE-GOV5'),
+        });
+    return response is Map<String, dynamic>
+        ? response
+        : Map<String, dynamic>.from(response as Map);
+  }
+
   Future<Map<String, dynamic>> voteGovernanceV4(
       String proposalId, String choice) async {
     final response = await _request(

@@ -35,7 +35,7 @@ class QuickActionsPanel extends StatelessWidget {
       (
         label: 'CHECK TERRITORY SERVICES',
         detail: membership['territory_id'] == null
-            ? 'Choose a territory to unlock services'
+            ? 'No physical capacity context available'
             : 'Review local capacity and infrastructure',
         section: 'territory-commons',
         icon: Icons.location_city_outlined,

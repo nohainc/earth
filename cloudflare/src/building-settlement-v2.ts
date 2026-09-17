@@ -14,6 +14,7 @@ type Building = {
   overdue_burden_bps_per_day: string;
   maximum_burden_bps: string;
   operating_mode: 'CONSERVATIVE' | 'BALANCED' | 'GROWTH';
+  v5_productive_status?: 'ACTIVE' | 'SUSPENDED';
 };
 function ageBurden(building: Building, day: number): bigint {
   const age = day >= Number(building.last_major_rebuild_game_day) ? BigInt(day - Number(building.last_major_rebuild_game_day)) : 0n;
@@ -223,9 +224,9 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
        JOIN building_design_life_rules r ON r.catalog_id = b.catalog_id
        LEFT JOIN building_catalog_resource_flows f ON f.catalog_id = c.id
        LEFT JOIN economic_assets a ON a.id = f.asset_id
-      WHERE b.status = 'ACTIVE'
+      WHERE b.status = 'ACTIVE' AND COALESCE(b.v5_productive_status, 'ACTIVE') = 'ACTIVE'
         AND mod(abs(hashtextextended(b.owner_economic_id, 0)), $1) = $2
-      GROUP BY b.id, b.owner_economic_id, b.territory_id, c.ownership_scope, c.operating_credit_units, b.last_major_rebuild_game_day, b.started_game_day, b.operating_mode, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps
+      GROUP BY b.id, b.owner_economic_id, b.territory_id, c.ownership_scope, c.operating_credit_units, b.last_major_rebuild_game_day, b.started_game_day, b.operating_mode, b.v5_productive_status, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps
       ORDER BY b.owner_economic_id, b.id`, [shardCount, shardId],
   );
   const modifiers = await loadModifierResolver(tx, day);
@@ -233,7 +234,7 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
   const houses = new Map<string, Building[]>();
   let publicBuildings = 0;
   for (const building of buildings.rows) {
-    territories.add(building.territory_id);
+    if (building.territory_id) territories.add(building.territory_id);
     if (building.ownership_scope === 'PUBLIC') {
       await settlePublicBuilding(tx, day, building);
       publicBuildings += 1;

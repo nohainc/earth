@@ -15,6 +15,7 @@ import { settlePerishableResourceDecay } from './resource-settlement-postgres.ts
 import { completeDueConstructionProjects } from './construction-settlement-postgres.ts';
 import { advanceGlobalPrograms } from './global-programs-postgres.ts';
 import { advanceTechnologyGenerationPrograms } from './technology-generations-postgres.ts';
+import { advanceV5ResearchProjects } from './technology-postgres.ts';
 import { settleBankLoanRisk } from './banking-postgres.ts';
 import { refreshOrganizationFinancialStates } from './organization-stress-postgres.ts';
 import { executeDueOrganizationResolutions } from './organization-stress-postgres.ts';
@@ -29,6 +30,9 @@ import { settlePatentExpirations } from './patent-settlement-postgres.ts';
 import { settleTechnologyLicenseFees } from './ip-license-settlement-postgres.ts';
 import { settleGlobalBank } from './global-bank-settlement-engine.ts';
 import { settleCorporationIncomeTax } from './corporation-tax-settlement-postgres.ts';
+import { settleV5CapacityInTransaction } from './v5-capacity-settlement-postgres.ts';
+import { reconcileV5TerritoryContainersInTransaction } from './v5-territory-containers-postgres.ts';
+import { activateDueV5GovernancePoliciesInTransaction } from './v5-governance-postgres.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -40,6 +44,7 @@ export type SettlementResult = { status: 'completed' | 'already_processed' | 'bu
 const noOpPhase = async (_context: DailySettlementPhaseContext): Promise<unknown> => ({ ok: true });
 const OWNER_SHARD_COUNT = 16;
 const settlementPhases = createDailySettlementPhaseRegistry({
+  v5PolicyActivation: async ({ tx, day }) => activateDueV5GovernancePoliciesInTransaction(tx, day),
   activateSuccessors: async ({ tx, day }) => ({ activated: await activatePendingHouseSuccessors(tx, day) }),
   preparePartitions: noOpPhase,
   rebuildProfiles: noOpPhase,
@@ -55,6 +60,8 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   mandatoryBudgetPayments: noOpPhase,
   scheduledBudgetPayments: noOpPhase,
   territoryCapacityProjections: async ({ tx, day }) => settleTerritoryCapacityProjections(tx, day),
+  v5Capacity: async ({ tx, day }) => settleV5CapacityInTransaction(tx, day),
+  v5TerritoryContainers: async ({ tx, day }) => reconcileV5TerritoryContainersInTransaction(tx, day - 1),
   corporationDynamics: async ({ tx, day }) => settleCorporationDynamics(tx, day),
   houseNeedsServices: async ({ tx, day, shard, shardCount }) => settleHouseNeedsAndServices(tx, day, shard, shardCount),
   perishableResourceDecay: async ({ tx, day, shard, shardCount }) => settlePerishableResourceDecay(tx, day, shard, shardCount),
@@ -63,7 +70,10 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   commonsDividendSettlement: async ({ tx, day }) => settleCommonsDividends(tx, day),
   budgetDividendEligibility: noOpPhase,
   patentExpirations: async ({ tx, day }) => settlePatentExpirations(tx, day),
-  researchAndProgress: async ({ tx, day }) => advanceTechnologyGenerationPrograms(tx, day),
+  researchAndProgress: async ({ tx, day }) => ({
+    legacy: await advanceTechnologyGenerationPrograms(tx, day),
+    v5: await advanceV5ResearchProjects(tx, day),
+  }),
   globalPrograms: async ({ tx, day }) => advanceGlobalPrograms(tx, day),
   publicProjects: async ({ tx, day }) => settleDuePublicProjectsInTransaction(tx, day),
   lifecycle: async ({ tx, day }) => processHouseMortality(tx, day),

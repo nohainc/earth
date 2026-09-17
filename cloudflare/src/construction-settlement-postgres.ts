@@ -26,7 +26,7 @@ export async function completeDueConstructionProjects(repository: PostgresReposi
       if (!generation || Number(generation.effective_from_game_day) > day) throw new Error('Generation retrofit completed before discovery became effective');
       await repository.query(`INSERT INTO building_generation_installations (id, building_id, domain_id, generation_id, installed_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (building_id, domain_id, status) DO UPDATE SET generation_id = EXCLUDED.generation_id, installed_game_day = EXCLUDED.installed_game_day, correlation_id = EXCLUDED.correlation_id`, [`INSTALL-${project.id}`, project.building_id, generation.domain_id, project.target_generation_id, day, `retrofit-install:${project.id}`]);
     }
-    await repository.query('SELECT earth_refresh_territory_capacity($1, $2)', [project.territory_id, day]);
+    if (project.territory_id) await repository.query('SELECT earth_refresh_territory_capacity($1, $2)', [project.territory_id, day]);
     await createGameEvent(repository, {
       id: `PROJECT-COMPLETED-${project.id}`,
       category: 'BUILDING', eventType: 'CONSTRUCTION_COMPLETED', gameDay: day,

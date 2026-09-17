@@ -39,6 +39,10 @@ export async function spendCorporationBudget(
     if (amountUnits <= 0n) throw new Error('Public spending amount must be positive');
     const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(world?.game_day ?? 1);
+    const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [input.corporationId])).rows[0]?.status;
+    const spendingCategory = budgetCategory(input.category);
+    if (delinquency === 'EARTH_RECEIVERSHIP' && spendingCategory !== 'ESSENTIAL_SERVICES') throw new Error('Corporation receivership blocks discretionary spending');
+    if (delinquency === 'EXPANSION_SPENDING_RESTRICTED' && !['ESSENTIAL_SERVICES', 'MAINTENANCE'].includes(spendingCategory)) throw new Error('Corporation capacity delinquency blocks discretionary spending');
     const prior = await tx.query<{ source_id: string; game_day: number }>('SELECT source_id, game_day FROM economic_transactions WHERE correlation_id = $1', [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, gameDay: prior.rows[0].game_day, correlationId: input.correlationId };
     const budget = (await tx.query<{ id: string; authorized_units: string; committed_units: string; spent_units: string }>(
@@ -46,7 +50,7 @@ export async function spendCorporationBudget(
          FROM institution_budget_lines l JOIN budget_categories c ON c.id = l.category_id
         WHERE l.institution_id = $1 AND c.institution_kind = 'CORPORATION' AND c.category_code = $2
           AND l.fiscal_period_id = (SELECT id FROM fiscal_periods WHERE start_game_day <= $3 AND end_game_day >= $3 AND status = 'ACTIVE' LIMIT 1)
-        FOR UPDATE`, [input.corporationId, budgetCategory(input.category), gameDay],
+        FOR UPDATE`, [input.corporationId, spendingCategory, gameDay],
     )).rows[0];
     if (!budget) throw new Error('Corporation budget line is unavailable');
     if (BigInt(budget.authorized_units) - BigInt(budget.committed_units) - BigInt(budget.spent_units) < amountUnits) throw new Error('Spending exceeds the Corporation budget');

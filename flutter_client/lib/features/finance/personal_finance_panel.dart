@@ -73,18 +73,10 @@ class PersonalFinancePanel extends StatelessWidget {
         asDouble(_map(personalFinanceData['protectedMinimum'])['credits']);
     final statusColor = unpaid > 0 ? Colors.orangeAccent : cyanAccentColor;
 
-    final economic = _map(personalFinanceData['economic']);
-    final economicAssets = (economic['assets'] as List? ?? const [])
-        .whereType<Map>()
-        .map((asset) => Map<String, dynamic>.from(asset));
-    final v2Credit =
-        economicAssets.where((asset) => asset['code'] == 'CREDIT').firstOrNull;
-    final liquidCredits = v2Credit != null
-        ? asDoubleOr(v2Credit['balance'], 0)
-        : (asDouble(state.human['credits']) ?? 0.0);
-    final availableToSpend = protected == null
-        ? liquidCredits
-        : (liquidCredits - protected).clamp(0, double.infinity).toDouble();
+    final liquidity = _map(personalFinanceData['liquidity']);
+    final serverAvailableToSpend = asDouble(liquidity['availableToSpendUnits']);
+    final availableToSpend = serverAvailableToSpend ?? 0.0;
+    final availableToSpendKnown = serverAvailableToSpend != null;
     final netDailyCredits = grossCredits - incomeTax;
     final netSign = netDailyCredits >= 0 ? '+' : '';
 
@@ -110,7 +102,9 @@ class PersonalFinancePanel extends StatelessWidget {
       metrics: [
         CockpitMetric(
           label: 'Available to Spend',
-          value: formatWholeNumber(availableToSpend),
+          value: availableToSpendKnown
+              ? formatWholeNumber(availableToSpend)
+              : 'UNAVAILABLE',
           icon: Icons.account_balance_wallet_outlined,
           color: context.primaryColor,
         ),
@@ -151,6 +145,11 @@ class PersonalFinancePanel extends StatelessWidget {
         const SizedBox(height: 28),
         const Text('NEXT SETTLEMENT', style: _sectionStyle),
         const SizedBox(height: 12),
+        if (liquidity['nextSettlementGameDay'] != null)
+          Text('Scheduled game day ${liquidity['nextSettlementGameDay']}',
+              style: context.widgetFooterStyle),
+        if (liquidity['nextSettlementGameDay'] != null)
+          const SizedBox(height: 8),
         _allResourcesLine(finalChange, emphasize: true),
         const SizedBox(height: 24),
         _CreditIncomeSummaryCard(
@@ -343,17 +342,8 @@ class PersonalFinancePanel extends StatelessWidget {
               share['building_id']?.toString() == building['id']?.toString())
           .firstOrNull;
       if (holding == null) continue;
-      final policy = building['operating_policy']?.toString() ?? 'balanced';
-      final yieldMultiplier = policy == 'high_output'
-          ? 1.3
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .75
-              : 1.0;
-      final costMultiplier = policy == 'high_output'
-          ? 1.4
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .7
-              : 1.0;
+      final yieldMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
+      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
       final gross =
           asDoubleOr(building['resource_output_amount'], 0) * yieldMultiplier;
       final cost =

@@ -11,244 +11,6 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'technology_dialogs.dart';
 
-const _kDefaultBlueprints = <Map<String, dynamic>>[
-  {
-    'building_type': 'restaurant',
-    'name': 'Molecular Bistro',
-    'category': 'commercial',
-    'ownership_class': 'private',
-    'slot_footprint': 1,
-    'cost_credits': 38000,
-    'cost_materials': 80,
-    'construction_days': 1,
-    'output_credits': 120,
-    'upkeep_credits': 20,
-    'operating_credits': 120,
-    'description':
-        'High-margin dining producing continuous municipal revenues.',
-  },
-  {
-    'building_type': 'retail-store',
-    'name': 'Retail & Tools Boutique',
-    'category': 'commercial',
-    'ownership_class': 'private',
-    'slot_footprint': 1,
-    'cost_credits': 32000,
-    'cost_materials': 60,
-    'construction_days': 1,
-    'output_credits': 100,
-    'upkeep_credits': 18,
-    'operating_credits': 140,
-    'description':
-        'Commercial storefront providing consumer goods and steady cash flow.',
-  },
-  {
-    'building_type': 'commercial-mall',
-    'name': 'Commercial Galleria',
-    'category': 'commercial',
-    'ownership_class': 'public_investment',
-    'slot_footprint': 4,
-    'cost_credits': 120000,
-    'cost_materials': 240,
-    'cost_components': 30,
-    'construction_days': 4,
-    'output_credits': 380,
-    'upkeep_credits': 65,
-    'operating_credits': 600,
-    'description':
-        'Large-scale trade plaza yielding community commerce dividends.',
-  },
-  {
-    'building_type': 'fabrication-plant',
-    'name': 'CNC Fabrication Plant',
-    'category': 'industrial',
-    'ownership_class': 'private',
-    'slot_footprint': 2,
-    'cost_credits': 65000,
-    'cost_materials': 180,
-    'cost_components': 40,
-    'construction_days': 2,
-    'output_materials': 45,
-    'upkeep_energy': 22,
-    'operating_credits': 150,
-    'description': 'Advanced precision manufacturing for industrial materials.',
-  },
-  {
-    'building_type': 'chemical-foundry',
-    'name': 'Polymer Foundry',
-    'category': 'industrial',
-    'ownership_class': 'private',
-    'slot_footprint': 2,
-    'cost_credits': 72000,
-    'cost_materials': 220,
-    'cost_components': 30,
-    'construction_days': 2,
-    'output_materials': 55,
-    'upkeep_energy': 28,
-    'operating_credits': 160,
-    'description':
-        'Chemical synthesis foundry producing high-grade structural compounds.',
-  },
-  {
-    'building_type': 'vertical-farm',
-    'name': 'Aeroponic Vertical Farm',
-    'category': 'agriculture',
-    'ownership_class': 'private',
-    'slot_footprint': 2,
-    'cost_credits': 42000,
-    'cost_materials': 90,
-    'construction_days': 2,
-    'output_food': 80,
-    'upkeep_energy': 15,
-    'operating_credits': 110,
-    'description':
-        'Climate-controlled multi-tier agricultural food production facility.',
-  },
-  {
-    'building_type': 'server-farm',
-    'name': 'Neural Data Center',
-    'category': 'technology',
-    'ownership_class': 'private',
-    'slot_footprint': 2,
-    'cost_credits': 85000,
-    'cost_materials': 120,
-    'cost_components': 50,
-    'cost_compute': 20,
-    'construction_days': 2,
-    'output_compute': 60,
-    'upkeep_energy': 40,
-    'operating_credits': 180,
-    'description':
-        'High-density computational clusters powering automated systems.',
-  },
-  {
-    'building_type': 'solar-array-complex',
-    'name': 'Solar Array Complex',
-    'category': 'energy',
-    'ownership_class': 'public_investment',
-    'slot_footprint': 2,
-    'cost_credits': 55000,
-    'cost_materials': 140,
-    'cost_components': 20,
-    'construction_days': 2,
-    'output_energy': 120,
-    'upkeep_credits': 15,
-    'operating_credits': 80,
-    'description':
-        'High-efficiency photovoltaic generation feeding regional grids.',
-  },
-  {
-    'building_type': 'geothermal-grid',
-    'name': 'Geothermal Core Grid',
-    'category': 'energy',
-    'ownership_class': 'civic',
-    'slot_footprint': 3,
-    'cost_credits': 140000,
-    'cost_materials': 350,
-    'cost_components': 60,
-    'construction_days': 3,
-    'output_energy': 320,
-    'upkeep_credits': 45,
-    'operating_credits': 300,
-    'description':
-        'Deep borehole subterranean thermal energy tap for planetary power.',
-  },
-  {
-    'building_type': 'medical-clinic',
-    'name': 'Bionic Medical Center',
-    'category': 'healthcare',
-    'ownership_class': 'civic',
-    'slot_footprint': 2,
-    'cost_credits': 95000,
-    'cost_materials': 160,
-    'cost_components': 40,
-    'construction_days': 2,
-    'output_credits': 60,
-    'upkeep_energy': 25,
-    'operating_credits': 220,
-    'description':
-        'Specialized bionic and cellular regeneration healthcare facility.',
-  },
-  {
-    'building_type': 'transit-hyperloop',
-    'name': 'Hyperloop Terminal',
-    'category': 'transport',
-    'ownership_class': 'civic',
-    'slot_footprint': 3,
-    'cost_credits': 160000,
-    'cost_materials': 400,
-    'cost_components': 80,
-    'construction_days': 3,
-    'output_credits': 150,
-    'upkeep_energy': 50,
-    'operating_credits': 500,
-    'description':
-        'Pneumatic ultra-speed passenger and logistics transit connection.',
-  },
-  {
-    'building_type': 'orbital-spaceport',
-    'name': 'Orbital Spaceport',
-    'category': 'transport',
-    'ownership_class': 'public_investment',
-    'slot_footprint': 6,
-    'cost_credits': 280000,
-    'cost_materials': 600,
-    'cost_components': 120,
-    'cost_compute': 80,
-    'construction_days': 6,
-    'output_credits': 500,
-    'upkeep_energy': 90,
-    'operating_credits': 1500,
-    'description':
-        'Planetary surface-to-orbit launch and recovery operations hub.',
-  },
-  {
-    'building_type': 'transit-terminus',
-    'name': 'Transit Hub Terminus',
-    'category': 'transport',
-    'ownership_class': 'civic',
-    'slot_footprint': 4,
-    'cost_credits': 80000,
-    'cost_materials': 180,
-    'cost_components': 30,
-    'construction_days': 4,
-    'output_credits': 75,
-    'upkeep_energy': 20,
-    'operating_credits': 260,
-    'description':
-        'Regional multimodal urban mobility terminal connecting districts.',
-  },
-  {
-    'building_type': 'urban-district-module',
-    'name': 'Urban District Module',
-    'category': 'residential',
-    'ownership_class': 'civic',
-    'slot_footprint': 1,
-    'cost_credits': 110000,
-    'cost_materials': 250,
-    'construction_days': 1,
-    'output_credits': 110,
-    'upkeep_energy': 35,
-    'operating_credits': 100,
-    'description':
-        'Modular civic habitat providing citizen housing and municipal capacity.',
-  },
-  {
-    'building_type': 'private-estate-plot',
-    'name': 'Private Estate Plot',
-    'category': 'residential',
-    'ownership_class': 'private',
-    'slot_footprint': 1,
-    'cost_credits': 50000,
-    'cost_materials': 100,
-    'construction_days': 1,
-    'output_credits': 40,
-    'upkeep_credits': 10,
-    'operating_credits': 10,
-    'description':
-        'Personal headquarters deed unlocking expanded private plot capacity.',
-  },
-];
 
 class CorporateBuildingResearchPanel extends StatefulWidget {
   final EarthState state;
@@ -368,51 +130,6 @@ class _CorporateBuildingResearchPanelState
         ),
       ),
     );
-  }
-
-  String _formatResourceDelta(dynamic rawVal, double multiplier, String unit) {
-    final current = asDoubleOr(rawVal, 0);
-    if (current <= 0) return 'None';
-    final next = current * multiplier;
-    final formattedCurrent = current == current.roundToDouble()
-        ? current.toInt().toString()
-        : current.toStringAsFixed(1);
-    final formattedNext = next == next.roundToDouble()
-        ? next.toInt().toString()
-        : next.toStringAsFixed(1);
-    return '$formattedCurrent ➔ $formattedNext $unit';
-  }
-
-  (String, String) _getPrimaryOutputAndUpkeep(Map<String, dynamic> bp) {
-    String outputStr = 'None';
-    if (asDoubleOr(bp['output_credits'], 0) > 0) {
-      outputStr = _formatResourceDelta(bp['output_credits'], 1.25, 'Cr/d');
-    } else if (asDoubleOr(bp['output_materials'], 0) > 0) {
-      outputStr = _formatResourceDelta(bp['output_materials'], 1.25, 'Mat/d');
-    } else if (asDoubleOr(bp['output_energy'], 0) > 0) {
-      outputStr = _formatResourceDelta(bp['output_energy'], 1.25, 'En/d');
-    } else if (asDoubleOr(bp['output_food'], 0) > 0) {
-      outputStr = _formatResourceDelta(bp['output_food'], 1.25, 'Food/d');
-    } else if (asDoubleOr(bp['output_compute'], 0) > 0) {
-      outputStr = _formatResourceDelta(bp['output_compute'], 1.25, 'Comp/d');
-    } else if (asDoubleOr(bp['output_components'], 0) > 0) {
-      outputStr = _formatResourceDelta(bp['output_components'], 1.25, 'Comp/d');
-    }
-
-    String upkeepStr = 'None';
-    if (asDoubleOr(bp['upkeep_credits'], 0) > 0) {
-      upkeepStr = _formatResourceDelta(bp['upkeep_credits'], 1.12, 'Cr/d');
-    } else if (asDoubleOr(bp['upkeep_energy'], 0) > 0) {
-      upkeepStr = _formatResourceDelta(bp['upkeep_energy'], 1.12, 'En/d');
-    } else if (asDoubleOr(bp['upkeep_materials'], 0) > 0) {
-      upkeepStr = _formatResourceDelta(bp['upkeep_materials'], 1.12, 'Mat/d');
-    } else if (asDoubleOr(bp['upkeep_food'], 0) > 0) {
-      upkeepStr = _formatResourceDelta(bp['upkeep_food'], 1.12, 'Food/d');
-    } else if (asDoubleOr(bp['upkeep_compute'], 0) > 0) {
-      upkeepStr = _formatResourceDelta(bp['upkeep_compute'], 1.12, 'Comp/d');
-    }
-
-    return (outputStr, upkeepStr);
   }
 
   String _formatDecimal(double val) {
@@ -700,6 +417,8 @@ class _CorporateBuildingResearchPanelState
                 // 4. Operating Expenses (+12% per tier)
                 final opCreditsBase = asDoubleOr(
                     bp['operating_credit_units'] ?? bp['operating_credits'], 0);
+                final opCreditsNext = asDoubleOr(
+                    bp['next_operating_credit_units'] ?? bp['next_operating_credits'], opCreditsBase);
                 final opEnergyBase = 0.0;
                 final opFoodBase = 0.0;
                 final opMaterialsBase = 0.0;
@@ -849,7 +568,7 @@ class _CorporateBuildingResearchPanelState
                                 color: EarthResourceColors.materials,
                               ),
                               Text(
-                                '${formatWholeNumber(matBase * math.pow(1.70, currentTier - 1))} -> ${formatWholeNumber(matBase * math.pow(1.70, targetTier - 1))}',
+                                '${formatWholeNumber(matBase)} -> ${formatWholeNumber(matBase)}',
                                 style: context.widgetFooterStyle,
                               ),
                             ],
@@ -862,7 +581,7 @@ class _CorporateBuildingResearchPanelState
                                 color: EarthResourceColors.components,
                               ),
                               Text(
-                                '${formatWholeNumber(compBase * math.pow(1.70, currentTier - 1))} -> ${formatWholeNumber(compBase * math.pow(1.70, targetTier - 1))}',
+                                '${formatWholeNumber(compBase)} -> ${formatWholeNumber(compBase)}',
                                 style: context.widgetFooterStyle,
                               ),
                             ],
@@ -874,7 +593,7 @@ class _CorporateBuildingResearchPanelState
                                 color: EarthResourceColors.compute,
                               ),
                               Text(
-                                '${formatWholeNumber(computeBase * math.pow(1.70, currentTier - 1))} -> ${formatWholeNumber(computeBase * math.pow(1.70, targetTier - 1))}',
+                                '${formatWholeNumber(computeBase)} -> ${formatWholeNumber(computeBase)}',
                                 style: context.widgetFooterStyle,
                               ),
                             ],
@@ -952,7 +671,7 @@ class _CorporateBuildingResearchPanelState
                                   color: EarthResourceColors.credits,
                                 ),
                                 Text(
-                                  '-${formatWholeNumber(opCreditsBase * math.pow(1.12, currentTier - 1))} -> -${formatWholeNumber(opCreditsBase * math.pow(1.12, targetTier - 1))} C / DAY',
+                                  '-${formatWholeNumber(opCreditsBase)} -> -${formatWholeNumber(opCreditsNext)} C / DAY',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -964,7 +683,7 @@ class _CorporateBuildingResearchPanelState
                                   color: EarthResourceColors.energy,
                                 ),
                                 Text(
-                                  '-${_formatDecimal(opEnergyBase * math.pow(1.12, currentTier - 1))} -> -${_formatDecimal(opEnergyBase * math.pow(1.12, targetTier - 1))} / DAY',
+                                  '-${_formatDecimal(opEnergyBase)} -> -${_formatDecimal(opEnergyBase)} / DAY',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -977,7 +696,7 @@ class _CorporateBuildingResearchPanelState
                                   color: EarthResourceColors.materials,
                                 ),
                                 Text(
-                                  '-${_formatDecimal(opMaterialsBase * math.pow(1.12, currentTier - 1))} -> -${_formatDecimal(opMaterialsBase * math.pow(1.12, targetTier - 1))} / DAY',
+                                  '-${_formatDecimal(opMaterialsBase)} -> -${_formatDecimal(opMaterialsBase)} / DAY',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -990,7 +709,7 @@ class _CorporateBuildingResearchPanelState
                                   color: EarthResourceColors.components,
                                 ),
                                 Text(
-                                  '-${_formatDecimal(opComponentsBase * math.pow(1.12, currentTier - 1))} -> -${_formatDecimal(opComponentsBase * math.pow(1.12, targetTier - 1))} / DAY',
+                                  '-${_formatDecimal(opComponentsBase)} -> -${_formatDecimal(opComponentsBase)} / DAY',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -1003,7 +722,7 @@ class _CorporateBuildingResearchPanelState
                                   color: EarthResourceColors.compute,
                                 ),
                                 Text(
-                                  '-${_formatDecimal(opComputeBase * math.pow(1.12, currentTier - 1))} -> -${_formatDecimal(opComputeBase * math.pow(1.12, targetTier - 1))} / DAY',
+                                  '-${_formatDecimal(opComputeBase)} -> -${_formatDecimal(opComputeBase)} / DAY',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -1168,6 +887,7 @@ class _CorporateBuildingResearchPanelState
                                                   upkeepInputs: upkeepInputs,
                                                   outputItems: outputItems,
                                                   opCreditsBase: opCreditsBase,
+                                                  opCreditsNext: opCreditsNext,
                                                   opEnergyBase: opEnergyBase,
                                                   opMaterialsBase:
                                                       opMaterialsBase,
@@ -1337,6 +1057,7 @@ class _CorporateBuildingResearchPanelState
     required List<(IconData, Color, String, double, double)> upkeepInputs,
     required List<(IconData, Color, String, double, double)> outputItems,
     required double opCreditsBase,
+    required double opCreditsNext,
     required double opEnergyBase,
     required double opMaterialsBase,
     required double opComponentsBase,
@@ -1611,7 +1332,7 @@ class _CorporateBuildingResearchPanelState
                               size: 13, color: EarthResourceColors.credits),
                           const SizedBox(width: 4),
                           Text(
-                            '-${formatWholeNumber(opCreditsBase * math.pow(1.12, currentTier - 1))} → -${formatWholeNumber(opCreditsBase * math.pow(1.12, targetTier - 1))}',
+                            '-${formatWholeNumber(opCreditsBase)} → -${formatWholeNumber(opCreditsNext)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -1683,50 +1404,7 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
   @override
   Widget build(BuildContext context) {
     final rawCatalog = widget.state.technologyRegistry['catalog'];
-    final catalog = rawCatalog is List && rawCatalog.isNotEmpty
-        ? rawCatalog
-        : const [
-            {
-              'name': 'Automated Assembly',
-              'branch': 'Construction & Industry',
-              'description':
-                  'Improves building construction and component output for industrial facilities.',
-              'effect': 'Higher building output',
-              'target': 'Industrial buildings · Components',
-            },
-            {
-              'name': 'Clean Energy Systems',
-              'branch': 'Energy & Infrastructure',
-              'description':
-                  'Reduces energy demand across productive buildings and civic infrastructure.',
-              'effect': 'Lower energy upkeep',
-              'target': 'Utilities · Operating buildings',
-            },
-            {
-              'name': 'Food Synthesis',
-              'branch': 'Life Support',
-              'description':
-                  'Expands reliable food production and improves city resilience during shortages.',
-              'effect': 'Stronger food supply',
-              'target': 'Food buildings · City services',
-            },
-            {
-              'name': 'Predictive Maintenance',
-              'branch': 'Construction & Industry',
-              'description':
-                  'Reduces building upkeep pressure and protects productive capacity over time.',
-              'effect': 'Lower upkeep pressure',
-              'target': 'Industrial buildings · Estates',
-            },
-            {
-              'name': 'Civic Network Infrastructure',
-              'branch': 'Civic Systems',
-              'description':
-                  'Improves the coordination capacity of territorial services and civic institutions.',
-              'effect': 'Better civic capacity',
-              'target': 'Civic buildings · Public services',
-            },
-          ];
+    final catalog = rawCatalog is List ? rawCatalog : const <dynamic>[];
     final items = catalog
         .map((raw) => raw is Map
             ? Map<String, dynamic>.from(raw)
@@ -1863,7 +1541,13 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
             .toList(),
       ),
       const SizedBox(height: 14),
-      ...visibleItems.take(8).map((item) {
+      if (visibleItems.isEmpty)
+        const EarthEmptyState(
+          icon: Icons.science_outlined,
+          message: 'No authoritative technology catalog is available.',
+        )
+      else
+        ...visibleItems.take(8).map((item) {
         final name =
             (item['name'] ?? item['title'] ?? 'Approved capability').toString();
         final description = (item['description'] ??
@@ -2463,7 +2147,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                           border: Border.all(color: Colors.white12),
                         ),
                         child: Text(
-                          'City context: $buildingCount active building${buildingCount == 1 ? '' : 's'}',
+                          'Corporation context: $buildingCount active building${buildingCount == 1 ? '' : 's'}',
                           style: const TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w600,

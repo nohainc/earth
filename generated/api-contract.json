@@ -64,6 +64,30 @@
       "status": "ACTIVE"
     },
     {
+      "method": "GET",
+      "path": "/internal/v5/capacity-backfill/run",
+      "owner": "ReadModelRoutes",
+      "auth": "INTERNAL_ADMIN",
+      "service": "getV5CapacityBackfillRun",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/v5/capacity-backfill",
+      "owner": "ReadModelRoutes",
+      "auth": "INTERNAL_ADMIN",
+      "service": "backfillV5CapacityBatch",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/internal/v5/cutover-readiness",
+      "owner": "ReadModelRoutes",
+      "auth": "INTERNAL_ADMIN",
+      "service": "getV5CutoverReadiness",
+      "status": "ACTIVE"
+    },
+    {
       "method": "POST",
       "path": "/api/auth/register",
       "owner": "AuthRoutes",
@@ -313,10 +337,26 @@
     },
     {
       "method": "GET",
+      "path": "/api/house/automation",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getHouseAutomation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
       "path": "/api/command-center",
       "owner": "ReadModelRoutes",
       "auth": "HOUSE_SELF",
       "service": "getDecisionQueue",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/command/overview",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getV5Overview",
       "status": "ACTIVE"
     },
     {
@@ -357,6 +397,22 @@
       "owner": "ReadModelRoutes",
       "auth": "PUBLIC",
       "service": "buildingCatalog",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/buildings",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "purchaseV5Building",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/buildings/quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteV5Building",
       "status": "ACTIVE"
     },
     {
@@ -552,6 +608,14 @@
       "status": "ACTIVE"
     },
     {
+      "method": "GET",
+      "path": "/api/real-estate/buildings/{id}/upgrade-quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingUpgrade",
+      "status": "ACTIVE"
+    },
+    {
       "method": "POST",
       "path": "/api/real-estate/policy",
       "owner": "BuildingRoutes",
@@ -560,11 +624,27 @@
       "status": "ACTIVE"
     },
     {
+      "method": "GET",
+      "path": "/api/real-estate/buildings/{id}/policy-quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingOperatingMode",
+      "status": "ACTIVE"
+    },
+    {
       "method": "POST",
       "path": "/api/real-estate/demolish",
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "decommissionBuilding",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/real-estate/buildings/{id}/demolition-quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingDemolition",
       "status": "ACTIVE"
     },
     {
@@ -613,6 +693,14 @@
       "owner": "MarketRoutes",
       "auth": "HOUSE_SELF",
       "service": "listOrders",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/market/order-quote",
+      "owner": "MarketRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteOrder",
       "status": "ACTIVE"
     },
     {
@@ -725,6 +813,158 @@
       "owner": "BuildingRoutes",
       "auth": "AUTHENTICATED",
       "service": "getCommonsStatement",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/house/capacity",
+      "owner": "ReadModelRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getV5HouseCapacity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/corporations/{id}/capacity",
+      "owner": "ReadModelRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "getV5CorporationCapacity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/corporations/{id}/membership",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteV5CorporationMembership",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/{id}/membership",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "applyV5CorporationMembership",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/{id}/membership/leave",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "leaveV5Corporation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/founding/quote",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteV5CorporationFounding",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "foundV5Corporation",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v5/corporations/{id}/membership/applications/{id}",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "decideV5MembershipApplication",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/corporations/{id}/membership/applications",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "listV5MembershipApplications",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/v5/proposals",
+      "owner": "GovernanceRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "createV5GovernanceProposal",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/v5/proposals",
+      "owner": "GovernanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listV5GovernanceProposals",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/v5/proposals/{id}/vote",
+      "owner": "GovernanceRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "castV5GovernanceVote",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/v5/proposals/{id}/resolve",
+      "owner": "GovernanceRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "resolveV5GovernanceProposal",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/house/capacity-resolution",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listV5CapacityResolutionCases",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/house/capacity-resolution",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "openV5CapacityResolutionCase",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/house/capacity-resolution/{id}/liquidate/{id}",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "liquidateV5HouseBuilding",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/corporations/{id}/receivership",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listV5CorporationReceivershipCases",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/{id}/receivership/{id}/restructure",
+      "owner": "FinanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "submitV5CorporationRestructuringPlan",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/{id}/invites",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "issueV5CorporationInvite",
       "status": "ACTIVE"
     },
     {
@@ -1193,6 +1433,14 @@
     },
     {
       "method": "POST",
+      "path": "/api/research/buildings/quote",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingResearch",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
       "path": "/api/research/contribute",
       "owner": "ResearchRoutes",
       "auth": "HOUSE_SELF",
@@ -1437,6 +1685,14 @@
       "owner": "ResearchRoutes",
       "auth": "HOUSE_SELF",
       "service": "createResearchProject",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/technology/projects/quote",
+      "owner": "ResearchRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteResearchProject",
       "status": "ACTIVE"
     },
     {

@@ -12,6 +12,8 @@ import {
   contributeToCorporation,
 } from './institutions-postgres.ts';
 import { getInstitutionBudget, listInstitutionBudgetLines, listInstitutionCommitments, createInstitutionCommitment, payInstitutionCommitment, cancelInstitutionCommitment } from './institution-budget-api.ts';
+import { applyV5CorporationMembership, decideV5MembershipApplication, issueV5CorporationInvite, leaveV5Corporation, listV5MembershipApplications, quoteV5CorporationMembership } from './v5-membership-postgres.ts';
+import { foundV5Corporation, quoteV5CorporationFounding } from './v5-founding-postgres.ts';
 
 export async function handleInstitutionRoutes(
   request: Request,
@@ -19,6 +21,90 @@ export async function handleInstitutionRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/v5/corporations/founding/quote' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ name?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    try {
+      const result = await withRepository(env, (repository) => quoteV5CorporationFounding(repository, viewer.id, parsed.value.name ?? ''));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation founding quote unavailable' }, { status: 409 }); }
+  }
+  if (url.pathname === '/api/v5/corporations' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ name?: string; admissionPolicy?: 'OPEN' | 'APPROVAL' | 'INVITE_ONLY'; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.name || !parsed.value.admissionPolicy || !['OPEN', 'APPROVAL', 'INVITE_ONLY'].includes(parsed.value.admissionPolicy)) return Response.json({ ok: false, error: 'Name, admission policy, and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => foundV5Corporation(repository, { humanId: viewer.id, name: parsed.value.name!, admissionPolicy: parsed.value.admissionPolicy!, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation founding failed' }, { status: 409 }); }
+  }
+
+  const v5Membership = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/membership$/);
+  if (v5Membership && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => quoteV5CorporationMembership(repository, viewer.id, v5Membership[1]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Membership quote unavailable' }, { status: 409 }); }
+  }
+  if (v5Membership && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ correlationId?: string; inviteToken?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId) return Response.json({ ok: false, error: 'A valid idempotency key is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => applyV5CorporationMembership(repository, { humanId: viewer.id, corporationId: v5Membership[1], correlationId, inviteToken: parsed.value.inviteToken }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.status === 'PENDING' ? 202 : 200 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation membership failed' }, { status: 409 }); }
+  }
+  const v5Leave = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/membership\/leave$/);
+  if (v5Leave && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId) return Response.json({ ok: false, error: 'Idempotency key is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => leaveV5Corporation(repository, { humanId: viewer.id, corporationId: v5Leave[1], correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation departure failed' }, { status: 409 }); }
+  }
+  const v5ApplicationDecision = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/membership\/applications\/([^/]+)$/);
+  const v5ApplicationQueue = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/membership\/applications$/);
+  if (v5ApplicationQueue && request.method === 'GET') {
+    const rawStatus = url.searchParams.get('status')?.toUpperCase() as 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | undefined;
+    if (rawStatus && !['PENDING', 'APPROVED', 'REJECTED', 'WITHDRAWN'].includes(rawStatus)) return Response.json({ ok: false, error: 'Invalid application status' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => listV5MembershipApplications(repository, { humanId: viewer.id, corporationId: v5ApplicationQueue[1], status: rawStatus }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Membership applications unavailable' }, { status: 403 }); }
+  }
+  if (v5ApplicationDecision && request.method === 'PATCH') {
+    const parsed = await parseJsonBody<{ decision?: 'APPROVED' | 'REJECTED'; reason?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    if (!parsed.value.decision) return Response.json({ ok: false, error: 'Decision is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => decideV5MembershipApplication(repository, { humanId: viewer.id, corporationId: v5ApplicationDecision[1], applicationId: v5ApplicationDecision[2], decision: parsed.value.decision!, reason: parsed.value.reason }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Membership application decision failed' }, { status: 409 }); }
+  }
+  const v5Invites = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/invites$/);
+  if (v5Invites && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ targetHouseId?: string; expiresGameDay?: number; maxUses?: number }>(request);
+    if (!parsed.ok) return parsed.response;
+    try {
+      const result = await withRepository(env, (repository) => issueV5CorporationInvite(repository, { humanId: viewer.id, corporationId: v5Invites[1], targetHouseId: parsed.value.targetHouseId, expiresGameDay: Number(parsed.value.expiresGameDay), maxUses: Number(parsed.value.maxUses ?? 1) }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation invite creation failed' }, { status: 409 }); }
+  }
+
   const institutionBudgetMatch = url.pathname.match(/^\/api\/institutions\/([^/]+)\/budget(?:\/(lines|commitments|fiscal-summary|financial-projection))?$/);
   if (institutionBudgetMatch && request.method === 'GET') {
     const institutionId = institutionBudgetMatch[1];

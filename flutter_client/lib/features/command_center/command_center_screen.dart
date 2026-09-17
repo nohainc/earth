@@ -426,6 +426,7 @@ class _CommandCenterState extends State<CommandCenter> {
         api.news().catchError((_) => <String, dynamic>{}),
         api.notifications(),
         api.commandCenter().catchError((_) => <String, dynamic>{}),
+        api.v5Overview().catchError((_) => <String, dynamic>{}),
         api.personalFinance().catchError((_) => personalFinanceData),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
       ]);
@@ -433,6 +434,7 @@ class _CommandCenterState extends State<CommandCenter> {
       final newsData = results[1] as Map<String, dynamic>;
       final notificationData = results[2] as Map<String, dynamic>;
       final decisionData = results[3] as Map<String, dynamic>;
+      final v5Overview = results[4] as Map<String, dynamic>;
       final ownership = latest
           .where((event) =>
               event is Map<String, dynamic> && event['category'] == 'OWNERSHIP')
@@ -442,7 +444,10 @@ class _CommandCenterState extends State<CommandCenter> {
               event is Map<String, dynamic> &&
               event['category'] == 'AFFILIATION')
           .toList();
-      final finData = results[4] as Map<String, dynamic>;
+      final v5Attention = v5Overview['attention'] is List
+          ? (v5Overview['attention'] as List).whereType<Map>().toList()
+          : const <Map>[];
+      final finData = results[5] as Map<String, dynamic>;
       final commUnread = 0;
       if (mounted) {
         setState(() {
@@ -455,8 +460,9 @@ class _CommandCenterState extends State<CommandCenter> {
           unreadCommMessages = commUnread;
           notifications =
               (notificationData['notifications'] as List<dynamic>?) ?? const [];
-          decisionQueue =
-              (decisionData['decisions'] as List<dynamic>?) ?? const [];
+          decisionQueue = v5Overview['version'] != null
+              ? v5Attention
+              : (decisionData['decisions'] as List<dynamic>?) ?? const [];
           unreadNotifications = asInt(notificationData['unread']) ??
               asInt(notificationData['unreadCount']) ??
               0;

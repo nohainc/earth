@@ -37,20 +37,18 @@ class _FormationComposerDialog extends StatefulWidget {
 
 class _FormationComposerDialogState extends State<_FormationComposerDialog> {
   late final TextEditingController _nameController;
-  late final TextEditingController _territoryController;
+  String _admissionPolicy = 'OPEN';
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController();
-    _territoryController =
-        TextEditingController(text: widget.initialTerritoryName ?? '');
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _territoryController.dispose();
     super.dispose();
   }
 
@@ -70,7 +68,7 @@ class _FormationComposerDialogState extends State<_FormationComposerDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-              'Founding creates a primary Territory and makes you its first executive.',
+              'Founding creates a Corporation, assigns you its initial executive and treasurer roles, and provisions pooled capacity automatically.',
               style: context.widgetFooterStyle),
           const SizedBox(height: 12),
           TextField(
@@ -83,13 +81,18 @@ class _FormationComposerDialogState extends State<_FormationComposerDialog> {
             ),
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: _territoryController,
-            style: context.bodyStyle.copyWith(color: context.inkColor),
+          DropdownButtonFormField<String>(
+            value: _admissionPolicy,
             decoration: InputDecoration(
-              labelText: 'Primary Territory name',
+              labelText: 'Admission policy',
               labelStyle: context.widgetFooterStyle,
             ),
+            items: const [
+              DropdownMenuItem(value: 'OPEN', child: Text('Open')),
+              DropdownMenuItem(value: 'APPROVAL', child: Text('Approval')),
+              DropdownMenuItem(value: 'INVITE_ONLY', child: Text('Invite only')),
+            ],
+            onChanged: _busy ? null : (value) => setState(() => _admissionPolicy = value ?? 'OPEN'),
           ),
         ],
       ),
@@ -101,16 +104,40 @@ class _FormationComposerDialogState extends State<_FormationComposerDialog> {
         ),
         EarthButton(
           label: 'Submit',
-          onPressed: () async {
+          onPressed: _busy ? null : () async {
             final selectedName = _nameController.text.trim();
-            if (selectedName.length < 2) return;
-            Navigator.pop(context);
-            await widget.action(() => const EarthApi().createCorporation(
-                  selectedName,
-                  territoryName: _territoryController.text.trim().isEmpty
-                      ? null
-                      : _territoryController.text.trim(),
-                ));
+            if (selectedName.length < 3) return;
+            setState(() => _busy = true);
+            try {
+              final quote = await const EarthApi().quoteV5CorporationFounding(selectedName);
+              if (!context.mounted) return;
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (confirmContext) => AlertDialog(
+                  title: const Text('Confirm Corporation founding'),
+                  content: Text(
+                    'Founding fee: ${quote['foundingFeeUnits'] ?? '0'} C\n'
+                    'Initial treasury reserve: ${quote['initialTreasuryReserveUnits'] ?? '0'} C\n'
+                    'Residential capacity: 1 unit\n\n'
+                    'The server will execute this as one idempotent founding command.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('CANCEL')),
+                    EarthButton(label: 'FOUND', onPressed: () => Navigator.pop(confirmContext, true)),
+                  ],
+                ),
+              ) ?? false;
+              if (!confirmed || !context.mounted) return;
+              Navigator.pop(context);
+              await widget.action(() async {
+                await const EarthApi().foundV5Corporation(
+                  name: selectedName,
+                  admissionPolicy: _admissionPolicy,
+                );
+                return const EarthApi().world();
+              });
+            } catch (_) {
+              if (context.mounted) setState(() => _busy = false);
+            }
           },
         ),
       ],

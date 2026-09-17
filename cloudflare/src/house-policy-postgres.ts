@@ -25,6 +25,37 @@ export async function listHousePolicies(repository: PostgresRepository, houseId:
   return { policies: result.rows, generatedFrom: 'postgres-canonical-facts' };
 }
 
+/** Read model for the single player-facing automation configuration. */
+export async function getHouseAutomation(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
+  const day = Number((await repository.query<{ game_day: string }>(
+    "SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'",
+  )).rows[0]?.game_day ?? 1);
+  const [policies, history] = await Promise.all([
+    repository.query(`SELECT id, policy_type, version, effective_from_game_day, status, operating_mode,
+             daily_spend_cap_units::TEXT, reserve_floor_units, max_input_price_units,
+             min_sale_price_units, procurement_quantity_units, rules_version
+        FROM house_operating_policies
+       WHERE house_id = $1 AND status = 'ACTIVE'
+       ORDER BY effective_from_game_day ASC, policy_type ASC, version DESC`, [houseId]),
+    repository.query(`SELECT l.id, l.game_day, l.action_type, l.decision, l.created_at
+        FROM policy_execution_log l
+        WHERE l.house_id = $1
+        ORDER BY l.game_day DESC, l.id DESC
+        LIMIT 50`, [houseId]),
+  ]);
+  const current = policies.rows.filter((row) => Number(row.effective_from_game_day) <= day);
+  const scheduled = policies.rows.filter((row) => Number(row.effective_from_game_day) > day);
+  return {
+    ok: true,
+    enabled: current.length > 0,
+    current,
+    scheduled,
+    nextRunGameDay: current.length > 0 ? day + 1 : null,
+    executionHistory: history.rows,
+    generatedFrom: 'postgres-canonical-facts',
+  };
+}
+
 export async function saveHousePolicy(repository: PostgresRepository, houseId: string, input: PolicyInput): Promise<Record<string, unknown>> {
   if (!['OPERATING', 'INVENTORY_RESERVE', 'MARKET_STANDING'].includes(input.policyType)) throw new Error('Unknown policy type');
   if (!Number.isInteger(input.effectiveFromGameDay) || input.effectiveFromGameDay < 1) throw new Error('Policy effective day must be a positive integer');

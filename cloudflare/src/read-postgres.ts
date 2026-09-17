@@ -57,6 +57,7 @@ export async function listTechnology(repository: PostgresRepository, humanId: st
       tc.patent_exclusivity_days,
       tc.credit_cost_units::TEXT AS research_credit_cost_units,
       tc.research_points_required::TEXT, tc.definition_version,
+      tc.research_duration_game_days::TEXT,
       COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'effectType', e.effect_type, 'modifierFamily', e.modifier_family,
         'targetType', e.target_type, 'targetKey', e.target_key,

@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { moneyToCents, formatCreditUnits, type CreditUnits } from './money.ts';
+import { formatCreditUnits } from './money.ts';
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
 
@@ -11,38 +11,6 @@ async function corporationForHuman(tx: PostgresRepository, humanId: string): Pro
   const corporationId = membership.rows[0]?.corporation_id;
   if (!corporationId) throw new Error('Building research is available only to corporation members');
   return corporationId;
-}
-
-function getScopeMultiplier(ownershipClass?: string): number {
-  if (ownershipClass === 'public_investment') return 3.5;
-  if (ownershipClass === 'civic') return 2.5;
-  return 2.0;
-}
-
-function getBaseDurationDays(constructionDays: number, ownershipClass?: string): number {
-  const days = Math.max(1, constructionDays);
-  if (ownershipClass === 'public_investment') {
-    return Math.max(14, Math.round(6 + days * 3.0));
-  }
-  if (ownershipClass === 'civic') {
-    return Math.max(8, Math.round(5 + days * 2.2));
-  }
-  return Math.max(5, Math.round(3 + days * 1.8));
-}
-
-function researchCost(baseCost: unknown, tier: number, ownershipClass?: string): CreditUnits {
-  const base = moneyToCents(baseCost);
-  const minimum = moneyToCents('1000');
-  const scope = ownershipClass === 'public_investment' ? [7n, 2n] : ownershipClass === 'civic' ? [5n, 2n] : [2n, 1n];
-  let result = (base > minimum ? base : minimum) * scope[0] / scope[1];
-  for (let i = 2; i < tier; i += 1) result *= 2n;
-  return result > minimum ? result : minimum;
-}
-
-function researchDurationDays(slotFootprint: number, tier: number, _ownershipClass?: string): number {
-  const slots = Math.max(1, slotFootprint || 1);
-  const days = (tier + 3) * slots;
-  return days;
 }
 
 export async function startCorporationBuildingResearchInTransaction(tx: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
@@ -71,8 +39,8 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
       [corporationId, input.buildingType],
     );
     const priorTier = Number(unlocked.rows[0]?.tier ?? 1);
-    const previous = await tx.query<{ id: string; tier: number; construction_credit_units: string; construction_minutes: number; slot_footprint: number; ownership_scope: string }>(
-      'SELECT id, tier, construction_credit_units, construction_minutes, slot_footprint, ownership_scope FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1',
+    const previous = await tx.query<{ id: string; tier: number; slot_footprint: number; ownership_scope: string }>(
+      'SELECT id, tier, slot_footprint, ownership_scope FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1',
       [input.buildingType, priorTier],
     );
     if (!previous.rows[0]) throw new Error('Building blueprint not found');
@@ -81,7 +49,7 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     const targetCatalogId = `${input.buildingType}-t${targetTier}`;
     // Tiers are authored in the catalog. Research unlocks a predefined
     // blueprint; it never generates or mutates shared catalog economics.
-    const targetCatalog = await tx.query(
+    const targetCatalog = await tx.query<{ research_credit_units: string; research_duration_game_days: number }>(
       'SELECT * FROM building_catalog WHERE id = $1 AND family_code = $2 AND tier = $3 AND tier BETWEEN 1 AND 5',
       [targetCatalogId, input.buildingType, targetTier],
     );
@@ -93,8 +61,8 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     if (existingProject.rows[0]) {
       throw new Error(`Your corporation has already researched or is researching Tier ${targetTier} for this building`);
     }
-    const costUnits = researchCost(previous.rows[0].construction_credit_units, targetTier, previous.rows[0].ownership_scope);
-    const durationDays = researchDurationDays(Number(previous.rows[0].slot_footprint ?? 1), targetTier, previous.rows[0].ownership_scope);
+    const costUnits = BigInt(targetCatalog.rows[0].research_credit_units);
+    const durationDays = Number(targetCatalog.rows[0].research_duration_game_days);
     // The database clock is the sole source of time. Do not derive or submit
     // a client/server timestamp for research start or completion.
     const timeRes = await tx.query<{ game_day: number }>(
@@ -152,6 +120,55 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
 
 export async function startCorporationBuildingResearch(repository: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
   return repository.transaction((tx) => startCorporationBuildingResearchInTransaction(tx, input));
+}
+
+/** Server-authoritative preview for the next Corporation building blueprint tier. */
+export async function quoteCorporationBuildingResearch(repository: PostgresRepository, input: { humanId: string; buildingType: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const corporationId = await corporationForHuman(tx, input.humanId);
+    await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`corp-building-research-quote:${corporationId}:${input.buildingType}`]);
+    const unlocked = await tx.query<{ tier: string }>(
+      `SELECT COALESCE(MAX(c.tier), 1)::text AS tier
+       FROM corporation_research_projects p
+       JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
+       JOIN building_catalog c ON c.id = p.target_id
+       WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' AND p.status = 'COMPLETED' AND c.family_code = $2`,
+      [corporationId, input.buildingType],
+    );
+    const currentTier = Number(unlocked.rows[0]?.tier ?? 1);
+    const previous = (await tx.query(`SELECT * FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1`, [input.buildingType, currentTier])).rows[0];
+    if (!previous) throw new Error('Building blueprint not found');
+    const targetTier = currentTier + 1;
+    if (targetTier > 5) throw new Error(`No predefined building tier remains after Tier ${currentTier}`);
+    const target = (await tx.query(`SELECT * FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1`, [input.buildingType, targetTier])).rows[0];
+    if (!target) throw new Error(`Predefined Tier ${targetTier} blueprint is missing from the building catalog`);
+    const existing = (await tx.query<{ id: string; status: string }>(
+      `SELECT p.id, p.status FROM corporation_research_projects p
+       JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
+       WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' AND p.target_id = $2
+         AND p.status IN ('QUEUED','ACTIVE','COMPLETED') LIMIT 1`,
+      [corporationId, target.id],
+    )).rows[0] ?? null;
+    const costUnits = BigInt(target.research_credit_units);
+    const durationDays = Number(target.research_duration_game_days);
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
+    return {
+      ok: true,
+      corporationId,
+      currentTier,
+      targetTier,
+      currentBlueprint: previous,
+      targetBlueprint: target,
+      quote: {
+        researchCostUnits: costUnits.toString(),
+        durationDays,
+        startsGameDay: day + 1,
+        completesGameDay: day + 1 + durationDays,
+        alreadyActive: existing,
+      },
+      generatedFrom: 'postgres-canonical-building-catalog-v5',
+    };
+  });
 }
 
 export async function listCorporationBuildingResearch(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {

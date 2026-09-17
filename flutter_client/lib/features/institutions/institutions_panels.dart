@@ -226,28 +226,17 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   }
 
   Future<void> _load() async {
-    final fallback = widget.state.rankings['corporations'] is List
-        ? (widget.state.rankings['corporations'] as List)
-            .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
-            .toList()
-        : <Map<String, dynamic>>[];
-
     final generation = ++_searchGeneration;
     setState(() {
       _loading = true;
       _error = null;
-      if (fallback.isNotEmpty && _corporations.isEmpty) {
-        _corporations = fallback;
-        _selected = fallback.first;
-      }
     });
     try {
       final query = _search.text.trim();
       final rows = await const EarthApi().listCorporations(search: query);
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
-        _corporations = (rows.isEmpty && query.isEmpty) ? fallback : rows;
+        _corporations = rows;
         if (widget.selectedCorporationId != null) {
           _selected = _corporations.firstWhere(
             (r) => r['id']?.toString() == widget.selectedCorporationId,
@@ -270,16 +259,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     } catch (_) {
       if (mounted && generation == _searchGeneration) {
         setState(() {
-          if (_corporations.isEmpty &&
-              _search.text.trim().isEmpty &&
-              fallback.isNotEmpty) {
-            _corporations = fallback;
-            _selected = _corporations.first;
-            widget.onSelectCorporation?.call(_selected!);
-          }
-          _error = fallback.isNotEmpty
-              ? 'Live directory unavailable — showing cached world data.'
-              : 'Live directory unavailable.';
+          _error = 'Live Corporation directory unavailable.';
           _loading = false;
         });
       }
@@ -292,18 +272,37 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     if (id == null) return;
     final policy =
         (target?['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase();
-    if (policy != 'OPEN') return;
+    if (!const {'OPEN', 'APPROVAL', 'INVITE_ONLY'}.contains(policy)) return;
+    Map<String, dynamic> quote = const {};
+    try {
+      quote = await const EarthApi().quoteV5CorporationMembership(id);
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error =
+            'Admission consequences are unavailable. Please try again when the server quote is ready.');
+      }
+      return;
+    }
+    if (quote['ok'] != true) return;
+    if (!mounted) return;
+    final inviteController = TextEditingController();
+    try {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(policy == 'OPEN' ? 'JOIN CORPORATION?' : 'APPLY TO JOIN?'),
-        content: Text(
-          '${target?['name'] ?? id}\n\n'
-          'Territory: ${target?['primary_territory_name'] ?? 'Not reported'}\n'
-          'Income tax: ${_rate(target?['income_tax_bps'])}\n'
-          'Sales fee: ${_rate(target?['sales_tax_bps'])}\n\n'
-          'Review this affiliation before continuing. The server remains authoritative for membership and residency consequences.',
-        ),
+        title: Text(policy == 'OPEN' ? 'JOIN CORPORATION?' : 'REVIEW ADMISSION?'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('${target?['name'] ?? id}\n\n'
+            'Admission: ${_admissionLabel(target ?? const {})}\n'
+            'Residential capacity added: 1 unit\n'
+            'Current usage: ${quote['capacity'] is Map ? (quote['capacity'] as Map)['currentUsage'] ?? 'Not reported' : 'Not reported'}\n'
+            'Incremental daily rent: ${quote['capacity'] is Map ? (quote['capacity'] as Map)['incrementalCharge'] ?? 'Not reported' : 'Not reported'}\n\n'
+            'Review this affiliation before continuing. Capacity and pricing are calculated by the server.'),
+          if (policy == 'INVITE_ONLY') ...[
+            const SizedBox(height: 12),
+            TextField(controller: inviteController, obscureText: true, decoration: const InputDecoration(labelText: 'Invitation token')),
+          ],
+        ]),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -311,13 +310,18 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
               child: Text(
-                  policy == 'OPEN' ? 'JOIN CORPORATION' : 'APPLY TO JOIN')),
+                  policy == 'OPEN' ? 'JOIN CORPORATION' : policy == 'APPROVAL' ? 'APPLY TO JOIN' : 'ACCEPT INVITATION')),
         ],
       ),
     );
     if (accepted != true || !mounted) return;
-    await widget
-        .action(() => const EarthApi().joinCorporation(corporationId: id));
+    await widget.action(() async {
+      await const EarthApi().applyV5CorporationMembership(corporationId: id, inviteToken: inviteController.text.trim());
+      return const EarthApi().world();
+    });
+    } finally {
+      inviteController.dispose();
+    }
   }
 
   void _scheduleSearch() {
@@ -330,6 +334,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       case 'OPEN':
         return 'OPEN';
       case 'REQUEST':
+      case 'APPROVAL':
         return 'APPLICATION';
       case 'INVITE_ONLY':
       case 'INVITE':
@@ -341,10 +346,18 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     }
   }
 
-  String _joinLabel(Map<String, dynamic> row) =>
-      (row['admission_policy']?.toString().toUpperCase() == 'REQUEST')
-          ? 'APPLY TO JOIN'
-          : 'JOIN';
+  String _joinLabel(Map<String, dynamic> row) {
+    switch (row['admission_policy']?.toString().toUpperCase()) {
+      case 'APPROVAL':
+      case 'REQUEST':
+        return 'APPLY TO JOIN';
+      case 'INVITE_ONLY':
+      case 'INVITE':
+        return 'ACCEPT INVITATION';
+      default:
+        return 'JOIN';
+    }
+  }
 
   String _rate(dynamic value) {
     final bps = asInt(value);
@@ -357,7 +370,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     if (_isMember || isAffiliated) return false;
     final policy =
         (row['admission_policy']?.toString() ?? 'UNKNOWN').toUpperCase();
-    return policy == 'OPEN';
+    return const {'OPEN', 'APPROVAL', 'INVITE_ONLY'}.contains(policy);
   }
 
   Future<void> _confirmLeave(BuildContext context) async {
@@ -544,6 +557,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final privateCapacity = asIntOr(row['private_slot_capacity'], 0);
     final privateUsed = asIntOr(row['private_slots_used'], 0);
     final capacityAvailable = math.max(0, privateCapacity - privateUsed);
+    final v5Occupied = row['v5_occupied_capacity']?.toString();
+    final v5Containers = row['v5_required_territory_units']?.toString();
+    final v5Standard = row['v5_standard_territory_capacity']?.toString();
     final admissionPolicy =
         (row['admission_policy'] ?? 'UNKNOWN').toString().toUpperCase();
 
@@ -643,6 +659,23 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                     ? '$capacityAvailable available'
                     : 'Not reported',
                 accentColor: context.goldColor),
+            if (v5Occupied != null) ...[
+              _buildAttributeRow(context,
+                  icon: Icons.stacked_bar_chart_outlined,
+                  label: 'POOLED CAPACITY',
+                  value: '$v5Occupied occupied',
+                  accentColor: context.primaryColor),
+              _buildAttributeRow(context,
+                  icon: Icons.layers_outlined,
+                  label: 'STANDARD CONTAINERS',
+                  value: '$v5Containers × $v5Standard units',
+                  accentColor: context.secondaryColor),
+              _buildAttributeRow(context,
+                  icon: Icons.public_outlined,
+                  label: 'EARTH CAPACITY EXPENSE',
+                  value: '${row['v5_earth_capacity_expense']?.toString() ?? 'Not reported'} C/day',
+                  accentColor: context.warningColor),
+            ],
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
@@ -994,7 +1027,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       statusColor: context.primaryColor,
       infoTitle: 'HOW CORPORATIONS WORK',
       infoDescription:
-          'Corporations are local polities and economic communities. They govern Territories, local policy, infrastructure, technology adoption, and House membership.',
+          'Corporations are local economic communities. They manage membership, pooled capacity, infrastructure, technology adoption, and Corporation policy.',
       title: 'CORPORATION DIRECTORY',
       subtitle:
           'Compare local policies, Territories, technology, and membership conditions.',
@@ -1058,6 +1091,12 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         'territory';
     final members = current['member_count'] ?? 0;
     final treasury = asDouble(current['treasury']) ?? 0.0;
+    final occupied = current['v5_occupied_capacity']?.toString();
+    final requiredContainers = current['v5_required_territory_units']?.toString();
+    final standardCapacity = current['v5_standard_territory_capacity']?.toString();
+    final affiliationSummary = occupied != null
+        ? 'Your House is affiliated with $name. The Corporation uses $occupied occupied capacity units across $requiredContainers standardized containers of $standardCapacity units ($members Houses · ${treasury.toStringAsFixed(0)} C treasury reserves).'
+        : 'Your House belongs to $name and resides in its primary Territory: $territory ($members Houses · ${treasury.toStringAsFixed(0)} C treasury reserves).';
 
     return Container(
       padding: EdgeInsets.all(context.cardPadding),
@@ -1095,7 +1134,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Your House belongs to $name and resides in its primary Territory: $territory ($members Houses · ${treasury.toStringAsFixed(0)} C treasury reserves).',
+                      affiliationSummary,
                       style:
                           context.bodyStyle.copyWith(color: context.inkColor),
                     ),
@@ -3100,6 +3139,8 @@ class CorporationOverviewPanel extends StatelessWidget {
     final id = corporation['id']?.toString() ?? '—';
     final memberCount =
         asIntOr(corporation['member_count'] ?? corporation['members'], 0);
+    final pooledCapacity = corporation['v5_occupied_capacity']?.toString();
+    final standardUnits = corporation['v5_required_territory_units']?.toString();
     final treasury = asDouble(corporation['treasury']);
     final operatingBudget = asDouble(corporation['operating_budget']);
     final reserve = asDouble(corporation['reserve']);
@@ -3140,7 +3181,7 @@ class CorporationOverviewPanel extends StatelessWidget {
       statusColor: isAffiliated ? context.successColor : context.primaryColor,
       infoTitle: 'CORPORATE GOVERNANCE & COMMONS ARCHITECTURE',
       infoDescription:
-          '• Chartered Governance: Corporations establish sovereign bylaws, taxation rates, and supermajority governance thresholds (67%).\n\n• Territory Network: Corporations own and operate Territories, providing shared infrastructure and services.\n\n• Corporate Treasury & Commons: Distinct institutional CREDIT accounts fund public infrastructure, research, shared patents, and collective expansion.',
+          '• Chartered Governance: Corporations establish versioned bylaws, taxation rates, and future-effective governance changes.\n\n• Pooled Capacity: Affiliated Houses and public infrastructure consume shared capacity, with standardized units calculated automatically.\n\n• Corporate Treasury & Commons: Distinct institutional CREDIT accounts fund public infrastructure, research, shared patents, and collective expansion.',
       title: name.toUpperCase(),
       subtitle:
           'Chartered corporate governance, Territory infrastructure, and shared enterprise commons across Earth',
@@ -3152,10 +3193,16 @@ class CorporationOverviewPanel extends StatelessWidget {
           color: context.primaryColor,
         ),
         CockpitMetric(
-          label: 'Territories',
-          value: '${corporation['territory_count'] ?? 'UNAVAILABLE'}',
-          icon: Icons.map_outlined,
+          label: 'Occupied capacity',
+          value: pooledCapacity ?? 'UNAVAILABLE',
+          icon: Icons.stacked_bar_chart_outlined,
           color: context.secondaryColor,
+        ),
+        CockpitMetric(
+          label: 'Standard units',
+          value: standardUnits ?? 'UNAVAILABLE',
+          icon: Icons.layers_outlined,
+          color: context.goldColor,
         ),
         CockpitMetric(
           label: 'Proposals',
@@ -3178,7 +3225,7 @@ class CorporationOverviewPanel extends StatelessWidget {
       showHeader: false,
       infoBulletPoints: const [
         'Corporation membership determines which shared rules, Territories, technologies, contracts, and services are available to you.',
-        'A Territory belongs to a Corporation and carries its local capacity, infrastructure, and services.',
+            'Corporation capacity is pooled; standardized Territory units are calculated from the occupied footprint.',
         'Independent people use Earth default rules and do not participate in corporation decisions.',
         'Corporate Budget: the Corporation treasury funds public infrastructure, services, research, and corporate projects.',
       ],
@@ -3533,8 +3580,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                     onPressed: busy
                         ? null
                         : () => (action ?? ((_) async {}))(() =>
-                            const EarthApi()
-                                .joinCorporation(corporationId: id)),
+                            const EarthApi().joinV5Corporation(corporationId: id)),
                   ),
                 ],
               ],
@@ -3657,15 +3703,50 @@ class CorporationTerritorySection extends StatefulWidget {
       _CorporationTerritorySectionState();
 }
 
+Widget _capacityAttributeRow(
+  BuildContext context, {
+  required IconData icon,
+  required String label,
+  required String value,
+  required Color accentColor,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Icon(icon, size: 14, color: accentColor),
+        const SizedBox(width: 6),
+        Text(label,
+            style: context.bodyStyle.copyWith(
+                color: context.mutedColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(value,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: context.bodyStyle.copyWith(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+}
+
 class _CorporationTerritorySectionState
     extends State<CorporationTerritorySection> {
   late Future<Map<String, dynamic>> _territories;
+  late Future<Map<String, dynamic>> _capacity;
 
   @override
   void initState() {
     super.initState();
     _territories =
         const EarthApi().listCorporationTerritories(widget.corporationId);
+    _capacity = const EarthApi().getV5CorporationCapacity(widget.corporationId);
   }
 
   @override
@@ -3676,34 +3757,100 @@ class _CorporationTerritorySectionState
         final rows = snapshot.data?['territories'] is List
             ? (snapshot.data!['territories'] as List).whereType<Map>().toList()
             : const <Map>[];
-        return EarthSection(
-          title: 'CORPORATION TERRITORIES',
+        return FutureBuilder<Map<String, dynamic>>(
+          future: _capacity,
+          builder: (context, capacitySnapshot) {
+            final capacity = capacitySnapshot.data?['capacity'] is Map
+                ? Map<String, dynamic>.from(
+                    capacitySnapshot.data!['capacity'] as Map)
+                : const <String, dynamic>{};
+            final occupied = capacity['totalOccupiedUnits']?.toString() ??
+                capacity['total_occupied_units']?.toString();
+            final standard = capacity['standardTerritoryCapacity']?.toString() ??
+                capacity['standard_territory_capacity']?.toString();
+            final required = capacity['requiredTerritoryUnits']?.toString() ??
+                capacity['required_territory_units']?.toString();
+            final residential = capacity['residentialUnits']?.toString() ??
+                capacity['residential_units']?.toString();
+            final privateUnits = capacity['privateBuildingUnits']?.toString() ??
+                capacity['private_building_units']?.toString();
+            final publicUnits = capacity['publicBuildingUnits']?.toString() ??
+                capacity['public_building_units']?.toString();
+            final denominator = int.tryParse(
+                capacity['utilizationDenominator']?.toString() ??
+                    capacity['utilization_denominator']?.toString() ??
+                    '0');
+            final numerator = int.tryParse(
+                capacity['utilizationNumerator']?.toString() ??
+                    capacity['utilization_numerator']?.toString() ??
+                    '0');
+            final utilization = denominator != null && denominator > 0
+                ? '${((numerator ?? 0) * 100 / denominator).toStringAsFixed(1)}%'
+                : 'UNAVAILABLE';
+
+            return EarthSection(
+          title: 'CORPORATION CAPACITY',
           showSurface: true,
           infoBulletPoints: const [
-            'Territories are geographic subdivisions of the Corporation, not separate political institutions.',
-            'Buildings, private slots, public slots, and service capacity are settled here.',
+            'Corporation capacity is pooled across affiliated Houses and public infrastructure.',
+            'Standardized Territory units are calculated automatically from occupied capacity.',
           ],
-          child: snapshot.connectionState == ConnectionState.waiting
-              ? const LinearProgressIndicator()
-              : rows.isEmpty
-                  ? Text('No active Territories are available.',
-                      style: context.bodyStyle)
-                  : Column(
-                      children: rows.map((row) {
-                        final name = row['name']?.toString() ??
-                            row['id']?.toString() ??
-                            'Territory';
-                        final primary =
-                            row['is_primary'] == true ? ' · PRIMARY' : '';
-                        return ListTile(
-                          dense: true,
-                          leading: const Icon(Icons.map_outlined),
-                          title: Text('$name$primary'),
-                          subtitle: Text(
-                              '${row['territory_type'] ?? 'TERRITORY'} · ${row['status'] ?? 'ACTIVE'}'),
-                        );
-                      }).toList(),
-                    ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (capacitySnapshot.connectionState == ConnectionState.waiting)
+                const LinearProgressIndicator()
+              else if (capacity.isEmpty)
+                Text('V5 capacity is not available yet.',
+                    style: context.widgetFooterStyle)
+              else ...[
+                _capacityAttributeRow(context,
+                    icon: Icons.stacked_bar_chart_outlined,
+                    label: 'OCCUPIED CAPACITY',
+                    value: occupied ?? 'UNAVAILABLE',
+                    accentColor: context.primaryColor),
+                _capacityAttributeRow(context,
+                    icon: Icons.home_outlined,
+                    label: 'MEMBER RESIDENTIAL',
+                    value: residential ?? 'UNAVAILABLE',
+                    accentColor: context.secondaryColor),
+                _capacityAttributeRow(context,
+                    icon: Icons.business_outlined,
+                    label: 'PRIVATE / PUBLIC FOOTPRINT',
+                    value: '${privateUnits ?? '—'} / ${publicUnits ?? '—'}',
+                    accentColor: context.goldColor),
+                _capacityAttributeRow(context,
+                    icon: Icons.layers_outlined,
+                    label: 'STANDARD UNITS',
+                    value: '${required ?? '—'} × ${standard ?? '—'} capacity',
+                    accentColor: context.primaryColor),
+                _capacityAttributeRow(context,
+                    icon: Icons.speed_outlined,
+                    label: 'UTILIZATION',
+                    value: utilization,
+                    accentColor: context.successColor),
+              ],
+              if (rows.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text('COMPATIBILITY TERRITORY RECORDS',
+                    style: context.widgetFooterStyle),
+                ...rows.map((row) {
+                  final name = row['name']?.toString() ??
+                      row['id']?.toString() ?? 'Territory';
+                  final status = row['status']?.toString() ?? 'ACTIVE';
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.map_outlined),
+                    title: Text(name),
+                    subtitle: Text(
+                        '${row['territory_type'] ?? 'TERRITORY'} · $status'),
+                  );
+                }),
+              ],
+            ],
+          ),
+        );
+          },
         );
       },
     );
@@ -3769,13 +3916,13 @@ class CorporationFormationAccessPanel extends StatelessWidget {
       title: 'CORPORATION FORMATION',
       showSurface: false,
       infoBulletPoints: const [
-        'Corporations are local polities. Each new Corporation receives its primary Territory.',
+        'Corporations are local polities. Capacity and standardized Territory units are calculated automatically after founding.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'You are not affiliated with a Corporation yet. Found a Corporation to receive its primary Territory and local public budget.',
+            'You are not affiliated with a Corporation yet. Found a Corporation to establish its pooled capacity policy and local public budget.',
             style: context.widgetFooterStyle,
           ),
           SizedBox(height: context.spacingControl),
@@ -4071,17 +4218,8 @@ class InstitutionsCapacityPanel extends StatelessWidget {
       'compute': 0,
     };
     for (final building in buildings) {
-      final policy = building['operating_policy']?.toString() ?? 'balanced';
-      final outputMultiplier = policy == 'high_output'
-          ? 1.3
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .75
-              : 1.0;
-      final costMultiplier = policy == 'high_output'
-          ? 1.4
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .7
-              : 1.0;
+      final outputMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
+      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
       for (final resource in totals.keys) {
         var output = asDoubleOr(building['output_$resource'], 0);
         if (output == 0 &&
@@ -4106,17 +4244,8 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     var civicBuildingIncome = 0.0;
     var buildingCosts = 0.0;
     for (final building in buildings) {
-      final policy = building['operating_policy']?.toString() ?? 'balanced';
-      final outputMultiplier = policy == 'high_output'
-          ? 1.3
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .75
-              : 1.0;
-      final costMultiplier = policy == 'high_output'
-          ? 1.4
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? .7
-              : 1.0;
+      final outputMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
+      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
       var output = asDoubleOr(building['output_credits'], 0);
       if (output == 0 &&
           (building['resource_output_type']?.toString() == 'credits' ||

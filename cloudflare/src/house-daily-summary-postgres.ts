@@ -55,7 +55,7 @@ export async function getHouseDailySummary(
     throw new Error('Summary day must be a completed game day');
   }
 
-  const [statement, cashflow, taxes, market, events, notifications] = await Promise.all([
+  const [statement, cashflow, taxes, market, events, notifications, capacity] = await Promise.all([
     repository.query(`
       SELECT opening_assets, closing_assets, production, consumption, market_activity,
              obligations, exceptions, net_credit_units
@@ -104,10 +104,34 @@ export async function getHouseDailySummary(
       ORDER BY created_at, id`, [houseId, summaryDay]),
   ]);
 
+  // V5 is additive while older summary callers can still run against a
+  // pre-V5 projection. Keep the optional read isolated so the core summary
+  // remains available during rollout and migration catch-up.
+  let v5Capacity: { rows: Array<Record<string, unknown>> } = { rows: [] };
+  try {
+    v5Capacity = await repository.query(`
+      SELECT
+        COALESCE(SUM(assessed_units), 0)::text AS assessed,
+        COALESCE(SUM(paid_units), 0)::text AS paid,
+        COALESCE(SUM(arrears_units), 0)::text AS arrears,
+        COALESCE(MAX(delinquency_status), 'CURRENT') AS status
+      FROM house_capacity_statements_v5
+      WHERE house_id = $1 AND game_day = $2`, [houseId, summaryDay]);
+  } catch {
+    // The V5 migration may not yet be present on an older read replica.
+  }
+
   const financial = cashflow.rows[0] ?? {};
   const income = units(financial.income);
   const expenses = units(financial.expenses);
   const taxUnits = units(taxes.rows[0]?.taxes);
+  const capacityRow = v5Capacity.rows[0] as Record<string, unknown> | undefined;
+  const capacityRent = {
+    assessed: units(capacityRow?.assessed),
+    paid: units(capacityRow?.paid),
+    arrears: units(capacityRow?.arrears),
+    status: String(capacityRow?.status ?? 'CURRENT'),
+  };
   const eventList = eventRows(events.rows as Record<string, unknown>[]);
   const buildings = eventList.filter((event) => event.type.startsWith('BUILDING_'));
   const research = eventList.filter((event) => event.type.startsWith('RESEARCH_') || event.type.startsWith('TECHNOLOGY_'));
@@ -157,6 +181,13 @@ export async function getHouseDailySummary(
     reason: `${item.resource} production was ${item.produced} and consumption was ${item.consumed} on game day ${summaryDay}.`,
     actionLabel: 'REVIEW RESOURCES', targetSection: 'buildings',
   });
+  if (capacityRent.arrears > 0 || capacityRent.status !== 'CURRENT') highlights.push({
+    id: `capacity-rent:${summaryDay}`,
+    severity: capacityRent.arrears > 0 ? 'high' : 'warning',
+    title: 'Capacity rent requires attention',
+    reason: `Capacity rent was assessed at ${capacityRent.assessed} CREDIT; ${capacityRent.arrears} CREDIT remains in arrears.`,
+    actionLabel: 'REVIEW FINANCE', targetSection: 'finance',
+  });
   for (const alert of notifications.rows as Array<Record<string, unknown>>) {
     const type = String(alert.notification_type ?? '').toLowerCase();
     if (alert.read_at != null || !/(failed|overdue|inactive|expired|risk|urgent|required|shortage)/.test(type)) continue;
@@ -177,6 +208,7 @@ export async function getHouseDailySummary(
       taxes: taxUnits,
       marketPurchases: market.rows.reduce((sum, row) => sum + units(row.purchases), 0),
       marketSales: market.rows.reduce((sum, row) => sum + units(row.sales), 0),
+      ...(capacityRow ? { capacityRent } : {}),
     },
     statement: statementView,
     resources: { produced: resourceDeltas.filter((item) => item.produced > 0), consumed: resourceDeltas.filter((item) => item.consumed > 0), deltas: resourceDeltas, traded: market.rows.map((row) => ({ commodity: row.commodity, purchases: units(row.purchases), sales: units(row.sales), volume: units(row.volume) })) },

@@ -34,7 +34,7 @@ export async function createGameEvent(repository: PostgresRepository, input: Gam
 
 export async function createAffiliationEvent(
   repository: PostgresRepository,
-  input: { id: string; humanId: string; institutionType: 'CORPORATION'; institutionId: string; action: string; gameDay: number; reason: string },
+  input: { id: string; humanId: string; institutionType: 'CORPORATION'; institutionId: string; action: string; gameDay: number; reason: string; correlationId?: string },
 ): Promise<void> {
   await createGameEvent(repository, {
     id: input.id,
@@ -46,5 +46,6 @@ export async function createAffiliationEvent(
     subjectId: input.institutionId,
     title: `${input.institutionType} affiliation ${input.action}`,
     details: { humanId: input.humanId, institutionId: input.institutionId, reason: input.reason },
+    correlationId: input.correlationId,
   });
 }

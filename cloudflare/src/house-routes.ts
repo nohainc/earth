@@ -10,7 +10,7 @@ import {
   updateHouseMotto,
 } from './house-postgres.ts';
 import { getHouseDailySummary } from './house-daily-summary-postgres.ts';
-import { listHousePolicies, saveHouseAutomation, saveHousePolicy } from './house-policy-postgres.ts';
+import { getHouseAutomation, listHousePolicies, saveHouseAutomation, saveHousePolicy } from './house-policy-postgres.ts';
 import { advanceHouseOnboarding, getHouseOnboarding } from './house-onboarding-postgres.ts';
 import { getHouseResidency, moveHouseResidence, quoteHouseMove } from './residency-postgres.ts';
 import { claimHouseEntrySupport, getHouseEntrySupport } from './catch-up-postgres.ts';
@@ -160,6 +160,18 @@ export async function handleHouseRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Policy save failed' }, { status: 400 });
+    }
+  }
+
+  if (url.pathname === '/api/house/automation' && request.method === 'GET') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    try {
+      const result = await withRepository(env, (repository) => getHouseAutomation(repository, viewer.house_id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Automation read failed' }, { status: 400 });
     }
   }
 

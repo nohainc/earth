@@ -16,6 +16,23 @@ extension EarthApiMarket on EarthApi {
     return world();
   }
 
+  Future<Map<String, dynamic>> quoteOrder({
+    required String product,
+    required double quantity,
+    required double limitPrice,
+    String side = 'buy',
+  }) async {
+    final response = await _request('/api/market/order-quote', method: 'POST', body: {
+      'product': product,
+      'quantity': quantity,
+      'limitPrice': limitPrice,
+      'side': side,
+    });
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{'ok': false, 'error': 'Market quote unavailable'};
+  }
+
   Future<EarthState> cancelOrder(String orderId) async {
     await _request('/api/market/orders/$orderId', method: 'DELETE');
     return world();

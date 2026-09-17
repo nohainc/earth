@@ -14,8 +14,9 @@ export type TechnologyCatalogRow = {
   patent_exclusivity_days: number;
   research_credit_cost_units: string;
   research_points_required: string;
+  research_duration_game_days: string;
   status: string;
-  definition_version: number;
+  definition_version: string;
   effective_from_game_day: number;
   effective_to_game_day: number | null;
   effects: Array<Record<string, unknown>>;
@@ -26,6 +27,7 @@ export function mapTechnologyCatalogRow(row: TechnologyCatalogRow): Record<strin
     ...row,
     researchCostUnits: row.research_credit_cost_units,
     researchPointsRequired: row.research_points_required,
+    researchDurationGameDays: row.research_duration_game_days,
     effects: row.effects ?? [],
     kind: 'approved_capability',
     tradeable: false,
@@ -36,8 +38,8 @@ export function mapTechnologyCatalogRow(row: TechnologyCatalogRow): Record<strin
 async function readTechnologyCatalog(tx: PostgresRepository, gameDay?: number): Promise<TechnologyCatalogRow[]> {
   const day = gameDay ?? 0;
   const result = await tx.query<TechnologyCatalogRow>(`SELECT DISTINCT ON (tc.code) tc.id, tc.code, tc.name, tc.category, tc.description,
-      patentable, patent_exclusivity_days, research_credit_cost_units::TEXT,
-      research_points_required::TEXT, status, definition_version,
+      patentable, patent_exclusivity_days, credit_cost_units::TEXT AS research_credit_cost_units,
+      research_points_required::TEXT, research_duration_game_days::TEXT, status, definition_version,
       effective_from_game_day, effective_to_game_day,
       (SELECT COALESCE(jsonb_agg(jsonb_build_object(
         'effectType', e.effect_type, 'modifierFamily', e.modifier_family, 'targetType', e.target_type,
@@ -146,8 +148,87 @@ export async function createResearchProject(repository: PostgresRepository, inpu
   });
 }
 
+export async function quoteResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string }): Promise<Record<string, unknown>> {
+  const world = await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'");
+  const day = Number(world.rows[0]?.game_day ?? 0);
+  await requireResearchJurisdiction(repository, input.ownerId);
+  const catalog = await readTechnologyCatalog(repository, day);
+  const entry = catalog.find((technology) => technology.name === input.name || technology.code === input.name);
+  if (!entry) throw new Error('Technology is not available in the active catalog');
+  await repository.query('SELECT earth_assert_technology_research_allowed($1, $2)', [entry.id, day + 1]);
+  const membership = (await repository.query<{ corporation_id: string }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.ownerId])).rows[0];
+  const activeProject = membership ? (await repository.query<{ id: string; status: string; progress_research_points: string }>(`SELECT p.id, p.status, p.progress_research_points::TEXT FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id WHERE o.id = $1 AND p.target_id = $2 AND p.status IN ('QUEUED','ACTIVE') LIMIT 1`, [membership.corporation_id, entry.id])).rows[0] : undefined;
+  return {
+    ok: true,
+    technology: mapTechnologyCatalogRow(entry),
+    quote: {
+      researchCostUnits: entry.research_credit_cost_units,
+      researchPointsRequired: entry.research_points_required,
+      researchDurationGameDays: entry.research_duration_game_days,
+      startsGameDay: day + 1,
+      completesGameDay: day + 1 + Number(entry.research_duration_game_days),
+      alreadyActive: activeProject ?? null,
+    },
+    generatedFrom: 'postgres-canonical-facts',
+  };
+}
+
 export async function fundResearchProject(repository: PostgresRepository, input: { ownerId: string; amount: number; correlationId: string }): Promise<Record<string, unknown>> {
   void repository;
   void input;
   throw new Error('Research is funded at creation and completes after its scheduled whole-day duration');
+}
+
+// V5 research advances once per finalized day. Completion and access grant
+// happen in the same transaction so retries cannot double-apply progression.
+export async function advanceV5ResearchProjects(
+  repository: PostgresRepository,
+  gameDay: number,
+): Promise<Record<string, unknown>> {
+  const candidates = await repository.query<{ id: string }>(
+    "SELECT id FROM corporation_research_projects WHERE target_type = 'TECHNOLOGY' AND status = 'ACTIVE' ORDER BY priority, id LIMIT 100",
+  );
+  let advanced = 0;
+  let completed = 0;
+  for (const candidate of candidates.rows) {
+    await repository.transaction(async (tx) => {
+      const project = (await tx.query<{
+        id: string;
+        corporation_economic_id: string;
+        target_id: string;
+        required_research_points: string;
+        progress_research_points: string;
+      }>(
+        `SELECT id, corporation_economic_id, target_id,
+                required_research_points::TEXT,
+                progress_research_points::TEXT
+           FROM corporation_research_projects
+          WHERE id = $1 AND target_type = 'TECHNOLOGY' AND status = 'ACTIVE'
+          FOR UPDATE`,
+        [candidate.id],
+      )).rows[0];
+      if (!project) return;
+
+      const next = BigInt(project.progress_research_points) + 1n;
+      const required = BigInt(project.required_research_points);
+      const progress = next < required ? next : required;
+      await tx.query(
+        'UPDATE corporation_research_projects SET progress_research_points = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [progress.toString(), project.id],
+      );
+      advanced += 1;
+      if (progress < required) return;
+
+      await tx.query(
+        "UPDATE corporation_research_projects SET status = 'COMPLETED', completed_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND status = 'ACTIVE'",
+        [gameDay, project.id],
+      );
+      await tx.query(
+        "SELECT earth_grant_corporation_technology_access($1, $2, 'RESEARCHED', $3, $4)",
+        [project.corporation_economic_id, project.target_id, project.id, gameDay + 1],
+      );
+      completed += 1;
+    });
+  }
+  return { ok: true, gameDay, projectsScanned: candidates.rows.length, advanced, completed };
 }

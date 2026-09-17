@@ -18,6 +18,7 @@ export type DailySettlementPhase = {
 };
 
 export type DailySettlementPhaseHandlers = {
+  v5PolicyActivation: (context: DailySettlementPhaseContext) => Promise<unknown>;
   activateSuccessors: (context: DailySettlementPhaseContext) => Promise<unknown>;
   preparePartitions: (context: DailySettlementPhaseContext) => Promise<unknown>;
   rebuildProfiles: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -36,6 +37,8 @@ export type DailySettlementPhaseHandlers = {
   mandatoryBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
   scheduledBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
   territoryCapacityProjections: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  v5Capacity: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  v5TerritoryContainers: (context: DailySettlementPhaseContext) => Promise<unknown>;
   corporationDynamics: (context: DailySettlementPhaseContext) => Promise<unknown>;
   houseNeedsServices: (context: DailySettlementPhaseContext) => Promise<unknown>;
   perishableResourceDecay: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -72,6 +75,7 @@ export function createDailySettlementPhaseRegistry(
   handlers: DailySettlementPhaseHandlers,
 ): readonly DailySettlementPhase[] {
   return [
+    required('v5_policy_activation', 4, 'all', handlers.v5PolicyActivation),
     required('succession_activation', 5, 'all', handlers.activateSuccessors),
     deferred('prepare_partitions', 10, 'all', handlers.preparePartitions),
     deferred('profile_rebuild', 20, 'owner-shards', handlers.rebuildProfiles),
@@ -91,6 +95,8 @@ export function createDailySettlementPhaseRegistry(
     deferred('mandatory_budget_payments', 115, 'all', handlers.mandatoryBudgetPayments),
     deferred('scheduled_budget_payments', 116, 'all', handlers.scheduledBudgetPayments),
     required('territory_capacity_projections', 120, 'all', handlers.territoryCapacityProjections),
+    required('v5_capacity_assessment', 121, 'all', handlers.v5Capacity),
+    required('v5_territory_containers', 122, 'all', handlers.v5TerritoryContainers),
     required('corporation_dynamics', 125, 'all', handlers.corporationDynamics),
     required('house_needs_services', 126, 'owner-shards', handlers.houseNeedsServices),
     required('perishable_resource_decay', 127, 'owner-shards', handlers.perishableResourceDecay),

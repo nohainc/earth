@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { applyConditionStack } from './world-conditions.ts';
+import { quoteV5HouseCapacityChange } from './v5-capacity-postgres.ts';
 
 export type TerritoryCapacity = {
   territory_id: string;
@@ -48,7 +49,7 @@ export async function getTerritoryCapacity(repository: PostgresRepository, terri
 
 type ConstructionRequirement = { code: string; asset_id: number; required_units: string; available_units: string; missing_units: string };
 
-async function effectiveConstructionMinutes(tx: PostgresRepository, day: number, territoryId: string, buildingCode: string, baseMinutes: number): Promise<{ minutes: number; modifiersBps: number[]; modifierDetails: Record<string, unknown>[] }> {
+export async function effectiveConstructionMinutes(tx: PostgresRepository, day: number, territoryId: string | null, buildingCode: string, baseMinutes: number): Promise<{ minutes: number; modifiersBps: number[]; modifierDetails: Record<string, unknown>[] }> {
   const conditions = await tx.query<{ scope_type: string; scope_id: string | null; effect_type: string; target_key: string; modifier_bps: number }>(`SELECT scope_type, scope_id, effect_type, target_key, modifier_bps
     FROM world_conditions
    WHERE effect_type IN ('CONSTRUCTION_INDEX', 'LABOR_INDEX') AND effective_from_game_day <= $1
@@ -62,7 +63,7 @@ async function effectiveConstructionMinutes(tx: PostgresRepository, day: number,
   return { minutes: Math.max(1, minutes), modifiersBps, modifierDetails };
 }
 
-async function loadConstructionRequirements(
+export async function loadConstructionRequirements(
   tx: PostgresRepository,
   catalogId: string,
   ownerEconomicId: string,
@@ -120,6 +121,9 @@ export async function getConstructionQuote(
         CREDIT: { required_units: catalog.construction_credit_units, available_units: credit, missing_units: (BigInt(catalog.construction_credit_units) > BigInt(credit) ? BigInt(catalog.construction_credit_units) - BigInt(credit) : 0n).toString() },
         ...Object.fromEntries(requirements.map((item) => [item.code, { required_units: item.required_units, available_units: item.available_units, missing_units: item.missing_units }])),
       },
+      v5Capacity: catalog.ownership_scope === 'PRIVATE'
+        ? await quoteV5HouseCapacityChange(tx, owner.house_id, BigInt(catalog.slot_footprint), day)
+        : null,
     };
   });
 }
@@ -151,6 +155,8 @@ export async function purchaseBuildingInTerritory(
         "SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id],
       )).rows[0];
       if (!membership) throw new Error('House must belong to the governing Organization for public construction');
+      const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [territory.corporation_id])).rows[0];
+      if (['EXPANSION_SPENDING_RESTRICTED', 'EARTH_RECEIVERSHIP'].includes(delinquency?.status ?? '')) throw new Error('Corporation capacity delinquency blocks public expansion');
     }
     const ownerEconomicId = isPublic
       ? (await tx.query<{ economic_id: string }>(
@@ -162,6 +168,15 @@ export async function purchaseBuildingInTerritory(
     const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(world?.game_day ?? 1);
     const duration = await effectiveConstructionMinutes(tx, gameDay, input.territoryId, catalog.code, catalog.construction_minutes);
+    const v5CapacityQuote = !isPublic
+      ? await quoteV5HouseCapacityChange(tx, owner.house_id, BigInt(catalog.slot_footprint), gameDay)
+      : null;
+    if (!isPublic && v5CapacityQuote?.available === true) {
+      const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'HOUSE' AND subject_id = $1`, [owner.house_id])).rows[0];
+      if (['EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED'].includes(delinquency?.status ?? '')) {
+        throw new Error('House capacity delinquency blocks new private capacity');
+      }
+    }
     const territoryRight = !isPublic
       ? (await tx.query<{ id: string; slot_quantity: string }>(
         `SELECT id, slot_quantity::TEXT
@@ -246,7 +261,7 @@ export async function purchaseBuildingInTerritory(
       details: { buildingId, catalogId: catalog.id, territoryId: input.territoryId, ownerEconomicId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE', constructionIndexModifiersBps: duration.modifiersBps, conditionModifiers: duration.modifierDetails, effectiveConstructionMinutes: duration.minutes },
       correlationId: input.correlationId,
     });
-    return { ok: true, status: 'UNDER_CONSTRUCTION', project: (await tx.query('SELECT * FROM construction_projects WHERE building_id = $1', [buildingId])).rows[0], building: (await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId])).rows[0], ownerType: isPublic ? 'CORPORATION' : 'HOUSE', capacity: (await tx.query('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [input.territoryId])).rows[0], correlationId: input.correlationId };
+    return { ok: true, status: 'UNDER_CONSTRUCTION', project: (await tx.query('SELECT * FROM construction_projects WHERE building_id = $1', [buildingId])).rows[0], building: (await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId])).rows[0], ownerType: isPublic ? 'CORPORATION' : 'HOUSE', capacity: (await tx.query('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [input.territoryId])).rows[0], v5Capacity: v5CapacityQuote, correlationId: input.correlationId };
   });
 }
 

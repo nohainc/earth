@@ -138,7 +138,6 @@ class SuppliesTodayPanel extends StatelessWidget {
                           action,
                           initialProduct: product,
                           initialPrice: price,
-                          feeRate: state.marketFeeRate,
                           initialSide: net < 0 && lowStock ? 'buy' : 'sell',
                         ),
                 style: TextButton.styleFrom(
@@ -567,14 +566,42 @@ Future<void> showPlaceOrderDialog(
   Future<void> Function(Future<EarthState> Function()) action, {
   required String initialProduct,
   required double initialPrice,
-  required double feeRate,
   String initialSide = 'buy',
 }) async {
   String selectedProduct = initialProduct;
   String side = initialSide;
+  Map<String, dynamic> serverQuote = const {};
+  bool quoteLoading = false;
   final qtyController = TextEditingController(text: '10');
   final priceController = TextEditingController(
       text: initialPrice > 0 ? initialPrice.toStringAsFixed(2) : '');
+
+  Future<void> refreshQuote(void Function(void Function()) setDialogState) async {
+    final quantity = double.tryParse(qtyController.text.trim()) ?? 0;
+    final price = double.tryParse(priceController.text.trim()) ?? 0;
+    if (quantity <= 0 || price <= 0) {
+      setDialogState(() => serverQuote = const {});
+      return;
+    }
+    setDialogState(() => quoteLoading = true);
+    try {
+      final quote = await const EarthApi().quoteOrder(
+        product: selectedProduct,
+        quantity: quantity,
+        limitPrice: price,
+        side: side,
+      );
+      setDialogState(() {
+        serverQuote = quote;
+        quoteLoading = false;
+      });
+    } catch (_) {
+      setDialogState(() {
+        serverQuote = const {};
+        quoteLoading = false;
+      });
+    }
+  }
 
   await showDialog<void>(
     context: context,
@@ -582,9 +609,12 @@ Future<void> showPlaceOrderDialog(
       builder: (context, setDialogState) {
         final qty = int.tryParse(qtyController.text.trim()) ?? 0;
         final price = double.tryParse(priceController.text.trim()) ?? 0.0;
-        final baseTotal = qty * price;
-        final fee = side == 'buy' ? baseTotal * feeRate : 0.0;
-        final grandTotal = side == 'buy' ? baseTotal + fee : baseTotal;
+        final quoteOk = serverQuote['ok'] == true;
+        double? cents(String? value) =>
+            value == null ? null : (double.tryParse(value) ?? 0) / 100;
+        final baseTotal = cents(serverQuote['baseValueUnits']?.toString());
+        final fee = cents(serverQuote['feeUnits']?.toString());
+        final grandTotal = cents(serverQuote['totalEscrowUnits']?.toString());
         final meta = CommodityMeta.forProduct(selectedProduct);
 
         return AlertDialog(
@@ -622,8 +652,10 @@ Future<void> showPlaceOrderDialog(
                           ButtonSegment(value: 'sell', label: Text('SELL')),
                         ],
                         selected: {side},
-                        onSelectionChanged: (set) =>
-                            setDialogState(() => side = set.first),
+                        onSelectionChanged: (set) {
+                          setDialogState(() => side = set.first);
+                          refreshQuote(setDialogState);
+                        },
                       ),
                     ),
                   ],
@@ -641,6 +673,7 @@ Future<void> showPlaceOrderDialog(
                   onChanged: (value) {
                     if (value != null) {
                       setDialogState(() => selectedProduct = value);
+                      refreshQuote(setDialogState);
                     }
                   },
                 ),
@@ -652,7 +685,10 @@ Future<void> showPlaceOrderDialog(
                     labelText: 'QUANTITY (UNITS)',
                     hintText: 'e.g. 10',
                   ),
-                  onChanged: (_) => setDialogState(() {}),
+                  onChanged: (_) {
+                    setDialogState(() {});
+                    refreshQuote(setDialogState);
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -663,7 +699,10 @@ Future<void> showPlaceOrderDialog(
                     labelText: 'LIMIT PRICE (CREDITS / UNIT)',
                     hintText: 'e.g. 45.00',
                   ),
-                  onChanged: (_) => setDialogState(() {}),
+                  onChanged: (_) {
+                    setDialogState(() {});
+                    refreshQuote(setDialogState);
+                  },
                 ),
                 const SizedBox(height: 16),
                 Container(
@@ -682,22 +721,24 @@ Future<void> showPlaceOrderDialog(
                           const Text('Base value:',
                               style:
                                   TextStyle(fontSize: 11, color: mutedColor)),
-                          Text('${baseTotal.toStringAsFixed(2)} C',
+                          Text(baseTotal == null
+                              ? 'Awaiting server quote'
+                              : '${baseTotal.toStringAsFixed(2)} C',
                               style: const TextStyle(
                                   fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
-                      if (side == 'buy' && feeRate > 0) ...[
+                      if (quoteOk && (fee ?? 0) > 0) ...[
                         const SizedBox(height: 4),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Exchange fee (${(feeRate * 100).toStringAsFixed(2)}%):',
+                              'Exchange fee (${serverQuote['feeBps'] ?? '—'} bps):',
                               style: const TextStyle(
                                   fontSize: 11, color: mutedColor),
                             ),
-                            Text('${fee.toStringAsFixed(2)} C',
+                            Text('${fee!.toStringAsFixed(2)} C',
                                 style: const TextStyle(
                                     fontSize: 11, color: mutedColor)),
                           ],
@@ -717,7 +758,11 @@ Future<void> showPlaceOrderDialog(
                             ),
                           ),
                           Text(
-                            '${grandTotal.toStringAsFixed(2)} C',
+                            quoteLoading
+                                ? 'Calculating…'
+                                : grandTotal == null
+                                    ? 'Awaiting server quote'
+                                    : '${grandTotal.toStringAsFixed(2)} C',
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -740,7 +785,7 @@ Future<void> showPlaceOrderDialog(
               child: const Text('CANCEL'),
             ),
             FilledButton(
-              onPressed: qty <= 0 || price <= 0
+              onPressed: qty <= 0 || price <= 0 || !quoteOk || quoteLoading
                   ? null
                   : () async {
                       Navigator.pop(dialogContext);
@@ -896,11 +941,20 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     required BuildContext context,
     required int quantity,
     required double limitPrice,
-    required double fee,
-    required double total,
     required String product,
     required String side,
   }) async {
+    final quote = await const EarthApi().quoteOrder(
+      product: product,
+      quantity: quantity.toDouble(),
+      limitPrice: limitPrice,
+      side: side,
+    );
+    if (!mounted || !context.mounted || quote['ok'] != true) return;
+    double cents(String? value) =>
+        (double.tryParse(value ?? '0') ?? 0) / 100;
+    final fee = cents(quote['feeUnits']?.toString());
+    final total = cents(quote['totalEscrowUnits']?.toString());
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -970,8 +1024,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final demand = asInt(productData['demand']) ?? 0;
     final history = widget.priceHistory[_selectedCommodity];
 
-    final userCredits = (asDouble(widget.state.human['credits']) ?? 0.0) -
-        widget.state.marketReservedCredits;
     final userStock = asInt(widget.state.resources[_selectedCommodity]) ??
         (asInt(widget.state.resources['materials']) ?? 0);
 
@@ -1000,15 +1052,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
 
     final qty = int.tryParse(_qtyController.text.trim()) ?? 0;
     final limitPrice = double.tryParse(_priceController.text.trim()) ?? 0.0;
-    final baseTotal = qty * limitPrice;
-    final fee =
-        _orderSide == 'buy' ? baseTotal * widget.state.marketFeeRate : 0.0;
-    final totalEscrow = _orderSide == 'buy' ? baseTotal + fee : baseTotal;
-
-    final maxAffordableUnits = limitPrice > 0
-        ? (userCredits / (limitPrice * (1 + widget.state.marketFeeRate)))
-            .floor()
-        : 0;
     final reservedSellUnits = _reservedSellUnits(_selectedCommodity);
     final maxSellableUnits =
         (userStock - reservedSellUnits).clamp(0, userStock);
@@ -1017,8 +1060,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
     final canSubmit = !widget.busy &&
         qty > 0 &&
-        limitPrice > 0 &&
-        (isBuy ? qty <= maxAffordableUnits : qty <= maxSellableUnits);
+        limitPrice > 0;
 
     final currentDay = asIntOr(widget.state.clock['day'], 1);
     final currentMinute = asIntOr(widget.state.clock['minute'], 0);
@@ -1280,9 +1322,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                               horizontal: 10, vertical: 10),
                                       suffixIcon: TextButton(
                                         onPressed: () {
-                                          final maxUnits = isBuy
-                                              ? maxAffordableUnits
-                                              : maxSellableUnits;
+                                          if (isBuy) return;
+                                          final maxUnits = maxSellableUnits;
                                           _qtyController.text = maxUnits
                                               .clamp(1, 99999)
                                               .toString();
@@ -1331,14 +1372,14 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 Expanded(
                                   flex: 1,
                                   child: _orderValue('FEE',
-                                      isBuy ? fee.toStringAsFixed(2) : '—'),
+                                      isBuy ? 'SERVER QUOTE' : '—'),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   flex: 3,
                                   child: _orderValue(
                                       isBuy ? 'TOTAL' : 'PROCEEDS',
-                                      '${totalEscrow.toStringAsFixed(2)} C'),
+                                      'SERVER QUOTE'),
                                 ),
                               ],
                             ),
@@ -1346,13 +1387,12 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
 
                             Text(
                               isBuy
-                                  ? 'Maximum affordable: $maxAffordableUnits units · Balance: ${userCredits.toStringAsFixed(2)} C'
+                                  ? 'Available balance and fee are verified by the server during review.'
                                   : 'Sellable: $maxSellableUnits units · Reserved: $reservedSellUnits units',
                               style: const TextStyle(
                                   fontSize: 10, color: mutedColor),
                             ),
-                            if ((isBuy && qty > maxAffordableUnits) ||
-                                (!isBuy && qty > maxSellableUnits)) ...[
+                            if (!isBuy && qty > maxSellableUnits) ...[
                               const SizedBox(height: 4),
                               Text(
                                 isBuy
@@ -1375,8 +1415,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                           context: context,
                                           quantity: qty,
                                           limitPrice: limitPrice,
-                                          fee: fee,
-                                          total: totalEscrow,
                                           product: _selectedCommodity,
                                           side: _orderSide,
                                         );

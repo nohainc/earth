@@ -3,9 +3,10 @@ import { currentHuman } from './auth-session.ts';
 import { withRepository, type PostgresRepository } from './repository.ts';
 import { cancelMarketOrder, submitMarketOrder } from './market-postgres.ts';
 import { assetUnitScale, MARKET_ASSET_IDS } from './market-model.ts';
-import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
+import { calculateFeeUnits, calculateQuoteUnits, displayPriceToUnits, displayQuantityToUnits, displayRateToBps, priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
+import { marketFeeRate } from './market-rules.ts';
 
 type InstrumentRow = {
   id: string;
@@ -187,9 +188,10 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
   const instrumentsPath = path === '/api/market/instruments' && request.method === 'GET';
   const instrumentMatch = path.match(/^\/api\/market\/([^/]+)\/(book|batches|fills|candles)$/);
   const myOrders = path === '/api/market/orders/my' && request.method === 'GET';
+  const orderQuote = path === '/api/market/order-quote' && request.method === 'POST';
   const orderPost = path === '/api/market/orders' && request.method === 'POST';
   const cancelMatch = path.match(/^\/api\/market\/orders\/([^/]+)$/);
-  if (!instrumentsPath && !instrumentMatch && !myOrders && !orderPost && !(cancelMatch && request.method === 'DELETE')) return null;
+  if (!instrumentsPath && !instrumentMatch && !myOrders && !orderQuote && !orderPost && !(cancelMatch && request.method === 'DELETE')) return null;
   if ((orderPost || (cancelMatch && request.method === 'DELETE')) && !featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
 
   try {
@@ -205,8 +207,8 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       return Response.json({ instruments: result.rows.map(instrumentPayload), persistence: 'planetscale-postgres' });
     }
 
-    const viewer = myOrders || orderPost || cancelMatch ? await currentHuman(request, env) : null;
-    if ((myOrders || orderPost || cancelMatch) && !viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const viewer = myOrders || orderQuote || orderPost || cancelMatch ? await currentHuman(request, env) : null;
+    if ((myOrders || orderQuote || orderPost || cancelMatch) && !viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
 
     if (instrumentMatch) {
       const result = await withRepository(env, (repository) => readInstrumentRoute(repository, instrumentMatch[1], instrumentMatch[2], url));
@@ -222,6 +224,63 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
             WHERE owner.id = (SELECT house_id FROM humans WHERE id = $1)
             ORDER BY market_orders.created_at DESC LIMIT 500`, [viewer!.id]);
         return { orders: rows.rows.map((row) => serializeOrder(row, Number(row.instrument_base_asset_id ?? row.base_asset_id ?? MARKET_ASSET_IDS.MATERIAL))) };
+      });
+      if (!result) return unavailable();
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
+    if (orderQuote) {
+      const parsed = await parseJsonBody<{ product?: string; quantity?: number | string; limitPrice?: number | string; side?: string; instrumentId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const product = body.product?.trim().toLowerCase() ?? '';
+      const side = body.side === 'sell' ? 'sell' : 'buy';
+      const quantity = Number(body.quantity);
+      const limitPrice = Number(body.limitPrice);
+      if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) {
+        return Response.json({ ok: false, error: 'A positive product, quantity, and limit price are required' }, { status: 400 });
+      }
+      const result = await withRepository(env, async (repository) => {
+        const instrument = body.instrumentId
+          ? await findInstrument(repository, body.instrumentId)
+          : await findInstrument(repository, `SPOT-${product.toUpperCase()}`);
+        if (!instrument) throw new Error('Market instrument not found');
+        const quantityUnits = displayQuantityToUnits(quantity);
+        const priceUnits = displayPriceToUnits(limitPrice);
+        const quoteUnits = calculateQuoteUnits(quantityUnits, priceUnits);
+        const feeRate = side === 'buy' ? await marketFeeRate(repository, viewer!.id) : '0';
+        const feeUnits = calculateFeeUnits(quoteUnits, feeRate);
+        const assetId = side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.asset_id;
+        const balances = await repository.query<{ available_units: string; reserved_units: string }>(
+          `SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS available_units,
+                  COALESCE((SELECT SUM(r.remaining_units) FROM market_order_reservations r
+                    WHERE r.escrow_account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = a.owner_economic_id)
+                      AND r.asset_id = $2 AND r.status = 'ACTIVE'), 0)::TEXT AS reserved_units
+             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+            WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = $2
+              AND a.account_type IN ('WALLET','INVENTORY') AND a.status = 'ACTIVE'
+            GROUP BY a.owner_economic_id`, [viewer!.house_id, assetId]);
+        const world = (await repository.query<{ game_day: string; game_minute: string }>(
+          "SELECT game_day::TEXT, game_minute::TEXT FROM world_state WHERE id = 'WORLD'",
+        )).rows[0];
+        const currentDay = Number(world?.game_day ?? 0);
+        const currentMinute = Number(world?.game_minute ?? 0);
+        const batchMinutes = 60;
+        const nextMinute = Math.ceil((currentMinute + 1) / batchMinutes) * batchMinutes;
+        return {
+          ok: true,
+          instrument: instrumentPayload(instrument),
+          side, quantity: unitsToDisplayQuantity(quantityUnits), limitPrice: priceUnitsToDisplayPrice(priceUnits),
+          baseValueUnits: quoteUnits.toString(), feeUnits: feeUnits.toString(), totalEscrowUnits: (quoteUnits + feeUnits).toString(),
+          feeBps: displayRateToBps(feeRate),
+          availableUnits: balances.rows[0]?.available_units ?? '0', reservedUnits: balances.rows[0]?.reserved_units ?? '0',
+          nextClearing: {
+            gameDay: currentDay + Math.floor(nextMinute / 1440),
+            gameMinute: nextMinute % 1440,
+            intervalMinutes: batchMinutes,
+            schedule: 'server-scheduled-market-batch',
+          },
+          generatedFrom: 'postgres-canonical-facts',
+        };
       });
       if (!result) return unavailable();
       return Response.json({ ...result, persistence: 'planetscale-postgres' });

@@ -1,0 +1,285 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { calculateProgressiveCharge, validateProgressiveBrackets } from '../cloudflare/src/v5-progressive.ts';
+import { aggregateCorporationCapacity, calculateHouseCapacity, quoteCapacityChange, requiredTerritoryUnits } from '../cloudflare/src/v5-capacity.ts';
+import { previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
+import { runV5ShadowSimulation } from '../cloudflare/src/v5-shadow-simulation.ts';
+
+const brackets = [
+  { ordinal: 1, lowerBound: 0n, upperBound: 1n, multiplierNumerator: 1n, multiplierDenominator: 1n },
+  { ordinal: 2, lowerBound: 1n, upperBound: 2n, multiplierNumerator: 6n, multiplierDenominator: 5n },
+  { ordinal: 3, lowerBound: 2n, upperBound: 4n, multiplierNumerator: 3n, multiplierDenominator: 2n },
+  { ordinal: 4, lowerBound: 4n, upperBound: null, multiplierNumerator: 2n, multiplierDenominator: 1n },
+];
+
+test('V5 migration defines additive policy, obligation, admission, and container authorities', async () => {
+  const migration = await readFile('db/migrations/083_v5_progressive_capacity_foundation.sql', 'utf8');
+  for (const table of ['progressive_policy_schedules', 'progressive_policy_brackets', 'v5_capacity_policy_versions', 'corporation_capacity_state_v5', 'house_capacity_statements_v5', 'v5_capacity_obligations', 'v5_capacity_delinquency_state', 'corporation_membership_applications_v5', 'corporation_invites_v5', 'v5_corporation_founding_policy_versions']) assert.match(migration, new RegExp(`CREATE TABLE ${table}`));
+  assert.match(migration, /financial_obligations_obligation_type_check/);
+  assert.match(migration, /Active V5 progressive schedules are immutable/);
+  assert.match(migration, /UPDATE corporations SET admission_policy = 'APPROVAL'/);
+});
+
+test('V5 progressive pricing charges marginal quantities only', () => {
+  const result = calculateProgressiveCharge({ quantity: 5n, baseRate: 100n, brackets });
+  assert.equal(result.totalCharge, 720n);
+  assert.deepEqual(result.allocations.map((item) => [item.ordinal, item.quantity, item.charge]), [[1, 1n, 100n], [2, 1n, 120n], [3, 2n, 300n], [4, 1n, 200n]]);
+  assert.equal(calculateProgressiveCharge({ quantity: 4n, baseRate: 100n, brackets }).totalCharge, 520n);
+  assert.equal(calculateProgressiveCharge({ quantity: 0n, baseRate: 100n, brackets }).totalCharge, 0n);
+});
+
+test('V5 progressive schedules reject gaps, repricing order, and closed tails', () => {
+  assert.throws(() => validateProgressiveBrackets([{ ...brackets[0] }, { ...brackets[1], lowerBound: 3n, upperBound: 4n }]), /contiguous/);
+  assert.throws(() => validateProgressiveBrackets([{ ...brackets[0], upperBound: null }, brackets[1]]), /final/);
+  assert.throws(() => validateProgressiveBrackets([{ ...brackets[0] }, { ...brackets[1], multiplierNumerator: 1n, multiplierDenominator: 2n }, brackets[2], brackets[3]]), /non-decreasing/);
+});
+
+test('V5 capacity uses one residential unit and canonical billable footprints', () => {
+  const house = calculateHouseCapacity({ houseId: 'H1', corporationId: 'C1', activeAffiliation: true, buildings: [
+    { id: 'B1', footprint: 3n, billable: true },
+    { id: 'B2', footprint: 99n, billable: false },
+  ] });
+  assert.deepEqual(house, { houseId: 'H1', corporationId: 'C1', residentialUnits: 1n, buildingUnits: 3n, totalUnits: 4n });
+  const independentHouse = calculateHouseCapacity({ houseId: 'H2', corporationId: null, activeAffiliation: false, buildings: [] });
+  assert.equal(independentHouse.residentialUnits, 1n);
+  assert.equal(independentHouse.totalUnits, 1n);
+  const aggregate = aggregateCorporationCapacity({ corporationId: 'C1', houses: [house], publicBuildingUnits: 1n, standardTerritoryCapacity: 5n });
+  assert.equal(aggregate.totalOccupiedUnits, 5n);
+  assert.equal(aggregate.requiredTerritoryUnits, 1n);
+  assert.equal(aggregate.memberCount, 1n);
+});
+
+test('V5 Territory containers scale at exact boundaries', () => {
+  assert.deepEqual([requiredTerritoryUnits(0n, 10n), requiredTerritoryUnits(10n, 10n), requiredTerritoryUnits(11n, 10n)], [0n, 1n, 2n]);
+  assert.throws(() => requiredTerritoryUnits(1n, 0n), /positive/);
+});
+
+test('V5 capacity quote is the exact marginal delta and supports release', () => {
+  const quote = quoteCapacityChange({ currentUsage: 4n, delta: 1n, baseRate: 100n, brackets });
+  assert.equal(quote.currentCharge.totalCharge, 520n);
+  assert.equal(quote.afterCharge.totalCharge, 720n);
+  assert.equal(quote.incrementalCharge, 200n);
+  assert.equal(quoteCapacityChange({ currentUsage: 5n, delta: -1n, baseRate: 100n, brackets }).afterUsage, 4n);
+  assert.throws(() => quoteCapacityChange({ currentUsage: 0n, delta: -1n, baseRate: 100n, brackets }), /negative/);
+});
+
+test('V5 suspension is non-destructive and reversible', async () => {
+  const migration = await readFile(new URL('../db/migrations/083_v5_progressive_capacity_foundation.sql', import.meta.url), 'utf8');
+  assert.match(migration, /v5_productive_status TEXT NOT NULL DEFAULT 'ACTIVE'/);
+  assert.match(migration, /v5_productive_status IN \('ACTIVE','SUSPENDED'\)/);
+  const settlement = await readFile(new URL('../cloudflare/src/v5-capacity-settlement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(settlement, /PRODUCTIVE_CAPACITY_SUSPENDED/);
+  assert.match(settlement, /v5_productive_status = \$2/);
+  const buildingSettlement = await readFile(new URL('../cloudflare/src/building-settlement-v2.ts', import.meta.url), 'utf8');
+  assert.match(buildingSettlement, /COALESCE\(b\.v5_productive_status, 'ACTIVE'\) = 'ACTIVE'/);
+});
+
+test('V5 corporation distress guards discretionary expansion', async () => {
+  const fiscal = await readFile(new URL('../cloudflare/src/corporation-fiscal-postgres.ts', import.meta.url), 'utf8');
+  assert.match(fiscal, /EARTH_RECEIVERSHIP/);
+  assert.match(fiscal, /blocks discretionary spending/);
+  const construction = await readFile(new URL('../cloudflare/src/territory-capacity-postgres.ts', import.meta.url), 'utf8');
+  assert.match(construction, /blocks public expansion/);
+});
+
+test('V5 House finance response exposes capacity statements and obligations', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/finance-routes.ts', import.meta.url), 'utf8');
+  assert.match(routes, /getV5HouseCapacity/);
+  assert.match(routes, /v5_capacity_obligations/);
+  assert.match(routes, /capacity: \{ summary: v5Capacity, obligations: v5Obligations\.rows \}/);
+});
+
+test('V5 governance validates future policies and previews proposed brackets', () => {
+  assert.throws(() => validateV5FutureEffectiveDay(5, 5), /future game day/);
+  assert.throws(() => validateV5GovernanceAction({ actionType: 'PROGRESSIVE_SCHEDULE', effectiveFromGameDay: 6, authorityInstitutionId: 'CORP-1', scheduleCode: 'bad', scheduleBasisType: 'CORPORATION_HOUSE_CAPACITY', brackets: [{ ordinal: 1, lowerBound: 0n, upperBound: 1n, multiplierNumerator: 2n, multiplierDenominator: 1n }] }, 5), /open-ended/);
+  const proposed = [...brackets];
+  proposed[1] = { ...proposed[1], multiplierNumerator: 3n, multiplierDenominator: 2n };
+  const preview = previewProgressivePolicyChange({ quantities: [1n, 2n, 5n], baseRate: 100n, currentBrackets: brackets, proposedBrackets: proposed });
+  assert.equal(preview.length, 3);
+  assert.equal(preview[0].delta, 0n);
+  assert.ok(preview[2].delta > 0n);
+});
+
+test('V5 resolution cases preserve Houses and release only selected building capacity', async () => {
+  const migration = await readFile(new URL('../db/migrations/085_v5_capacity_resolution_cases.sql', import.meta.url), 'utf8');
+  assert.match(migration, /v5_capacity_resolution_cases/);
+  assert.match(migration, /v5_capacity_resolution_assets/);
+  const service = await readFile(new URL('../cloudflare/src/v5-capacity-resolution-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /status = 'INACTIVE'/);
+  assert.match(service, /V5_CAPACITY_ASSET_RELEASED/);
+  assert.doesNotMatch(service, /DELETE FROM houses/);
+});
+
+test('V5 Corporation receivership is auditable and preserves member Houses', async () => {
+  const migration = await readFile(new URL('../db/migrations/086_v5_corporation_receivership.sql', import.meta.url), 'utf8');
+  assert.match(migration, /v5_corporation_receivership_cases/);
+  assert.match(migration, /v5_corporation_restructuring_plans/);
+  const settlement = await readFile(new URL('../cloudflare/src/v5-capacity-settlement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(settlement, /ensureCorporationReceivershipCase/);
+  const service = await readFile(new URL('../cloudflare/src/v5-corporation-receivership-postgres.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(service, /DELETE FROM houses/);
+  assert.match(service, /RESTRUCTURING/);
+});
+
+test('V5 technology research exposes catalog-authoritative duration and quote flow', async () => {
+  const migration = await readFile(new URL('../db/migrations/087_v5_technology_duration.sql', import.meta.url), 'utf8');
+  assert.match(migration, /research_duration_game_days/);
+  const service = await readFile(new URL('../cloudflare/src/technology-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /quoteResearchProject/);
+  assert.match(service, /researchDurationGameDays/);
+  assert.match(service, /credit_cost_units::TEXT AS research_credit_cost_units/);
+  const route = await readFile(new URL('../cloudflare/src/index.ts', import.meta.url), 'utf8');
+  assert.match(route, /\/api\/technology\/projects\/quote/);
+});
+
+test('V5 research settlement advances projects and grants access on completion', async () => {
+  const service = await readFile(new URL('../cloudflare/src/technology-postgres.ts', import.meta.url), 'utf8');
+  const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /advanceV5ResearchProjects/);
+  assert.match(service, /progress_research_points = \$1/);
+  assert.match(service, /completed_game_day = \$1/);
+  assert.match(service, /earth_grant_corporation_technology_access/);
+  assert.match(scheduler, /v5: await advanceV5ResearchProjects/);
+});
+
+test('V5 market order ticket uses a server quote contract', async () => {
+  const service = await readFile(new URL('../cloudflare/src/market-api.ts', import.meta.url), 'utf8');
+  assert.match(service, /\/api\/market\/order-quote/);
+  assert.match(service, /calculateFeeUnits/);
+  assert.match(service, /reservedUnits/);
+  const client = await readFile(new URL('../flutter_client/lib/features/market/market_panels.dart', import.meta.url), 'utf8');
+  assert.match(client, /quoteOrder/);
+  assert.match(client, /SERVER QUOTE/);
+});
+
+test('V5 governance read model is scoped to Earth and active Corporation affiliation', async () => {
+  const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /listV5GovernanceProposals/);
+  assert.match(service, /subject_type = 'EARTH'/);
+  assert.match(service, /house_affiliations/);
+  assert.match(service, /viewer_voted/);
+  const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
+  assert.match(route, /governance\/v5\/proposals.*GET/);
+});
+
+test('V5 Finance exposes server-authoritative liquidity and next settlement', async () => {
+  const route = await readFile(new URL('../cloudflare/src/finance-routes.ts', import.meta.url), 'utf8');
+  const client = await readFile(new URL('../flutter_client/lib/features/finance/personal_finance_panel.dart', import.meta.url), 'utf8');
+  assert.match(route, /availableToSpendUnits/);
+  assert.match(route, /nextSettlementGameDay/);
+  assert.match(client, /serverAvailableToSpend/);
+  assert.match(client, /nextSettlementGameDay/);
+});
+
+test('V5 shadow simulation is deterministic and measures arrears and standardized capacity', async () => {
+  const source = await readFile(new URL('../cloudflare/src/v5-shadow-simulation.ts', import.meta.url), 'utf8');
+  assert.match(source, /runV5ShadowSimulation/);
+  assert.match(source, /totalHouseArrearsUnits/);
+  assert.match(source, /requiredTerritoryUnits/);
+  assert.match(source, /calculateProgressiveCharge/);
+  assert.match(source, /never writes production state|never writes production/i);
+  const input = {
+    days: 3,
+    corporations: [{ id: 'CORP-A', startingWalletUnits: 0n, dailyIncomeUnits: 0n }],
+    houses: [{ id: 'HOUSE-A', corporationId: 'CORP-A', occupiedUnits: 2n, startingWalletUnits: 5n, dailyIncomeUnits: 0n, active: true }],
+    policy: {
+      standardTerritoryCapacityUnits: 2n,
+      earthBaseRateUnits: 1n,
+      earthBrackets: brackets,
+      houseBaseRateByCorporation: { 'CORP-A': 2n },
+      houseBrackets: brackets,
+    },
+  };
+  const first = runV5ShadowSimulation(input);
+  const second = runV5ShadowSimulation(input);
+  assert.deepEqual(first, second);
+  assert.equal(first.peakRequiredTerritoryUnits, 1n);
+  assert.ok(first.totalHouseArrearsUnits > 0n);
+  assert.ok(first.metrics.houseSurvivalRateBps > 0n);
+  assert.equal(first.metrics.totalEarthRevenueUnits, first.days.reduce((sum, day) => sum + day.earthPaidUnits, 0n));
+  assert.equal(first.metrics.corporationConcentrationBps, 10_000n);
+});
+
+test('V5 capacity backfill is resumable, shadow-only, and reportable', async () => {
+  const migration = await readFile(new URL('../db/migrations/088_v5_capacity_backfill_runs.sql', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/v5-capacity-backfill-postgres.ts', import.meta.url), 'utf8');
+  assert.match(migration, /v5_capacity_backfill_runs/);
+  assert.match(service, /backfillV5CapacityBatch/);
+  assert.match(service, /ON CONFLICT \(corporation_id, game_day\) DO UPDATE/);
+  assert.match(service, /paid_rent_units,\n             arrears_units/);
+  assert.doesNotMatch(service, /earth_post_transaction/);
+  const routes = await readFile(new URL('../cloudflare/src/read-model-routes.ts', import.meta.url), 'utf8');
+  assert.match(routes, /internal\/v5\/capacity-backfill/);
+});
+
+test('V5 cutover readiness is fail-closed and read-only', async () => {
+  const service = await readFile(new URL('../cloudflare/src/v5-cutover-readiness-postgres.ts', import.meta.url), 'utf8');
+  const routes = await readFile(new URL('../cloudflare/src/read-model-routes.ts', import.meta.url), 'utf8');
+  assert.match(service, /capacityBackfillCompleted/);
+  assert.match(service, /schemaVersionMatches/);
+  assert.match(service, /allActiveCorporationsHavePolicy/);
+  assert.match(service, /mutationEnabled: false/);
+  assert.match(service, /Object\.values\(checks\)\.every\(Boolean\)/);
+  assert.doesNotMatch(service, /INSERT INTO|UPDATE |DELETE FROM/);
+  assert.match(routes, /internal\/v5\/cutover-readiness/);
+});
+
+test('V5 pooled construction accepts no Territory placement target', async () => {
+  const migration = await readFile(new URL('../db/migrations/089_v5_pooled_construction.sql', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/v5-building-postgres.ts', import.meta.url), 'utf8');
+  const route = await readFile(new URL('../cloudflare/src/real-estate-routes.ts', import.meta.url), 'utf8');
+  assert.match(migration, /ALTER TABLE buildings ALTER COLUMN territory_id DROP NOT NULL/);
+  assert.match(service, /territoryPlacement: null/);
+  assert.match(service, /V5_POOLED_CONSTRUCTION/);
+  assert.match(route, /\/api\/v5\/buildings/);
+});
+
+test('V5 building research uses authored catalog economics', async () => {
+  const migration = await readFile(new URL('../db/migrations/091_v5_building_research_catalog_authority.sql', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/corporation-building-research-postgres.ts', import.meta.url), 'utf8');
+  assert.match(migration, /research_credit_units/);
+  assert.match(migration, /research_duration_game_days/);
+  assert.match(service, /target\.research_credit_units/);
+  assert.match(service, /target\.research_duration_game_days/);
+  assert.doesNotMatch(service, /function researchCost|function researchDurationDays|Math\.pow/);
+});
+
+test('V5 governance UI exposes only Earth and Corporation scopes', async () => {
+  const panel = await readFile(new URL('../flutter_client/lib/features/governance/governance_panels.dart', import.meta.url), 'utf8');
+  assert.match(panel, /TabController\(length: 2/);
+  assert.match(panel, /Territory records are physical capacity containers/);
+  assert.doesNotMatch(panel, /_scopeTab\(context, 0, 'TERRITORY/);
+});
+
+test('V5 client finance projections consume server policy multipliers', async () => {
+  const finance = await readFile(new URL('../flutter_client/lib/features/finance/personal_finance_panel.dart', import.meta.url), 'utf8');
+  const institutions = await readFile(new URL('../flutter_client/lib/features/institutions/institutions_panels.dart', import.meta.url), 'utf8');
+  assert.match(finance, /building\['output_multiplier'\]/);
+  assert.match(finance, /building\['cost_multiplier'\]/);
+  assert.match(institutions, /building\['output_multiplier'\]/);
+  assert.doesNotMatch(`${finance}\n${institutions}`, /high_output|eco_reserve|frugal/);
+});
+
+test('V5 building client projections consume server policy multipliers', async () => {
+  const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  assert.match(buildings, /building\['output_multiplier'\]/);
+  assert.match(buildings, /building\['cost_multiplier'\]/);
+  assert.doesNotMatch(buildings, /high_output|eco_reserve|frugal/);
+});
+
+test('V5 cutover rehearsal is fail-closed and produces evidence', async () => {
+  const script = await readFile(new URL('../scripts/run-v5-cutover-rehearsal.mjs', import.meta.url), 'utf8');
+  assert.match(script, /DATABASE_URL is required for a V5 cutover rehearsal/);
+  assert.match(script, /artifact_checks_passed_database_rehearsal_pending/);
+  assert.match(script, /createHash\('sha256'\)/);
+  assert.match(script, /db:verify:surface/);
+  assert.match(script, /db:verify:readiness/);
+});
+
+test('V5 Territory view is read-only physical capacity context', async () => {
+  const panel = await readFile(new URL('../flutter_client/lib/features/institutions/territory_overview_panel.dart', import.meta.url), 'utf8');
+  assert.match(panel, /Read-only physical capacity-container overview/);
+  assert.match(panel, /does not create a political or placement choice/);
+  assert.doesNotMatch(panel, /MANAGE USE RIGHTS|Acquire or release use rights/);
+});

@@ -303,10 +303,19 @@ Future<void> showBuildingUpgradeDialog(
   final nextTier = currentTier + 1;
   final outAmt = asDoubleOr(building['resource_output_amount'], 0);
   final outType = building['resource_output_type']?.toString();
-  final projectedAmt = (outAmt * 1.30);
-
-  final upgradeCreditCost = (currentTier * 5000 + 4000);
-  final upgradeMaterialCost = (currentTier * 40 + 20);
+  final quote = await const EarthApi().quoteBuildingUpgrade(buildingId: id);
+  if (quote['eligible'] != true) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text((quote['blockers'] as List?)?.join(', ') ?? 'Upgrade is not currently available')));
+    }
+    return;
+  }
+  final upgradeCreditCost = asIntOr(quote['creditCostUnits'], 0);
+  final footprintDelta = asIntOr(quote['footprintDelta'], 0);
+  final capacityQuote = quote['capacity'] is Map
+      ? Map<String, dynamic>.from(quote['capacity'] as Map)
+      : const <String, dynamic>{};
+  if (!context.mounted) return;
 
   await showDialog<void>(
     context: context,
@@ -323,7 +332,7 @@ Future<void> showBuildingUpgradeDialog(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Upgrading $name enhances operational efficiency, boosts daily commercial yield by +30%, and fully restores facility health to 100%.',
+            'Upgrading $name starts the next catalog-defined tier after the server confirms the quoted cost, capacity impact, and construction duration.',
             style: context.bodyStyle,
           ),
           const SizedBox(height: 12),
@@ -352,22 +361,23 @@ Future<void> showBuildingUpgradeDialog(
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                          'Yield: +${outType == 'credits' || outType == null ? formatWholeNumber(outAmt) : outAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}',
+                      Text('Current output: ${outAmt == 0 ? '—' : '${outType ?? 'CRD'} ${outAmt.toStringAsFixed(1)}'}',
                           style: context.widgetFooterStyle),
-                      Text(
-                          'Projected: +${outType == 'credits' || outType == null ? formatWholeNumber(projectedAmt) : projectedAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}',
-                          style: context.widgetFooterStyle.copyWith(
-                              color: context.successColor,
-                              fontWeight: FontWeight.bold)),
+                      Text('Next-tier output: server catalog',
+                          style: context.widgetFooterStyle.copyWith(color: context.successColor)),
                     ],
                   ),
                 const Divider(height: 16),
                 Text(
-                  'Upgrade Investment: ${formatWholeNumber(upgradeCreditCost)} CRD + $upgradeMaterialCost Materials',
+                  'Server quote: ${formatWholeNumber(upgradeCreditCost)} CRD; footprint change ${footprintDelta >= 0 ? '+' : ''}$footprintDelta',
                   style: context.widgetTitleStyle
                       .copyWith(color: context.primaryColor),
                 ),
+                if (capacityQuote.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text('Capacity rent: ${capacityQuote['currentChargeUnits'] ?? '—'} → ${capacityQuote['afterChargeUnits'] ?? '—'} units/day (increment ${capacityQuote['incrementalChargeUnits'] ?? '—'})',
+                      style: context.widgetFooterStyle),
+                ],
               ],
             ),
           ),
@@ -402,7 +412,15 @@ Future<bool?> showDemolishConfirmDialog(
 ) async {
   final id = building['id']?.toString() ?? '';
   final name = building['name']?.toString() ?? 'Facility';
-  final footprint = asIntOr(building['slot_footprint'], 1);
+  final quote = await const EarthApi().quoteBuildingDemolition(buildingId: id);
+  if (quote['eligible'] != true) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Demolition is not currently available')));
+    }
+    return false;
+  }
+  final footprint = asIntOr(quote['footprintReleased'], asIntOr(building['slot_footprint'], 1));
+  if (!context.mounted) return false;
 
   return await showDialog<bool>(
     context: context,
@@ -420,7 +438,7 @@ Future<bool?> showDemolishConfirmDialog(
         ],
       ),
       content: Text(
-        'Are you sure you want to demolish $name? Demolition will close the facility, deallocate its $footprint district zoning slot(s) for new construction, and recycle 30% of its structural materials back to your warehouse.',
+        'Are you sure you want to demolish $name? The server will close the facility and release $footprint pooled capacity units for future construction.',
         style: context.bodyStyle,
       ),
       actions: [
@@ -430,7 +448,7 @@ Future<bool?> showDemolishConfirmDialog(
           onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         EarthButton(
-          label: 'DEMOLISH & RECYCLE',
+          label: 'DEMOLISH FACILITY',
           icon: Icons.delete_forever_outlined,
           variant: EarthButtonVariant.danger,
           onPressed: () async {

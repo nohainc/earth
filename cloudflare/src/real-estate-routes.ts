@@ -4,12 +4,14 @@ import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { cancelConstructionProject, getConstructionQuote, getTerritoryCapacity, listConstructionProjects, purchaseBuildingInTerritory } from './territory-capacity-postgres.ts';
 import {
   startCorporationBuildingResearch,
+  quoteCorporationBuildingResearch,
   listCorporationBuildingResearch,
 } from './corporation-building-research-postgres.ts';
 import { getBuildingCapitalOptions, startBuildingCapitalProject } from './building-age-postgres.ts';
 import { acquireTerritoryRight, listTerritoryRights, releaseTerritoryRight } from './territory-rights-postgres.ts';
 import { declareCommonsDividend, getCommonsStatement } from './commons-dividends-postgres.ts';
-import { decommissionBuilding, setBuildingOperatingMode, upgradeBuilding } from './building-investment-postgres.ts';
+import { decommissionBuilding, quoteBuildingDemolition, quoteBuildingOperatingMode, quoteBuildingUpgrade, setBuildingOperatingMode, upgradeBuilding } from './building-investment-postgres.ts';
+import { purchaseV5Building, quoteV5Building } from './v5-building-postgres.ts';
 
 export async function handleRealEstateRoutes(
   request: Request,
@@ -17,6 +19,30 @@ export async function handleRealEstateRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/v5/buildings' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ buildingType?: string; name?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.buildingType || !parsed.value.name?.trim()) return Response.json({ ok: false, error: 'Building type, name, and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => purchaseV5Building(repository, { ownerId: viewer.id, buildingType: parsed.value.buildingType!, name: parsed.value.name!.trim(), correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 pooled construction failed' }, { status: 409 }); }
+  }
+  if (url.pathname === '/api/v5/buildings/quote' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ buildingType?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const buildingType = parsed.value.buildingType?.trim();
+    if (!buildingType) return Response.json({ ok: false, error: 'Building type is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => quoteV5Building(repository, { ownerId: viewer.id, buildingType }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 construction quote unavailable' }, { status: 409 });
+    }
+  }
   if (url.pathname === '/api/real-estate/upgrade' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ buildingId?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
@@ -27,6 +53,14 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade failed' }, { status: 409 }); }
+  }
+  const upgradeQuoteMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/upgrade-quote$/);
+  if (upgradeQuoteMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => quoteBuildingUpgrade(repository, { buildingId: upgradeQuoteMatch[1], humanId: viewer.id }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade quote unavailable' }, { status: 409 }); }
   }
   if (url.pathname === '/api/real-estate/policy' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ buildingId?: string; policy?: string; correlationId?: string }>(request);
@@ -39,6 +73,14 @@ export async function handleRealEstateRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building policy update failed' }, { status: 409 }); }
   }
+  const policyQuoteMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/policy-quote$/);
+  if (policyQuoteMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => quoteBuildingOperatingMode(repository, { buildingId: policyQuoteMatch[1], humanId: viewer.id }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building policy quote unavailable' }, { status: 409 }); }
+  }
   if (url.pathname === '/api/real-estate/demolish' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ buildingId?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
@@ -49,6 +91,14 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building decommission failed' }, { status: 409 }); }
+  }
+  const demolitionQuoteMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/demolition-quote$/);
+  if (demolitionQuoteMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => quoteBuildingDemolition(repository, { buildingId: demolitionQuoteMatch[1], humanId: viewer.id }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building demolition quote unavailable' }, { status: 409 }); }
   }
   const territoryRightsMatch = url.pathname.match(/^\/api\/territories\/([^/]+)\/rights$/);
   if (territoryRightsMatch && request.method === 'GET') {
@@ -243,6 +293,20 @@ export async function handleRealEstateRoutes(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Building research initiation failed';
       return Response.json({ ok: false, error: message }, { status: /insufficient|already|not found|only to corporation/i.test(message) ? 409 : 400 });
+    }
+  }
+
+  if (url.pathname === '/api/research/buildings/quote' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ buildingType?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const buildingType = parsed.value.buildingType?.trim();
+    if (!buildingType) return Response.json({ ok: false, error: 'Building type is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => quoteCorporationBuildingResearch(repository, { humanId: viewer.id, buildingType }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building research quote unavailable' }, { status: 409 });
     }
   }
 

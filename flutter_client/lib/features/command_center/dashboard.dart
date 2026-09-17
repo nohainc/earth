@@ -32,7 +32,6 @@ import '../world/world_conditions_panel.dart';
 import '../../core/navigation_registry.dart';
 import '../world/initiatives_panel.dart';
 import '../institutions/mutual_credit_panel.dart';
-import '../institutions/territory_commons_panel.dart';
 import '../institutions/territory_overview_panel.dart';
 import '../house/house_policy_panel.dart';
 
@@ -264,6 +263,8 @@ class Dashboard extends StatelessWidget {
       case 'civic':
       case 'governance':
         return [
+          V5GovernanceReviewPanel(state: state, action: action),
+          const SizedBox(height: 34),
           PublicFinanceGovernancePanel(
               state: state, busy: busy, action: action),
           const SizedBox(height: 34),
@@ -407,15 +408,7 @@ class Dashboard extends StatelessWidget {
       case 'mutual-credit':
         return [MutualCreditPanel(data: mutualCreditData)];
       case 'territory-commons':
-        return [
-          TerritoryCommonsPanel(
-            data: territoryCommonsData,
-            api: const EarthApi(),
-            onRefresh: () {
-              onRefreshTerritoryCommons?.call();
-            },
-          ),
-        ];
+        return [TerritoryOverviewPanel(state: state, commonsData: territoryCommonsData)];
       case 'news':
         return [
           NewsPanel(

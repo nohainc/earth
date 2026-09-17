@@ -40,6 +40,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   int _localElapsedSeconds = 0;
   int? _serverClockTotalMinutes;
 
+  bool get _hasActiveCorporation {
+    final corporationId = widget.state.membership?['corporation_id']
+            ?.toString() ??
+        widget.state.human['corporation_id']?.toString();
+    return corporationId != null &&
+        corporationId.isNotEmpty &&
+        corporationId != 'null' &&
+        corporationId != 'Independent';
+  }
+
   String _buildingImageAsset(String buildingType) {
     return EarthBuildingMeta.getAssetPath(buildingType);
   }
@@ -1624,22 +1634,20 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               children: [
                                 for (final policyOption in const [
                                   {
-                                    'id': 'balanced',
+                                    'id': 'BALANCED',
                                     'label': 'Normal',
                                     'help':
                                         'Standard output and operating cost.'
                                   },
                                   {
-                                    'id': 'eco_reserve',
-                                    'label': 'Frugal −25% / −30% cost',
-                                    'help':
-                                        '25% lower output and 30% lower operating cost.'
+                                    'id': 'CONSERVATIVE',
+                                    'label': 'Conservative',
+                                    'help': 'Server-defined conservative operating policy.'
                                   },
                                   {
-                                    'id': 'high_output',
-                                    'label': 'High output +30%',
-                                    'help':
-                                        '30% higher output and 40% higher operating cost.'
+                                    'id': 'GROWTH',
+                                    'label': 'Growth',
+                                    'help': 'Server-defined growth operating policy.'
                                   },
                                 ])
                                   Tooltip(
@@ -1649,6 +1657,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                               commonPolicy == policyOption['id']
                                           ? null
                                           : () async {
+                                              final preview = await const EarthApi()
+                                                  .quoteBuildingOperatingPolicy(
+                                                      buildingId: items.first['id'].toString());
+                                              final allowed = (preview['allowedModes'] as List?)
+                                                  ?.map((mode) => mode.toString())
+                                                  .toSet();
+                                              if (allowed == null || !allowed.contains(policyOption['id'])) {
+                                                _showBuildingFeedback('This operating policy is not available for the group.');
+                                                return;
+                                              }
                                               await Future.wait(items.map(
                                                   (item) => widget.action(() =>
                                                       const EarthApi()
@@ -1800,10 +1818,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         creditsAvailable == null || creditsAvailable >= creditCost;
     final hasEnoughMaterials =
         materialsAvailable == null || materialsAvailable >= materialCost;
-    final canConstruct = hasEnoughSlots &&
-        hasEnoughPop &&
-        hasEnoughCredits &&
-        hasEnoughMaterials;
+    final canConstruct = _hasActiveCorporation
+        ? true
+        : hasEnoughSlots &&
+            hasEnoughPop &&
+            hasEnoughCredits &&
+            hasEnoughMaterials;
 
     return Container(
       padding: EdgeInsets.all(context.cardPadding),
@@ -2209,6 +2229,50 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required List<(IconData, Color, String, bool)> netYields,
   }) async {
     EarthAudioEngine.instance.playClick();
+    var quotedCreditCost = creditCost;
+    var quotedMaterialCost = materialCost;
+    var quotedCapacityCost = capacityCost;
+    var quotedRemainingCapacity = remainingCapacity;
+    var quotedConstructionDays = constructionDays;
+    var quotedCapacityQuote = <String, dynamic>{};
+    if (_hasActiveCorporation) {
+      final quote = await const EarthApi().quoteV5Building(buildingType);
+      if (!context.mounted) return;
+      if (quote['ok'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(quote['error']?.toString() ??
+                'V5 construction quote unavailable.')));
+        return;
+      }
+      final blockers = quote['blockers'] is List
+          ? (quote['blockers'] as List).whereType<Object>().join('; ')
+          : '';
+      if (quote['eligible'] != true) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(blockers.isEmpty
+                ? 'Construction is not currently eligible.'
+                : blockers)));
+        return;
+      }
+      quotedCreditCost = asIntOr(quote['creditCostUnits'], creditCost);
+      quotedCapacityCost = asIntOr(quote['footprintUnits'], capacityCost);
+      if (quote['capacity'] is Map) {
+        quotedCapacityQuote = Map<String, dynamic>.from(quote['capacity'] as Map);
+      }
+      quotedConstructionDays = math.max(
+          1,
+          (asIntOr(quote['effectiveConstructionMinutes'], constructionDays * 1440) /
+                  1440)
+              .ceil());
+      final requirements = quote['resourceRequirements'] is List
+          ? (quote['resourceRequirements'] as List).whereType<Map>()
+          : const <Map>[];
+      quotedMaterialCost = requirements
+          .where((item) =>
+              (item['code']?.toString() ?? '').toLowerCase() == 'materials')
+          .fold<int>(0, (sum, item) => sum + asIntOr(item['requiredUnits'], 0));
+      quotedRemainingCapacity = math.max(0, remainingCapacity);
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -2289,18 +2353,18 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         const Icon(Icons.account_balance_wallet_outlined,
                             size: 14, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
-                        Text('${formatWholeNumber(creditCost)} C',
+                        Text('${formatWholeNumber(quotedCreditCost)} C',
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
                               color: context.inkColor,
                             )),
-                        if (materialCost > 0) ...[
+                        if (quotedMaterialCost > 0) ...[
                           const SizedBox(width: 8),
                           const Icon(Icons.terrain_outlined,
                               size: 14, color: EarthResourceColors.materials),
                           const SizedBox(width: 3),
-                          Text('${formatWholeNumber(materialCost)} Mat',
+                          Text('${formatWholeNumber(quotedMaterialCost)} Mat',
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w800,
@@ -2309,6 +2373,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         ],
                       ],
                     ),
+                    if (quotedCapacityQuote.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Capacity rent after construction: ${quotedCapacityQuote['afterChargeUnits'] ?? '—'} units/day · incremental ${quotedCapacityQuote['incrementalChargeUnits'] ?? '—'}',
+                          style: TextStyle(fontSize: 11, color: context.mutedColor),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -2320,7 +2394,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             size: 14, color: Colors.amber),
                         const SizedBox(width: 4),
                         Text(
-                          '${constructionDays}d',
+                              '${quotedConstructionDays}d',
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w800,
@@ -2340,7 +2414,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             size: 14, color: context.primaryColor),
                         const SizedBox(width: 4),
                         Text(
-                          '$capacityCost ${capacityCost == 1 ? "Space" : "Spaces"} ($remainingCapacity remaining)',
+                          '$quotedCapacityCost ${quotedCapacityCost == 1 ? "Space" : "Spaces"} ($quotedRemainingCapacity remaining)',
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w800,
@@ -2430,11 +2504,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     );
 
     if (confirmed == true && mounted) {
-      await widget.action(() => const EarthApi().purchaseBuilding(
-            buildingType: buildingType,
-            name: buildingName,
-            territoryId: cityId,
-          ));
+      final corporationId = widget.state.membership?['corporation_id']
+              ?.toString() ??
+          widget.state.human['corporation_id']?.toString();
+      final hasActiveCorporation = corporationId != null &&
+          corporationId.isNotEmpty &&
+          corporationId != 'null' &&
+          corporationId != 'Independent';
+      await widget.action(() => hasActiveCorporation
+          ? const EarthApi().purchaseV5Building(
+              buildingType: buildingType,
+              name: buildingName,
+            )
+          : const EarthApi().purchaseBuilding(
+              buildingType: buildingType,
+              name: buildingName,
+              territoryId: cityId,
+            ));
       if (mounted) {
         ScaffoldMessenger.of(this.context).showSnackBar(
           SnackBar(content: Text('$buildingName construction started.')),
@@ -2940,7 +3026,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   ? availableCivicSlots != null &&
                       availableCivicSlots >= footprint
                   : effAvailablePrivateSlots >= footprint;
-              final canBuild = canAfford && hasSlots;
+              final canBuild = _hasActiveCorporation && !isCivicMunicipal
+                  ? true
+                  : canAfford && hasSlots;
 
               Widget buildCardBody({bool fillHeight = false}) {
                 return Container(
@@ -3621,18 +3709,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final resOutAmt = asDoubleOr(b['resource_output_amount'], 0);
     final opCost = asDoubleOr(b['daily_operating_credits'], 0);
     final isCreditOutput = resOutType == 'credits' || resOutType == null;
-    final policyCostMultiplier = (policy == 'frugal' || policy == 'eco_reserve')
-        ? 0.70
-        : policy == 'high_output'
-            ? 1.40
-            : 1.0;
+    final policyCostMultiplier = asDoubleOr(b['cost_multiplier'], 1.0);
     final effectiveOpCost = opCost * policyCostMultiplier;
-    final policyYieldMultiplier =
-        (policy == 'frugal' || policy == 'eco_reserve')
-            ? 0.75
-            : policy == 'high_output'
-                ? 1.30
-                : 1.0;
+    final policyYieldMultiplier = asDoubleOr(b['output_multiplier'], 1.0);
     final effectiveOutputAmount = resOutAmt * policyYieldMultiplier;
     final effectiveOutput = isCreditOutput ? effectiveOutputAmount : 0.0;
     final isPublicInvestment = ownershipClass == 'public_investment';
@@ -3833,14 +3912,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         spacing: 4,
                         children: [
                           for (final p in [
-                            {'id': 'balanced', 'label': 'Balanced · normal'},
+                            {'id': 'BALANCED', 'label': 'Balanced'},
                             {
-                              'id': 'high_output',
-                              'label': 'High output · +30%'
+                              'id': 'GROWTH',
+                              'label': 'Growth'
                             },
                             {
-                              'id': 'eco_reserve',
-                              'label': 'Frugal · lower upkeep'
+                              'id': 'CONSERVATIVE',
+                              'label': 'Conservative'
                             },
                           ])
                             ChoiceChip(
@@ -3853,6 +3932,15 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                   : (selected) async {
                                       if (selected && policy != p['id']) {
                                         EarthAudioEngine.instance.playClick();
+                                        final preview = await const EarthApi()
+                                            .quoteBuildingOperatingPolicy(buildingId: id);
+                                        final allowed = (preview['allowedModes'] as List?)
+                                            ?.map((mode) => mode.toString())
+                                            .toSet();
+                                        if (allowed == null || !allowed.contains(p['id'])) {
+                                          _showBuildingFeedback('This operating policy is not available for the building.');
+                                          return;
+                                        }
                                         await widget.action(() =>
                                             const EarthApi()
                                                 .setBuildingOperatingPolicy(
@@ -4041,22 +4129,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     );
   }
 
-  int _calculateResearchCost(dynamic baseCost, int targetTier,
-      {String ownership = 'private'}) {
-    final base = math.max(1000.0, asDoubleOr(baseCost, 1000.0));
-    final double scopeMul = ownership == 'public_investment'
-        ? 3.5
-        : (ownership == 'civic' ? 2.5 : 2.0);
-    final tierMul = math.pow(2.0, math.max(0, targetTier - 2)).toDouble();
-    return math.max(1000, (base * scopeMul * tierMul).round());
-  }
-
-  int _calculateDurationDays(dynamic slotFootprint, int targetTier,
-      {String ownership = 'private'}) {
-    final slots = math.max(1, asIntOr(slotFootprint, 1));
-    return (targetTier + 3) * slots;
-  }
-
   Future<void> _showBuildingResearchDialog(
     BuildContext context, {
     required Map<String, dynamic> building,
@@ -4065,36 +4137,60 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   }) async {
     final bType = building['building_type']?.toString() ?? '';
     final bName = building['name']?.toString() ?? 'Facility';
-    final currentTier = asIntOr(building['tier'], 1);
-    final footprint = math.max(1, asIntOr(building['slot_footprint'], 1));
+    final quoteResponse = await const EarthApi()
+        .quoteCorporationBuildingResearch(bType);
+    if (!context.mounted || quoteResponse['ok'] != true) {
+      _showBuildingFeedback(quoteResponse['error']?.toString() ??
+          'Authoritative building research quote unavailable.');
+      return;
+    }
+    final serverQuote = quoteResponse['quote'] is Map
+        ? Map<String, dynamic>.from(quoteResponse['quote'] as Map)
+        : const <String, dynamic>{};
+    targetTier = asIntOr(quoteResponse['targetTier'], targetTier);
+    final currentTier = asIntOr(quoteResponse['currentTier'],
+        asIntOr(building['tier'], 1));
+    final serverTarget = quoteResponse['targetBlueprint'] is Map
+        ? Map<String, dynamic>.from(quoteResponse['targetBlueprint'] as Map)
+        : const <String, dynamic>{};
+    final footprint = math.max(
+        1,
+        asIntOr(serverTarget['slot_footprint'],
+            asIntOr(building['slot_footprint'], 1)));
     final ownership = building['ownership_class']?.toString() ?? 'private';
 
     final match = catalog.whereType<Map>().firstWhere(
           (c) => c['type'] == bType || c['building_type'] == bType,
           orElse: () => <String, dynamic>{},
         );
-    final baseCost =
-        asDoubleOr(match['cost_credits'] ?? match['baseCreditCost'], 35000);
-    final costCredits =
-        _calculateResearchCost(baseCost, targetTier, ownership: ownership);
-    final durationDays =
-        _calculateDurationDays(footprint, targetTier, ownership: ownership);
+    final baseCost = asDoubleOr(
+        match['construction_credit_units'] ??
+            match['cost_credits'] ??
+            match['baseCreditCost'],
+        0);
+    final costCredits = asDoubleOr(serverQuote['researchCostUnits'], 0);
+    final durationDays = asIntOr(serverQuote['durationDays'], 0);
 
     final isPrivate = ownership == 'private';
     final fundingSource =
         isPrivate ? 'your personal account' : 'your corporation treasury';
 
     // Real CapEx values
-    final costCreditsCur = baseCost * math.pow(1.70, currentTier - 1);
-    final costCreditsNext = baseCost * math.pow(1.70, targetTier - 1);
+    final costCreditsCur = baseCost;
+    final costCreditsNext = asDoubleOr(
+        serverTarget['construction_credit_units'] ??
+            serverTarget['cost_credits'],
+        baseCost);
 
     // Outputs
     final outputs = <(IconData, Color, String, double, double)>[];
     void addOutput(String key, String label, IconData icon, Color color) {
       final raw = asDoubleOr(match['output_$key'], 0);
       if (raw > 0) {
-        final cur = raw * math.pow(1.25, currentTier - 1);
-        final next = raw * math.pow(1.25, targetTier - 1);
+        final cur = raw;
+        final next = asDoubleOr(
+            serverTarget['output_$key'] ?? serverTarget['output${key[0].toUpperCase()}${key.substring(1)}'],
+            raw);
         outputs.add((icon, color, label, cur, next));
       }
     }
@@ -4116,8 +4212,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     void addUpkeep(String key, String label, IconData icon, Color color) {
       final raw = asDoubleOr(match['upkeep_$key'], 0);
       if (raw > 0) {
-        final cur = raw * math.pow(1.12, currentTier - 1);
-        final next = raw * math.pow(1.12, targetTier - 1);
+        final cur = raw;
+        final next = asDoubleOr(
+            serverTarget['upkeep_$key'] ?? serverTarget['upkeep${key[0].toUpperCase()}${key.substring(1)}'],
+            raw);
         upkeeps.add((icon, color, label, cur, next));
       }
     }
@@ -4139,6 +4237,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           match['daily_operating_credits'],
       0,
     );
+    final opCreditsNext = asDoubleOr(
+        serverTarget['operating_credit_units'] ??
+            serverTarget['operating_credits'] ??
+            serverTarget['operating_cost_credits'],
+        opCreditsBase);
 
     String formatVal(double val) {
       if (val == val.roundToDouble()) return val.toInt().toString();
@@ -4149,8 +4252,17 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
     EarthAudioEngine.instance.playClick();
     // Construction days
-    final tierDaysCurrent = math.max(1, (footprint * currentTier).toInt());
-    final tierDaysNext = math.max(1, (footprint * targetTier).toInt());
+    final tierDaysCurrent = math.max(
+        1,
+        (asDoubleOr(match['construction_minutes'], footprint * currentTier * 1440) /
+                1440)
+            .ceil());
+    final tierDaysNext = math.max(
+        1,
+        (asDoubleOr(serverTarget['construction_minutes'],
+                    footprint * targetTier * 1440) /
+                1440)
+            .ceil());
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -4413,7 +4525,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               size: 13, color: EarthResourceColors.credits),
                           const SizedBox(width: 4),
                           Text(
-                            '-${formatWholeNumber(opCreditsBase * math.pow(1.12, currentTier - 1))} → -${formatWholeNumber(opCreditsBase * math.pow(1.12, targetTier - 1))}',
+                            '-${formatWholeNumber(opCreditsBase)} → -${formatWholeNumber(opCreditsNext)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -4575,16 +4687,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       }
 
       final policy = building['operating_policy']?.toString() ?? 'balanced';
-      final outputMultiplier = (policy == 'high_output')
-          ? 1.30
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? 0.75
-              : 1.0;
-      final costMultiplier = (policy == 'high_output')
-          ? 1.40
-          : (policy == 'frugal' || policy == 'eco_reserve')
-              ? 0.70
-              : 1.0;
+      final outputMultiplier = asDoubleOr(building['output_multiplier'], 1.0);
+      final costMultiplier = asDoubleOr(building['cost_multiplier'], 1.0);
       double rounded(double value) => (value * 10).ceil() / 10;
 
       for (final key in [

@@ -24,6 +24,14 @@ extension EarthApiTechnology on EarthApi {
     return world();
   }
 
+  Future<Map<String, dynamic>> quoteResearch(String name) async {
+    final response = await _request('/api/technology/projects/quote',
+        method: 'POST', body: {'name': name});
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{'ok': false, 'error': 'Research quote unavailable'};
+  }
+
   Future<EarthState> startCorporationBuildingResearch(String buildingType) async {
     await _request('/api/research/buildings', method: 'POST', body: {
       'buildingType': buildingType,
@@ -31,6 +39,18 @@ extension EarthApiTechnology on EarthApi {
           newClientCorrelationId('corporation-building-research'),
     });
     return world();
+  }
+
+  Future<Map<String, dynamic>> quoteCorporationBuildingResearch(
+      String buildingType) async {
+    final response = await _request('/api/research/buildings/quote',
+        method: 'POST', body: {'buildingType': buildingType});
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{
+            'ok': false,
+            'error': 'Building research quote unavailable',
+          };
   }
 
 }

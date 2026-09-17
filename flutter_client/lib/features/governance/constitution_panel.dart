@@ -96,7 +96,7 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
       statusColor: context.primaryColor,
       infoTitle: 'PLANETARY CONSTITUTION & LEGAL ORDER',
       infoDescription:
-          '• Supreme Law: The highest legal baseline across Earth. All municipal charters and organization policies must conform to constitutional invariants.\n\n• 3-Tier Governance Hierarchy:\n  1. Earth Baseline (Supreme global statutes & unalienable citizen rights)\n  2. Organization Policy (Intermediate organizational rules & dividends)\n  3. Territory Commons (Final permitted local overrides, municipal taxation, & zoning)\n\n• Precedence: A permitted local override modifies the tier before it, provided it conforms to global constitutional invariants.',
+          '• Supreme Law: The highest legal baseline across Earth. All Corporation policies must conform to constitutional invariants.\n\n• V5 Governance Scopes:\n  1. Earth Baseline (global statutes, fiscal policy, and unalienable citizen rights)\n  2. Corporation Policy (membership, pooled capacity, operations, and Corporation services)\n\n• Precedence: Corporation policy operates within the Earth baseline. Standalone Territory records are capacity containers, not a third government tier.',
       title: 'PLANETARY CONSTITUTION',
       subtitle:
           'Supreme legal architecture and governance override hierarchy across Earth',
@@ -333,7 +333,7 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
       child: Column(
         children: [
           Text(
-            'Rule Precedence: Earth Baseline → Organization Policy → Territory Commons',
+            'Rule Precedence: Earth Baseline → Corporation Policy → Community and capacity administration',
             style: context.widgetFooterStyle,
           ),
           const SizedBox(height: 14),

@@ -11,6 +11,8 @@ import {
 } from './read-postgres.ts';
 import { listEvents as listEventsPostgres, listHistory as listHistoryPostgres } from './read-models/events-read.ts';
 import { listNews as listNewsPostgres } from './read-models/news-read.ts';
+import { backfillV5CapacityBatch, getV5CapacityBackfillRun } from './v5-capacity-backfill-postgres.ts';
+import { getV5CutoverReadiness } from './v5-cutover-readiness-postgres.ts';
 import { listNotifications as listNotificationsPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-models/notifications-read.ts';
 import { getDecisionQueue } from './decision-queue-postgres.ts';
 import { contributeToGlobalProgram, createGlobalProgram, fundGlobalProgram, listGlobalProgramContributions, listGlobalPrograms, settleGlobalProgramFunding } from './global-programs-postgres.ts';
@@ -21,6 +23,8 @@ import { listWorldConditions } from './world-conditions-postgres.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { addMutualCreditGuarantee, createMutualCreditNetwork, getMutualCreditNetwork, joinMutualCreditNetwork, listMutualCreditNetworks, transferMutualCredit } from './mutual-credit-postgres.ts';
+import { getActiveV5StandardCapacity, getV5CorporationCapacity, getV5HouseCapacity } from './v5-capacity-postgres.ts';
+import { getV5Overview } from './v5-overview-postgres.ts';
 
 /**
  * Read-model routes: notifications, events, history, rankings, institutions,
@@ -35,6 +39,36 @@ export async function handleReadModelRoutes(
   env: Env,
   url: URL,
 ): Promise<Response | null> {
+
+  const v5HouseCapacity = url.pathname === '/api/v5/house/capacity' && request.method === 'GET';
+  if (v5HouseCapacity) {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const result = await withRepository(env, (repository) => getV5HouseCapacity(repository, viewer.house_id));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, capacity: result, persistence: 'planetscale-postgres' });
+  }
+  if (url.pathname === '/api/v5/command/overview' && request.method === 'GET') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    try {
+      const result = await withRepository(env, (repository) => getV5Overview(repository, viewer.house_id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 overview unavailable' }, { status: 400 });
+    }
+  }
+  const v5CorporationCapacity = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/capacity$/);
+  if (v5CorporationCapacity && request.method === 'GET') {
+    if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const result = await withRepository(env, async (repository) => {
+      const policy = await getActiveV5StandardCapacity(repository);
+      return { ...(await getV5CorporationCapacity(repository, v5CorporationCapacity[1], policy.standardTerritoryCapacity)), policyVersion: policy.policyVersion, gameDay: policy.gameDay };
+    });
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, capacity: result, persistence: 'planetscale-postgres' });
+  }
 
   const mutualCreditDetail = url.pathname.match(/^\/api\/mutual-credit\/networks\/([^/]+)$/);
   if (url.pathname === '/api/mutual-credit/networks' && request.method === 'GET') {
@@ -396,6 +430,37 @@ export async function handleReadModelRoutes(
     const result = await withRepository(env, (repository) => auditWorldPostgres(repository, 'internal-admin'));
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/internal/v5/cutover-readiness' && request.method === 'GET') {
+    const expectedToken = env.INTERNAL_ADMIN_TOKEN;
+    const providedToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    if (!expectedToken || providedToken !== expectedToken) return new Response(null, { status: 404 });
+    const result = await withRepository(env, (repository) => getV5CutoverReadiness(repository));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.eligible ? 200 : 503 });
+  }
+
+  if ((url.pathname === '/internal/v5/capacity-backfill' || url.pathname === '/internal/v5/capacity-backfill/run') && (request.method === 'GET' || request.method === 'POST')) {
+    const expectedToken = env.INTERNAL_ADMIN_TOKEN;
+    const providedToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    if (!expectedToken || providedToken !== expectedToken) return new Response(null, { status: 404 });
+    try {
+      if (request.method === 'GET') {
+        const sourceGameDay = Number(url.searchParams.get('sourceGameDay'));
+        if (!Number.isInteger(sourceGameDay) || sourceGameDay < 1) return Response.json({ ok: false, error: 'sourceGameDay must be a positive integer' }, { status: 400 });
+        const result = await withRepository(env, (repository) => getV5CapacityBackfillRun(repository, sourceGameDay));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      }
+      const body = await request.json() as { runId?: string; sourceGameDay?: number; batchSize?: number };
+      if (!body.runId || !Number.isInteger(body.sourceGameDay) || body.sourceGameDay < 1) return Response.json({ ok: false, error: 'runId and positive sourceGameDay are required' }, { status: 400 });
+      const result = await withRepository(env, (repository) => backfillV5CapacityBatch(repository, { runId: body.runId!, sourceGameDay: body.sourceGameDay!, batchSize: body.batchSize }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 capacity backfill failed' }, { status: 409 });
+    }
   }
 
   if (url.pathname === '/api/pantheon' && request.method === 'GET') {

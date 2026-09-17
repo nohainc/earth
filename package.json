@@ -109,6 +109,7 @@
     "db:verify:surface": "node scripts/verify-postgres-surface.mjs",
     "db:verify:readiness": "node scripts/verify-readiness.mjs",
     "api:contract:generate": "node --experimental-strip-types scripts/generate-api-contract.mjs",
+    "v5:rehearse": "node scripts/run-v5-cutover-rehearsal.mjs",
     "db:verify:ci-provenance": "node scripts/verify-ci-provenance.mjs",
     "db:upgrade:snapshot": "node scripts/verify-postgres-upgrade.mjs",
     "db:upgrade:verify": "node scripts/verify-postgres-upgrade.mjs --verify",

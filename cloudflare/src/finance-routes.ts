@@ -10,6 +10,9 @@ import { getHouseFinancialProjection, getInstitutionFinancialProjection } from '
 import { addBankLoanGuarantee, getBankLoanQuote, getBankRiskProjection, listBankLoans, originateBankLoan, repayBankLoan } from './banking-postgres.ts';
 import { createOrganizationResolutionCase, getOrganizationFinancialState } from './organization-stress-postgres.ts';
 import { getTaxStatement } from './tax-statement-postgres.ts';
+import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
+import { listV5CapacityResolutionCases, liquidateV5HouseBuilding, openV5CapacityResolutionCase } from './v5-capacity-resolution-postgres.ts';
+import { listV5CorporationReceivershipCases, submitV5CorporationRestructuringPlan } from './v5-corporation-receivership-postgres.ts';
 
 export async function handleFinanceRoutes(
   request: Request,
@@ -18,6 +21,53 @@ export async function handleFinanceRoutes(
   viewer: { id: string; house_id: string },
   sensitiveActionAllowed: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
+  if (url.pathname === '/api/v5/house/capacity-resolution' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => listV5CapacityResolutionCases(repository, viewer.id));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+  const v5Receivership = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/receivership$/);
+  if (v5Receivership && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => listV5CorporationReceivershipCases(repository, { humanId: viewer.id, corporationId: v5Receivership[1] }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Receivership history unavailable' }, { status: 403 }); }
+  }
+  const v5Restructure = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/receivership\/([^/]+)\/restructure$/);
+  if (v5Restructure && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ planText?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.planText) return Response.json({ ok: false, error: 'A restructuring plan and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => submitV5CorporationRestructuringPlan(repository, { humanId: viewer.id, corporationId: v5Restructure[1], caseId: v5Restructure[2], planText: parsed.value.planText!, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Restructuring plan submission failed' }, { status: 409 }); }
+  }
+  if (url.pathname === '/api/v5/house/capacity-resolution' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ reason?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    try {
+      const result = await withRepository(env, (repository) => openV5CapacityResolutionCase(repository, { humanId: viewer.id, reason: parsed.value.reason }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Capacity resolution case could not be opened' }, { status: 409 }); }
+  }
+  const v5Liquidation = url.pathname.match(/^\/api\/v5\/house\/capacity-resolution\/([^/]+)\/liquidate\/([^/]+)$/);
+  if (v5Liquidation && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId) return Response.json({ ok: false, error: 'A valid idempotency key is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => liquidateV5HouseBuilding(repository, { humanId: viewer.id, caseId: v5Liquidation[1], buildingId: v5Liquidation[2], correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Capacity asset release failed' }, { status: 409 }); }
+  }
+
   if (url.pathname === '/api/finance/tax-statement' && request.method === 'GET') {
     try {
       const result = await withRepository(env, (repository) => getTaxStatement(repository, viewer.id));
@@ -211,7 +261,7 @@ export async function handleFinanceRoutes(
   }
   if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [account, state, buildings, context, latestMaintenance, arrears, taxRules, taxObligations, bankDeposits, transactions] = await Promise.all([
+      const [account, state, buildings, context, latestMaintenance, arrears, taxRules, taxObligations, bankDeposits, transactions, v5Capacity, v5Obligations] = await Promise.all([
         repository.query(`SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance_units,
                                  'CREDIT' AS currency,
                                  a.account_type
@@ -240,9 +290,19 @@ export async function handleFinanceRoutes(
                             FROM economic_transactions t JOIN economic_entries e ON e.transaction_id = t.id
                            WHERE e.account_id IN (SELECT a.id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1)
                            ORDER BY t.id DESC LIMIT 100`, [viewer.house_id]),
+        getV5HouseCapacity(repository, viewer.house_id).catch(() => null),
+        repository.query(`SELECT o.id, o.game_day, o.usage_units::TEXT, o.assessed_units::TEXT, o.paid_units::TEXT,
+                                 o.status, o.schedule_id, o.financial_obligation_id
+                            FROM v5_capacity_obligations o
+                           WHERE o.house_id = $1 ORDER BY o.game_day DESC, o.created_at DESC LIMIT 100`, [viewer.house_id]).catch(() => ({ rows: [] })),
       ]);
       const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
       const resident = context.rows[0];
+      const walletUnits = BigInt(account.rows[0]?.balance_units ?? 0);
+      const protectedUnits = BigInt(stateRow.protected_credits ?? 0);
+      const availableToSpendUnits = walletUnits > protectedUnits
+        ? walletUnits - protectedUnits
+        : 0n;
       return {
         account: account.rows[0] ?? null,
         state: stateRow,
@@ -252,6 +312,14 @@ export async function handleFinanceRoutes(
         },
         lifeMaintenance: { lastSettlement: latestMaintenance.rows[0] ?? null, unpaidTotal: Number(arrears.rows[0]?.total ?? 0), corporationId: resident?.corporation_id ?? null },
         taxes: { rules: taxRules.rows, obligations: taxObligations.rows },
+        capacity: { summary: v5Capacity, obligations: v5Obligations.rows },
+        liquidity: {
+          walletUnits: walletUnits.toString(),
+          protectedReserveUnits: protectedUnits.toString(),
+          availableToSpendUnits: availableToSpendUnits.toString(),
+          nextSettlementGameDay: Number((await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0) + 1,
+          generatedFrom: 'postgres-canonical-facts-v5',
+        },
         bank: { deposits: bankDeposits.rows },
         transactions: transactions.rows,
       };

@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { authorityMode, withRepository } from './repository';
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, registerSuccessor as registerSuccessorPostgres } from './lifecycle-postgres';
-import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
+import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, quoteResearchProject as quoteResearchProjectPostgres } from './technology-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { runSchedulerHeartbeat } from './scheduler';
 import { deliverOutbox } from './outbox-postgres';
@@ -316,6 +316,21 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Research project creation failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/technology/projects/quote' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ name?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const name = parsed.value.name?.trim() ?? '';
+      if (!name || name.length < 3 || name.length > 120) return Response.json({ ok: false, error: 'Technology name is required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => quoteResearchProjectPostgres(repository, { ownerId: viewer.id, name }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Research quote unavailable' }, { status: 409 });
       }
     }
     if (url.pathname === '/api/technology/me/fund' && request.method === 'POST') {
