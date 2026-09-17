@@ -88,6 +88,14 @@
       "status": "ACTIVE"
     },
     {
+      "method": "GET",
+      "path": "/internal/v5/tax-reconciliation",
+      "owner": "ReadModelRoutes",
+      "auth": "INTERNAL_ADMIN",
+      "service": "getV5TaxReconciliation",
+      "status": "ACTIVE"
+    },
+    {
       "method": "POST",
       "path": "/api/auth/register",
       "owner": "AuthRoutes",

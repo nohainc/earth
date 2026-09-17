@@ -39,6 +39,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'GET', path: '/internal/v5/capacity-backfill/run', owner: 'ReadModelRoutes', auth: 'INTERNAL_ADMIN', service: 'getV5CapacityBackfillRun', status: 'ACTIVE' },
   { method: 'POST', path: '/internal/v5/capacity-backfill', owner: 'ReadModelRoutes', auth: 'INTERNAL_ADMIN', service: 'backfillV5CapacityBatch', status: 'ACTIVE' },
   { method: 'GET', path: '/internal/v5/cutover-readiness', owner: 'ReadModelRoutes', auth: 'INTERNAL_ADMIN', service: 'getV5CutoverReadiness', status: 'ACTIVE' },
+  { method: 'GET', path: '/internal/v5/tax-reconciliation', owner: 'ReadModelRoutes', auth: 'INTERNAL_ADMIN', service: 'getV5TaxReconciliation', status: 'ACTIVE' },
   { method: 'POST', path: '/api/auth/register', owner: 'AuthRoutes', auth: 'PUBLIC', service: 'registerAccount', status: 'ACTIVE' },
   { method: 'POST', path: '/api/auth/login', owner: 'AuthRoutes', auth: 'PUBLIC', service: 'login', status: 'ACTIVE' },
   { method: 'GET', path: '/api/auth/verify-email', owner: 'AuthRoutes', auth: 'PUBLIC', service: 'verifyEmail', status: 'ACTIVE' },

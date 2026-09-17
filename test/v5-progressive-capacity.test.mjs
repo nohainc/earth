@@ -408,6 +408,10 @@ test('V5 cutover readiness is fail-closed and read-only', async () => {
   const migration = await readFile(new URL('../db/migrations/103_v5_tax_reconciliation.sql', import.meta.url), 'utf8');
   assert.match(migration, /v5_tax_reconciliation_runs/);
   assert.match(migration, /MISSING_CANONICAL/);
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  const readRoutes = await readFile(new URL('../cloudflare/src/read-model-routes.ts', import.meta.url), 'utf8');
+  assert.match(registry, /internal\/v5\/tax-reconciliation/);
+  assert.match(readRoutes, /getV5TaxReconciliation/);
 });
 
 test('V5 pooled construction accepts no Territory placement target', async () => {

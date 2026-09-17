@@ -13,6 +13,7 @@ import { listEvents as listEventsPostgres, listHistory as listHistoryPostgres } 
 import { listNews as listNewsPostgres } from './read-models/news-read.ts';
 import { backfillV5CapacityBatch, getV5CapacityBackfillRun } from './v5-capacity-backfill-postgres.ts';
 import { getV5CutoverReadiness } from './v5-cutover-readiness-postgres.ts';
+import { getV5TaxReconciliation } from './v5-tax-reconciliation-postgres.ts';
 import { listNotifications as listNotificationsPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-models/notifications-read.ts';
 import { getDecisionQueue } from './decision-queue-postgres.ts';
 import { contributeToGlobalProgram, createGlobalProgram, fundGlobalProgram, listGlobalProgramContributions, listGlobalPrograms, settleGlobalProgramFunding } from './global-programs-postgres.ts';
@@ -446,6 +447,18 @@ export async function handleReadModelRoutes(
     const result = await withRepository(env, (repository) => getV5CutoverReadiness(repository));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.eligible ? 200 : 503 });
+  }
+
+  if (url.pathname === '/internal/v5/tax-reconciliation' && request.method === 'GET') {
+    const expectedToken = env.INTERNAL_ADMIN_TOKEN;
+    const providedToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    if (!expectedToken || providedToken !== expectedToken) return new Response(null, { status: 404 });
+    const rawDay = url.searchParams.get('assessedGameDay');
+    const assessedDay = rawDay === null ? undefined : Number(rawDay);
+    if (assessedDay !== undefined && (!Number.isInteger(assessedDay) || assessedDay < 1)) return Response.json({ ok: false, error: 'assessedGameDay must be a positive integer' }, { status: 400 });
+    const result = await withRepository(env, (repository) => getV5TaxReconciliation(repository, assessedDay));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
   if ((url.pathname === '/internal/v5/capacity-backfill' || url.pathname === '/internal/v5/capacity-backfill/run') && (request.method === 'GET' || request.method === 'POST')) {
