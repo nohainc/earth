@@ -1,4 +1,4 @@
--- Extend the resumable V5 capacity backfill with an independent-House cursor.
+-- EARTH ACTIVE MIGRATION: extend the resumable V5 capacity backfill with an independent-House cursor.
 -- Independent Houses are Earth-direct capacity principals and must not be
 -- omitted simply because the corporation cursor has been exhausted.
 
