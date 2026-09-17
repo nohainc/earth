@@ -167,6 +167,11 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     const governanceRulePrefix = institutionKind === 'EARTH' ? 'EARTH.GOVERNANCE' : 'CORPORATION.GOVERNANCE';
     const canonicalGovernanceValue = (suffix: string): number | null => canonicalValue(`${governanceRulePrefix}.${suffix}`);
     if (canonical) {
+      const requiredGovernanceRules = ['POLICY_QUORUM_BPS', 'POLICY_APPROVAL_BPS', 'VOTING_PERIOD_DAYS', 'IMPLEMENTATION_DELAY_DAYS'];
+      const missingGovernanceRule = requiredGovernanceRules.find((suffix) => canonicalGovernanceValue(suffix) === null);
+      if (missingGovernanceRule) {
+        throw new Error(`Canonical Constitution governance rule is unavailable: ${governanceRulePrefix}.${missingGovernanceRule}`);
+      }
       // Earth and Corporation governance is Constitution-backed. Keep a
       // synthetic snapshot row for the proposal contract without recreating
       // a competing legacy governance_rules authority.
@@ -179,6 +184,9 @@ export async function createProposal(repository: PostgresRepository, input: { hu
         voting_period_days: canonicalGovernanceValue('VOTING_PERIOD_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays,
         implementation_delay_days: canonicalGovernanceValue('IMPLEMENTATION_DELAY_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays,
       };
+    }
+    if ((institutionKind === 'EARTH' || institutionKind === 'CORPORATION') && !canonical) {
+      throw new Error('Canonical Constitution governance is unavailable; legacy governance fallback is disabled for V5 authorities');
     }
     if (!canonical && ruleRow && input.expectedGovernanceRuleVersionId && ruleRow.id !== input.expectedGovernanceRuleVersionId) {
       throw new Error('Governance rule version changed; refresh and retry');

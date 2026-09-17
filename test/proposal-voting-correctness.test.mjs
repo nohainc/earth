@@ -42,3 +42,9 @@ test('V4 service rejects legacy tax and charter constitutional actions', () => {
   assert.match(source, /actionType === 'TAX_RULE' \|\| actionType === 'CHARTER_CHANGE'/);
   assert.match(source, /Legacy constitutional governance action is retired/);
 });
+
+test('V2 proposal creation cannot seed legacy governance defaults for V5 authorities', () => {
+  const source = fs.readFileSync('cloudflare/src/governance-postgres.ts', 'utf8');
+  assert.match(source, /Canonical Constitution governance rule is unavailable/);
+  assert.match(source, /legacy governance fallback is disabled for V5 authorities/);
+});
