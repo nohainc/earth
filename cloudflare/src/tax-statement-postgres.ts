@@ -33,7 +33,17 @@ export async function getTaxStatement(repository: PostgresRepository, humanId: s
       authority_id: constitutionalTaxProvenance[code] === 'CORPORATION' ? house.corporation_id : 'EARTH',
       generatedFrom: 'constitutional_rule_versions_v5',
     }));
-    return toJsonSafe({ houseId: house.house_id, territoryId: house.territory_id, corporationId: house.corporation_id, gameDay: day, constitutionSnapshotId: constitution.snapshotId, constitutionalTaxRules, constitutionalTaxVersionIds, constitutionalTaxProvenance, activeRules, financialObligations: obligations.rows, taxObligations: arrears.rows, generatedFrom: 'postgres-canonical-facts' });
+    const scheduleIds = [...new Set(Object.values(constitutionalTaxRules)
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .filter((value) => value.startsWith('CONST-SCHEDULE-') || value.startsWith('V5-')))]
+      .sort();
+    const scheduleRows = scheduleIds.length === 0 ? [] : (await tx.query<{ schedule_id: string; ordinal: number; lower_bound_units: string; upper_bound_units: string | null; marginal_multiplier_numerator: string; marginal_multiplier_denominator: string }>(
+      `SELECT schedule_id, ordinal, lower_bound_units::TEXT, upper_bound_units::TEXT,
+              marginal_multiplier_numerator::TEXT, marginal_multiplier_denominator::TEXT
+         FROM progressive_policy_brackets WHERE schedule_id = ANY($1::TEXT[]) ORDER BY schedule_id, ordinal`, [scheduleIds],
+    )).rows;
+    const progressiveSchedules = Object.fromEntries(scheduleIds.map((scheduleId) => [scheduleId, scheduleRows.filter((row) => row.schedule_id === scheduleId).map((row) => ({ ordinal: Number(row.ordinal), lowerBound: row.lower_bound_units, upperBound: row.upper_bound_units, marginalMultiplierNumerator: row.marginal_multiplier_numerator, marginalMultiplierDenominator: row.marginal_multiplier_denominator }))]));
+    return toJsonSafe({ houseId: house.house_id, territoryId: house.territory_id, corporationId: house.corporation_id, gameDay: day, constitutionSnapshotId: constitution.snapshotId, constitutionalTaxRules, constitutionalTaxVersionIds, constitutionalTaxProvenance, activeRules, progressiveSchedules, financialObligations: obligations.rows, taxObligations: arrears.rows, generatedFrom: 'postgres-canonical-facts' });
   });
   return result;
 }

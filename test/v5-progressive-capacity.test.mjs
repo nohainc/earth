@@ -423,6 +423,8 @@ test('V5 Constitution read model exposes resolved values, provenance, and histor
 test('V5 tax statements consume assessed-day Constitution snapshots with provenance', async () => {
   const statement = await readFile(new URL('../cloudflare/src/tax-statement-postgres.ts', import.meta.url), 'utf8');
   assert.match(statement, /getResolvedConstitutionForDay/);
+  assert.match(statement, /progressive_policy_brackets/);
+  assert.match(statement, /progressiveSchedules/);
   assert.match(statement, /constitutionSnapshotId/);
   assert.match(statement, /constitutionalTaxProvenance/);
 });
