@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { toJsonSafe } from './json-safe.ts';
 import { getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 
 // @mutation-boundary deterministic-settlement
@@ -214,5 +215,5 @@ export async function backfillV5CapacityBatch(
 
 export async function getV5CapacityBackfillRun(repository: PostgresRepository, sourceGameDay: number): Promise<Record<string, unknown>> {
   const result = await repository.query('SELECT * FROM v5_capacity_backfill_runs WHERE source_game_day = $1', [sourceGameDay]);
-  return { ok: true, run: result.rows[0] ?? null, generatedFrom: 'postgres-canonical-facts-v5' };
+  return { ok: true, run: toJsonSafe(result.rows[0] ?? null), generatedFrom: 'postgres-canonical-facts-v5' };
 }

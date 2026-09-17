@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { toJsonSafe } from './json-safe.ts';
 
 type EarthLegacyTaxRule = { id: string; tax_rule_id: string; rate_bps: number };
 type CorporationTaxState = {
@@ -112,5 +113,5 @@ export async function getV5TaxReconciliation(repository: PostgresRepository, req
   const run = (await repository.query('SELECT * FROM v5_tax_reconciliation_runs WHERE assessed_game_day = $1', [assessedDay])).rows[0];
   if (!run) return { ok: true, available: false, assessedGameDay: assessedDay, items: [], generatedFrom: 'postgres-v5-tax-reconciliation' };
   const items = (await repository.query('SELECT * FROM v5_tax_reconciliation_items WHERE run_id = $1 ORDER BY authority_type, authority_id, canonical_rule_code', [run.id])).rows;
-  return { ok: true, available: true, run, items, generatedFrom: 'postgres-v5-tax-reconciliation' };
+  return { ok: true, available: true, run: toJsonSafe(run), items: toJsonSafe(items), generatedFrom: 'postgres-v5-tax-reconciliation' };
 }
