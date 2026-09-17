@@ -170,6 +170,8 @@ test('V5 constitutional amendments are typed, policy-group scoped change sets', 
   const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
   const migration = await readFile(new URL('../db/migrations/095_constitution_kernel.sql', import.meta.url), 'utf8');
   assert.match(governance, /CONSTITUTION_AMENDMENT/);
+  assert.match(service, /materializeConstitutionSchedule/);
+  assert.match(service, /earth_validate_v5_progressive_schedule/);
   assert.match(governance, /validateConstitutionalRuleValue/);
   assert.match(service, /constitutional_change_sets_v5/);
   assert.match(service, /groups\.size !== 1/);

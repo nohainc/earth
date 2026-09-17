@@ -185,6 +185,47 @@ async function retireActive(tx: PostgresRepository, table: string, keyColumn: st
   await tx.query(`UPDATE ${table} SET effective_to_game_day = $2 WHERE ${keyColumn} = $1 AND status = 'RETIRED' AND effective_to_game_day IS NULL`, [keyValue, effective - 1]);
 }
 
+function progressiveBasis(ruleCode: string): 'EARTH_CORPORATION_CAPACITY' | 'CORPORATION_HOUSE_CAPACITY' | 'HOUSE_INCOME_TAX' {
+  if (ruleCode === 'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE') return 'EARTH_CORPORATION_CAPACITY';
+  if (ruleCode === 'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE') return 'CORPORATION_HOUSE_CAPACITY';
+  return 'HOUSE_INCOME_TAX';
+}
+
+async function materializeConstitutionSchedule(
+  tx: PostgresRepository,
+  input: { proposalId: string; ruleCode: string; authorityType: 'EARTH' | 'CORPORATION'; authorityId: string; effective: number; brackets: NonNullable<ProposalAction['brackets']> },
+): Promise<string> {
+  const scheduleId = `CONST-SCHEDULE-${input.proposalId}-${input.ruleCode.replaceAll('.', '-')}`;
+  const code = `CONSTITUTION:${input.ruleCode}:${input.authorityId}`;
+  const authority = (await tx.query<{ id: string }>(
+    'SELECT id FROM institutions WHERE id = $1 AND status = \'ACTIVE\'',
+    [input.authorityType === 'EARTH' ? 'EARTH' : input.authorityId],
+  )).rows[0];
+  if (!authority) throw new Error(`Constitution schedule authority is unavailable: ${input.authorityId}`);
+  const version = Number((await tx.query<{ version: number }>(
+    'SELECT COALESCE(MAX(version), 0) + 1 AS version FROM progressive_policy_schedules WHERE code = $1',
+    [code],
+  )).rows[0]?.version ?? 1);
+  await tx.query(
+    `INSERT INTO progressive_policy_schedules
+       (id, code, basis_type, authority_institution_id, version, status, effective_from_game_day, created_by)
+     VALUES ($1,$2,$3,$4,$5,'DRAFT',$6,NULL)`,
+    [scheduleId, code, progressiveBasis(input.ruleCode), authority.id, version, input.effective],
+  );
+  for (const bracket of input.brackets) {
+    await tx.query(
+      `INSERT INTO progressive_policy_brackets
+         (schedule_id, ordinal, lower_bound_units, upper_bound_units,
+          marginal_multiplier_numerator, marginal_multiplier_denominator)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [scheduleId, bracket.ordinal, bracket.lowerBound.toString(), bracket.upperBound?.toString() ?? null, bracket.multiplierNumerator.toString(), bracket.multiplierDenominator.toString()],
+    );
+  }
+  await tx.query('SELECT earth_validate_v5_progressive_schedule($1)', [scheduleId]);
+  await tx.query("UPDATE progressive_policy_schedules SET status = 'ACTIVE' WHERE id = $1", [scheduleId]);
+  return scheduleId;
+}
+
 async function applyActivation(tx: PostgresRepository, row: { proposal_id: string; action_type: string; payload: Record<string, unknown>; effective_from_game_day: number }, day: number): Promise<void> {
   const payload = row.payload;
   const effective = Number(row.effective_from_game_day);
@@ -204,9 +245,21 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
         await tx.query(`UPDATE constitutional_rule_versions_v5 SET status = 'RETIRED', effective_to_game_day = $3 WHERE rule_code = $1 AND authority_type = 'CORPORATION' AND authority_id = $2 AND status = 'ACTIVE' AND effective_to_game_day IS NULL`, [change.ruleCode, authorityId, effective - 1]);
         continue;
       }
+      let constitutionalValue = change.value;
+      const definition = getConstitutionalRuleDefinition(change.ruleCode);
+      if (definition.valueType === 'PROGRESSIVE_SCHEDULE_REF' && Array.isArray(change.value)) {
+        constitutionalValue = await materializeConstitutionSchedule(tx, {
+          proposalId: row.proposal_id,
+          ruleCode: change.ruleCode,
+          authorityType,
+          authorityId,
+          effective,
+          brackets: change.value as NonNullable<ProposalAction['brackets']>,
+        });
+      }
       const prior = (await tx.query<{ version: number }>('SELECT COALESCE(MAX(version), 0) + 1 AS version FROM constitutional_rule_versions_v5 WHERE rule_code = $1 AND authority_type = $2 AND authority_id = $3', [change.ruleCode, authorityType, authorityId])).rows[0];
       await tx.query(`UPDATE constitutional_rule_versions_v5 SET status = 'RETIRED', effective_to_game_day = $4 WHERE rule_code = $1 AND authority_type = $2 AND authority_id = $3 AND status = 'ACTIVE' AND effective_to_game_day IS NULL`, [change.ruleCode, authorityType, authorityId, effective - 1]);
-      await tx.query(`INSERT INTO constitutional_rule_versions_v5 (id, rule_code, authority_type, authority_id, version, value_json, effective_from_game_day, status, proposal_id) VALUES ($1,$2,$3,$4,$5,$6::JSONB,$7,'ACTIVE',$8)`, [`CONST-${row.proposal_id}-${change.ruleCode}`, change.ruleCode, authorityType, authorityId, Number(prior?.version ?? 1), JSON.stringify({ value: change.value }), effective, row.proposal_id]);
+      await tx.query(`INSERT INTO constitutional_rule_versions_v5 (id, rule_code, authority_type, authority_id, version, value_json, effective_from_game_day, status, proposal_id) VALUES ($1,$2,$3,$4,$5,$6::JSONB,$7,'ACTIVE',$8)`, [`CONST-${row.proposal_id}-${change.ruleCode}`, change.ruleCode, authorityType, authorityId, Number(prior?.version ?? 1), JSON.stringify({ value: constitutionalValue }), effective, row.proposal_id]);
       if (change.ruleCode === 'CORPORATION.ADMISSION_POLICY' && authorityType === 'CORPORATION') {
         await tx.query('UPDATE corporations SET admission_policy = $1 WHERE id = $2', [String(change.value), authorityId]);
       }
