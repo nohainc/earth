@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { quoteV5HouseCapacityChange } from './v5-capacity-postgres.ts';
+import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 async function getHouseBuildingActionContext(repository: PostgresRepository, buildingId: string, humanId: string) {
   const row = (await repository.query<{
@@ -89,6 +90,7 @@ export async function upgradeBuilding(repository: PostgresRepository, input: { b
     const completion = day + Math.max(1, Math.ceil(Number(next.construction_minutes) / 1440));
     await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind) VALUES ($1,$2,$3,$4,$5,$6,'{}'::JSONB,$7,$8,'IN_PROGRESS',$9,$10,'TIER_UPGRADE')`, [projectId, building.id, building.owner_economic_id, building.territory_id, next.id, cost.toString(), day, completion, input.correlationId, building.territory_right_id]);
     await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION' WHERE id = $1", [building.id]);
+    await refreshV5SettlementProfilesForHouse(tx, houseId!, day);
     await createGameEvent(tx, { id: `BUILDING-UPGRADE-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_TIER_UPGRADE_STARTED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: `Tier ${building.tier + 1} upgrade started`, details: { projectId, fromTier: building.tier, toTier: building.tier + 1, costUnits: cost.toString(), completionGameDay: completion }, correlationId: input.correlationId });
     return { ok: true, status: 'UNDER_CONSTRUCTION', projectId, fromTier: building.tier, toTier: building.tier + 1, creditCostUnits: cost.toString(), expectedCompletionGameDay: completion, v5Capacity: v5CapacityQuote, correlationId: input.correlationId };
   });
@@ -120,6 +122,7 @@ export async function decommissionBuilding(repository: PostgresRepository, input
     if (!building) throw new Error('Building not found, inactive, or not owned by the active House');
     const v5CapacityQuote = await quoteV5HouseCapacityChange(tx, building.house_id, -BigInt(building.slot_footprint), day);
     const result = await tx.query<{ id: string; territory_id: string }>('UPDATE buildings SET status = \'INACTIVE\' WHERE id = $1 RETURNING id, territory_id', [input.buildingId]);
+    await refreshV5SettlementProfilesForHouse(tx, building.house_id, day);
     await tx.query("UPDATE construction_projects SET status = 'CANCELLED', cancelled_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId, day]);
     if (result.rows[0].territory_id) {
       await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [result.rows[0].territory_id, day]);

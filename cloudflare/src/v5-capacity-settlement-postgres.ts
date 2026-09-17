@@ -5,7 +5,7 @@ import { calculateProgressiveCharge, type ProgressiveBracket } from './v5-progre
 
 type Policy = { id: string; earthBaseRate: bigint; standardCapacity: bigint; corporationScheduleId: string; houseScheduleId: string; version: number };
 type Schedule = { id: string; brackets: ProgressiveBracket[] };
-type Member = { houseId: string; corporationId: string; houseEconomicId: string; corporationEconomicId: string; buildingUnits: bigint };
+type Member = { houseId: string; corporationId: string | null; houseEconomicId: string; corporationEconomicId: string | null; buildingUnits: bigint };
 
 async function loadSchedule(tx: PostgresRepository, scheduleId: string): Promise<Schedule> {
   const rows = (await tx.query<{ ordinal: number; lower_bound_units: string; upper_bound_units: string | null; marginal_multiplier_numerator: string; marginal_multiplier_denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT, upper_bound_units::TEXT, marginal_multiplier_numerator::TEXT, marginal_multiplier_denominator::TEXT
@@ -44,7 +44,7 @@ async function recordObligation(tx: PostgresRepository, input: {
      priority_class, rule_version, status, created_game_day, debtor_account_purpose, creditor_account_purpose,
      nexus_type, authority_type, authority_id, base_reference, correlation_id)
     VALUES ($1,$2,$3,'CAPACITY_RENT',$4,$5,$6,20,'v5-capacity-policy','DUE',$7,'WALLET','OPERATIONS','MEMBERSHIP','EARTH',$8,'physical_capacity_units',$9)
-    ON CONFLICT (correlation_id) DO NOTHING`, [financialId, input.payerEconomicId, input.beneficiaryEconomicId, input.sourceKey, input.assessed.toString(), input.day, input.day, input.level === 'HOUSE' ? input.corporationId : 'EARTH', `v5-fin:${input.sourceKey}`]);
+    ON CONFLICT (correlation_id) DO NOTHING`, [financialId, input.payerEconomicId, input.beneficiaryEconomicId, input.sourceKey, input.assessed.toString(), input.day, input.day, input.level === 'HOUSE' ? (input.corporationId ?? 'EARTH') : 'EARTH', `v5-fin:${input.sourceKey}`]);
   const subjectColumn = input.level === 'HOUSE' ? 'house_id' : 'corporation_id';
   const subjectId = input.level === 'HOUSE' ? input.houseId : input.corporationId;
   const priorObligations = (await tx.query<{ id: string; financial_obligation_id: string | null; assessed_units: string; paid_units: string }>(
@@ -129,19 +129,24 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
   const { executePendingV5CorporationDissolutionsInTransaction } = await import('./v5-membership-postgres.ts');
   await executePendingV5CorporationDissolutionsInTransaction(tx, assessedDay);
   const [houseSchedule, corporationSchedule] = await Promise.all([loadSchedule(tx, policy.houseScheduleId), loadSchedule(tx, policy.corporationScheduleId)]);
-  const members = (await tx.query<Member>(`SELECT ha.house_id AS "houseId", ha.corporation_id AS "corporationId", ho.economic_id AS "houseEconomicId", co.economic_id AS "corporationEconomicId",
-      COALESCE((SELECT SUM(bc.slot_footprint) FROM buildings b JOIN building_catalog bc ON bc.id = b.catalog_id WHERE b.owner_economic_id = ho.economic_id AND b.status = 'ACTIVE'), 0)::TEXT AS "buildingUnits"
-    FROM house_affiliations ha JOIN owner_registry ho ON ho.id = ha.house_id AND ho.owner_type = 'HOUSE'
-      JOIN owner_registry co ON co.id = ha.corporation_id AND co.owner_type = 'CORPORATION'
-    WHERE ha.status = 'ACTIVE' ORDER BY ha.house_id`, [])).rows.map((row) => ({ ...row, buildingUnits: BigInt(String(row.buildingUnits)) }));
+  const members = (await tx.query<Member>(`SELECT hsp.house_id AS "houseId", hsp.corporation_id AS "corporationId",
+      ho.economic_id AS "houseEconomicId", co.economic_id AS "corporationEconomicId",
+      hsp.productive_capacity_units::TEXT AS "buildingUnits"
+    FROM v5_house_settlement_profiles hsp
+    JOIN houses h ON h.id = hsp.house_id AND h.status = 'ACTIVE'
+    JOIN owner_registry ho ON ho.id = hsp.house_id AND ho.owner_type = 'HOUSE'
+    LEFT JOIN owner_registry co ON co.id = hsp.corporation_id AND co.owner_type = 'CORPORATION'
+    ORDER BY hsp.house_id`, [])).rows.map((row) => ({ ...row, buildingUnits: BigInt(String(row.buildingUnits)) }));
   const corporationUnits = new Map<string, { economicId: string; residential: bigint; privateBuildings: bigint; publicBuildings: bigint }>();
   let paid = 0; let partial = 0; let arrears = 0; let houseAssessments = 0;
   for (const member of members) {
     const usage = 1n + member.buildingUnits;
-    const baseRate = await corporationBaseRate(tx, member.corporationId, assessedDay);
+    const baseRate = member.corporationId === null
+      ? policy.earthBaseRate
+      : await corporationBaseRate(tx, member.corporationId, assessedDay);
     if (baseRate !== null) {
       const charge = calculateProgressiveCharge({ quantity: usage, baseRate, brackets: houseSchedule.brackets });
-      const result = await recordObligation(tx, { level: 'HOUSE', houseId: member.houseId, corporationId: member.corporationId, payerEconomicId: member.houseEconomicId, beneficiaryEconomicId: member.corporationEconomicId, day, assessedDay, usage, baseRate, schedule: houseSchedule, assessed: charge.totalCharge, sourceKey: `house:${member.houseId}:${assessedDay}:${houseSchedule.id}` });
+      const result = await recordObligation(tx, { level: 'HOUSE', houseId: member.houseId, corporationId: member.corporationId ?? undefined, payerEconomicId: member.houseEconomicId, beneficiaryEconomicId: member.corporationEconomicId ?? 'ECON-EARTH-001', day, assessedDay, usage, baseRate, schedule: houseSchedule, assessed: charge.totalCharge, sourceKey: `house:${member.houseId}:${assessedDay}:${houseSchedule.id}:${member.corporationId ?? 'EARTH'}` });
       await updateDelinquency(tx, 'HOUSE', member.houseId, assessedDay, result);
       const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'HOUSE' AND subject_id = $1`, [member.houseId])).rows[0];
       await applyHouseProductiveStatus(tx, member.houseId, delinquency?.status ?? 'CURRENT');
@@ -160,13 +165,27 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
       }
       if (result !== 'EXISTING') { houseAssessments += 1; if (result === 'PAID') paid += 1; else if (result === 'PARTIAL') partial += 1; else arrears += 1; }
     }
-    const current = corporationUnits.get(member.corporationId) ?? { economicId: member.corporationEconomicId, residential: 0n, privateBuildings: 0n, publicBuildings: 0n };
-    current.residential += 1n; current.privateBuildings += member.buildingUnits; corporationUnits.set(member.corporationId, current);
+    if (member.corporationId) {
+      const current = corporationUnits.get(member.corporationId) ?? { economicId: member.corporationEconomicId ?? '', residential: 0n, privateBuildings: 0n, publicBuildings: 0n };
+      current.residential += 1n; current.privateBuildings += member.buildingUnits; corporationUnits.set(member.corporationId, current);
+    }
   }
-  const publicRows = (await tx.query<{ corporation_id: string; units: string }>(`SELECT o.id AS corporation_id, COALESCE(SUM(bc.slot_footprint),0)::TEXT AS units
-    FROM buildings b JOIN building_catalog bc ON bc.id = b.catalog_id JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'CORPORATION'
-    WHERE b.status = 'ACTIVE' AND bc.ownership_scope = 'PUBLIC' GROUP BY o.id`, [])).rows;
-  for (const row of publicRows) { const current = corporationUnits.get(row.corporation_id) ?? { economicId: '', residential: 0n, privateBuildings: 0n, publicBuildings: 0n }; current.publicBuildings += BigInt(row.units); corporationUnits.set(row.corporation_id, current); }
+  const corporationProfiles = (await tx.query<{ corporation_id: string; economic_id: string; residential: string; productive: string; public_units: string }>(`SELECT p.corporation_id, o.economic_id,
+      p.member_residential_capacity_units::TEXT AS residential,
+      p.member_productive_capacity_units::TEXT AS productive,
+      p.public_capacity_units::TEXT AS public_units
+    FROM v5_corporation_settlement_profiles p
+    JOIN corporations c ON c.id = p.corporation_id AND c.status = 'ACTIVE'
+    JOIN owner_registry o ON o.id = p.corporation_id AND o.owner_type = 'CORPORATION'
+    ORDER BY p.corporation_id`, [])).rows;
+  for (const row of corporationProfiles) {
+    corporationUnits.set(row.corporation_id, {
+      economicId: row.economic_id,
+      residential: BigInt(row.residential),
+      privateBuildings: BigInt(row.productive),
+      publicBuildings: BigInt(row.public_units),
+    });
+  }
   for (const [corporationId, units] of corporationUnits) {
     if (!units.economicId) units.economicId = (await tx.query<{ economic_id: string }>(`SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'`, [corporationId])).rows[0]?.economic_id ?? '';
     if (!units.economicId) continue;

@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { createAffiliationEvent } from './game-events-postgres.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
+import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 type FoundingPolicy = { id: string; version: number; fee: bigint; reserve: bigint; initialHouseRate: bigint; rulesVersion: string };
 
@@ -30,7 +31,8 @@ export async function quoteV5CorporationFounding(repository: PostgresRepository,
     const world = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const policy = await foundingPolicy(tx, world);
     const existing = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1) AND status = \'ACTIVE\'', [normalized])).rows[0];
-    return { ok: true, eligible: !existing, blockers: existing ? ['Corporation name is already in use'] : [], name: normalized, foundingPolicyVersion: policy.version, foundingFeeUnits: policy.fee.toString(), initialTreasuryReserveUnits: policy.reserve.toString(), initialHouseBaseCapacityRateUnits: policy.initialHouseRate.toString(), firstResidentialCapacityUnits: '1', earthCapacityPolicy: await getActiveV5StandardCapacity(tx, world), founderHouseId: founderContext.house_id, effectiveGameDay: world };
+    const earthCapacityPolicy = await getActiveV5StandardCapacity(tx, world);
+    return { ok: true, eligible: !existing, blockers: existing ? ['Corporation name is already in use'] : [], name: normalized, foundingPolicyVersion: policy.version, foundingFeeUnits: policy.fee.toString(), initialTreasuryReserveUnits: policy.reserve.toString(), initialHouseBaseCapacityRateUnits: policy.initialHouseRate.toString(), firstResidentialCapacityUnits: '1', earthCapacityPolicy: { ...earthCapacityPolicy, standardTerritoryCapacity: earthCapacityPolicy.standardTerritoryCapacity.toString(), earthBaseRate: earthCapacityPolicy.earthBaseRate.toString() }, founderHouseId: founderContext.house_id, effectiveGameDay: world };
   });
 }
 
@@ -72,6 +74,7 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
       [`channel-corporation-${id}`, id, normalized, `Private conversation for members of ${normalized}.`],
     );
     await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1,$2,NULL,$3,'ACTIVE')`, [house.house_id, id, day]);
+    await refreshV5SettlementProfilesForHouse(tx, house.house_id, day, [id]);
     const requiredFounderFunds = policy.fee + policy.reserve;
     if (requiredFounderFunds > 0n) {
       const wallet = (await tx.query<{ id: string; balance_units: string }>(`SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET' AND status = 'ACTIVE' FOR UPDATE`, [house.economic_id])).rows[0];

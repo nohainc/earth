@@ -21,6 +21,20 @@ test('V5 migration defines additive policy, obligation, admission, and container
   assert.match(migration, /UPDATE corporations SET admission_policy = 'APPROVAL'/);
 });
 
+test('V5 structural settlement profiles are rebuildable and independent Houses route directly to Earth', async () => {
+  const migration = await readFile(new URL('../db/migrations/093_v5_settlement_profiles.sql', import.meta.url), 'utf8');
+  const profiles = await readFile(new URL('../cloudflare/src/v5-settlement-profiles-postgres.ts', import.meta.url), 'utf8');
+  const capacity = await readFile(new URL('../cloudflare/src/v5-capacity-settlement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(migration, /CREATE TABLE v5_house_settlement_profiles/);
+  assert.match(migration, /CREATE TABLE v5_corporation_settlement_profiles/);
+  assert.match(profiles, /rebuildV5HouseSettlementProfile/);
+  assert.match(profiles, /rebuildV5CorporationSettlementProfile/);
+  assert.match(migration, /dirty BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.match(capacity, /member\.corporationId === null/);
+  assert.match(capacity, /'ECON-EARTH-001'/);
+  assert.doesNotMatch(capacity, /SUM\(bc\.slot_footprint\)/);
+});
+
 test('V5 progressive pricing charges marginal quantities only', () => {
   const result = calculateProgressiveCharge({ quantity: 5n, baseRate: 100n, brackets });
   assert.equal(result.totalCharge, 720n);
@@ -306,4 +320,3 @@ test('V5 corporation lifecycle supports name reuse, leadership delegation, and g
   assert.match(migration, /CREATE UNIQUE INDEX institutions_active_name_idx ON institutions \(lower\(name\)\) WHERE status = 'ACTIVE'/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS v5_corporation_dissolution_schedules/);
 });
-

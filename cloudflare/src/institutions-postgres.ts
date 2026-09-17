@@ -3,6 +3,7 @@ import { moneyToCents } from './money.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { createAffiliationEvent } from './game-events-postgres.ts';
+import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 async function day(repository: PostgresRepository): Promise<number> {
   const result = await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
@@ -129,6 +130,7 @@ export async function createCorporation(
        VALUES ($1, $2, $3, $4, 'ACTIVE')`,
       [founder.house_id, corporationId, territoryId, gameDay],
     );
+    await refreshV5SettlementProfilesForHouse(tx, founder.house_id, gameDay, [corporationId]);
     await tx.query(
       `INSERT INTO house_residencies
          (id, house_id, territory_id, residency_class, effective_from_game_day, correlation_id)

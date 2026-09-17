@@ -3,6 +3,7 @@ import { createAffiliationEvent } from './game-events-postgres.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
 import { calculateProgressiveCharge } from './v5-progressive.ts';
+import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 type HouseContext = { houseId: string; currentCorporationId: string | null; buildingUnits: bigint };
 
@@ -77,6 +78,7 @@ export async function applyV5CorporationMembership(repository: PostgresRepositor
       await tx.query(`UPDATE corporation_invites_v5 SET uses = uses + 1, status = CASE WHEN uses + 1 >= max_uses THEN 'EXHAUSTED' ELSE status END WHERE id = $1`, [invite.id]);
     }
     await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1,$2,NULL,$3,'ACTIVE')`, [house.houseId, input.corporationId, world]);
+    await refreshV5SettlementProfilesForHouse(tx, house.houseId, world, [input.corporationId]);
     await createAffiliationEvent(tx, { id: `V5-AFF-${input.correlationId}`, humanId: input.humanId, institutionType: 'CORPORATION', institutionId: input.corporationId, action: 'joined', gameDay: world, reason: 'v5_admission' });
     await enqueueOutbox(tx, { eventKey: `v5-membership:${input.correlationId}`, topic: 'institutions', aggregateType: 'CORPORATION', aggregateId: input.corporationId, payload: { type: 'HOUSE_CORPORATION_JOINED', houseId: house.houseId, corporationId: input.corporationId, gameDay: world } });
     return { ok: true, status: 'ACTIVE', corporationId: input.corporationId, residentialCapacityAdded: 1, capacity: await v5Pricing(tx, input.corporationId, house.buildingUnits, world), correlationId: input.correlationId };
@@ -99,6 +101,7 @@ export async function leaveV5Corporation(repository: PostgresRepository, input: 
     if (prior) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, correlationId: input.correlationId };
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     await tx.query(`UPDATE house_affiliations SET status = 'LEFT', left_game_day = $2 WHERE id = $1`, [affiliation.id, day]);
+    await refreshV5SettlementProfilesForHouse(tx, house.houseId, day, [input.corporationId]);
     
     // Check if the leaving human held executive leadership roles
     const execRoles = await tx.query<{ id: number; role_code: string }>(
@@ -208,7 +211,9 @@ export async function executePendingV5CorporationDissolutionsInTransaction(tx: P
     )).rows;
     for (const member of members) {
       await tx.query(`UPDATE house_affiliations SET status = 'LEFT', left_game_day = $2 WHERE id = $1`, [member.id, day]);
+      await refreshV5SettlementProfilesForHouse(tx, member.house_id, day, [schedule.corporation_id]);
     }
+    await rebuildV5CorporationSettlementProfile(tx, schedule.corporation_id, day);
     // Deactivate governance roles
     await tx.query(`UPDATE institution_governance_roles SET status = 'INACTIVE' WHERE institution_id = $1`, [schedule.corporation_id]);
     // Set corporation and institution to DISSOLVED
@@ -232,6 +237,7 @@ export async function decideV5MembershipApplication(repository: PostgresReposito
       const current = (await tx.query('SELECT 1 FROM house_affiliations WHERE house_id = $1 AND status = \'ACTIVE\' FOR UPDATE', [application.house_id])).rows[0];
       if (current) throw new Error('House already belongs to an active Corporation');
       await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1,$2,NULL,$3,'ACTIVE')`, [application.house_id, input.corporationId, day]);
+      await refreshV5SettlementProfilesForHouse(tx, application.house_id, day, [input.corporationId]);
       const applicant = (await tx.query<{ id: string }>("SELECT id FROM humans WHERE house_id = $1 AND status = 'ACTIVE' ORDER BY id LIMIT 1", [application.house_id])).rows[0];
       if (applicant) {
         await createAffiliationEvent(tx, { id: `V5-APP-AFF-${input.applicationId}`, humanId: applicant.id, institutionType: 'CORPORATION', institutionId: input.corporationId, action: 'joined', gameDay: day, reason: 'v5_admission_approved' });

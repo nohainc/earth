@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 async function activeHouse(tx: PostgresRepository, humanId: string) {
   const row = (await tx.query<{ house_id: string; corporation_id: string | null }>(`SELECT h.house_id, ha.corporation_id
@@ -41,6 +42,7 @@ export async function liquidateV5HouseBuilding(repository: PostgresRepository, i
     if (!building) throw new Error('Active House building not found');
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     await tx.query("UPDATE buildings SET status = 'INACTIVE', v5_productive_status = 'ACTIVE' WHERE id = $1", [building.id]);
+    await refreshV5SettlementProfilesForHouse(tx, house.house_id, day);
     await tx.query(`INSERT INTO v5_capacity_resolution_assets (case_id, building_id, footprint_units, resolved_game_day) VALUES ($1,$2,$3,$4)`, [input.caseId, building.id, building.footprint, day]);
     await createGameEvent(tx, { id: `V5-RES-LIQ-${input.correlationId}`, category: 'FINANCE', eventType: 'V5_CAPACITY_ASSET_RELEASED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: 'Productive building capacity released', details: { caseId: input.caseId, footprintUnits: building.footprint, proceedsUnits: '0' }, correlationId: input.correlationId });
     return { ok: true, caseId: input.caseId, buildingId: building.id, status: 'INACTIVE', releasedFootprintUnits: building.footprint, proceedsUnits: '0', gameDay: day, correlationId: input.correlationId };

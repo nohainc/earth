@@ -33,6 +33,7 @@ import { settleCorporationIncomeTax } from './corporation-tax-settlement-postgre
 import { settleV5CapacityInTransaction } from './v5-capacity-settlement-postgres.ts';
 import { reconcileV5TerritoryContainersInTransaction } from './v5-territory-containers-postgres.ts';
 import { activateDueV5GovernancePoliciesInTransaction } from './v5-governance-postgres.ts';
+import { rebuildV5SettlementProfilesInShard, settleV5CorporationSettlementProfiles } from './v5-settlement-profiles-postgres.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -47,8 +48,8 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   v5PolicyActivation: async ({ tx, day }) => activateDueV5GovernancePoliciesInTransaction(tx, day),
   activateSuccessors: async ({ tx, day }) => ({ activated: await activatePendingHouseSuccessors(tx, day) }),
   preparePartitions: noOpPhase,
-  rebuildProfiles: noOpPhase,
-  profileSettlement: noOpPhase,
+  rebuildProfiles: async ({ tx, day, shard, shardCount }) => rebuildV5SettlementProfilesInShard(tx, day, shard ?? 0, shardCount ?? OWNER_SHARD_COUNT),
+  profileSettlement: async ({ tx, day }) => settleV5CorporationSettlementProfiles(tx, day),
   lifeMaintenance: async ({ tx, day }) => settleLifeMaintenanceInTransaction(tx, day),
   basicLevy: noOpPhase,
   ipLicenseBilling: async ({ tx, day }) => settleTechnologyLicenseFees(tx, day),

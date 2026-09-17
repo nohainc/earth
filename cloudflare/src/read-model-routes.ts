@@ -26,6 +26,13 @@ import { addMutualCreditGuarantee, createMutualCreditNetwork, getMutualCreditNet
 import { getActiveV5StandardCapacity, getV5CorporationCapacity, getV5HouseCapacity } from './v5-capacity-postgres.ts';
 import { getV5Overview } from './v5-overview-postgres.ts';
 
+function toJsonSafe<T>(value: T): T {
+  if (typeof value === 'bigint') return value.toString() as T;
+  if (Array.isArray(value)) return value.map((item) => toJsonSafe(item)) as T;
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toJsonSafe(item)])) as T;
+  return value;
+}
+
 /**
  * Read-model routes: notifications, events, history, rankings, institutions,
  * audit, pantheon/cemetery, market history, admin email deliveries,
@@ -46,7 +53,7 @@ export async function handleReadModelRoutes(
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const result = await withRepository(env, (repository) => getV5HouseCapacity(repository, viewer.house_id));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-    return Response.json({ ok: true, capacity: result, persistence: 'planetscale-postgres' });
+    return Response.json({ ok: true, capacity: toJsonSafe(result), persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/v5/command/overview' && request.method === 'GET') {
     const viewer = await currentHuman(request, env);
@@ -67,7 +74,7 @@ export async function handleReadModelRoutes(
       return { ...(await getV5CorporationCapacity(repository, v5CorporationCapacity[1], policy.standardTerritoryCapacity)), policyVersion: policy.policyVersion, gameDay: policy.gameDay };
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-    return Response.json({ ok: true, capacity: result, persistence: 'planetscale-postgres' });
+    return Response.json({ ok: true, capacity: toJsonSafe(result), persistence: 'planetscale-postgres' });
   }
 
   const mutualCreditDetail = url.pathname.match(/^\/api\/mutual-credit\/networks\/([^/]+)$/);

@@ -1,3 +1,4 @@
+-- EARTH ACTIVE MIGRATION: V5 Corporation lifecycle, dissolution, and name reuse authority.
 -- Migration 092: V5 Corporation Lifecycle, Dissolution, and Name Reuse Authority
 
 -- Allow dead / dissolved institutions to release their name for new active institutions

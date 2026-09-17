@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 // @mutation-boundary caller-owned-transaction: invoked by the settlement worker inside its phase transaction.
 export async function completeDueConstructionProjects(repository: PostgresRepository, day: number, shard = 0, shardCount = 1): Promise<{ completed: number }> {
@@ -20,6 +21,11 @@ export async function completeDueConstructionProjects(repository: PostgresReposi
     await repository.query(`UPDATE buildings SET status = 'ACTIVE', commissioned_game_day = $2,
       catalog_id = CASE WHEN $3 = 'TIER_UPGRADE' THEN target_catalog_id ELSE catalog_id END
       FROM construction_projects cp WHERE buildings.id = $1 AND cp.id = $4 AND buildings.status = 'UNDER_CONSTRUCTION'`, [project.building_id, day, project.project_kind, project.id]);
+    const owner = (await repository.query<{ id: string; owner_type: 'HOUSE' | 'CORPORATION' }>(
+      'SELECT id, owner_type FROM owner_registry WHERE economic_id = $1', [project.owner_economic_id],
+    )).rows[0];
+    if (owner?.owner_type === 'HOUSE') await refreshV5SettlementProfilesForHouse(repository, owner.id, day);
+    if (owner?.owner_type === 'CORPORATION') await rebuildV5CorporationSettlementProfile(repository, owner.id, day);
     if (project.project_kind === 'OVERHAUL') await repository.query('UPDATE buildings SET last_major_rebuild_game_day = $2 WHERE id = $1', [project.building_id, day]);
     if (project.project_kind === 'GENERATION_RETROFIT' && project.target_generation_id) {
       const generation = (await repository.query<{ domain_id: string; effective_from_game_day: number }>('SELECT domain_id, COALESCE((SELECT effective_from_game_day FROM technology_discoveries WHERE generation_id = $1), 0) AS effective_from_game_day FROM technology_generations WHERE id = $1', [project.target_generation_id])).rows[0];
