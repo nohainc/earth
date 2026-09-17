@@ -44,20 +44,28 @@ export async function handleRealEstateRoutes(
     }
   }
   if (url.pathname === '/api/real-estate/upgrade' && request.method === 'POST') {
+    return Response.json({ ok: false, error: 'Territory-bound building upgrades are retired; use /api/v5/buildings/{id}/upgrade.' }, { status: 410 });
+  }
+  const v5UpgradeMatch = url.pathname.match(/^\/api\/v5\/buildings\/([^/]+)\/upgrade$/);
+  if (v5UpgradeMatch && request.method === 'POST') {
     const parsed = await parseJsonBody<{ buildingId?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.buildingId) return Response.json({ ok: false, error: 'Building ID and idempotency key are required' }, { status: 400 });
+    if (!correlationId) return Response.json({ ok: false, error: 'Idempotency key is required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => upgradeBuilding(repository, { buildingId: parsed.value.buildingId!, humanId: viewer.id, correlationId }));
+      const result = await withRepository(env, (repository) => upgradeBuilding(repository, { buildingId: v5UpgradeMatch[1], humanId: viewer.id, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade failed' }, { status: 409 }); }
   }
   const upgradeQuoteMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/upgrade-quote$/);
   if (upgradeQuoteMatch && request.method === 'GET') {
+    return Response.json({ ok: false, error: 'Territory-bound building upgrade quotes are retired; use /api/v5/buildings/{id}/upgrade-quote.' }, { status: 410 });
+  }
+  const v5UpgradeQuoteMatch = url.pathname.match(/^\/api\/v5\/buildings\/([^/]+)\/upgrade-quote$/);
+  if (v5UpgradeQuoteMatch && request.method === 'GET') {
     try {
-      const result = await withRepository(env, (repository) => quoteBuildingUpgrade(repository, { buildingId: upgradeQuoteMatch[1], humanId: viewer.id }));
+      const result = await withRepository(env, (repository) => quoteBuildingUpgrade(repository, { buildingId: v5UpgradeQuoteMatch[1], humanId: viewer.id }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade quote unavailable' }, { status: 409 }); }

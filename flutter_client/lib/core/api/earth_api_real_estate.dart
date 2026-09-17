@@ -96,7 +96,7 @@ extension EarthApiRealEstate on EarthApi {
     required String buildingId,
   }) async {
     final res = await _request(
-      '/api/real-estate/upgrade',
+      '/api/v5/buildings/$buildingId/upgrade',
       method: 'POST',
       body: {
         'buildingId': buildingId,
@@ -107,7 +107,7 @@ extension EarthApiRealEstate on EarthApi {
   }
 
   Future<Map<String, dynamic>> quoteBuildingUpgrade({required String buildingId}) async {
-    final response = await _request('/api/real-estate/buildings/$buildingId/upgrade-quote');
+    final response = await _request('/api/v5/buildings/$buildingId/upgrade-quote');
     return Map<String, dynamic>.from(response as Map);
   }
 

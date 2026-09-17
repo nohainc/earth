@@ -919,6 +919,25 @@ test('V5 construction review quotes and executes the pooled path for independent
   assert.match(service, /rebuildV5CorporationSettlementProfile\(tx, owner\.corporationId/);
 });
 
+test('V5 building upgrades use pooled routes and null Territory project context', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/real-estate-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../flutter_client/lib/core/api/earth_api_real_estate.dart', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/building-investment-postgres.ts', import.meta.url), 'utf8');
+  assert.match(routes, /v5UpgradeMatch/);
+  assert.match(routes, /Territory-bound building upgrades are retired/);
+  assert.match(routes, /Territory-bound building upgrade quotes are retired/);
+  assert.match(registry, /path: '\/api\/v5\/buildings\/\{id\}\/upgrade'.*status: 'ACTIVE'/);
+  assert.match(registry, /path: '\/api\/v5\/buildings\/\{id\}\/upgrade-quote'.*status: 'ACTIVE'/);
+  assert.match(registry, /path: '\/api\/real-estate\/upgrade'.*status: 'RETIRED'/);
+  assert.match(registry, /path: '\/api\/real-estate\/buildings\/\{id\}\/upgrade-quote'.*status: 'RETIRED'/);
+  assert.match(api, /'\/api\/v5\/buildings\/\$buildingId\/upgrade'/);
+  assert.match(api, /'\/api\/v5\/buildings\/\$buildingId\/upgrade-quote'/);
+  assert.match(service, /construction-investment-v5/);
+  assert.match(service, /capacityModel: 'V5_POOLED'/);
+  assert.match(service, /building\.owner_economic_id, null, next\.id/);
+});
+
 test('V5 Corporation client mutations do not fall back to Territory-bound endpoints', async () => {
   const api = await readFile(new URL('../flutter_client/lib/core/api/earth_api_institutions.dart', import.meta.url), 'utf8');
   const joinStart = api.indexOf('Future<EarthState> joinCorporation');
