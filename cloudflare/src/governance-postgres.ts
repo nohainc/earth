@@ -706,6 +706,12 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       return { ok: true, executionStatus: 'started', researchProject: result.project, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
 
+    // Historical V2 records may still contain this action, but it must never
+    // write the retired governance_rules authority during replay or execution.
+    if (action.actionType === 'amend_rule') {
+      throw new Error('Generic rule amendments are retired; submit a typed V5 Constitution amendment');
+    }
+
     if (!['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(category)) throw new Error('Target rule is outside engine bounds');
     if (category === 'finance' && value.rate !== undefined && (typeof value.rate !== 'number' || Number(value.rate) < 0 || Number(value.rate) > 0.25)) throw new Error('Finance rule rate must be between 0 and 0.25');
     const quorum = value.quorum !== undefined ? Number(value.quorum) : 0.25;

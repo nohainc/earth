@@ -12,6 +12,8 @@ test('financial proposals use typed snapshots and existing Budget V2 services', 
   assert.match(governance, /\.\.\.\(input\.targetValue/);
   assert.match(actions, /execute: async \(\{ repository, proposal, action, gameDay \}\) => executeProposalFinancialAction/);
   assert.match(governance, /if \(actionHandler\.execute\)/);
+  assert.match(actions, /Generic rule amendments are retired/);
+  assert.match(governance, /retired governance_rules authority/);
   assert.match(execution, /setBudgetAuthorization/);
   assert.match(execution, /approveInstitutionGrant/);
   assert.match(execution, /spendInstitutionBudget/);

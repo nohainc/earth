@@ -187,10 +187,12 @@ const legacyOperationalHandlers: ProposalActionHandler[] = [
 const amendRuleHandler: ProposalActionHandler = {
   actionType: 'amend_rule',
   version: 1,
-  validateCreation: (action) => {
-    if (!action.targetCategory) throw new Error('Rule amendment requires a target category');
+  validateCreation: () => {
+    throw new Error('Generic rule amendments are retired; submit a typed V5 Constitution amendment');
   },
-  validateExecution: async () => undefined,
+  validateExecution: async () => {
+    throw new Error('Generic rule amendments are retired; submit a typed V5 Constitution amendment');
+  },
 };
 
 const handlers = new Map<string, ProposalActionHandler>([
