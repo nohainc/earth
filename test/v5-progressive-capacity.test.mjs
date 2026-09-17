@@ -707,8 +707,10 @@ test('V5 building read model exposes latest settlement net resources', async () 
 
 test('V5 world catalog exposes authored building research economics', async () => {
   const world = await readFile(new URL('../cloudflare/src/world-postgres.ts', import.meta.url), 'utf8');
+  const catalogRoute = await readFile(new URL('../cloudflare/src/read-model-routes.ts', import.meta.url), 'utf8');
   const technology = await readFile(new URL('../flutter_client/lib/features/operations/technology_panel.dart', import.meta.url), 'utf8');
   assert.match(world, /c\.research_credit_units, c\.research_duration_game_days/);
+  assert.match(catalogRoute, /c\.research_credit_units, c\.research_duration_game_days/);
   assert.match(technology, /bp\['research_credit_units'\]/);
   assert.match(technology, /bp\['research_duration_game_days'\]/);
 });

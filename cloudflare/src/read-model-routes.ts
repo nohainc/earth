@@ -168,6 +168,7 @@ export async function handleReadModelRoutes(
       `SELECT c.id, c.code, c.family_code, c.tier, c.tier_formula_version,
               c.economic_role,
               c.construction_credit_units, c.construction_minutes,
+              c.research_credit_units, c.research_duration_game_days,
               c.operating_credit_units, c.service_type, c.service_capacity_units,
               c.slot_footprint, c.definition_version,
               COALESCE(jsonb_agg(jsonb_build_object(
@@ -181,6 +182,7 @@ export async function handleReadModelRoutes(
         GROUP BY c.id, c.code, c.family_code, c.tier, c.tier_formula_version,
                  c.economic_role,
                  c.construction_credit_units, c.construction_minutes,
+                 c.research_credit_units, c.research_duration_game_days,
                  c.operating_credit_units, c.service_type, c.service_capacity_units,
                  c.slot_footprint, c.definition_version
         ORDER BY code, tier, id`,
