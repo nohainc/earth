@@ -15,7 +15,8 @@ import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVoting
 import { castV5GovernanceVote, createV5GovernanceProposal, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
 import { getConstitutionReadModel, getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
-import { previewConstitutionAmendment } from './v5-governance.ts';
+import { previewConstitutionAmendment, previewProgressivePolicyChange } from './v5-governance.ts';
+import type { ProgressiveBracket } from './v5-progressive.ts';
 
 export async function handleGovernanceRoutes(
   request: Request,
@@ -45,7 +46,49 @@ export async function handleGovernanceRoutes(
           if (corporationId && change.clearOverride && definition.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
         }
         const preview = previewConstitutionAmendment({ currentRules: current.rules, fallbackRules: earth?.rules, changes: parsed.value.changes!.map((change) => ({ ruleCode: String(change.ruleCode ?? ''), value: change.value, clearOverride: change.clearOverride })) });
-        return { ...preview, gameDay, corporationId: corporationId ?? null, versionIds: current.versionIds, generatedFrom: 'postgres-constitutional-kernel-v5-preview' };
+        const scheduleChanges = preview.changes.filter((change) => {
+          const definition = getConstitutionalRuleDefinition(change.ruleCode);
+          return definition.valueType === 'PROGRESSIVE_SCHEDULE_REF' && typeof change.currentValue === 'string' && typeof change.proposedValue === 'string';
+        });
+        const scheduleIds = [...new Set(scheduleChanges.flatMap((change) => [String(change.currentValue), String(change.proposedValue)]))];
+        const scheduleRows = scheduleIds.length === 0 ? [] : (await repository.query<{ schedule_id: string; ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(
+          `SELECT schedule_id, ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper,
+                  marginal_multiplier_numerator::TEXT AS numerator,
+                  marginal_multiplier_denominator::TEXT AS denominator
+             FROM progressive_policy_brackets
+            WHERE schedule_id = ANY($1::TEXT[])
+            ORDER BY schedule_id, ordinal`, [scheduleIds])).rows;
+        const schedules = new Map<string, ProgressiveBracket[]>();
+        for (const row of scheduleRows) {
+          const brackets = schedules.get(row.schedule_id) ?? [];
+          brackets.push({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) });
+          schedules.set(row.schedule_id, brackets);
+        }
+        const baseRateFor = (ruleCode: string): bigint => {
+          if (ruleCode.endsWith('.HOUSE_INCOME_TAX')) return 10_000n;
+          const raw = ruleCode === 'CORPORATION.HOUSE_CAPACITY.BASE_RATE'
+            ? current.rules['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] ?? earth?.rules['EARTH.CAPACITY.BASE_RATE']
+            : current.rules['EARTH.CAPACITY.BASE_RATE'];
+          return BigInt(String(raw ?? 0));
+        };
+        const progressiveEffects = scheduleChanges.flatMap((change) => {
+          const currentSchedule = schedules.get(String(change.currentValue));
+          const proposedSchedule = schedules.get(String(change.proposedValue));
+          if (!currentSchedule || !proposedSchedule) return [];
+          return [{
+            ruleCode: change.ruleCode,
+            currentScheduleId: String(change.currentValue),
+            proposedScheduleId: String(change.proposedValue),
+            baseRateUnits: baseRateFor(change.ruleCode).toString(),
+            effects: previewProgressivePolicyChange({
+              quantities: [1n, 10n, 100n, 1_000n],
+              baseRate: baseRateFor(change.ruleCode),
+              currentBrackets: currentSchedule,
+              proposedBrackets: proposedSchedule,
+            }),
+          }];
+        });
+        return { ...preview, progressiveEffects, gameDay, corporationId: corporationId ?? null, versionIds: current.versionIds, generatedFrom: 'postgres-constitutional-kernel-v5-preview' };
       });
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return new Response(JSON.stringify({ ok: true, ...result }, (_, value) => typeof value === 'bigint' ? value.toString() : value), { headers: { 'content-type': 'application/json; charset=utf-8' } });
