@@ -39,10 +39,12 @@ export async function listCorporations(repository: PostgresRepository, search = 
   const result = await repository.query(`
     SELECT c.id, i.name, i.status, c.status AS corporation_status,
            c.charter_version, c.admission_policy,
-           NULLIF(c.tax_charter->>'incomeTaxBps', '')::INTEGER AS income_tax_bps,
-           NULLIF(c.tax_charter->>'salesTaxBps', '')::INTEGER AS sales_tax_bps,
-           NULLIF(c.tax_charter->>'propertyTaxBps', '')::INTEGER AS property_tax_bps,
-           NULLIF(c.tax_charter->>'corporateTaxBps', '')::INTEGER AS corporate_tax_bps,
+           NULLIF(corp_rules.rules->>'CORPORATION.TAX.INCOME_RATE', '')::INTEGER AS income_tax_bps,
+           NULLIF(corp_rules.rules->>'CORPORATION.TAX.SALES_RATE', '')::INTEGER AS sales_tax_bps,
+           NULLIF(corp_rules.rules->>'CORPORATION.TAX.PROPERTY_RATE', '')::INTEGER AS property_tax_bps,
+           NULLIF(corp_rules.rules->>'CORPORATION.TAX.CORPORATE_RATE', '')::INTEGER AS corporate_tax_bps,
+           NULLIF(COALESCE(corp_rules.rules->>'CORPORATION.HOUSE_CAPACITY.BASE_RATE', earth_rules.rules->>'EARTH.CAPACITY.BASE_RATE'), '')::TEXT AS v5_house_capacity_base_rate,
+           NULLIF(earth_rules.rules->>'EARTH.CAPACITY.BASE_RATE', '')::TEXT AS v5_earth_capacity_base_rate,
            (SELECT COUNT(*)::integer FROM territories t WHERE t.corporation_id = c.id AND t.status = 'ACTIVE') AS territory_count,
            (SELECT COUNT(*)::integer FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_count,
            (SELECT s.total_occupied_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_occupied_capacity,
@@ -61,6 +63,30 @@ export async function listCorporations(repository: PostgresRepository, search = 
            COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'RESERVE' AND a.status = 'ACTIVE'), 0)::TEXT AS reserve
       FROM corporations c
       JOIN institutions i ON i.id = c.id
+      LEFT JOIN LATERAL (
+        SELECT jsonb_object_agg(rule_code, value_json->'value') AS rules
+          FROM (
+            SELECT DISTINCT ON (v.rule_code) v.rule_code, v.value_json
+              FROM constitutional_rule_versions_v5 v
+             WHERE v.authority_type = 'EARTH' AND v.authority_id = 'EARTH'
+               AND v.status IN ('ACTIVE', 'RETIRED')
+               AND v.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
+               AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
+             ORDER BY v.rule_code, v.effective_from_game_day DESC, v.version DESC
+          ) earth_versions
+      ) earth_rules ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT jsonb_object_agg(rule_code, value_json->'value') AS rules
+          FROM (
+            SELECT DISTINCT ON (v.rule_code) v.rule_code, v.value_json
+              FROM constitutional_rule_versions_v5 v
+             WHERE v.authority_type = 'CORPORATION' AND v.authority_id = c.id
+               AND v.status IN ('ACTIVE', 'RETIRED')
+               AND v.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
+               AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
+             ORDER BY v.rule_code, v.effective_from_game_day DESC, v.version DESC
+          ) corporation_versions
+      ) corp_rules ON TRUE
      WHERE i.status = 'ACTIVE' AND ($1 = '%%' OR i.name ILIKE $1)
      ORDER BY i.name ASC
      LIMIT 100`, [term]);

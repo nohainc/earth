@@ -692,6 +692,14 @@ test('V5 Territory containers reconcile with exact counts and monotonic sequence
   assert.doesNotMatch(containers, /const required = Number\(/);
 });
 
+test('V5 Corporation directory reads tax policy from Constitution versions', async () => {
+  const institutions = await readFile(new URL('../cloudflare/src/institutions-postgres.ts', import.meta.url), 'utf8');
+  assert.match(institutions, /constitutional_rule_versions_v5/);
+  assert.match(institutions, /CORPORATION\.TAX\.INCOME_RATE/);
+  assert.match(institutions, /EARTH\.CAPACITY\.BASE_RATE/);
+  assert.doesNotMatch(institutions, /NULLIF\(c\.tax_charter->>'incomeTaxBps'/);
+});
+
 test('V5 cutover rehearsal is fail-closed and produces evidence', async () => {
   const script = await readFile(new URL('../scripts/run-v5-cutover-rehearsal.mjs', import.meta.url), 'utf8');
   assert.match(script, /DATABASE_URL is required for a V5 cutover rehearsal/);

@@ -563,17 +563,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final admissionPolicy =
         (row['admission_policy'] ?? 'UNKNOWN').toString().toUpperCase();
 
-    final rules = row['rules'] is Map
-        ? Map<String, dynamic>.from(row['rules'] as Map)
-        : const <String, dynamic>{};
-
-    final corporateTaxBps =
-        asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], -1);
-    final propertyTaxBps = asIntOr(
-        row['property_tax_bps'] ??
-            rules['propertyTaxBps'] ??
-            rules['property_tax_bps'],
-        -1);
+    final corporateTaxBps = asInt(row['corporate_tax_bps']);
+    final propertyTaxBps = asInt(row['property_tax_bps']);
 
     final sharedPatents = row['shared_patents'] is List
         ? row['shared_patents'] as List
@@ -3154,19 +3145,12 @@ class CorporationOverviewPanel extends StatelessWidget {
 
     final isAffiliated = myCorpId != null && myCorpId == id;
 
-    final rules = corporation['rules'] is Map
-        ? Map<String, dynamic>.from(corporation['rules'] as Map)
-        : const <String, dynamic>{};
+    final incomeTaxBps = asInt(corporation['income_tax_bps']);
+    final salesTaxBps = asInt(corporation['sales_tax_bps']);
+    final corporateTaxBps = asInt(corporation['corporate_tax_bps']);
 
-    final incomeTaxBps =
-        asIntOr(rules['incomeTaxBps'] ?? rules['income_tax_bps'], -1);
-    final salesTaxBps =
-        asIntOr(rules['salesTaxBps'] ?? rules['sales_tax_bps'], -1);
-    final corporateTaxBps =
-        asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], -1);
-
-    String formatRate(int bps) =>
-        bps < 0 ? 'UNAVAILABLE' : '${(bps / 100).toStringAsFixed(1)}%';
+    String formatRate(int? bps) =>
+        bps == null || bps < 0 ? 'UNAVAILABLE' : '${(bps / 100).toStringAsFixed(1)}%';
 
     final corpProposalsCount =
         ((state.governance['proposals'] as List<dynamic>?) ?? const [])
