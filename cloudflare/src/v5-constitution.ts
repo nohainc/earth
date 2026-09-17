@@ -3,13 +3,6 @@ import { validateProgressiveBrackets, type ProgressiveBracket } from './v5-progr
 export type ConstitutionalValueType = 'BOOLEAN' | 'INTEGER' | 'CREDIT_UNITS' | 'RATE_BPS' | 'ENUM' | 'GAME_DAYS' | 'RESOURCE_UNITS' | 'PROGRESSIVE_SCHEDULE_REF' | 'POLICY_REFERENCE';
 export type ConstitutionalAuthorityModel = 'EARTH_LOCKED' | 'EARTH_DEFAULT_CORPORATION_OVERRIDE' | 'CORPORATION_LOCAL';
 
-export const DEFAULT_V5_GOVERNANCE_RULE = Object.freeze({
-  quorumBps: 2500,
-  approvalBps: 5000,
-  votingPeriodDays: 3,
-  implementationDelayDays: 0,
-});
-
 export type ConstitutionalRuleDefinition = {
   code: string;
   articleCode: string;

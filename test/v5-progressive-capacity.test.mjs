@@ -5,7 +5,7 @@ import { calculateProgressiveCharge, validateProgressiveBrackets } from '../clou
 import { aggregateCorporationCapacity, calculateHouseCapacity, quoteCapacityChange, requiredTerritoryUnits } from '../cloudflare/src/v5-capacity.ts';
 import { previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
 import { runV5ShadowSimulation } from '../cloudflare/src/v5-shadow-simulation.ts';
-import { CONSTITUTIONAL_RULE_DEFINITIONS, DEFAULT_V5_GOVERNANCE_RULE, resolveConstitutionalRuleSet, validateConstitutionalRuleValue } from '../cloudflare/src/v5-constitution.ts';
+import { CONSTITUTIONAL_RULE_DEFINITIONS, resolveConstitutionalRuleSet, validateConstitutionalRuleValue } from '../cloudflare/src/v5-constitution.ts';
 import { evaluateOneHouseVote } from '../cloudflare/src/governance-decision.ts';
 
 const brackets = [
@@ -131,7 +131,6 @@ test('proposal execution rejects unregistered action handlers', async () => {
 });
 
 test('V5 constitutional rules enforce typed values and authority inheritance', () => {
-  assert.deepEqual(DEFAULT_V5_GOVERNANCE_RULE, { quorumBps: 2500, approvalBps: 5000, votingPeriodDays: 3, implementationDelayDays: 0 });
   assert.ok(CONSTITUTIONAL_RULE_DEFINITIONS.some((rule) => rule.code === 'EARTH.CAPACITY.STANDARD'));
   validateConstitutionalRuleValue('EARTH.CAPACITY.STANDARD', 10n);
   validateConstitutionalRuleValue('CORPORATION.ADMISSION_POLICY', 'OPEN');
