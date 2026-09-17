@@ -94,8 +94,9 @@ extension EarthApiInstitutions on EarthApi {
 
   Future<EarthState> joinCorporation(
       {String corporationId = 'CORP-001'}) async {
-    await _request('/api/corporations/$corporationId/membership',
-        method: 'POST');
+    await _request('/api/v5/corporations/$corporationId/membership',
+        method: 'POST',
+        body: {'correlationId': newClientCorrelationId('v5-join')});
     return world();
   }
 
@@ -120,9 +121,15 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
-  Future<EarthState> createCorporation(String name, {String? territoryName}) async {
-    await _request('/api/corporations',
-        method: 'POST', body: {'name': name, if (territoryName != null) 'territoryName': territoryName});
+  Future<EarthState> createCorporation(String name,
+      {String? territoryName, String admissionPolicy = 'OPEN'}) async {
+    // Territory placement is obsolete in V5; founding is Earth-governed and
+    // provisions pooled capacity automatically.
+    await _request('/api/v5/corporations', method: 'POST', body: {
+      'name': name,
+      'admissionPolicy': admissionPolicy.toUpperCase(),
+      'correlationId': newClientCorrelationId('v5-founding'),
+    });
     return world();
   }
 

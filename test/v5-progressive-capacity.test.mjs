@@ -894,6 +894,19 @@ test('V5 construction review quotes and executes the pooled path for independent
   assert.match(confirm, /REPORTED AFTER GAME-DAY SETTLEMENT/);
 });
 
+test('V5 Corporation client mutations do not fall back to Territory-bound endpoints', async () => {
+  const api = await readFile(new URL('../flutter_client/lib/core/api/earth_api_institutions.dart', import.meta.url), 'utf8');
+  const joinStart = api.indexOf('Future<EarthState> joinCorporation');
+  const createStart = api.indexOf('Future<EarthState> createCorporation');
+  assert.ok(joinStart >= 0 && createStart > joinStart);
+  const joinSlice = api.slice(joinStart, createStart);
+  const createSlice = api.slice(createStart, api.indexOf('Future<EarthState> spendCorporationTreasury'));
+  assert.match(joinSlice, /api\/v5\/corporations/);
+  assert.doesNotMatch(joinSlice, /api\/corporations\/\$corporationId\/membership/);
+  assert.match(createSlice, /api\/v5\/corporations/);
+  assert.doesNotMatch(createSlice, /'territoryName'/);
+});
+
 test('V5 operations UI has no dead legacy real-estate dialog path', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   assert.doesNotMatch(buildings, /real_estate_dialogs\.dart/);
