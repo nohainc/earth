@@ -461,7 +461,11 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           : authority != 'CORPORATION_LOCAL';
     }).where((definition) {
       final type = definition['value_type']?.toString();
-      return ['BOOLEAN', 'INTEGER', 'CREDIT_UNITS', 'RATE_BPS', 'ENUM', 'GAME_DAYS', 'RESOURCE_UNITS'].contains(type);
+      // Schedule references are selectable by their canonical server-owned
+      // ID. The server validates that the referenced schedule is active and
+      // uses the same brackets during settlement; the client must not edit or
+      // recreate the schedule definition locally.
+      return ['BOOLEAN', 'INTEGER', 'CREDIT_UNITS', 'RATE_BPS', 'ENUM', 'GAME_DAYS', 'RESOURCE_UNITS', 'PROGRESSIVE_SCHEDULE_REF'].contains(type);
     }).toList();
     if (available.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No scalar Constitution rules are available for amendment.')));
@@ -506,7 +510,14 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                     onChanged: (value) => setState(() => valueController.text = value ?? ''),
                   )
                 else
-                  TextField(controller: valueController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '$type value')),
+                  TextField(
+                    controller: valueController,
+                    keyboardType: type == 'PROGRESSIVE_SCHEDULE_REF' ? TextInputType.text : TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: type == 'PROGRESSIVE_SCHEDULE_REF' ? 'Canonical schedule ID' : '$type value',
+                      helperText: type == 'PROGRESSIVE_SCHEDULE_REF' ? 'Use an active schedule ID from the server.' : null,
+                    ),
+                  ),
                 if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
               ]),
             ),
