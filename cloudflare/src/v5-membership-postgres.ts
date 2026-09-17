@@ -4,7 +4,7 @@ import { enqueueOutbox } from './outbox-postgres.ts';
 import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
 import { calculateProgressiveCharge } from './v5-progressive.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
-import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
+import { getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 import { toJsonSafe } from './json-safe.ts';
 
 type HouseContext = { houseId: string; currentCorporationId: string | null; buildingUnits: bigint };
@@ -30,7 +30,7 @@ async function corporation(tx: PostgresRepository, corporationId: string, gameDa
   const row = (await tx.query<{ id: string; name: string; admission_policy: string }>(`SELECT c.id, i.name, c.admission_policy
     FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1 AND c.status = 'ACTIVE' FOR UPDATE`, [corporationId])).rows[0];
   if (!row) throw new Error('Corporation not found or inactive');
-  const constitution = await resolveEffectiveConstitution(tx, { corporationId, gameDay });
+  const constitution = await getResolvedConstitutionForDay(tx, { corporationId, gameDay });
   const policy = String(
     constitution.rules['CORPORATION.ADMISSION_POLICY'] ?? row.admission_policy,
   ).toUpperCase();
@@ -40,7 +40,7 @@ async function corporation(tx: PostgresRepository, corporationId: string, gameDa
 
 async function v5Pricing(tx: PostgresRepository, corporationId: string, buildingUnits: bigint, day: number) {
   const global = await getActiveV5StandardCapacity(tx, day);
-  const constitution = await resolveEffectiveConstitution(tx, { corporationId, gameDay: day });
+  const constitution = await getResolvedConstitutionForDay(tx, { corporationId, gameDay: day });
   const canonicalRate = constitution.rules['CORPORATION.HOUSE_CAPACITY.BASE_RATE'];
   const canonicalSchedule = constitution.rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'];
   if (canonicalRate === undefined || canonicalSchedule === undefined) {
