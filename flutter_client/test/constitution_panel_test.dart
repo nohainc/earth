@@ -57,4 +57,29 @@ void main() {
     expect(find.text('Authoritative World Time'), findsOneWidget);
     expect(find.text('Constitutional Amendment Supermajority'), findsOneWidget);
   });
+
+  testWidgets('ConstitutionPanel can render a canonical typed policy snapshot',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 185}
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ConstitutionPanel(
+            state: state,
+            canonicalLoader: () async => {
+              'ok': true,
+              'gameDay': 185,
+              'rules': {'EARTH.CAPACITY.BASE_RATE': '1000'},
+              'versionIds': {'EARTH.CAPACITY.BASE_RATE': 'CONST-V1'},
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('EARTH.CAPACITY.BASE_RATE'), findsOneWidget);
+    expect(find.text('1000 · CONST-V1'), findsOneWidget);
+  });
 }

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 
 class ConstitutionPanel extends StatefulWidget {
   final EarthState state;
+  final Future<Map<String, dynamic>> Function()? canonicalLoader;
 
-  const ConstitutionPanel({super.key, required this.state});
+  const ConstitutionPanel(
+      {super.key, required this.state, this.canonicalLoader});
 
   @override
   State<ConstitutionPanel> createState() => _ConstitutionPanelState();
@@ -23,6 +26,24 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     super.dispose();
   }
 
+  @override
+  Widget build(BuildContext context) {
+    final loader = widget.canonicalLoader;
+    if (loader == null) return _buildContent(context, null);
+    return FutureBuilder<Map<String, dynamic>>(
+      future: loader(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError || snapshot.data?['ok'] == false) {
+          return _buildContent(context, null, canonicalUnavailable: true);
+        }
+        return _buildContent(context, snapshot.data);
+      },
+    );
+  }
+
   List<Map<String, dynamic>> _resolveAllRules() {
     final serverRules = widget.state.json['constitutionalRules'] is List
         ? (widget.state.json['constitutionalRules'] as List)
@@ -37,8 +58,8 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     return serverRules;
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildContent(BuildContext context, Map<String, dynamic>? canonical,
+      {bool canonicalUnavailable = false}) {
     final allRules = _resolveAllRules();
     final serverRules = widget.state.json['constitutionalRules'];
     final hasServerRules = serverRules is List && serverRules.isNotEmpty;
@@ -131,6 +152,16 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           _buildTierFlow(context),
           const SizedBox(height: 24),
 
+          if (canonical != null) ...[
+            _buildCanonicalPolicyValues(context, canonical),
+            const SizedBox(height: 24),
+          ],
+
+          if (canonicalUnavailable) ...[
+            _buildCanonicalUnavailable(context),
+            const SizedBox(height: 20),
+          ],
+
           if (!hasServerRules)
             Container(
               padding: EdgeInsets.all(context.cardPadding),
@@ -213,6 +244,68 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
         ],
       ),
     );
+  }
+
+  Widget _buildCanonicalUnavailable(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.warningColor.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.warningColor.withValues(alpha: .35)),
+      ),
+      child: Text(
+        'CANONICAL CONSTITUTION UNAVAILABLE\n\nThe server could not verify the effective rule set for this game day. Current policy values are hidden until the canonical feed is restored.',
+        style: context.bodyStyle,
+      ),
+    );
+  }
+
+  Widget _buildCanonicalPolicyValues(
+      BuildContext context, Map<String, dynamic> canonical) {
+    final rawRules = canonical['rules'];
+    final rules = rawRules is Map
+        ? rawRules.entries
+            .map((entry) => MapEntry(entry.key.toString(), entry.value))
+            .toList(growable: false)
+        : const <MapEntry<String, dynamic>>[];
+    final versionIds = canonical['versionIds'] is Map
+        ? Map<String, dynamic>.from(canonical['versionIds'] as Map)
+        : const <String, dynamic>{};
+    return EarthSection(
+      title: 'CURRENT CONSTITUTION POLICY · DAY ${canonical['gameDay'] ?? '—'}',
+      showSurface: false,
+      child: rules.isEmpty
+          ? const EarthEmptyState(
+              message: 'No effective typed policy values are available.',
+              icon: Icons.rule_outlined,
+            )
+          : EarthDataList(
+              children: rules.map((entry) {
+                final value = _formatCanonicalValue(entry.value);
+                final version = versionIds[entry.key]?.toString();
+                return EarthDataRow(
+                  title: entry.key,
+                  subtitle: version == null ? value : '$value · $version',
+                  leading: Icon(Icons.rule_outlined,
+                      size: context.iconSize, color: context.primaryColor),
+                  showDivider: entry.key != rules.last.key,
+                );
+              }).toList(),
+            ),
+    );
+  }
+
+  String _formatCanonicalValue(dynamic value) {
+    if (value is List) {
+      return value.map((item) => _formatCanonicalValue(item)).join(' · ');
+    }
+    if (value is Map) {
+      return value.entries
+          .map((entry) => '${entry.key}: ${_formatCanonicalValue(entry.value)}')
+          .join(', ');
+    }
+    return value?.toString() ?? '—';
   }
 
   Widget _buildSearchAndFilters(BuildContext context, List<String> categories) {

@@ -408,7 +408,10 @@ class Dashboard extends StatelessWidget {
       case 'mutual-credit':
         return [MutualCreditPanel(data: mutualCreditData)];
       case 'territory-commons':
-        return [TerritoryOverviewPanel(state: state, commonsData: territoryCommonsData)];
+        return [
+          TerritoryOverviewPanel(
+              state: state, commonsData: territoryCommonsData)
+        ];
       case 'news':
         return [
           NewsPanel(
@@ -421,7 +424,14 @@ class Dashboard extends StatelessWidget {
               onRefresh: onRefreshEvents)
         ];
       case 'constitution':
-        return [ConstitutionPanel(state: state)];
+        return [
+          ConstitutionPanel(
+            state: state,
+            canonicalLoader: () => const EarthApi().getV5Constitution(
+              corporationId: state.membership?['corporation_id']?.toString(),
+            ),
+          ),
+        ];
       case 'life':
         final human = state.human;
         final life = state.life;
