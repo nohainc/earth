@@ -632,6 +632,9 @@ test('V5 pooled construction accepts no Territory placement target', async () =>
   assert.match(migration, /ALTER TABLE buildings ALTER COLUMN territory_id DROP NOT NULL/);
   assert.match(service, /territoryPlacement: null/);
   assert.match(service, /V5_POOLED_CONSTRUCTION/);
+  assert.match(service, /LEFT JOIN house_affiliations/);
+  assert.match(service, /Public V5 construction requires an active Corporation affiliation/);
+  assert.doesNotMatch(service, /Error\(['"]V5 construction requires an active Corporation affiliation/);
   assert.match(route, /\/api\/v5\/buildings/);
 });
 

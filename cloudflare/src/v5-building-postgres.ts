@@ -12,17 +12,17 @@ type Catalog = {
   slot_footprint: number;
 };
 
-async function ownerContext(tx: PostgresRepository, humanId: string): Promise<{ houseId: string; houseEconomicId: string; corporationId: string; corporationEconomicId: string }> {
-  const row = (await tx.query<{ house_id: string; house_economic_id: string; corporation_id: string; corporation_economic_id: string }>(
+async function ownerContext(tx: PostgresRepository, humanId: string): Promise<{ houseId: string; houseEconomicId: string; corporationId: string | null; corporationEconomicId: string | null }> {
+  const row = (await tx.query<{ house_id: string; house_economic_id: string; corporation_id: string | null; corporation_economic_id: string | null }>(
     `SELECT h.house_id, house_owner.economic_id AS house_economic_id,
             ha.corporation_id, corp_owner.economic_id AS corporation_economic_id
        FROM humans h
        JOIN owner_registry house_owner ON house_owner.id = h.house_id AND house_owner.owner_type = 'HOUSE'
-       JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE'
-       JOIN owner_registry corp_owner ON corp_owner.id = ha.corporation_id AND corp_owner.owner_type = 'CORPORATION'
+       LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE'
+       LEFT JOIN owner_registry corp_owner ON corp_owner.id = ha.corporation_id AND corp_owner.owner_type = 'CORPORATION'
       WHERE h.id = $1 AND h.status = 'ACTIVE' LIMIT 1`, [humanId],
   )).rows[0];
-  if (!row) throw new Error('V5 construction requires an active Corporation affiliation');
+  if (!row) throw new Error('Active House is required for V5 construction');
   return { houseId: row.house_id, houseEconomicId: row.house_economic_id, corporationId: row.corporation_id, corporationEconomicId: row.corporation_economic_id };
 }
 
@@ -41,6 +41,7 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
     const owner = await ownerContext(tx, input.ownerId);
     const blueprint = await catalog(tx, input.buildingType);
     const isPublic = blueprint.ownership_scope === 'PUBLIC';
+    if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
     const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(world?.game_day ?? 1);
@@ -92,6 +93,7 @@ export async function purchaseV5Building(repository: PostgresRepository, input: 
     const owner = await ownerContext(tx, input.ownerId);
     const blueprint = await catalog(tx, input.buildingType);
     const isPublic = blueprint.ownership_scope === 'PUBLIC';
+    if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
     const currentWorld = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(currentWorld?.game_day ?? 1);
