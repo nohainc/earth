@@ -15,6 +15,10 @@ export async function rebuildV5HouseSettlementProfile(
   houseId: string,
   gameDay: number,
 ): Promise<{ corporationId: string | null }> {
+  const house = (await tx.query<{ status: string }>(
+    'SELECT status FROM houses WHERE id = $1 FOR SHARE', [houseId],
+  )).rows[0];
+  if (!house) throw new Error(`House not found: ${houseId}`);
   const affiliation = (await tx.query<{ corporation_id: string | null }>(
     `SELECT corporation_id FROM house_affiliations
       WHERE house_id = $1 AND status = 'ACTIVE'
@@ -36,7 +40,7 @@ export async function rebuildV5HouseSettlementProfile(
        (house_id, corporation_id, residential_capacity_units, productive_capacity_units,
         total_capacity_units, active_building_count, profile_version, source_game_day,
         dirty, dirty_reason)
-     VALUES ($1, $2, 1, $3, 1 + $3, $4, $5, $6, FALSE, NULL)
+     VALUES ($1, $2, CASE WHEN $7 = 'ACTIVE' THEN 1 ELSE 0 END, $3, CASE WHEN $7 = 'ACTIVE' THEN 1 ELSE 0 END + $3, $4, $5, $6, FALSE, NULL)
      ON CONFLICT (house_id) DO UPDATE SET corporation_id = EXCLUDED.corporation_id,
        residential_capacity_units = EXCLUDED.residential_capacity_units,
        productive_capacity_units = EXCLUDED.productive_capacity_units,
@@ -45,7 +49,7 @@ export async function rebuildV5HouseSettlementProfile(
        profile_version = EXCLUDED.profile_version,
        source_game_day = EXCLUDED.source_game_day,
        dirty = FALSE, dirty_reason = NULL, updated_at = CURRENT_TIMESTAMP`,
-    [houseId, affiliation?.corporation_id ?? null, facts.building_units, Number(facts.building_count), V5_SETTLEMENT_PROFILE_VERSION, gameDay],
+    [houseId, affiliation?.corporation_id ?? null, facts.building_units, Number(facts.building_count), V5_SETTLEMENT_PROFILE_VERSION, gameDay, house.status],
   );
   return { corporationId: affiliation?.corporation_id ?? null };
 }
@@ -72,6 +76,7 @@ export async function rebuildV5CorporationSettlementProfile(
        COALESCE(public_facts.building_count, 0)::INTEGER,
        $2, $3, FALSE, NULL
      FROM v5_house_settlement_profiles hp
+     JOIN houses h ON h.id = hp.house_id AND h.status = 'ACTIVE'
      LEFT JOIN (
        SELECT COALESCE(SUM(bc.slot_footprint), 0) AS capacity_units,
               COUNT(*) AS building_count

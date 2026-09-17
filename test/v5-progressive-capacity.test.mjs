@@ -37,6 +37,12 @@ test('V5 structural settlement profiles are rebuildable and independent Houses r
   assert.doesNotMatch(capacity, /SUM\(bc\.slot_footprint\)/);
 });
 
+test('V5 settlement profiles exclude inactive Houses from residential aggregates', async () => {
+  const profiles = await readFile(new URL('../cloudflare/src/v5-settlement-profiles-postgres.ts', import.meta.url), 'utf8');
+  assert.match(profiles, /CASE WHEN \$7 = 'ACTIVE' THEN 1 ELSE 0 END/);
+  assert.match(profiles, /JOIN houses h ON h\.id = hp\.house_id AND h\.status = 'ACTIVE'/);
+});
+
 test('V5 progressive pricing charges marginal quantities only', () => {
   const result = calculateProgressiveCharge({ quantity: 5n, baseRate: 100n, brackets });
   assert.equal(result.totalCharge, 720n);
