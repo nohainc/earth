@@ -22,19 +22,19 @@ test('House Daily Summary derives deterministic values from V2 records', async (
   assert.equal(result.currentGameDay, 5);
   assert.equal(result.summaryDay, 4);
   assert.deepEqual(result.financial, {
-    income: 100,
-    expenses: 40,
-    net: 60,
-    taxes: 5,
-    marketPurchases: 20,
-    marketSales: 30,
+    income: '100',
+    expenses: '40',
+    net: '60',
+    taxes: '5',
+    marketPurchases: '20',
+    marketSales: '30',
   });
   assert.deepEqual(result.statement?.openingAssets, { CREDIT: '40' });
   assert.equal(result.statement?.netCreditUnits, '60');
   assert.equal(result.buildings.completed.length, 1);
   assert.equal(result.alerts[0].read, false);
   assert.deepEqual(result.highlights, []);
-  assert.deepEqual(result.resources.deltas, [{ resource: 'FOOD', produced: 2, consumed: 1, net: 1 }]);
+  assert.deepEqual(result.resources.deltas, [{ resource: 'FOOD', produced: '2', consumed: '1', net: '1' }]);
 });
 
 test('House Daily Summary fails closed when the completed-day statement is missing', async () => {
@@ -50,4 +50,25 @@ test('House Daily Summary fails closed when the completed-day statement is missi
     () => getHouseDailySummary(repository, 'HOUSE-1'),
     /Daily summary is unavailable for completed game day 4/,
   );
+});
+
+test('House Daily Summary preserves large fixed-point units exactly', async () => {
+  const repository = {
+    async query(sql) {
+      const normalized = sql.toLowerCase();
+      if (normalized.includes('from world_state')) return { rows: [{ game_day: 8 }] };
+      if (normalized.includes('from house_daily_statements')) return { rows: [{ opening_assets: {}, closing_assets: {}, production: { COMPUTE: '9007199254740993' }, consumption: { COMPUTE: '2' }, market_activity: {}, obligations: {}, exceptions: {}, net_credit_units: '9007199254740991' }] };
+      if (normalized.includes('as income')) return { rows: [{ income: '9007199254740993', expenses: '2' }] };
+      if (normalized.includes('as taxes')) return { rows: [{ taxes: '0' }] };
+      if (normalized.includes('from market_fills')) return { rows: [] };
+      if (normalized.includes('from game_events')) return { rows: [] };
+      if (normalized.includes('from notifications')) return { rows: [] };
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  };
+
+  const result = await getHouseDailySummary(repository, 'HOUSE-1');
+  assert.equal(result.financial.income, '9007199254740993');
+  assert.equal(result.financial.net, '9007199254740991');
+  assert.deepEqual(result.resources.deltas, [{ resource: 'COMPUTE', produced: '9007199254740993', consumed: '2', net: '9007199254740991' }]);
 });

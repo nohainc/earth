@@ -19,8 +19,16 @@ type SummaryEvent = {
   gameMinute: number | null;
 };
 
-function units(value: unknown): number {
-  return Number(value ?? 0);
+function units(value: unknown): bigint {
+  try {
+    return BigInt(String(value ?? '0'));
+  } catch {
+    throw new Error('Daily summary contains an invalid integer unit value');
+  }
+}
+
+function unitString(value: unknown): string {
+  return units(value).toString();
 }
 
 function eventRows(rows: Record<string, unknown>[]): SummaryEvent[] {
@@ -132,9 +140,9 @@ export async function getHouseDailySummary(
   const taxUnits = units(taxes.rows[0]?.taxes);
   const capacityRow = v5Capacity.rows[0] as Record<string, unknown> | undefined;
   const capacityRent = {
-    assessed: units(capacityRow?.assessed),
-    paid: units(capacityRow?.paid),
-    arrears: units(capacityRow?.arrears),
+    assessed: unitString(capacityRow?.assessed),
+    paid: unitString(capacityRow?.paid),
+    arrears: unitString(capacityRow?.arrears),
     status: String(capacityRow?.status ?? 'CURRENT'),
   };
   const eventList = eventRows(events.rows as Record<string, unknown>[]);
@@ -155,9 +163,9 @@ export async function getHouseDailySummary(
   const resourceCodes = new Set([...Object.keys(production), ...Object.keys(consumption)]);
   const resourceDeltas = [...resourceCodes].sort().map((resource) => ({
     resource,
-    produced: units(production[resource]),
-    consumed: units(consumption[resource]),
-    net: units(production[resource]) - units(consumption[resource]),
+    produced: unitString(production[resource]),
+    consumed: unitString(consumption[resource]),
+    net: (units(production[resource]) - units(consumption[resource])).toString(),
   }));
   const statementView = {
     openingAssets: jsonObject(authoritative.opening_assets),
@@ -173,21 +181,21 @@ export async function getHouseDailySummary(
   const highlights: Array<Record<string, unknown>> = [];
   if (expenses > income) highlights.push({
     id: 'negative_cashflow', severity: 'warning', title: 'Expenses exceeded income',
-    reason: `Your House spent ${expenses} CREDIT and received ${income} CREDIT on game day ${summaryDay}.`,
+    reason: `Your House spent ${expenses.toString()} CREDIT and received ${income.toString()} CREDIT on game day ${summaryDay}.`,
     actionLabel: 'REVIEW FINANCE', targetSection: 'finance',
   });
   for (const event of buildings.filter((item) => item.type.includes('INACTIVE'))) highlights.push({
     id: `building-inactive:${event.id}`, severity: 'high', title: event.title,
     reason: event.details, actionLabel: 'VIEW BUILDINGS', targetSection: 'buildings',
   });
-  for (const item of resourceDeltas.filter((delta) => delta.net < 0)) highlights.push({
+  for (const item of resourceDeltas.filter((delta) => units(delta.net) < 0n)) highlights.push({
     id: `resource-decline:${item.resource}`, severity: 'warning', title: `${item.resource} decreased`,
     reason: `${item.resource} production was ${item.produced} and consumption was ${item.consumed} on game day ${summaryDay}.`,
     actionLabel: 'REVIEW RESOURCES', targetSection: 'buildings',
   });
-  if (capacityRent.arrears > 0 || capacityRent.status !== 'CURRENT') highlights.push({
+  if (units(capacityRent.arrears) > 0n || capacityRent.status !== 'CURRENT') highlights.push({
     id: `capacity-rent:${summaryDay}`,
-    severity: capacityRent.arrears > 0 ? 'high' : 'warning',
+    severity: units(capacityRent.arrears) > 0n ? 'high' : 'warning',
     title: 'Capacity rent requires attention',
     reason: `Capacity rent was assessed at ${capacityRent.assessed} CREDIT; ${capacityRent.arrears} CREDIT remains in arrears.`,
     actionLabel: 'REVIEW FINANCE', targetSection: 'finance',
@@ -206,16 +214,16 @@ export async function getHouseDailySummary(
     currentGameDay,
     summaryDay,
     financial: {
-      income,
-      expenses,
-      net: income - expenses,
-      taxes: taxUnits,
-      marketPurchases: market.rows.reduce((sum, row) => sum + units(row.purchases), 0),
-      marketSales: market.rows.reduce((sum, row) => sum + units(row.sales), 0),
+      income: income.toString(),
+      expenses: expenses.toString(),
+      net: (income - expenses).toString(),
+      taxes: taxUnits.toString(),
+      marketPurchases: market.rows.reduce((sum, row) => sum + units(row.purchases), 0n).toString(),
+      marketSales: market.rows.reduce((sum, row) => sum + units(row.sales), 0n).toString(),
       ...(capacityRow ? { capacityRent } : {}),
     },
     statement: statementView,
-    resources: { produced: resourceDeltas.filter((item) => item.produced > 0), consumed: resourceDeltas.filter((item) => item.consumed > 0), deltas: resourceDeltas, traded: market.rows.map((row) => ({ commodity: row.commodity, purchases: units(row.purchases), sales: units(row.sales), volume: units(row.volume) })) },
+    resources: { produced: resourceDeltas.filter((item) => units(item.produced) > 0n), consumed: resourceDeltas.filter((item) => units(item.consumed) > 0n), deltas: resourceDeltas, traded: market.rows.map((row) => ({ commodity: row.commodity, purchases: unitString(row.purchases), sales: unitString(row.sales), volume: unitString(row.volume) })) },
     buildings: { completed: buildings.filter((event) => event.type.includes('COMPLETED')), upgraded: buildings.filter((event) => event.type.includes('UPGRADED')), inactive: buildings.filter((event) => event.type.includes('INACTIVE')) },
     research: { progress: research.filter((event) => !event.type.includes('COMPLETED')), completed: research.filter((event) => event.type.includes('COMPLETED')) },
     governance: { relevantEvents: governance },
