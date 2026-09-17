@@ -9,28 +9,29 @@ export type ConstitutionalRuleDefinition = {
   valueType: ConstitutionalValueType;
   authorityModel: ConstitutionalAuthorityModel;
   policyGroup: string;
+  calculationKey: string;
   allowedValues?: readonly string[];
 };
 
 export const CONSTITUTIONAL_RULE_DEFINITIONS: readonly ConstitutionalRuleDefinition[] = [
-  { code: 'EARTH.CAPACITY.STANDARD', articleCode: 'TERRITORY_CAPACITY', valueType: 'INTEGER', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY' },
-  { code: 'EARTH.CAPACITY.BASE_RATE', articleCode: 'TERRITORY_CAPACITY', valueType: 'CREDIT_UNITS', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY' },
-  { code: 'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE', articleCode: 'TERRITORY_CAPACITY', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY' },
-  { code: 'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE', articleCode: 'TERRITORY_CAPACITY', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY' },
-  { code: 'CORPORATION.HOUSE_CAPACITY.BASE_RATE', articleCode: 'TERRITORY_CAPACITY', valueType: 'CREDIT_UNITS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'HOUSE_CAPACITY_POLICY' },
-  { code: 'CORPORATION.ADMISSION_POLICY', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'ENUM', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'ADMISSION_POLICY', allowedValues: ['OPEN', 'APPROVAL', 'INVITE_ONLY'] },
-  { code: 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'RATE_BPS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY' },
-  { code: 'CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'RATE_BPS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY' },
-  { code: 'CORPORATION.GOVERNANCE.VOTING_PERIOD_DAYS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'GAME_DAYS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY' },
-  { code: 'CORPORATION.GOVERNANCE.IMPLEMENTATION_DELAY_DAYS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'GAME_DAYS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY' },
-  { code: 'EARTH.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_HOUSE_INCOME_TAX' },
-  { code: 'EARTH.TAX.BASIC_LEVY_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_BASIC_LEVY' },
-  { code: 'EARTH.MARKET.TRANSACTION_TAX_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_MARKET_TAX' },
-  { code: 'CORPORATION.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION_HOUSE_INCOME_TAX' },
-  { code: 'CORPORATION.TAX.INCOME_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION' },
-  { code: 'CORPORATION.TAX.SALES_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION' },
-  { code: 'CORPORATION.TAX.CORPORATE_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION' },
-  { code: 'CORPORATION.TAX.PROPERTY_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION' },
+  { code: 'EARTH.CAPACITY.STANDARD', articleCode: 'TERRITORY_CAPACITY', valueType: 'INTEGER', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY', calculationKey: 'earth.capacity.standard' },
+  { code: 'EARTH.CAPACITY.BASE_RATE', articleCode: 'TERRITORY_CAPACITY', valueType: 'CREDIT_UNITS', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY', calculationKey: 'earth.capacity.base_rate' },
+  { code: 'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE', articleCode: 'TERRITORY_CAPACITY', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY', calculationKey: 'earth.capacity.progressive_schedule' },
+  { code: 'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE', articleCode: 'TERRITORY_CAPACITY', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'CAPACITY_POLICY', calculationKey: 'earth.capacity.house_progressive_schedule' },
+  { code: 'CORPORATION.HOUSE_CAPACITY.BASE_RATE', articleCode: 'TERRITORY_CAPACITY', valueType: 'CREDIT_UNITS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'HOUSE_CAPACITY_POLICY', calculationKey: 'corporation.house_capacity.base_rate' },
+  { code: 'CORPORATION.ADMISSION_POLICY', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'ENUM', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'ADMISSION_POLICY', calculationKey: 'corporation.admission_policy', allowedValues: ['OPEN', 'APPROVAL', 'INVITE_ONLY'] },
+  { code: 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'RATE_BPS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY', calculationKey: 'corporation.governance.policy_quorum_bps' },
+  { code: 'CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'RATE_BPS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY', calculationKey: 'corporation.governance.policy_approval_bps' },
+  { code: 'CORPORATION.GOVERNANCE.VOTING_PERIOD_DAYS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'GAME_DAYS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY', calculationKey: 'corporation.governance.voting_period_days' },
+  { code: 'CORPORATION.GOVERNANCE.IMPLEMENTATION_DELAY_DAYS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'GAME_DAYS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY', calculationKey: 'corporation.governance.implementation_delay_days' },
+  { code: 'EARTH.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_HOUSE_INCOME_TAX', calculationKey: 'earth.house_income_tax' },
+  { code: 'EARTH.TAX.BASIC_LEVY_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_BASIC_LEVY', calculationKey: 'earth.tax.basic_levy_rate' },
+  { code: 'EARTH.MARKET.TRANSACTION_TAX_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_MARKET_TAX', calculationKey: 'earth.market.transaction_tax_rate' },
+  { code: 'CORPORATION.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION_HOUSE_INCOME_TAX', calculationKey: 'corporation.house_income_tax' },
+  { code: 'CORPORATION.TAX.INCOME_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION', calculationKey: 'corporation.tax.income_rate' },
+  { code: 'CORPORATION.TAX.SALES_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION', calculationKey: 'corporation.tax.sales_rate' },
+  { code: 'CORPORATION.TAX.CORPORATE_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION', calculationKey: 'corporation.tax.corporate_rate' },
+  { code: 'CORPORATION.TAX.PROPERTY_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION', calculationKey: 'corporation.tax.property_rate' },
 ];
 
 export type ConstitutionalRuleValue = boolean | bigint | number | string | ProgressiveBracket[];

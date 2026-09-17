@@ -214,6 +214,18 @@ test('V5 active policy-group exclusivity is enforced by PostgreSQL', async () =>
   assert.match(migration, /status IN \('VOTING', 'PASSED', 'SCHEDULED'\)/);
 });
 
+test('V5 rule definitions expose stable calculation dispatch keys', async () => {
+  const registry = await readFile(new URL('../cloudflare/src/v5-constitution.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../db/migrations/105_constitution_calculation_keys.sql', import.meta.url), 'utf8');
+  const readModel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  assert.match(registry, /calculationKey: string/);
+  assert.match(registry, /earth\.capacity\.base_rate/);
+  assert.match(migration, /calculation_key TEXT/);
+  assert.match(migration, /SET calculation_key = CASE rule_code/);
+  assert.match(migration, /calculation_key SET NOT NULL/);
+  assert.match(readModel, /amendment_class, calculation_key, allowed_values/);
+});
+
 test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');

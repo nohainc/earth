@@ -95,7 +95,7 @@ export async function getConstitutionReadModel(
   const [definitionsResult, historyResult, scheduledResult] = await Promise.all([
     repository.query(`
       SELECT rule_code, article_code, value_type, authority_model, policy_group,
-             amendment_class, allowed_values, validation_schema, active
+             amendment_class, calculation_key, allowed_values, validation_schema, active
         FROM constitutional_rule_definitions_v5
        WHERE active = TRUE
        ORDER BY article_code, rule_code`),
