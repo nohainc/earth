@@ -1,7 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
-import { DEFAULT_V5_GOVERNANCE_RULE, getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
@@ -37,6 +38,26 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
     }) : undefined,
   };
   return action;
+}
+
+async function governancePolicy(tx: PostgresRepository, subjectType: 'EARTH' | 'CORPORATION', subjectId: string | null, gameDay: number) {
+  const resolved = await resolveEffectiveConstitution(tx, {
+    gameDay,
+    corporationId: subjectType === 'CORPORATION' ? subjectId ?? undefined : undefined,
+  });
+  const value = (code: string): number => {
+    const raw = resolved.rules[code];
+    if (raw === undefined) throw new Error(`Constitution governance rule is unavailable: ${code}`);
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(`Invalid Constitution governance rule: ${code}`);
+    return parsed;
+  };
+  return {
+    quorumBps: value('CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS'),
+    approvalBps: value('CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS'),
+    votingPeriodDays: value('CORPORATION.GOVERNANCE.VOTING_PERIOD_DAYS'),
+    implementationDelayDays: value('CORPORATION.GOVERNANCE.IMPLEMENTATION_DELAY_DAYS'),
+  };
 }
 
 async function canPropose(tx: PostgresRepository, humanId: string, subjectType: 'EARTH' | 'CORPORATION', subjectId: string | null): Promise<{ houseId: string }> {
@@ -117,12 +138,15 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
           : input.actionType === 'CONSTITUTION_AMENDMENT' ? `${scope}:${getConstitutionalRuleDefinition(String((action.changes ?? [])[0]?.ruleCode ?? 'CONSTITUTION')).policyGroup}`
             : `${scope}:PROGRESSIVE_SCHEDULE`;
     if ((await tx.query(`SELECT 1 FROM v5_governance_proposals WHERE subject_type = $1 AND subject_id IS NOT DISTINCT FROM $2 AND policy_group = $3 AND status IN ('VOTING','PASSED','SCHEDULED') LIMIT 1`, [input.subjectType, input.subjectId, policyGroup])).rows[0]) throw new Error('An active proposal already exists for this policy group');
+    const governanceRuleSnapshot = await governancePolicy(tx, input.subjectType, input.subjectId, day);
+    if (action.effectiveFromGameDay < day + 1 + governanceRuleSnapshot.implementationDelayDays) {
+      throw new Error('Constitution amendment does not satisfy the implementation delay');
+    }
     const votingStart = day + 1;
     const electorate = input.subjectType === 'CORPORATION'
       ? await tx.query<{ count: string }>(`SELECT COUNT(DISTINCT house_id)::TEXT AS count FROM house_affiliations WHERE corporation_id = $1 AND status = 'ACTIVE' AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)`, [input.subjectId, votingStart])
       : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'", []);
     const electorateSize = Number(electorate.rows[0]?.count ?? 0);
-    const governanceRuleSnapshot = { ...DEFAULT_V5_GOVERNANCE_RULE };
     const baseVersionSnapshot: Record<string, unknown> = { capturedAtGameDay: day };
     let proposalPayload = proposalInputPayload;
     if (input.actionType === 'CONSTITUTION_AMENDMENT') {
@@ -137,7 +161,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     const proposalId = `V5-GOV-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const effective = action.effectiveFromGameDay;
     await tx.query(`INSERT INTO v5_governance_proposals (id, subject_type, subject_id, action_type, payload, status, submitted_game_day, voting_start_game_day, voting_end_game_day, effective_from_game_day, created_by_human_id, correlation_id, quorum_bps, approval_bps, electorate_snapshot_game_day, electorate_size, governance_rule_snapshot, base_version_snapshot, policy_group)
-      VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$7 + 2,$8,$9,$10,$11,$12,$7,$13,$14::JSONB,$15::JSONB,$16)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
+      VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$7 + $13,$8,$9,$10,$11,$12,$7,$14,$15::JSONB,$16::JSONB,$17)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, governanceRuleSnapshot.votingPeriodDays, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
     if (input.actionType === 'CONSTITUTION_AMENDMENT') await tx.query(`INSERT INTO constitutional_change_sets_v5 (proposal_id, authority_type, authority_id, policy_group, changes, base_version_snapshot) VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB)`, [proposalId, input.subjectType, input.subjectType === 'EARTH' ? 'EARTH' : input.subjectId, policyGroup, JSON.stringify((proposalPayload as Record<string, unknown>).changes), JSON.stringify(baseVersionSnapshot)]);
     await createGameEvent(tx, { id: `V5-GOV-CREATED-${proposalId}`, category: 'GOVERNANCE', eventType: 'V5_POLICY_PROPOSAL_CREATED', gameDay: day, actorHumanId: input.humanId, subjectType: input.subjectType, subjectId: input.subjectId ?? 'EARTH', title: input.title.trim(), details: { proposalId, actionType: input.actionType, effectiveFromGameDay: effective, body: input.body?.trim() ?? '' }, correlationId: input.correlationId });
     return { ok: true, proposal: (await tx.query('SELECT * FROM v5_governance_proposals WHERE id = $1', [proposalId])).rows[0], correlationId: input.correlationId };
@@ -146,10 +170,10 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
 
 export async function castV5GovernanceVote(repository: PostgresRepository, input: { humanId: string; proposalId: string; choice: 'SUPPORT' | 'OPPOSE' | 'ABSTAIN'; correlationId: string }) {
   return repository.transaction(async (tx) => {
-    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; voting_end_game_day: number; electorate_snapshot_game_day: number; status: string }>('SELECT subject_type, subject_id, voting_end_game_day, electorate_snapshot_game_day, status FROM v5_governance_proposals WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
+    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; voting_start_game_day: number; voting_end_game_day: number; electorate_snapshot_game_day: number; status: string }>('SELECT subject_type, subject_id, voting_start_game_day, voting_end_game_day, electorate_snapshot_game_day, status FROM v5_governance_proposals WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
     if (!proposal || proposal.status !== 'VOTING') throw new Error('V5 governance proposal is not open for voting');
     const day = await currentDay(tx);
-    if (day < proposal.voting_end_game_day - 2 || day > proposal.voting_end_game_day) throw new Error('V5 governance voting is not open');
+    if (day < proposal.voting_start_game_day || day > proposal.voting_end_game_day) throw new Error('V5 governance voting is not open');
     const houseId = await canVote(tx, input.humanId, proposal);
     await tx.query(`INSERT INTO v5_governance_ballots (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)
       ON CONFLICT (proposal_id, house_id) DO UPDATE SET choice = EXCLUDED.choice, cast_by_human_id = EXCLUDED.cast_by_human_id, cast_game_day = EXCLUDED.cast_game_day, correlation_id = EXCLUDED.correlation_id`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);

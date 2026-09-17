@@ -178,6 +178,9 @@ test('V5 constitutional amendments are typed, policy-group scoped change sets', 
   assert.match(service, /status = 'RETIRED'/);
   assert.match(service, /CORPORATION\.ADMISSION_POLICY/);
   assert.match(service, /proposalInputPayload/);
+  assert.match(service, /governancePolicy\(tx/);
+  assert.match(service, /implementationDelayDays/);
+  assert.match(service, /voting_start_game_day/);
   assert.match(migration, /CREATE TABLE constitutional_change_sets_v5/);
 });
 
