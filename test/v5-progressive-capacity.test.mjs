@@ -194,6 +194,14 @@ test('V5 constitutional amendments are typed, policy-group scoped change sets', 
   assert.match(migration, /CREATE TABLE constitutional_change_sets_v5/);
 });
 
+test('V5 Constitution activation rolls back a failed change set atomically', async () => {
+  const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /SAVEPOINT \$\{savepoint\}/);
+  assert.match(service, /ROLLBACK TO SAVEPOINT/);
+  assert.match(service, /RELEASE SAVEPOINT/);
+  assert.match(service, /A Constitution change set is atomic/);
+});
+
 test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');

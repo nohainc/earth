@@ -323,7 +323,23 @@ export async function activateDueV5GovernancePoliciesInTransaction(tx: PostgresR
   const rows = (await tx.query<{ proposal_id: string; action_type: string; payload: Record<string, unknown>; effective_from_game_day: number }>(`SELECT proposal_id, action_type, payload, effective_from_game_day FROM v5_governance_activation_queue WHERE status = 'PENDING' AND effective_from_game_day <= $1 ORDER BY effective_from_game_day, proposal_id FOR UPDATE`, [day])).rows;
   let applied = 0; let failed = 0;
   for (const row of rows) {
-    try { await applyActivation(tx, row, day); applied += 1; } catch (error) { failed += 1; const message = error instanceof Error ? error.message : 'Activation failed'; const stale = message.startsWith('STALE'); await tx.query(`UPDATE v5_governance_activation_queue SET status = $2, error_message = $3 WHERE proposal_id = $1`, [row.proposal_id, stale ? 'STALE' : 'FAILED', message]); if (stale) await tx.query("UPDATE v5_governance_proposals SET status = 'STALE' WHERE id = $1", [row.proposal_id]); }
+    const savepoint = `v5_activation_${row.proposal_id.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+    await tx.query(`SAVEPOINT ${savepoint}`);
+    try {
+      await applyActivation(tx, row, day);
+      await tx.query(`RELEASE SAVEPOINT ${savepoint}`);
+      applied += 1;
+    } catch (error) {
+      // A Constitution change set is atomic. Restore every rule/schedule write
+      // from this proposal before recording its terminal failure state.
+      await tx.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      await tx.query(`RELEASE SAVEPOINT ${savepoint}`);
+      failed += 1;
+      const message = error instanceof Error ? error.message : 'Activation failed';
+      const stale = message.startsWith('STALE');
+      await tx.query(`UPDATE v5_governance_activation_queue SET status = $2, error_message = $3 WHERE proposal_id = $1`, [row.proposal_id, stale ? 'STALE' : 'FAILED', message]);
+      if (stale) await tx.query("UPDATE v5_governance_proposals SET status = 'STALE' WHERE id = $1", [row.proposal_id]);
+    }
   }
   return { ok: true, day, applied, failed };
 }
