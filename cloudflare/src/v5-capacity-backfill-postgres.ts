@@ -6,6 +6,7 @@ import { getResolvedConstitutionForDay } from './constitutional-kernel-postgres.
 
 type BackfillPolicy = {
   standardCapacity: bigint;
+  baseRate: bigint;
   houseScheduleId: string;
   rulesVersion: string;
 };
@@ -13,14 +14,61 @@ type BackfillPolicy = {
 async function policyForDay(repository: PostgresRepository, gameDay: number): Promise<BackfillPolicy> {
   const constitution = await getResolvedConstitutionForDay(repository, { gameDay });
   const standard = constitution.rules['EARTH.CAPACITY.STANDARD'];
+  const baseRate = constitution.rules['EARTH.CAPACITY.BASE_RATE'];
   const schedule = constitution.rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'];
-  if (standard === undefined || schedule === undefined) {
+  if (standard === undefined || baseRate === undefined || schedule === undefined) {
     throw new Error('Canonical Earth capacity Constitution is unavailable for the backfill day');
   }
   return {
     standardCapacity: BigInt(String(standard)),
+    baseRate: BigInt(String(baseRate)),
     houseScheduleId: String(schedule),
     rulesVersion: constitution.snapshotId ?? constitution.versionIds['EARTH.CAPACITY.STANDARD'] ?? 'constitution-v5',
+  };
+}
+
+async function backfillIndependentHouses(
+  tx: PostgresRepository,
+  sourceGameDay: number,
+  policy: BackfillPolicy,
+  cursorHouseId: string | null,
+  batchSize: number,
+): Promise<{ processed: number; buildingUnits: bigint; nextCursor: string | null }> {
+  const houses = (await tx.query<{ house_id: string; building_units: string }>(
+    `SELECT h.id AS house_id,
+            COALESCE((SELECT SUM(bc.slot_footprint)
+                        FROM buildings b JOIN building_catalog bc ON bc.id = b.catalog_id
+                       JOIN owner_registry bo ON bo.economic_id = b.owner_economic_id
+                                              AND bo.id = h.id AND bo.owner_type = 'HOUSE'
+                       WHERE b.status = 'ACTIVE'), 0)::TEXT AS building_units
+       FROM houses h
+       LEFT JOIN house_affiliations ha ON ha.house_id = h.id AND ha.status = 'ACTIVE'
+      WHERE ha.house_id IS NULL
+        AND ($1::TEXT IS NULL OR h.id > $1)
+      ORDER BY h.id
+      LIMIT $2`,
+    [cursorHouseId, batchSize],
+  )).rows;
+  for (const house of houses) {
+    const buildingUnits = BigInt(house.building_units);
+    await tx.query(
+      `INSERT INTO house_capacity_statements_v5
+        (house_id, corporation_id, game_day, residential_units, building_units, total_units,
+         base_rate_units, progressive_schedule_id, assessed_rent_units, paid_rent_units,
+         arrears_units, delinquency_status, rules_version)
+       VALUES ($1,NULL,$2,1,$3,$4,$5,$6,0,0,0,'CURRENT',$7)
+       ON CONFLICT (house_id, game_day) DO UPDATE SET
+         corporation_id = NULL, building_units = EXCLUDED.building_units,
+         total_units = EXCLUDED.total_units, base_rate_units = EXCLUDED.base_rate_units,
+         progressive_schedule_id = EXCLUDED.progressive_schedule_id,
+         rules_version = EXCLUDED.rules_version`,
+      [house.house_id, sourceGameDay, buildingUnits.toString(), (1n + buildingUnits).toString(), policy.baseRate.toString(), policy.houseScheduleId, policy.rulesVersion],
+    );
+  }
+  return {
+    processed: houses.length,
+    buildingUnits: houses.reduce((sum, house) => sum + BigInt(house.building_units), 0n),
+    nextCursor: houses.at(-1)?.house_id ?? cursorHouseId,
   };
 }
 
@@ -50,6 +98,7 @@ export async function backfillV5CapacityBatch(
     const run = (await tx.query<{
       id: string;
       cursor_corporation_id: string | null;
+      cursor_house_id: string | null;
       status: string;
     }>(
       'SELECT id, cursor_corporation_id, status FROM v5_capacity_backfill_runs WHERE source_game_day = $1 FOR UPDATE',
@@ -132,18 +181,32 @@ export async function backfillV5CapacityBatch(
       housesProcessed += houses.length;
       buildingUnitsProcessed += privateUnits + publicUnits;
     }
+    const corporationPageComplete = corporations.length < batchSize;
+    let independent = { processed: 0, buildingUnits: 0n as bigint, nextCursor: run.cursor_house_id };
+    if (corporationPageComplete) {
+      independent = await backfillIndependentHouses(
+        tx,
+        input.sourceGameDay,
+        policy,
+        run.cursor_house_id,
+        batchSize,
+      );
+      housesProcessed += independent.processed;
+      buildingUnitsProcessed += independent.buildingUnits;
+    }
     const nextCursor = corporations.at(-1)?.id ?? run.cursor_corporation_id;
-    const completed = corporations.length < batchSize;
+    const completed = corporationPageComplete && independent.processed < batchSize;
     await tx.query(
       `UPDATE v5_capacity_backfill_runs
           SET cursor_corporation_id = $2,
-              status = CASE WHEN $3 THEN 'COMPLETED' ELSE 'RUNNING' END,
-              corporations_processed = corporations_processed + $4,
-              houses_processed = houses_processed + $5,
-              building_units_processed = building_units_processed + $6,
-              completed_at = CASE WHEN $3 THEN CURRENT_TIMESTAMP ELSE completed_at END
+              cursor_house_id = $3,
+              status = CASE WHEN $4 THEN 'COMPLETED' ELSE 'RUNNING' END,
+              corporations_processed = corporations_processed + $5,
+              houses_processed = houses_processed + $6,
+              building_units_processed = building_units_processed + $7,
+              completed_at = CASE WHEN $4 THEN CURRENT_TIMESTAMP ELSE completed_at END
         WHERE id = $1`,
-      [run.id, nextCursor, completed, corporations.length, housesProcessed, buildingUnitsProcessed.toString()],
+      [run.id, nextCursor, independent.nextCursor, completed, corporations.length, housesProcessed, buildingUnitsProcessed.toString()],
     );
     return { ok: true, runId: run.id, sourceGameDay: input.sourceGameDay, corporationsProcessed: corporations.length, housesProcessed, buildingUnitsProcessed: buildingUnitsProcessed.toString(), completed };
   });
