@@ -567,6 +567,8 @@ test('V5 Corporation fiscal read model does not expose legacy tax-rule authority
   assert.match(fiscal, /capacitySource/);
   assert.doesNotMatch(fiscal, /SELECT r\.\* FROM tax_rule_versions/);
   assert.doesNotMatch(fiscal, /legacy-tax-rule-versions-bridge/);
+  assert.doesNotMatch(fiscal, /c\.tax_charter/);
+  assert.doesNotMatch(fiscal, /tax_charter_version/);
 });
 
 test('V5 House tax read models use canonical constitutional rules', async () => {
