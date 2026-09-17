@@ -56,6 +56,7 @@ test('canonical registration creates one House principal and outbox delivery is 
       await tx.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [email]);
       await tx.query('DELETE FROM house_entry_support WHERE house_id = $1', [houseId]);
       await tx.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [houseId]);
+      await tx.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
       await tx.query('DELETE FROM houses WHERE id = $1', [houseId]);
       await tx.query('DELETE FROM auth_accounts WHERE email = $1', [email]);
     });

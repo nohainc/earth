@@ -119,7 +119,7 @@
     "security:audit": "node scripts/verify-dependency-security.mjs",
     "perf:economy-v2": "node scripts/benchmark-economy-v2.mjs",
     "db:recalculate:profiles": "node scripts/recalculate-profiles.mjs",
-    "test:postgres": "node --experimental-strip-types --test test/postgres-integration.test.mjs test/auth-postgres.test.mjs test/economy-v2-invariants.test.mjs test/economy-v2-owner-totals.test.mjs test/economy-v2-rate-segments.test.mjs test/economy-v2-building-economics.test.mjs test/postgres-invariant-corruption.test.mjs test/community-v2-postgres.test.mjs",
+    "test:postgres": "node --experimental-strip-types --test test/postgres-integration.test.mjs test/auth-postgres.test.mjs test/economy-v2-invariants.test.mjs test/economy-v2-owner-totals.test.mjs test/economy-v2-rate-segments.test.mjs test/economy-v2-building-economics.test.mjs test/postgres-invariant-corruption.test.mjs test/community-v2-postgres.test.mjs test/v5-economic-core-postgres.test.mjs",
     "rankings:calc": "node scripts/calculate-rankings.mjs",
     "rankings:calc:local": "node scripts/calculate-rankings-local.mjs",
     "rankings:calc:prod": "node scripts/calculate-rankings-prod.mjs",
