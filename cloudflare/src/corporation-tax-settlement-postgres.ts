@@ -22,9 +22,8 @@ export async function settleCorporationIncomeTax(
            COALESCE(snap.version_ids->>'CORPORATION.TAX.CORPORATE_RATE', 'legacy-corporation-tax-v' || c.tax_charter_version::TEXT) AS tax_rule_version
       FROM corporations c
       JOIN owner_registry oe ON oe.id = c.id AND oe.owner_type = 'CORPORATION'
-      LEFT JOIN resolved_constitution_snapshots_v5 snap ON snap.authority_type = 'CORPORATION' AND snap.authority_id = c.id AND snap.game_day = $1
+     LEFT JOIN resolved_constitution_snapshots_v5 snap ON snap.authority_type = 'CORPORATION' AND snap.authority_id = c.id AND snap.game_day = $1
      WHERE c.status = 'ACTIVE'
-       AND COALESCE(c.tax_charter_updated_game_day, 0) <= $1
        AND COALESCE((snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER, (c.tax_charter->>'corporateTaxBps')::INTEGER, 0) > 0
      ORDER BY c.id
   `, [assessedDay])).rows;
@@ -98,7 +97,7 @@ export async function settleCorporationIncomeTax(
       arrears += 1;
     } else {
       const posted = (await tx.query<{ transaction_id: string }>(`
-        SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','TAX_COLLECTION',$3,'corporation-tax-v4',$4::JSONB) AS transaction_id
+        SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','TAX_COLLECTION',$3,'corporation-tax-constitution-v5',$4::JSONB) AS transaction_id
       `, [`corporation-tax-payment:${correlationId}`, day, corporation.id, JSON.stringify([
         { account_id: corporationAccount.id, asset_id: 1, delta_units: (-amount).toString() },
         { account_id: earthAccount.id, asset_id: 1, delta_units: amount.toString() },
