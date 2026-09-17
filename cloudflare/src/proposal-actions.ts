@@ -53,10 +53,18 @@ const financialHandler: ProposalActionHandler = {
   },
 };
 
-const genericHandler: ProposalActionHandler = {
-  actionType: 'generic',
+const discussionHandler: ProposalActionHandler = {
+  actionType: 'discussion',
   version: 1,
-  validateCreation: () => undefined,
+  validateCreation: (action) => {
+    const targetValue = action.targetValue;
+    const hasTargetValue = targetValue && typeof targetValue === 'object'
+      ? Object.keys(targetValue as Record<string, unknown>).length > 0
+      : targetValue !== undefined && targetValue !== null;
+    if (action.targetCategory || hasTargetValue) {
+      throw new Error('Discussion proposals cannot contain an executable target');
+    }
+  },
   validateExecution: async () => undefined,
 };
 
@@ -90,7 +98,7 @@ const amendRuleHandler: ProposalActionHandler = {
 };
 
 const handlers = new Map<string, ProposalActionHandler>([
-  [genericHandler.actionType, genericHandler],
+  [discussionHandler.actionType, discussionHandler],
   [constructCivicBuildingHandler.actionType, constructCivicBuildingHandler],
   [startResearchHandler.actionType, startResearchHandler],
   [amendRuleHandler.actionType, amendRuleHandler],
@@ -98,7 +106,8 @@ const handlers = new Map<string, ProposalActionHandler>([
 ]);
 
 export function proposalActionHandler(actionType: unknown): ProposalActionHandler {
-  const normalized = String(actionType || 'generic');
+  const normalized = String(actionType ?? '').trim();
+  if (!normalized) throw new Error('Proposal action type is required');
   const handler = handlers.get(normalized);
   if (!handler) throw new Error(`Unregistered proposal action handler: ${normalized}`);
   return handler;

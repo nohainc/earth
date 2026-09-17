@@ -262,7 +262,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       resourceOutputType: catalog.output_energy > 0 ? 'energy' : catalog.output_food > 0 ? 'food' : catalog.output_materials > 0 ? 'material' : catalog.output_components > 0 ? 'components' : 'compute',
       resourceOutputAmount: Number(catalog.output_energy || catalog.output_food || catalog.output_materials || catalog.output_components || catalog.output_compute || 0),
     } : {
-      actionType: financialActionType(input.targetCategory) ?? (input.targetCategory === 'technology' || input.targetCategory === 'research' ? 'start_research' : input.targetCategory ? 'amend_rule' : 'generic'),
+      actionType: financialActionType(input.targetCategory) ?? (input.targetCategory === 'technology' || input.targetCategory === 'research' ? 'start_research' : input.targetCategory ? 'amend_rule' : 'discussion'),
       ...(input.targetValue ?? {}),
       researchProjectId,
       buildingType: input.targetValue?.buildingType ?? input.targetValue?.building_type,
