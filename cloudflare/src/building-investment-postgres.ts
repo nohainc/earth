@@ -250,9 +250,26 @@ export async function setBuildingOperatingMode(repository: PostgresRepository, i
     `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return setCorporationBuildingOperatingMode(repository, { ...input, mode });
-  const result = await repository.query<{ id: string; operating_mode: string }>(`UPDATE buildings b SET operating_mode = $1 FROM owner_registry o JOIN humans h ON h.house_id = o.id WHERE b.id = $2 AND o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE' AND h.id = $3 AND h.status = 'ACTIVE' RETURNING b.id, b.operating_mode`, [mode, input.buildingId, input.humanId]);
-  if (!result.rows[0]) throw new Error('Building not found or not owned by the active House');
-  return { ok: true, building: result.rows[0], correlationId: input.correlationId };
+  return repository.transaction(async (tx) => {
+    const building = await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
+    const result = await tx.query<{ id: string; operating_mode: string }>(
+      'UPDATE buildings SET operating_mode = $1 WHERE id = $2 RETURNING id, operating_mode',
+      [mode, input.buildingId],
+    );
+    await createGameEvent(tx, {
+      id: `BUILDING-POLICY-${input.correlationId}`,
+      category: 'BUILDING',
+      eventType: 'BUILDING_OPERATING_POLICY_CHANGED',
+      gameDay: Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1),
+      actorHumanId: input.humanId,
+      subjectType: 'BUILDING',
+      subjectId: building.id,
+      title: 'House building operating policy changed',
+      details: { buildingId: building.id, ownerType: 'HOUSE', operatingMode: result.rows[0].operating_mode, capacityModel: 'V5_POOLED' },
+      correlationId: input.correlationId,
+    });
+    return { ok: true, building: result.rows[0], correlationId: input.correlationId };
+  });
 }
 
 /** Server-owned operating-policy preview. The client must not infer policy effects. */
