@@ -938,6 +938,30 @@ test('V5 building upgrades use pooled routes and null Territory project context'
   assert.match(service, /building\.owner_economic_id, null, next\.id/);
 });
 
+test('V5 building lifecycle routes cover policy, demolition, and capital actions', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/real-estate-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../flutter_client/lib/core/api/earth_api_real_estate.dart', import.meta.url), 'utf8');
+  const service = await readFile(new URL('../cloudflare/src/building-age-postgres.ts', import.meta.url), 'utf8');
+  for (const marker of ['v5PolicyMatch', 'v5PolicyQuoteMatch', 'v5DemolishMatch', 'v5DemolitionQuoteMatch', 'v5CapitalOptionsMatch', 'v5CapitalProjectMatch']) {
+    assert.match(routes, new RegExp(marker));
+  }
+  for (const path of [
+    '/api/v5/buildings/{id}/policy',
+    '/api/v5/buildings/{id}/policy-quote',
+    '/api/v5/buildings/{id}/demolish',
+    '/api/v5/buildings/{id}/demolition-quote',
+    '/api/v5/buildings/{id}/capital-options',
+    '/api/v5/buildings/{id}/capital-projects',
+  ]) assert.match(registry, new RegExp(path.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&') + ".*status: 'ACTIVE'"));
+  assert.match(api, /\/api\/v5\/buildings\/\$buildingId\/policy/);
+  assert.match(api, /\/api\/v5\/buildings\/\$buildingId\/demolish/);
+  assert.match(api, /\/api\/v5\/buildings\/\$buildingId\/capital-projects/);
+  assert.match(service, /capital-project-v5/);
+  assert.match(service, /refreshV5SettlementProfilesForHouse\(tx, building\.house_id/);
+  assert.match(service, /VALUES \(\$1,\$2,\$3,NULL/);
+});
+
 test('V5 Corporation client mutations do not fall back to Territory-bound endpoints', async () => {
   const api = await readFile(new URL('../flutter_client/lib/core/api/earth_api_institutions.dart', import.meta.url), 'utf8');
   const joinStart = api.indexOf('Future<EarthState> joinCorporation');

@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { assessBuildingAge } from './building-age.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 export async function getBuildingCapitalOptions(repository: PostgresRepository, buildingId: string): Promise<Record<string, unknown>> {
   const day = Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
@@ -56,12 +57,13 @@ export async function startBuildingCapitalProject(
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
-    const building = (await tx.query<{ id: string; owner_economic_id: string; territory_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string; territory_right_id: string | null }>(
-      `SELECT b.id, b.owner_economic_id, b.territory_id, b.catalog_id, c.construction_credit_units::TEXT,
-              c.definition_version, b.status, b.territory_right_id
+    const building = (await tx.query<{ id: string; owner_economic_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string; house_id: string }>(
+      `SELECT b.id, b.owner_economic_id, b.catalog_id, c.construction_credit_units::TEXT,
+              c.definition_version, b.status, h.house_id
          FROM buildings b
          JOIN building_catalog c ON c.id = b.catalog_id
-         JOIN humans h ON h.id = $2 AND h.house_id = (SELECT id FROM owner_registry WHERE economic_id = b.owner_economic_id AND owner_type = 'HOUSE') AND h.status = 'ACTIVE'
+         JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE'
+         JOIN humans h ON h.id = $2 AND h.house_id = o.id AND h.status = 'ACTIVE'
         WHERE b.id = $1
         FOR UPDATE`, [input.buildingId, input.humanId],
     )).rows[0];
@@ -95,7 +97,7 @@ export async function startBuildingCapitalProject(
          AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`,
     )).rows[0];
     if (!wallet || !sink || BigInt(wallet.balance_units) < cost) throw new Error('Insufficient CREDIT for capital project');
-    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER',$3,$4,'capital-project-v1',$5::JSONB)`, [input.correlationId, day, input.projectKind, input.buildingId, JSON.stringify([
+    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER',$3,$4,'capital-project-v5',$5::JSONB)`, [input.correlationId, day, input.projectKind, input.buildingId, JSON.stringify([
       { account_id: wallet.id, asset_id: 1, delta_units: (-cost).toString() },
       { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
     ])]);
@@ -103,17 +105,18 @@ export async function startBuildingCapitalProject(
     await tx.query(`INSERT INTO construction_projects
       (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units,
        started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id)
-      VALUES ($1,$2,$3,$4,$5,$6,'{}'::JSONB,$7,$8,'IN_PROGRESS',$9,$10,$11,$12)`, [
-      projectId, building.id, building.owner_economic_id, building.territory_id, building.catalog_id, cost.toString(), day, day + 1,
-      input.correlationId, building.territory_right_id, input.projectKind, input.targetGenerationId ?? null,
+      VALUES ($1,$2,$3,NULL,$4,$5,'{}'::JSONB,$6,$7,'IN_PROGRESS',$8,NULL,$9,$10)`, [
+      projectId, building.id, building.owner_economic_id, building.catalog_id, cost.toString(), day, day + 1,
+      input.correlationId, input.projectKind, input.targetGenerationId ?? null,
     ]);
     await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION' WHERE id = $1", [building.id]);
+    await refreshV5SettlementProfilesForHouse(tx, building.house_id, day);
     await createGameEvent(tx, {
       id: `CAPITAL-PROJECT-STARTED-${input.correlationId}`,
       category: 'BUILDING', eventType: 'CAPITAL_PROJECT_STARTED', gameDay: day,
       actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id,
       title: `${input.projectKind === 'OVERHAUL' ? 'Building overhaul' : 'Technology retrofit'} started`,
-      details: { projectId, buildingId: building.id, projectKind: input.projectKind, targetGenerationId: input.targetGenerationId ?? null, creditCostUnits: cost.toString(), expectedCompletionGameDay: day + 1 },
+      details: { projectId, buildingId: building.id, projectKind: input.projectKind, targetGenerationId: input.targetGenerationId ?? null, creditCostUnits: cost.toString(), expectedCompletionGameDay: day + 1, capacityModel: 'V5_POOLED', territoryPlacement: null },
       correlationId: input.correlationId,
     });
     return { ok: true, projectId, projectKind: input.projectKind, targetGenerationId: input.targetGenerationId ?? null, creditCostUnits: cost.toString(), expectedCompletionGameDay: day + 1, correlationId: input.correlationId };
