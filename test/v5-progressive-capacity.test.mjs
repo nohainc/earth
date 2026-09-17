@@ -328,7 +328,7 @@ test('V5 daily settlement materializes one resolved Constitution per active auth
   assert.match(kernel, /resolved_constitution_snapshots_v5/);
 });
 
-test('V5 capacity settlement consumes resolved Constitution values before legacy policy fallback', async () => {
+test('V5 capacity settlement and quotes require resolved Constitution values', async () => {
   const settlement = await readFile(new URL('../cloudflare/src/v5-capacity-settlement-postgres.ts', import.meta.url), 'utf8');
   const quotes = await readFile(new URL('../cloudflare/src/v5-capacity-postgres.ts', import.meta.url), 'utf8');
   assert.match(settlement, /resolved_constitution_snapshots_v5/);
@@ -342,6 +342,13 @@ test('V5 capacity settlement consumes resolved Constitution values before legacy
   assert.match(settlement, /snapshotFields\.every/);
   assert.match(quotes, /snapshotRules\['EARTH\.CAPACITY\.STANDARD'\]/);
   assert.match(quotes, /corporationScheduleId/);
+  assert.match(settlement, /Canonical Earth capacity snapshot is unavailable/);
+  assert.match(settlement, /Canonical Corporation capacity snapshot is unavailable/);
+  assert.match(quotes, /Canonical Earth capacity snapshot is unavailable/);
+  assert.doesNotMatch(settlement, /FROM v5_capacity_policy_versions/);
+  assert.doesNotMatch(settlement, /FROM corporation_capacity_policy_versions/);
+  assert.doesNotMatch(quotes, /FROM v5_capacity_policy_versions/);
+  assert.doesNotMatch(quotes, /FROM corporation_capacity_policy_versions/);
 });
 
 test('daily tax settlement consumes the assessed-day Constitution market rate', async () => {

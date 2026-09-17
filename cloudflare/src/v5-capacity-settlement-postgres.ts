@@ -14,7 +14,7 @@ async function loadSchedule(tx: PostgresRepository, scheduleId: string): Promise
   return { id: scheduleId, brackets };
 }
 
-async function activePolicy(tx: PostgresRepository, day: number): Promise<Policy | null> {
+async function activePolicy(tx: PostgresRepository, day: number): Promise<Policy> {
   const snapshot = (await tx.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json
       FROM resolved_constitution_snapshots_v5
      WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [day])).rows[0];
@@ -35,19 +35,7 @@ async function activePolicy(tx: PostgresRepository, day: number): Promise<Policy
       version: 0,
     };
   }
-  const row = (await tx.query<{ id: string; earth_base_capacity_rate_units: string; standard_territory_capacity_units: string; earth_corporation_schedule_id: string; earth_house_schedule_id: string; version: number }>(`SELECT id, earth_base_capacity_rate_units::TEXT, standard_territory_capacity_units::TEXT, earth_corporation_schedule_id, earth_house_schedule_id, version
-    FROM v5_capacity_policy_versions WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
-      AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
-    ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day])).rows[0];
-  if (!row) return null;
-  return {
-    id: row.id,
-    earthBaseRate: BigInt(row.earth_base_capacity_rate_units),
-    standardCapacity: BigInt(row.standard_territory_capacity_units),
-    corporationScheduleId: row.earth_corporation_schedule_id,
-    houseScheduleId: row.earth_house_schedule_id,
-    version: Number(row.version),
-  };
+  throw new Error(`Canonical Earth capacity snapshot is unavailable for assessed game day ${day}`);
 }
 
 async function account(tx: PostgresRepository, economicId: string, types: string[], lock = false): Promise<{ id: string; balance: bigint } | null> {
@@ -151,8 +139,8 @@ async function ensureCorporationReceivershipCase(tx: PostgresRepository, corpora
 
 /** V5 daily capacity assessment. The caller owns the settlement transaction. */
 export async function settleV5CapacityInTransaction(tx: PostgresRepository, day: number): Promise<Record<string, unknown>> {
+  if (day <= 1) return { ok: true, day, assessedDay: day - 1, skipped: true, houses: 0, corporations: 0, paid: 0, partial: 0, arrears: 0 };
   const policy = await activePolicy(tx, day - 1);
-  if (day <= 1 || !policy) return { ok: true, day, assessedDay: day - 1, skipped: !policy, houses: 0, corporations: 0, paid: 0, partial: 0, arrears: 0 };
   const assessedDay = day - 1;
   const { executePendingV5CorporationDissolutionsInTransaction } = await import('./v5-membership-postgres.ts');
   await executePendingV5CorporationDissolutionsInTransaction(tx, assessedDay);
@@ -243,13 +231,9 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
   return { ok: true, day, assessedDay, houses: houseAssessments, corporations: corporationUnits.size, paid, partial, arrears, policyVersion: policy.version };
 }
 
-async function corporationBaseRate(tx: PostgresRepository, corporationId: string, day: number): Promise<{ rate: bigint; ruleSetId: string } | null> {
+async function corporationBaseRate(tx: PostgresRepository, corporationId: string, day: number): Promise<{ rate: bigint; ruleSetId: string }> {
   const snapshot = (await tx.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [corporationId, day])).rows[0];
   const snapshotRate = snapshot?.rules_json?.['CORPORATION.HOUSE_CAPACITY.BASE_RATE'];
   if (snapshotRate !== undefined && snapshot) return { rate: BigInt(String(snapshotRate)), ruleSetId: snapshot.id };
-  const row = (await tx.query<{ rate: string }>(`SELECT house_base_capacity_rate_units::TEXT AS rate FROM corporation_capacity_policy_versions
-    WHERE corporation_id = $1 AND status = 'ACTIVE' AND effective_from_game_day <= $2
-      AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)
-    ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [corporationId, day])).rows[0];
-  return row ? { rate: BigInt(row.rate), ruleSetId: `v5-capacity-policy:${corporationId}:${day}` } : null;
+  throw new Error(`Canonical Corporation capacity snapshot is unavailable for Corporation ${corporationId} on game day ${day}`);
 }
