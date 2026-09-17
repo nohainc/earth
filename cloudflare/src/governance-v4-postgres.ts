@@ -67,20 +67,6 @@ function validateAction(actionType: string, actionSnapshot: Record<string, unkno
   }
 }
 
-async function executeWorldCondition(tx: PostgresRepository, proposal: any, day: number): Promise<Record<string, unknown>> {
-  const action = object(proposal.action_snapshot);
-  const effectiveFrom = Number(action.effectiveFromGameDay);
-  if (effectiveFrom < day + 1) throw new Error('World condition must begin after governance execution');
-  const conditionId = `WORLD-COND-${proposal.id}`;
-  const result = { conditionId, proposalId: proposal.id, effectiveFromGameDay: effectiveFrom, effectiveToGameDay: action.effectiveToGameDay == null ? null : Number(action.effectiveToGameDay) };
-  await tx.query(`INSERT INTO world_conditions (id, condition_code, title, description, source_type, source_id, scope_type, scope_id, effect_type, target_key, modifier_bps, effective_from_game_day, effective_to_game_day, rules_version)
-    VALUES ($1,$2,$3,$4,'GOVERNANCE',$5,$6,$7,$8,$9,$10,$11,$12,'world-conditions-v1') ON CONFLICT (id) DO NOTHING`, [conditionId, String(action.conditionCode), String(action.title), String(action.description), proposal.id, String(action.scopeType), action.scopeId == null ? null : String(action.scopeId), String(action.effectType), String(action.targetKey).toUpperCase(), Number(action.modifierBps), effectiveFrom, result.effectiveToGameDay]);
-  await tx.query(`INSERT INTO governance_executions_v4 (id, proposal_id, action_type, handler_version, status, result, correlation_id, executed_game_day)
-    VALUES ($1,$2,'WORLD_CONDITION','world-condition-v1','EXECUTED',$3::JSONB,$4,$5)
-    ON CONFLICT (proposal_id) DO UPDATE SET status = 'EXECUTED', result = EXCLUDED.result, executed_game_day = EXCLUDED.executed_game_day`, [`EXEC-${proposal.id}`, proposal.id, JSON.stringify(result), `governance-execution:${proposal.id}`, day]);
-  return result;
-}
-
 export async function createGovernanceProposalV4(repository: PostgresRepository, input: { humanId: string; subjectType: 'EARTH' | 'ORGANIZATION'; subjectId: string | null; title: string; body?: string; actionType: string; actionSnapshot: Record<string, unknown>; ruleSnapshot?: Record<string, unknown>; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query('SELECT * FROM governance_proposals_v4 WHERE correlation_id = $1', [input.correlationId]);
@@ -173,7 +159,10 @@ export async function resolveGovernanceProposalV4(repository: PostgresRepository
     const status = passed ? 'PASSED' : 'REJECTED';
     await tx.query('UPDATE governance_proposals_v4 SET status = $1 WHERE id = $2', [status, proposalId]);
     if (passed && proposal.action_type === 'WORLD_CONDITION') {
-      const execution = await executeWorldCondition(tx, proposal, day);
+      const handler = proposalActionHandler(proposal.action_type);
+      const execution = handler.execute
+        ? await handler.execute({ repository: tx, proposal: proposal as Record<string, unknown>, action: object(proposal.action_snapshot), gameDay: day })
+        : (() => { throw new Error('Governance action handler has no executor'); })();
       await tx.query('UPDATE governance_proposals_v4 SET status = \'EXECUTED\' WHERE id = $1', [proposalId]);
       return { ok: true, proposalId, status: 'EXECUTED', quorumMet, executionGameDay: proposal.execution_game_day, execution };
     }
