@@ -45,6 +45,22 @@ export async function handleGovernanceRoutes(
           if (corporationId && definition.authorityModel === 'EARTH_LOCKED') throw new Error('Earth-locked rule cannot be previewed at Corporation scope');
           if (corporationId && change.clearOverride && definition.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
         }
+        const proposedScheduleIds = parsed.value.changes!
+          .filter((change) => getConstitutionalRuleDefinition(String(change.ruleCode ?? '')).valueType === 'PROGRESSIVE_SCHEDULE_REF')
+          .map((change) => typeof change.value === 'string' ? change.value.trim() : '')
+          .filter(Boolean);
+        if (proposedScheduleIds.length > 0) {
+          const activeSchedules = (await repository.query<{ id: string }>(
+            `SELECT id
+               FROM progressive_policy_schedules
+              WHERE id = ANY($1::TEXT[])
+                AND status = 'ACTIVE'`,
+            [proposedScheduleIds],
+          )).rows;
+          const activeScheduleIds = new Set(activeSchedules.map((schedule) => schedule.id));
+          const missingSchedule = proposedScheduleIds.find((scheduleId) => !activeScheduleIds.has(scheduleId));
+          if (missingSchedule) throw new Error(`Progressive schedule is not an active canonical policy: ${missingSchedule}`);
+        }
         const preview = previewConstitutionAmendment({ currentRules: current.rules, fallbackRules: earth?.rules, changes: parsed.value.changes!.map((change) => ({ ruleCode: String(change.ruleCode ?? ''), value: change.value, clearOverride: change.clearOverride })) });
         const scheduleChanges = preview.changes.filter((change) => {
           const definition = getConstitutionalRuleDefinition(change.ruleCode);

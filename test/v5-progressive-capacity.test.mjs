@@ -284,6 +284,13 @@ test('V5 Constitution amendments cannot reference a missing progressive schedule
   assert.match(service, /Progressive schedule is not an active canonical policy/);
 });
 
+test('Constitution previews reject inactive progressive schedule references', async () => {
+  const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
+  assert.match(route, /progressive_policy_schedules/);
+  assert.match(route, /status = 'ACTIVE'/);
+  assert.match(route, /Progressive schedule is not an active canonical policy/);
+});
+
 test('V5 Corporation admission consumes the canonical Constitution rule', async () => {
   const membership = await readFile(new URL('../cloudflare/src/v5-membership-postgres.ts', import.meta.url), 'utf8');
   const founding = await readFile(new URL('../cloudflare/src/v5-founding-postgres.ts', import.meta.url), 'utf8');
