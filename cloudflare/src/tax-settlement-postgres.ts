@@ -1,7 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
+import { calculateProgressiveCharge, type ProgressiveBracket } from './v5-progressive.ts';
 
 type TaxRule = { id: string; tax_rule_id: string; category: string; rate_bps: number; tax_base_definition: string; base_reference: string; base_amount_units: string; nexus_type: string; authority_type: string; authority_id: string | null; beneficiary_economic_id: string };
-type ConstitutionalCorporationTax = { id: string; corporation_id: string; beneficiary_economic_id: string; rate_bps: number; version_id: string };
+type ConstitutionalHouseIncomeTax = { id: string; corporation_id: string; beneficiary_economic_id: string; schedule_id: string; version_id: string };
 
 function positive(value: string | number | null | undefined) {
   const units = BigInt(String(value ?? '0'));
@@ -21,6 +22,15 @@ async function assessableBase(tx: PostgresRepository, rule: TaxRule, houseId: st
   throw new Error(`Unsupported tax base definition: ${rule.tax_base_definition}`);
 }
 
+async function loadSchedule(tx: PostgresRepository, scheduleId: string): Promise<ProgressiveBracket[]> {
+  return (await tx.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(
+    `SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper,
+            marginal_multiplier_numerator::TEXT AS numerator,
+            marginal_multiplier_denominator::TEXT AS denominator
+       FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [scheduleId],
+  )).rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }));
+}
+
 async function payObligation(tx: PostgresRepository, input: { obligationId: string; taxpayerEconomicId: string; beneficiaryEconomicId: string; amount: bigint; day: number; correlationId: string; ruleVersion: string }) {
   const wallet = (await tx.query<{ id: string; balance_units: string }>(`SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET' AND status = 'ACTIVE' FOR UPDATE`, [input.taxpayerEconomicId])).rows[0];
   const beneficiary = (await tx.query<{ id: string }>(`SELECT id::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type IN ('OPERATIONS','TREASURY') AND status = 'ACTIVE' ORDER BY CASE account_type WHEN 'OPERATIONS' THEN 0 ELSE 1 END LIMIT 1 FOR UPDATE`, [input.beneficiaryEconomicId])).rows[0];
@@ -37,6 +47,47 @@ async function payObligation(tx: PostgresRepository, input: { obligationId: stri
   return { paid: true, transactionId };
 }
 
+async function assessCanonicalHouseIncomeTax(
+  tx: PostgresRepository,
+  input: { houseId: string; houseEconomicId: string; authorityType: 'EARTH' | 'CORPORATION'; authorityId: string; beneficiaryEconomicId: string; scheduleId: string; ruleVersion: string; day: number; assessedDay: number },
+): Promise<'PAID' | 'ARREARS' | 'EXISTING' | 'ZERO'> {
+  const base = await assessableBase(tx, {
+    id: input.ruleVersion,
+    tax_rule_id: input.authorityType === 'EARTH' ? 'EARTH.HOUSE_INCOME_TAX' : 'CORPORATION.HOUSE_INCOME_TAX',
+    category: input.authorityType === 'EARTH' ? 'earth_house_income' : 'corporation_house_income',
+    rate_bps: 0,
+    tax_base_definition: 'positive_realized_daily_income',
+    base_reference: 'positive_realized_daily_income',
+    base_amount_units: '0',
+    nexus_type: 'HOUSE_INCOME',
+    authority_type: input.authorityType,
+    authority_id: input.authorityId,
+    beneficiary_economic_id: input.beneficiaryEconomicId,
+  }, input.houseId, input.assessedDay);
+  const brackets = await loadSchedule(tx, input.scheduleId);
+  const amount = calculateProgressiveCharge({ quantity: base, baseRate: 10_000n, brackets }).totalCharge;
+  if (amount <= 0n) return 'ZERO';
+  const key = `v5-house-income-tax:${input.authorityType}:${input.authorityId}:${input.houseId}:${input.assessedDay}:${input.ruleVersion}`;
+  const existing = (await tx.query<{ status: string }>('SELECT status FROM financial_obligations WHERE correlation_id = $1', [key])).rows[0];
+  if (existing) return existing.status === 'PAID' ? 'EXISTING' : 'EXISTING';
+  const obligationId = `V5-HOUSE-TAX-${input.authorityType}-${input.authorityId}-${input.houseId}-${input.assessedDay}`;
+  await tx.query(`INSERT INTO financial_obligations
+    (id, debtor_economic_id, creditor_economic_id, obligation_type, source_id, principal_due_units,
+     due_game_day, priority_class, rule_version, status, created_game_day, nexus_type,
+     authority_type, authority_id, base_reference, correlation_id)
+    VALUES ($1,$2,$3,'TAX',$4,$5,$6,10,$7,'DUE',$8,$9,$10,$11,$12,$13)`,
+    [obligationId, input.houseEconomicId, input.beneficiaryEconomicId, input.ruleVersion, amount.toString(), input.day, input.ruleVersion, input.day, 'HOUSE_INCOME', input.authorityType, input.authorityId, 'positive_realized_daily_income', key]);
+  await tx.query(`INSERT INTO tax_obligations
+    (id, taxpayer_economic_id, beneficiary_economic_id, tax_type, tax_base_units, amount_units,
+     rule_version, game_day, status, due_game_day, nexus_type, authority_type, authority_id,
+     base_reference, correlation_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DUE',$9,'HOUSE_INCOME',$10,$11,'positive_realized_daily_income',$12)
+    ON CONFLICT (correlation_id) DO NOTHING`,
+    [obligationId, input.houseEconomicId, input.beneficiaryEconomicId, input.authorityType === 'EARTH' ? 'earth_house_income' : 'corporation_house_income', base.toString(), amount.toString(), input.ruleVersion, input.assessedDay, input.day, input.authorityType, input.authorityId, key]);
+  const result = await payObligation(tx, { obligationId, taxpayerEconomicId: input.houseEconomicId, beneficiaryEconomicId: input.beneficiaryEconomicId, amount, day: input.day, correlationId: `v5-house-income-tax-payment:${key}`, ruleVersion: input.ruleVersion });
+  return result.paid ? 'PAID' : 'ARREARS';
+}
+
 export async function settlePublicTaxesInTransaction(repository: PostgresRepository, day: number, shard = 0, shardCount = 1) {
   const assessedDay = day - 1;
   if (assessedDay < 1) return { ok: true, day, assessedDay, assessed: 0, paid: 0, arrears: 0 };
@@ -45,17 +96,16 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
     repository.query<{ rules_json: Record<string, unknown>; version_ids: Record<string, string> }>(`SELECT rules_json, version_ids
       FROM resolved_constitution_snapshots_v5
      WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [assessedDay]),
-    repository.query<ConstitutionalCorporationTax>(`SELECT c.id AS corporation_id,
+    repository.query<ConstitutionalHouseIncomeTax>(`SELECT c.id AS corporation_id,
            o.economic_id AS beneficiary_economic_id,
-           (s.rules_json->>'CORPORATION.TAX.INCOME_RATE')::INTEGER AS rate_bps,
-           s.version_ids->>'CORPORATION.TAX.INCOME_RATE' AS version_id,
-           s.version_ids->>'CORPORATION.TAX.INCOME_RATE' AS id
+           s.rules_json->>'CORPORATION.HOUSE_INCOME_TAX' AS schedule_id,
+           s.version_ids->>'CORPORATION.HOUSE_INCOME_TAX' AS version_id,
+           s.version_ids->>'CORPORATION.HOUSE_INCOME_TAX' AS id
       FROM corporations c
       JOIN owner_registry o ON o.id = c.id AND o.owner_type = 'CORPORATION'
       JOIN resolved_constitution_snapshots_v5 s
         ON s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1
-     WHERE c.status = 'ACTIVE' AND s.rules_json ? 'CORPORATION.TAX.INCOME_RATE'
-       AND (s.rules_json->>'CORPORATION.TAX.INCOME_RATE')::INTEGER > 0`, [assessedDay]),
+     WHERE c.status = 'ACTIVE' AND s.rules_json ? 'CORPORATION.HOUSE_INCOME_TAX'`, [assessedDay]),
     repository.query<{ house_id: string; corporation_id: string }>(`SELECT house_id, corporation_id
       FROM house_affiliations
      WHERE status = 'ACTIVE' AND joined_game_day <= $1
@@ -82,21 +132,6 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
     return value === undefined ? null : { rate: BigInt(String(value)), versionId: constitution?.version_ids?.[ruleCode] ?? null };
   };
   const rules: TaxRule[] = [...ruleResult.rows];
-  for (const rule of corporationTaxResult.rows) {
-    rules.push({
-      id: rule.id,
-      tax_rule_id: 'CORPORATION.TAX.INCOME_RATE',
-      category: 'corporate_house_income',
-      rate_bps: Number(rule.rate_bps),
-      tax_base_definition: 'positive_realized_daily_income',
-      base_reference: 'positive_realized_daily_income',
-      base_amount_units: '0',
-      nexus_type: 'MEMBERSHIP',
-      authority_type: 'CORPORATION',
-      authority_id: rule.corporation_id,
-      beneficiary_economic_id: rule.beneficiary_economic_id,
-    });
-  }
   const corporationMemberships = new Map<string, Set<string>>();
   for (const affiliation of affiliationResult.rows) {
     const housesForCorporation = corporationMemberships.get(affiliation.corporation_id) ?? new Set<string>();
@@ -127,7 +162,29 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
       assessed += 1; if (result.paid) paid += 1; else arrears += 1;
     }
   }
+  const earthIncomeScheduleId = constitutionRules['EARTH.HOUSE_INCOME_TAX'] === undefined ? null : String(constitutionRules['EARTH.HOUSE_INCOME_TAX']);
+  const corporationIncomeSchedules = new Map<string, { scheduleId: string; versionId: string }>();
+  for (const policy of corporationTaxResult.rows) corporationIncomeSchedules.set(policy.corporation_id, { scheduleId: policy.schedule_id, versionId: policy.version_id });
+  for (const house of houses) {
+    if (earthIncomeScheduleId) {
+      const result = await assessCanonicalHouseIncomeTax(repository, { houseId: house.house_id, houseEconomicId: house.economic_id, authorityType: 'EARTH', authorityId: 'EARTH', beneficiaryEconomicId: 'ECON-EARTH-001', scheduleId: earthIncomeScheduleId, ruleVersion: String(constitution?.version_ids?.['EARTH.HOUSE_INCOME_TAX'] ?? earthIncomeScheduleId), day, assessedDay });
+      if (result !== 'ZERO' && result !== 'EXISTING') { assessed += 1; if (result === 'PAID') paid += 1; else arrears += 1; }
+    }
+    const corporationId = corporationMembershipsForHouse(corporationMemberships, house.house_id);
+    const corporationPolicy = corporationId ? corporationIncomeSchedules.get(corporationId) : undefined;
+    if (corporationPolicy) {
+      const beneficiary = (await repository.query<{ economic_id: string }>('SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = \'CORPORATION\'', [corporationId])).rows[0]?.economic_id;
+      if (!beneficiary) throw new Error(`Corporation tax beneficiary is unavailable: ${corporationId}`);
+      const result = await assessCanonicalHouseIncomeTax(repository, { houseId: house.house_id, houseEconomicId: house.economic_id, authorityType: 'CORPORATION', authorityId: corporationId, beneficiaryEconomicId: beneficiary, scheduleId: corporationPolicy.scheduleId, ruleVersion: corporationPolicy.versionId, day, assessedDay });
+      if (result !== 'ZERO' && result !== 'EXISTING') { assessed += 1; if (result === 'PAID') paid += 1; else arrears += 1; }
+    }
+  }
   return { ok: true, day, assessedDay, assessed, paid, arrears, shard, shardCount };
+}
+
+function corporationMembershipsForHouse(memberships: Map<string, Set<string>>, houseId: string): string | null {
+  for (const [corporationId, houses] of memberships) if (houses.has(houseId)) return corporationId;
+  return null;
 }
 
 export async function settlePublicTaxes(repository: PostgresRepository, day: number, shard = 0, shardCount = 1) {

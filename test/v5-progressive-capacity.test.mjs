@@ -371,10 +371,10 @@ test('daily tax settlement consumes the assessed-day Constitution market rate', 
   assert.match(settlement, /resolved_constitution_snapshots_v5/);
   assert.match(settlement, /EARTH\.MARKET\.TRANSACTION_TAX_RATE/);
   assert.match(settlement, /constitutionalRate\(rule\)/);
-  assert.match(settlement, /CORPORATION\.TAX\.INCOME_RATE/);
+  assert.match(settlement, /CORPORATION\.HOUSE_INCOME_TAX/);
   assert.match(settlement, /EARTH\.TAX\.BASIC_LEVY_RATE/);
   assert.match(settlement, /corporationMemberships/);
-  assert.match(settlement, /nexus_type: 'MEMBERSHIP'/);
+  assert.match(settlement, /nexus_type: 'HOUSE_INCOME'/);
 });
 
 test('House and Corporation fiscal read models expose canonical tax rules and provenance', async () => {
@@ -487,6 +487,16 @@ test('V5 House tax read models use canonical constitutional rules', async () => 
   assert.doesNotMatch(statement, /FROM tax_rule_versions/);
   assert.match(finance, /rules: canonicalTaxStatement\?\.activeRules \?\? \[\]/);
   assert.doesNotMatch(finance, /legacy-tax-rule-versions-bridge/);
+});
+
+test('V5 House income tax settlement uses the shared progressive calculator', async () => {
+  const settlement = await readFile(new URL('../cloudflare/src/tax-settlement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(settlement, /calculateProgressiveCharge/);
+  assert.match(settlement, /EARTH\.HOUSE_INCOME_TAX/);
+  assert.match(settlement, /CORPORATION\.HOUSE_INCOME_TAX/);
+  assert.match(settlement, /baseRate: 10_000n/);
+  assert.match(settlement, /v5-house-income-tax/);
+  assert.doesNotMatch(settlement, /CORPORATION\.TAX\.INCOME_RATE/);
 });
 
 test('V5 resolution cases preserve Houses and release only selected building capacity', async () => {
