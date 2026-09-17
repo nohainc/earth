@@ -28,6 +28,16 @@ async function ownerContext(tx: PostgresRepository, humanId: string): Promise<{ 
   return { houseId: row.house_id, houseEconomicId: row.house_economic_id, corporationId: row.corporation_id, corporationEconomicId: row.corporation_economic_id };
 }
 
+async function requirePublicCorporationAuthorization(tx: PostgresRepository, corporationId: string, humanId: string): Promise<void> {
+  const authorized = (await tx.query(
+    `SELECT 1 FROM institution_governance_roles
+      WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
+        AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')`,
+    [corporationId, humanId],
+  )).rows[0];
+  if (!authorized) throw new Error('Public V5 construction requires Corporation governance authorization');
+}
+
 async function catalog(tx: PostgresRepository, buildingType: string): Promise<Catalog> {
   const row = (await tx.query<Catalog>(
     `SELECT id, code, ownership_scope, construction_credit_units, construction_minutes, slot_footprint
@@ -44,12 +54,7 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
     const blueprint = await catalog(tx, input.buildingType);
     const isPublic = blueprint.ownership_scope === 'PUBLIC';
     if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
-    if (isPublic && !(await tx.query(
-      `SELECT 1 FROM institution_governance_roles
-        WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
-          AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')`,
-      [owner.corporationId, input.ownerId],
-    )).rows[0]) throw new Error('Public V5 construction requires Corporation governance authorization');
+    if (isPublic) await requirePublicCorporationAuthorization(tx, owner.corporationId!, input.ownerId);
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
     const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(world?.game_day ?? 1);
@@ -102,6 +107,7 @@ export async function purchaseV5Building(repository: PostgresRepository, input: 
     const blueprint = await catalog(tx, input.buildingType);
     const isPublic = blueprint.ownership_scope === 'PUBLIC';
     if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
+    if (isPublic) await requirePublicCorporationAuthorization(tx, owner.corporationId!, input.ownerId);
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
     const currentWorld = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(currentWorld?.game_day ?? 1);

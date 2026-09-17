@@ -672,6 +672,9 @@ test('V5 public construction requires Corporation governance authorization', asy
   const service = await readFile(new URL('../cloudflare/src/v5-building-postgres.ts', import.meta.url), 'utf8');
   assert.match(service, /Public V5 construction requires Corporation governance authorization/);
   assert.match(service, /role_code IN \('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER'\)/);
+  const purchaseStart = service.indexOf('export async function purchaseV5Building');
+  assert.notEqual(purchaseStart, -1);
+  assert.match(service.slice(purchaseStart), /requirePublicCorporationAuthorization/);
 });
 
 test('V5 civic construction dialog submits the Corporation-owned pooled path', async () => {
