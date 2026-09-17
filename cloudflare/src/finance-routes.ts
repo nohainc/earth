@@ -110,7 +110,7 @@ export async function handleFinanceRoutes(
   }
   if (url.pathname === '/api/finance/me' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [accounts, deposits, entries] = await Promise.all([
+      const [accounts, deposits, entries, taxStatement] = await Promise.all([
         repository.query(`SELECT a.id AS account_id, ea.code AS asset_code, a.asset_id, a.account_type,
                                  a.balance_units::TEXT AS balance_units, NULL::integer AS scale, NULL::integer AS decimals
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
@@ -123,9 +123,30 @@ export async function handleFinanceRoutes(
                             FROM economic_transactions t JOIN economic_entries e ON e.transaction_id = t.id
                            WHERE e.account_id IN (SELECT a.id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1)
                            ORDER BY t.id DESC LIMIT 100`, [viewer.house_id]),
+        getTaxStatement(repository, viewer.id),
       ]);
       const projection = await getHouseFinancialProjection(repository, viewer.house_id);
-      return { accounts: accounts.rows, summary: projection, state: null, obligations: [], deposits: deposits.rows, transactions: entries.rows };
+      const canonicalRules = Object.entries(taxStatement.constitutionalTaxRules ?? {})
+        .map(([code, value]) => ({
+          code,
+          value,
+          versionId: taxStatement.constitutionalTaxVersionIds?.[code] ?? null,
+          provenance: taxStatement.constitutionalTaxProvenance?.[code] ?? null,
+        }));
+      return {
+        accounts: accounts.rows,
+        summary: projection,
+        state: null,
+        obligations: [],
+        deposits: deposits.rows,
+        transactions: entries.rows,
+        taxes: {
+          rules: canonicalRules,
+          obligations: taxStatement.taxObligations,
+          generatedFrom: 'postgres-constitutional-tax-v5',
+          constitutionSnapshotId: taxStatement.constitutionSnapshotId,
+        },
+      };
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
