@@ -155,6 +155,15 @@ test('V4 compatibility proposals snapshot authority-scoped Constitution governan
   assert.doesNotMatch(source, /\.\.\.\(input\.ruleSnapshot \?\? \{\}\)/);
 });
 
+test('V4 operational actions use the shared proposal action registry', async () => {
+  const v4 = await readFile(new URL('../cloudflare/src/governance-v4-postgres.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/proposal-actions.ts', import.meta.url), 'utf8');
+  assert.match(v4, /proposalActionHandler\(actionType\)/);
+  for (const action of ['PUBLIC_PROJECT', 'RESEARCH_FUNDING', 'ORGANIZATION_TECHNOLOGY_ADOPTION', 'WORLD_CONDITION']) {
+    assert.match(registry, new RegExp(`actionType: '${action}'`));
+  }
+});
+
 test('Constitution amendment preview applies typed changes and restores Earth defaults when clearing overrides', () => {
   const preview = previewConstitutionAmendment({
     currentRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 4000n },

@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { assertConstitutionalAmendableRule, validateConstitutionalRuleValue } from './v5-constitution.ts';
+import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 
 export type ProposalActionContext = {
   repository: PostgresRepository;
@@ -114,6 +115,55 @@ const startResearchHandler: ProposalActionHandler = {
   validateExecution: async () => undefined,
 };
 
+function requiredFields(action: Record<string, unknown>, fields: string[], label: string): void {
+  if (fields.some((field) => action[field] === undefined || action[field] === null || action[field] === '')) {
+    throw new Error(`${label} requires ${fields.join(', ')}`);
+  }
+}
+
+const legacyOperationalHandlers: ProposalActionHandler[] = [
+  {
+    actionType: 'ORGANIZATION_BUDGET_SPEND',
+    version: 1,
+    validateCreation: (action) => requiredFields(action, ['budgetLineId', 'amountUnits', 'destinationAccountId'], 'Budget action'),
+    validateExecution: async () => undefined,
+  },
+  {
+    actionType: 'PUBLIC_PROJECT',
+    version: 1,
+    validateCreation: (action) => requiredFields(action, ['projectId'], 'Public project action'),
+    validateExecution: async () => undefined,
+  },
+  {
+    actionType: 'RESEARCH_FUNDING',
+    version: 1,
+    validateCreation: (action) => requiredFields(action, ['projectId'], 'Research funding action'),
+    validateExecution: async () => undefined,
+  },
+  {
+    actionType: 'ORGANIZATION_TECHNOLOGY_ADOPTION',
+    version: 1,
+    validateCreation: (action) => requiredFields(action, ['generationId', 'adoptionCostUnits'], 'Technology adoption action'),
+    validateExecution: async () => undefined,
+  },
+  {
+    actionType: 'WORLD_CONDITION',
+    version: 1,
+    validateCreation: (action) => {
+      requiredFields(action, ['conditionCode', 'title', 'description', 'effectType', 'targetKey', 'effectiveFromGameDay'], 'World condition action');
+      const effectType = String(action.effectType);
+      const scopeType = String(action.scopeType ?? '');
+      const modifierBps = Number(action.modifierBps);
+      const effectiveFrom = Number(action.effectiveFromGameDay);
+      if (!WORLD_CONDITION_EFFECTS.includes(effectType as typeof WORLD_CONDITION_EFFECTS[number])) throw new Error('World condition effect is invalid');
+      if (!['WORLD', 'TERRITORY', 'ORGANIZATION'].includes(scopeType) || (scopeType === 'WORLD' ? action.scopeId != null : !action.scopeId)) throw new Error('World condition scope is invalid');
+      if (!Number.isInteger(modifierBps) || modifierBps < -5000 || modifierBps > 5000 || !Number.isInteger(effectiveFrom) || effectiveFrom < 1) throw new Error('World condition modifier or effective day is invalid');
+      if (action.effectiveToGameDay != null && (!Number.isInteger(Number(action.effectiveToGameDay)) || Number(action.effectiveToGameDay) < effectiveFrom)) throw new Error('World condition end day is invalid');
+    },
+    validateExecution: async () => undefined,
+  },
+];
+
 const amendRuleHandler: ProposalActionHandler = {
   actionType: 'amend_rule',
   version: 1,
@@ -129,6 +179,7 @@ const handlers = new Map<string, ProposalActionHandler>([
   [constructCivicBuildingHandler.actionType, constructCivicBuildingHandler],
   [startResearchHandler.actionType, startResearchHandler],
   [amendRuleHandler.actionType, amendRuleHandler],
+  ...legacyOperationalHandlers.map((handler) => [handler.actionType, handler] as const),
   ...Array.from(FINANCIAL_ACTIONS, (actionType) => [actionType, financialHandler] as const),
 ]);
 

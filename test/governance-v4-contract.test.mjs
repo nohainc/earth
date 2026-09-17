@@ -11,7 +11,7 @@ test('V4 governance uses typed actions, immutable snapshots, House ballots, and 
   assert.match(migration, /rule_snapshot JSONB NOT NULL/);
   assert.match(migration, /governance_ballots_v4/);
   assert.match(migration, /PRIMARY KEY \(proposal_id, house_id\)/);
-  assert.match(service, /const ACTIONS = new Set/);
+  assert.match(service, /proposalActionHandler/);
   assert.match(service, /Unregistered governance action/);
   assert.match(service, /organization_capabilities/);
   assert.match(service, /ON CONFLICT \(proposal_id, house_id\) DO UPDATE/);

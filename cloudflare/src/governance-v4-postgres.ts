@@ -1,11 +1,10 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import type { VotingMethod } from './governance-voting.ts';
-import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
+import { proposalActionHandler } from './proposal-actions.ts';
 
-const ACTIONS = new Set(['ORGANIZATION_BUDGET_SPEND', 'TAX_RULE', 'PUBLIC_PROJECT', 'RESEARCH_FUNDING', 'CHARTER_CHANGE', 'WORLD_CONDITION', 'ORGANIZATION_TECHNOLOGY_ADOPTION']);
 const VOTING_METHODS = new Set<VotingMethod>(['ONE_HOUSE_ONE_VOTE', 'DELEGATED', 'SHARE_WEIGHTED', 'QUADRATIC_VOICE']);
 
 function object(value: unknown): Record<string, unknown> {
@@ -57,23 +56,14 @@ export async function setOrganizationVotingSettings(repository: PostgresReposito
 }
 
 function validateAction(actionType: string, actionSnapshot: Record<string, unknown>): void {
-  if (!ACTIONS.has(actionType)) throw new Error('Unregistered governance action');
-  if (actionType === 'TAX_RULE' || actionType === 'CHARTER_CHANGE') {
-    throw new Error('Legacy constitutional governance action is retired; use a V5 Constitution amendment');
-  }
-  if (actionType === 'ORGANIZATION_BUDGET_SPEND' && (!actionSnapshot.budgetLineId || !actionSnapshot.amountUnits || !actionSnapshot.destinationAccountId)) throw new Error('Budget action requires a line, amount, and destination');
-  if (actionType === 'TAX_RULE' && (!actionSnapshot.category || actionSnapshot.rateBps === undefined)) throw new Error('Tax action requires category and rate');
-  if ((actionType === 'PUBLIC_PROJECT' || actionType === 'RESEARCH_FUNDING') && !actionSnapshot.projectId) throw new Error('Project action requires projectId');
-  if (actionType === 'ORGANIZATION_TECHNOLOGY_ADOPTION' && (!actionSnapshot.generationId || !actionSnapshot.adoptionCostUnits)) throw new Error('Technology adoption requires generationId and adoptionCostUnits');
-  if (actionType === 'WORLD_CONDITION') {
-    const effectType = String(actionSnapshot.effectType ?? '');
-    const scopeType = String(actionSnapshot.scopeType ?? '');
-    const modifierBps = Number(actionSnapshot.modifierBps);
-    const effectiveFrom = Number(actionSnapshot.effectiveFromGameDay);
-    if (!actionSnapshot.conditionCode || !actionSnapshot.title || !actionSnapshot.description || !WORLD_CONDITION_EFFECTS.includes(effectType as typeof WORLD_CONDITION_EFFECTS[number])) throw new Error('World condition requires a valid code, title, description, and effect');
-    if (!['WORLD', 'TERRITORY', 'ORGANIZATION'].includes(scopeType) || (scopeType === 'WORLD' ? actionSnapshot.scopeId != null : !actionSnapshot.scopeId)) throw new Error('World condition scope is invalid');
-    if (!actionSnapshot.targetKey || !Number.isInteger(modifierBps) || modifierBps < -5000 || modifierBps > 5000 || !Number.isInteger(effectiveFrom) || effectiveFrom < 1) throw new Error('World condition modifier or effective day is invalid');
-    if (actionSnapshot.effectiveToGameDay != null && (!Number.isInteger(Number(actionSnapshot.effectiveToGameDay)) || Number(actionSnapshot.effectiveToGameDay) < effectiveFrom)) throw new Error('World condition end day is invalid');
+  try {
+    proposalActionHandler(actionType).validateCreation({ ...actionSnapshot, actionType });
+  } catch (error) {
+    if (actionType === 'TAX_RULE' || actionType === 'CHARTER_CHANGE') {
+      throw new Error('Legacy constitutional governance action is retired; use a V5 Constitution amendment');
+    }
+    if (error instanceof Error && error.message.startsWith('Unregistered proposal action handler')) throw new Error('Unregistered governance action');
+    throw error;
   }
 }
 
