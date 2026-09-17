@@ -299,13 +299,44 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     BuildContext context, {
     required String buildingName,
     required String buildingType,
-    required int creditCost,
-    required int materialCost,
-    required int footprint,
-    int constructionDays = 1,
     bool publicInvestment = false,
   }) async {
     EarthAudioEngine.instance.playClick();
+    final Map<String, dynamic> quote;
+    try {
+      quote = await const EarthApi().quoteV5Building(buildingType);
+    } catch (error) {
+      _showBuildingFeedback(
+          'Authoritative V5 construction quote unavailable: ${error.toString().replaceFirst('Exception: ', '')}');
+      return;
+    }
+    final quotedCreditCost =
+        int.tryParse(quote['creditCostUnits']?.toString() ?? '');
+    final quotedFootprint =
+        int.tryParse(quote['footprintUnits']?.toString() ?? '');
+    final quotedMinutes = int.tryParse(
+        quote['effectiveConstructionMinutes']?.toString() ?? '');
+    final resourceRequirements = (quote['resourceRequirements'] as List?)
+        ?.whereType<Map>()
+        .map((item) => '${item['code']}: ${item['requiredUnits']}')
+        .toList(growable: false);
+    final blockers = (quote['blockers'] as List?)
+            ?.map((item) => item.toString())
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false) ??
+        const <String>[];
+    if (quote['ok'] != true ||
+        quote['eligible'] != true ||
+        quotedCreditCost == null ||
+        quotedFootprint == null ||
+        quotedMinutes == null) {
+      _showBuildingFeedback(blockers.isEmpty
+          ? 'V5 construction is not currently eligible.'
+          : blockers.join(' · '));
+      return;
+    }
+    final constructionDays = math.max(1, (quotedMinutes / 1440).ceil());
+    final footprint = quotedFootprint;
     final title = TextEditingController(
         text: publicInvestment
             ? 'Open investment project: $buildingName'
@@ -403,23 +434,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         const Icon(Icons.account_balance_wallet_outlined,
                             size: 14, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
-                        Text('${formatWholeNumber(creditCost)} C',
+                        Text('${formatWholeNumber(quotedCreditCost)} C',
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
                               color: context.inkColor,
                             )),
-                        if (materialCost > 0) ...[
+                        if (resourceRequirements?.isNotEmpty == true) ...[
                           const SizedBox(width: 8),
-                          const Icon(Icons.terrain_outlined,
-                              size: 14, color: EarthResourceColors.materials),
-                          const SizedBox(width: 3),
-                          Text('${formatWholeNumber(materialCost)} Mat',
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                                color: context.inkColor,
-                              )),
+                          Flexible(
+                            child: Text(resourceRequirements!.join(' · '),
+                                textAlign: TextAlign.end,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.inkColor,
+                                )),
+                          ),
                         ],
                       ],
                     ),
@@ -446,7 +477,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Text('District Footprint:',
+                        Text('Pooled Capacity Footprint:',
                             style: TextStyle(
                                 fontSize: 12, color: context.mutedColor)),
                         const Spacer(),
@@ -3092,16 +3123,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 child: InkWell(
                                   onTap: isCivicOrInvest
                                       ? () {
-                                          final cDays =
-                                              asInt(item['construction_days'])!;
                                           _showCivicProposalDialog(
                                             context,
                                             buildingName: name.trim(),
                                             buildingType: bType,
-                                            creditCost: creditCost,
-                                            materialCost: matCost,
-                                            footprint: footprint,
-                                            constructionDays: cDays,
                                             publicInvestment: isPublicInvest,
                                           );
                                         }
@@ -3709,55 +3734,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               : () async {
                                   EarthAudioEngine.instance.playClick();
                                   if (isCivic || isPublicInvestment) {
-                                    final cityId = b['territory_id']
-                                            ?.toString() ??
-                                        widget.state.membership?['territory_id']
-                                            ?.toString();
-                                    if (cityId == null || cityId.isEmpty) {
-                                      _showBuildingFeedback(
-                                          'This civic asset is not assigned to a territory.');
-                                      return;
-                                    }
-                                    final footprint =
-                                        asIntOr(b['slot_footprint'], 1);
-                                    final nextTierCatalog =
-                                        catalog.whereType<Map>().firstWhere(
-                                      (c) {
-                                        final type =
-                                            c['building_type'] ?? c['type'];
-                                        return type?.toString() == bType &&
-                                            asIntOr(c['tier'], 1) == tier + 1;
-                                      },
-                                      orElse: () => <String, dynamic>{},
-                                    );
-                                    final nextCreditCost = asIntOr(
-                                        nextTierCatalog['cost_credits'] ??
-                                            nextTierCatalog['baseCreditCost'],
-                                        0);
-                                    final nextMatCost = asIntOr(
-                                        nextTierCatalog['cost_materials'] ??
-                                            nextTierCatalog['baseMaterialCost'],
-                                        0);
-                                    final nextFootprint = asIntOr(
-                                        nextTierCatalog['slot_footprint'] ??
-                                            nextTierCatalog['footprint'],
-                                        footprint);
-                                    final nextConstructionDays = math.max(
-                                      1,
-                                      asIntOr(
-                                        nextTierCatalog['construction_days'],
-                                        nextFootprint * (tier + 1),
-                                      ),
-                                    );
                                     await _showCivicProposalDialog(
                                       context,
                                       buildingName:
-                                          '${nextTierCatalog['name'] ?? name} (Tier ${tier + 1})',
+                                          '$name (Tier ${tier + 1})',
                                       buildingType: bType,
-                                      creditCost: nextCreditCost,
-                                      materialCost: nextMatCost,
-                                      footprint: nextFootprint,
-                                      constructionDays: nextConstructionDays,
                                       publicInvestment: isPublicInvestment,
                                     );
                                   } else {

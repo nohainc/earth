@@ -680,6 +680,10 @@ test('V5 civic construction dialog submits the Corporation-owned pooled path', a
   const dialogEnd = buildings.indexOf('\n  @override\n  Widget build', dialogStart);
   assert.ok(dialogStart >= 0 && dialogEnd > dialogStart);
   const dialog = buildings.slice(dialogStart, dialogEnd);
+  assert.match(dialog, /quoteV5Building\(buildingType\)/);
+  assert.match(dialog, /quotedCreditCost/);
+  assert.match(dialog, /quotedFootprint/);
+  assert.doesNotMatch(dialog, /required int creditCost|required int materialCost|required int footprint/);
   assert.match(dialog, /Corporation governance authorization is required/);
   assert.match(dialog, /purchaseV5Building\(/);
   assert.doesNotMatch(dialog, /createProposal\(/);
