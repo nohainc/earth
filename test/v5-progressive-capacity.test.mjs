@@ -411,6 +411,14 @@ test('V5 constitutional version ranges are protected against overlap in PostgreS
   assert.match(migration, /constitutional_rule_versions_overlap_guard/);
 });
 
+test('V5 established Constitution versions are immutable after activation', async () => {
+  const migration = await readFile(new URL('../db/migrations/110_constitution_version_immutability_guard.sql', import.meta.url), 'utf8');
+  assert.match(migration, /earth_guard_constitutional_version_immutability/);
+  assert.match(migration, /NEW\.value_json IS DISTINCT FROM OLD\.value_json/);
+  assert.match(migration, /Active constitutional rule versions may only be retired/);
+  assert.match(migration, /Retired constitutional rule versions cannot be reactivated/);
+});
+
 test('legacy player-facing constitutional mutation routes are retired', async () => {
   const organizations = await readFile(new URL('../cloudflare/src/organizations-routes.ts', import.meta.url), 'utf8');
   const governance = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
