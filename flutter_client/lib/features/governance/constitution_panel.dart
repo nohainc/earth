@@ -6,9 +6,10 @@ import '../../shared/widgets/earth_page_cockpit.dart';
 class ConstitutionPanel extends StatefulWidget {
   final EarthState state;
   final Future<Map<String, dynamic>> Function()? canonicalLoader;
+  final Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> changes)? onProposeAmendment;
 
   const ConstitutionPanel(
-      {super.key, required this.state, this.canonicalLoader});
+      {super.key, required this.state, this.canonicalLoader, this.onProposeAmendment});
 
   @override
   State<ConstitutionPanel> createState() => _ConstitutionPanelState();
@@ -278,6 +279,9 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     final history = canonical['history'] is List
         ? (canonical['history'] as List).whereType<Map>().take(24).toList()
         : const <Map>[];
+    final definitions = canonical['definitions'] is List
+        ? (canonical['definitions'] as List).whereType<Map>().toList()
+        : const <Map>[];
     return Column(
       children: [
         EarthSection(
@@ -302,6 +306,18 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                   }).toList(),
                 ),
         ),
+        if (widget.onProposeAmendment != null && definitions.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: EarthButton(
+                label: 'PROPOSE AMENDMENT',
+                variant: EarthButtonVariant.primary,
+                onPressed: () => _openAmendmentComposer(context, canonical, definitions),
+              ),
+            ),
+          ),
         if (scheduled.isNotEmpty)
           EarthSection(
             title: 'SCHEDULED CONSTITUTION CHANGES',
@@ -344,6 +360,96 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           ),
       ],
     );
+  }
+
+  Future<void> _openAmendmentComposer(BuildContext context,
+      Map<String, dynamic> canonical, List<Map> definitions) async {
+    final corporationScope = canonical['corporationId']?.toString().isNotEmpty == true;
+    final available = definitions.where((definition) {
+      final authority = definition['authority_model']?.toString();
+      return corporationScope
+          ? authority != 'EARTH_LOCKED'
+          : authority != 'CORPORATION_LOCAL';
+    }).where((definition) {
+      final type = definition['value_type']?.toString();
+      return ['BOOLEAN', 'INTEGER', 'CREDIT_UNITS', 'RATE_BPS', 'ENUM', 'GAME_DAYS', 'RESOURCE_UNITS'].contains(type);
+    }).toList();
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No scalar Constitution rules are available for amendment.')));
+      return;
+    }
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        String selected = available.first['rule_code'].toString();
+        String? error;
+        final valueController = TextEditingController();
+        return StatefulBuilder(builder: (context, setState) {
+          final definition = available.firstWhere((item) => item['rule_code'].toString() == selected);
+          final type = definition['value_type']?.toString() ?? 'INTEGER';
+          final allowed = definition['allowed_values'] is List
+              ? (definition['allowed_values'] as List).map((item) => item.toString()).toList()
+              : const <String>[];
+          return AlertDialog(
+            title: const Text('PROPOSE CONSTITUTION AMENDMENT'),
+            content: SizedBox(
+              width: 480,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                DropdownButtonFormField<String>(
+                  value: selected,
+                  decoration: const InputDecoration(labelText: 'Rule'),
+                  items: available.map((item) => DropdownMenuItem(value: item['rule_code'].toString(), child: Text(item['rule_code'].toString()))).toList(),
+                  onChanged: (value) => setState(() { selected = value ?? selected; error = null; }),
+                ),
+                const SizedBox(height: 12),
+                if (type == 'BOOLEAN')
+                  DropdownButtonFormField<String>(
+                    value: valueController.text.isEmpty ? null : valueController.text,
+                    decoration: const InputDecoration(labelText: 'Value'),
+                    items: const [DropdownMenuItem(value: 'true', child: Text('TRUE')), DropdownMenuItem(value: 'false', child: Text('FALSE'))],
+                    onChanged: (value) => setState(() => valueController.text = value ?? ''),
+                  )
+                else if (type == 'ENUM' && allowed.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    value: allowed.contains(valueController.text) ? valueController.text : null,
+                    decoration: const InputDecoration(labelText: 'Value'),
+                    items: allowed.map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
+                    onChanged: (value) => setState(() => valueController.text = value ?? ''),
+                  )
+                else
+                  TextField(controller: valueController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '$type value')),
+                if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('CANCEL')),
+              FilledButton(onPressed: () {
+                dynamic value;
+                if (type == 'BOOLEAN') {
+                  value = valueController.text == 'true' ? true : valueController.text == 'false' ? false : null;
+                } else if (type == 'ENUM') {
+                  value = valueController.text.isEmpty ? null : valueController.text;
+                } else {
+                  final parsed = BigInt.tryParse(valueController.text.trim());
+                  value = parsed == null ? null : valueController.text.trim();
+                }
+                if (value == null) { setState(() => error = 'Enter a valid $type value.'); return; }
+                Navigator.of(dialogContext).pop({'ruleCode': selected, 'value': value});
+              }, child: const Text('CONTINUE')),
+            ],
+          );
+        });
+      },
+    );
+    if (result == null || !context.mounted || widget.onProposeAmendment == null) return;
+    try {
+      final response = await widget.onProposeAmendment!([result]);
+      if (!context.mounted) return;
+      final ok = response['ok'] != false;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Constitution amendment proposal submitted.' : response['error']?.toString() ?? 'Amendment proposal failed.')));
+    } catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Amendment proposal failed: $error')));
+    }
   }
 
   String _formatCanonicalValue(dynamic value) {

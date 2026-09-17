@@ -437,6 +437,16 @@ test('V5 governance UI exposes only Earth and Corporation scopes', async () => {
   assert.doesNotMatch(panel, /_scopeTab\(context, 0, 'TERRITORY/);
 });
 
+test('Constitution UI submits typed amendments through preview before proposal creation', async () => {
+  const panel = await readFile(new URL('../flutter_client/lib/features/governance/constitution_panel.dart', import.meta.url), 'utf8');
+  const dashboard = await readFile(new URL('../flutter_client/lib/features/command_center/dashboard.dart', import.meta.url), 'utf8');
+  assert.match(panel, /onProposeAmendment/);
+  assert.match(panel, /PROPOSE AMENDMENT/);
+  assert.match(panel, /value_type/);
+  assert.match(dashboard, /previewV5ConstitutionAmendment/);
+  assert.match(dashboard, /proposeV5ConstitutionAmendment/);
+});
+
 test('V5 client finance projections consume server policy multipliers', async () => {
   const finance = await readFile(new URL('../flutter_client/lib/features/finance/personal_finance_panel.dart', import.meta.url), 'utf8');
   const institutions = await readFile(new URL('../flutter_client/lib/features/institutions/institutions_panels.dart', import.meta.url), 'utf8');

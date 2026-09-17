@@ -430,6 +430,21 @@ class Dashboard extends StatelessWidget {
             canonicalLoader: () => const EarthApi().getV5Constitution(
               corporationId: state.membership?['corporation_id']?.toString(),
             ),
+            onProposeAmendment: (changes) async {
+              final corporationId = state.membership?['corporation_id']?.toString();
+              final preview = await const EarthApi().previewV5ConstitutionAmendment(
+                corporationId: corporationId,
+                changes: changes,
+              );
+              if (preview['ok'] == false) return preview;
+              return const EarthApi().proposeV5ConstitutionAmendment(
+                subjectType: corporationId == null ? 'EARTH' : 'CORPORATION',
+                subjectId: corporationId,
+                title: 'Constitution amendment proposal',
+                body: 'Typed Constitution amendment submitted from the canonical policy editor.',
+                changes: changes,
+              );
+            },
           ),
         ];
       case 'life':
