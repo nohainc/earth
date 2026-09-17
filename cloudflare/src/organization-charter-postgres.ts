@@ -23,6 +23,11 @@ async function authorizeAmendment(tx: PostgresRepository, organizationId: string
 }
 
 export async function amendOrganizationCharter(repository: PostgresRepository, input: { organizationId: string; houseId: string; humanId: string; charter: unknown; correlationId: string }): Promise<Record<string, unknown>> {
+  // V5 Corporations are governed by typed Constitution rule versions. Keep
+  // this symbol available for historical tooling, but fail closed if any
+  // caller attempts to use the old direct mutation path.
+  throw new Error('Direct Charter mutation is retired; submit a V5 Constitution amendment proposal.');
+  /* istanbul ignore next -- retained below only for historical migration callers. */
   const charter = validateOrganizationCharter(input.charter);
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ id: string; version: number }>('SELECT id, version FROM organization_charter_versions WHERE correlation_id = $1', [input.correlationId]);

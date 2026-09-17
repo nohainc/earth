@@ -40,6 +40,12 @@ export async function getOrganizationVotingSettings(repository: PostgresReposito
 }
 
 export async function setOrganizationVotingSettings(repository: PostgresRepository, input: { organizationId: string; humanId: string; votingMethod: VotingMethod; voiceCycleDays?: number; voicePerCycle?: number; correlationId: string }): Promise<Record<string, unknown>> {
+  // This service remains exported for historical replay/tooling compatibility,
+  // but it must never be a gameplay mutation path. Corporation governance
+  // settings are constitutional V5 rules and can only change through a typed
+  // amendment proposal and activation.
+  throw new Error('Direct voting-setting mutation is retired; submit a V5 Constitution amendment proposal.');
+  /* istanbul ignore next -- retained below only for historical migration callers. */
   if (!VOTING_METHODS.has(input.votingMethod)) throw new Error('Unsupported voting method');
   return repository.transaction(async (tx) => {
     const human = (await tx.query<{ house_id: string }>("SELECT house_id FROM humans WHERE id = $1 AND status = 'ACTIVE'", [input.humanId])).rows[0];
