@@ -38,25 +38,19 @@ async function corporation(tx: PostgresRepository, corporationId: string, gameDa
 }
 
 async function v5Pricing(tx: PostgresRepository, corporationId: string, buildingUnits: bigint, day: number) {
-  let global;
-  try { global = await getActiveV5StandardCapacity(tx, day); } catch (error) {
-    if (error instanceof Error && error.message.includes('No active V5 capacity policy')) return { available: false, reason: error.message };
-    throw error;
-  }
+  const global = await getActiveV5StandardCapacity(tx, day);
   const constitution = await resolveEffectiveConstitution(tx, { corporationId, gameDay: day });
   const canonicalRate = constitution.rules['CORPORATION.HOUSE_CAPACITY.BASE_RATE'];
   const canonicalSchedule = constitution.rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'];
-  const legacy = (await tx.query<{ rate: string; schedule_id: string; version: number }>(`SELECT house_base_capacity_rate_units::TEXT AS rate, house_schedule_id, version
-    FROM corporation_capacity_policy_versions WHERE corporation_id = $1 AND status = 'ACTIVE'
-      AND effective_from_game_day <= $2 AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)
-    ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [corporationId, day])).rows[0];
-  const rate = canonicalRate === undefined ? legacy?.rate : String(canonicalRate);
-  const scheduleId = canonicalSchedule === undefined ? legacy?.schedule_id : String(canonicalSchedule);
-  if (rate === undefined || !scheduleId) return { available: false, reason: 'Corporation has no active V5 capacity policy' };
+  if (canonicalRate === undefined || canonicalSchedule === undefined) {
+    return { available: false, reason: 'Canonical Corporation capacity Constitution is unavailable' };
+  }
+  const rate = String(canonicalRate);
+  const scheduleId = String(canonicalSchedule);
   const brackets = (await tx.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [scheduleId])).rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }));
   const current = calculateProgressiveCharge({ quantity: 1n + buildingUnits, baseRate: BigInt(rate), brackets });
   const after = calculateProgressiveCharge({ quantity: 2n + buildingUnits, baseRate: BigInt(rate), brackets });
-  return { available: true, gameDay: day, residentialDelta: 1, currentUsage: current.quantity.toString(), afterUsage: after.quantity.toString(), currentCharge: current.totalCharge.toString(), afterCharge: after.totalCharge.toString(), incrementalCharge: (after.totalCharge - current.totalCharge).toString(), scheduleId, policyVersion: canonicalRate === undefined ? legacy?.version ?? global.policyVersion : constitution.versionIds['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] ?? global.policyVersion };
+  return { available: true, gameDay: day, residentialDelta: 1, currentUsage: current.quantity.toString(), afterUsage: after.quantity.toString(), currentCharge: current.totalCharge.toString(), afterCharge: after.totalCharge.toString(), incrementalCharge: (after.totalCharge - current.totalCharge).toString(), scheduleId, policyVersion: constitution.versionIds['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] ?? global.policyVersion };
 }
 
 export async function quoteV5CorporationMembership(repository: PostgresRepository, humanId: string, corporationId: string) {
