@@ -80,14 +80,14 @@ void main() {
     await tester.tap(find.text('Open Tax Charter Dialog'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Set city tax charter'), findsOneWidget);
+    expect(find.text('Propose tax amendment'), findsOneWidget);
     await tester.enterText(
         find.widgetWithText(TextField, 'Income tax (%)'), '4.5');
     await tester.enterText(
         find.widgetWithText(TextField, 'Sales tax (%)'), '2.5');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('SAVE CHARTER'));
+    await tester.tap(find.text('SUBMIT PROPOSAL'));
     await tester.pumpAndSettle();
 
     expect(saved, true);

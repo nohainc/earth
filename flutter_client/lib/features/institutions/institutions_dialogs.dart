@@ -1495,8 +1495,8 @@ Future<void> showTaxCharterDialog(
           ),
           title: Text(
             corporation
-                ? 'Set corporation tax charter'
-                : 'Set city tax charter',
+                ? 'Propose corporation tax amendment'
+                : 'Propose tax amendment',
             style:
                 context.topicTitleStyle.copyWith(color: context.primaryColor),
           ),
@@ -1579,7 +1579,7 @@ Future<void> showTaxCharterDialog(
                       context.controlStyle.copyWith(color: context.mutedColor)),
             ),
             EarthButton(
-              label: 'SAVE CHARTER',
+              label: 'SUBMIT PROPOSAL',
               onPressed: () async {
                 final rates = [
                   double.tryParse(income.text.trim()),
@@ -1659,7 +1659,7 @@ Future<void> showAdmissionPolicyDialog(
                     context.controlStyle.copyWith(color: context.mutedColor)),
           ),
           EarthButton(
-            label: 'SAVE POLICY',
+            label: 'SUBMIT PROPOSAL',
             onPressed: () async {
               Navigator.pop(dialogContext);
               await action(() => const EarthApi().setCorporationAdmissionPolicy(

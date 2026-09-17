@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../core/api/earth_api.dart';
@@ -199,10 +198,6 @@ class _OrganizationDirectoryPanelState
         actions: [
           if (organization['is_member'] == true)
             TextButton(
-                onPressed: () => _amendCharter(id),
-                child: const Text('AMEND CHARTER')),
-          if (organization['is_member'] == true)
-            TextButton(
                 onPressed: () => _openResolution(id),
                 child: const Text('RESOLUTION')),
           if (organization['is_member'] == true)
@@ -215,60 +210,6 @@ class _OrganizationDirectoryPanelState
         ],
       ),
     );
-  }
-
-  Future<void> _amendCharter(String organizationId) async {
-    final controller = TextEditingController(
-        text: '{\n  "governance": {},\n  "policies": {}\n}');
-    final raw = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('AMEND ORGANIZATION CHARTER'),
-        content: SizedBox(
-            width: 520,
-            child: TextField(
-                controller: controller,
-                maxLines: 12,
-                decoration: const InputDecoration(labelText: 'Charter JSON'))),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('CANCEL')),
-          FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, controller.text),
-              child: const Text('VALIDATE & AMEND'))
-        ],
-      ),
-    );
-    controller.dispose();
-    if (raw == null || !mounted) return;
-    try {
-      final charter = jsonDecode(raw);
-      if (charter is! Map) {
-        throw const FormatException('Charter must be a JSON object');
-      }
-      final api = const EarthApi();
-      final validation = await api.validateOrganizationCharter(
-          organizationId: organizationId,
-          charter: Map<String, dynamic>.from(charter));
-      if (validation['valid'] == false || validation['ok'] == false) {
-        throw Exception(validation['error'] ?? 'Charter validation failed');
-      }
-      await api.amendOrganizationCharter(
-          organizationId: organizationId,
-          charter: Map<String, dynamic>.from(charter));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Charter amendment submitted for the next effective game day.')));
-        await _load();
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Charter amendment failed: $error')));
-      }
-    }
   }
 
   Future<void> _openResolution(String organizationId) async {
