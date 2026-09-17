@@ -15,19 +15,37 @@ async function loadSchedule(tx: PostgresRepository, scheduleId: string): Promise
 }
 
 async function activePolicy(tx: PostgresRepository, day: number): Promise<Policy | null> {
+  const snapshot = (await tx.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json
+      FROM resolved_constitution_snapshots_v5
+     WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [day])).rows[0];
+  const snapshotRules = snapshot?.rules_json ?? {};
+  const snapshotFields = [
+    'EARTH.CAPACITY.BASE_RATE',
+    'EARTH.CAPACITY.STANDARD',
+    'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE',
+    'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE',
+  ];
+  if (snapshot && snapshotFields.every((code) => snapshotRules[code] !== undefined)) {
+    return {
+      id: snapshot.id,
+      earthBaseRate: BigInt(String(snapshotRules['EARTH.CAPACITY.BASE_RATE'])),
+      standardCapacity: BigInt(String(snapshotRules['EARTH.CAPACITY.STANDARD'])),
+      corporationScheduleId: String(snapshotRules['EARTH.CAPACITY.PROGRESSIVE_SCHEDULE']),
+      houseScheduleId: String(snapshotRules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE']),
+      version: 0,
+    };
+  }
   const row = (await tx.query<{ id: string; earth_base_capacity_rate_units: string; standard_territory_capacity_units: string; earth_corporation_schedule_id: string; earth_house_schedule_id: string; version: number }>(`SELECT id, earth_base_capacity_rate_units::TEXT, standard_territory_capacity_units::TEXT, earth_corporation_schedule_id, earth_house_schedule_id, version
     FROM v5_capacity_policy_versions WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
       AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
     ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day])).rows[0];
   if (!row) return null;
-  const snapshot = (await tx.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [day])).rows[0];
-  const rules = snapshot?.rules_json ?? {};
   return {
-    id: snapshot?.id ?? row.id,
-    earthBaseRate: BigInt(String(rules['EARTH.CAPACITY.BASE_RATE'] ?? row.earth_base_capacity_rate_units)),
-    standardCapacity: BigInt(String(rules['EARTH.CAPACITY.STANDARD'] ?? row.standard_territory_capacity_units)),
-    corporationScheduleId: String(rules['EARTH.CAPACITY.PROGRESSIVE_SCHEDULE'] ?? row.earth_corporation_schedule_id),
-    houseScheduleId: String(rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'] ?? row.earth_house_schedule_id),
+    id: row.id,
+    earthBaseRate: BigInt(row.earth_base_capacity_rate_units),
+    standardCapacity: BigInt(row.standard_territory_capacity_units),
+    corporationScheduleId: row.earth_corporation_schedule_id,
+    houseScheduleId: row.earth_house_schedule_id,
     version: Number(row.version),
   };
 }

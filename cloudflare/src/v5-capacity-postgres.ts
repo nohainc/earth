@@ -6,20 +6,33 @@ import { calculateProgressiveCharge } from './v5-progressive.ts';
 // @mutation-boundary read-only
 // Capacity quotes are read-only projections; callers own the surrounding mutation transaction.
 
-export async function getActiveV5StandardCapacity(repository: PostgresRepository, gameDay?: number): Promise<{ standardTerritoryCapacity: bigint; earthBaseRate: bigint; houseScheduleId: string; policyVersion: number; gameDay: number }> {
+export async function getActiveV5StandardCapacity(repository: PostgresRepository, gameDay?: number): Promise<{ standardTerritoryCapacity: bigint; earthBaseRate: bigint; houseScheduleId: string; corporationScheduleId: string; policyVersion: number; gameDay: number }> {
   const day = gameDay ?? Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
-  const policy = (await repository.query<{ standard_territory_capacity_units: string; earth_base_capacity_rate_units: string; earth_house_schedule_id: string; version: number }>(`SELECT standard_territory_capacity_units::TEXT, earth_base_capacity_rate_units::TEXT, earth_house_schedule_id, version
+  const snapshot = (await repository.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json
+      FROM resolved_constitution_snapshots_v5
+     WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [day])).rows[0];
+  const snapshotRules = snapshot?.rules_json ?? {};
+  if (snapshot && snapshotRules['EARTH.CAPACITY.STANDARD'] !== undefined && snapshotRules['EARTH.CAPACITY.BASE_RATE'] !== undefined && snapshotRules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'] !== undefined && snapshotRules['EARTH.CAPACITY.PROGRESSIVE_SCHEDULE'] !== undefined) {
+    return {
+      standardTerritoryCapacity: BigInt(String(snapshotRules['EARTH.CAPACITY.STANDARD'])),
+      earthBaseRate: BigInt(String(snapshotRules['EARTH.CAPACITY.BASE_RATE'])),
+      houseScheduleId: String(snapshotRules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE']),
+      corporationScheduleId: String(snapshotRules['EARTH.CAPACITY.PROGRESSIVE_SCHEDULE']),
+      policyVersion: 0,
+      gameDay: day,
+    };
+  }
+  const policy = (await repository.query<{ standard_territory_capacity_units: string; earth_base_capacity_rate_units: string; earth_corporation_schedule_id: string; earth_house_schedule_id: string; version: number }>(`SELECT standard_territory_capacity_units::TEXT, earth_base_capacity_rate_units::TEXT, earth_corporation_schedule_id, earth_house_schedule_id, version
     FROM v5_capacity_policy_versions
     WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
       AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
     ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day])).rows[0];
   if (!policy) throw new Error('No active V5 capacity policy is available');
-  const snapshot = (await repository.query<{ rules_json: Record<string, unknown> }>(`SELECT rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [day])).rows[0];
-  const rules = snapshot?.rules_json ?? {};
   return {
-    standardTerritoryCapacity: BigInt(String(rules['EARTH.CAPACITY.STANDARD'] ?? policy.standard_territory_capacity_units)),
-    earthBaseRate: BigInt(String(rules['EARTH.CAPACITY.BASE_RATE'] ?? policy.earth_base_capacity_rate_units)),
-    houseScheduleId: String(rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'] ?? policy.earth_house_schedule_id),
+    standardTerritoryCapacity: BigInt(policy.standard_territory_capacity_units),
+    earthBaseRate: BigInt(policy.earth_base_capacity_rate_units),
+    houseScheduleId: policy.earth_house_schedule_id,
+    corporationScheduleId: policy.earth_corporation_schedule_id,
     policyVersion: policy.version,
     gameDay: day,
   };
@@ -45,10 +58,10 @@ export async function quoteV5HouseCapacityChange(repository: PostgresRepository,
   const house = (await repository.query<{ corporation_id: string | null; total_units: string }>(`SELECT corporation_id, total_capacity_units::TEXT AS total_units
     FROM v5_house_settlement_profiles WHERE house_id = $1`, [houseId])).rows[0];
   const day = gameDay ?? Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
-  const globalPolicy = house?.corporation_id ? null : await getActiveV5StandardCapacity(repository, day);
+  const globalPolicy = await getActiveV5StandardCapacity(repository, day);
   const corporationSnapshot = house?.corporation_id ? (await repository.query<{ rules_json: Record<string, unknown> }>(`SELECT rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [house.corporation_id, day])).rows[0] : undefined;
   const policy = house?.corporation_id && corporationSnapshot?.rules_json?.['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] !== undefined
-    ? { rate: String(corporationSnapshot.rules_json['CORPORATION.HOUSE_CAPACITY.BASE_RATE']), schedule_id: '', version: 0 }
+    ? { rate: String(corporationSnapshot.rules_json['CORPORATION.HOUSE_CAPACITY.BASE_RATE']), schedule_id: globalPolicy.houseScheduleId, version: globalPolicy.policyVersion }
     : house?.corporation_id ? (await repository.query<{ rate: string; schedule_id: string; version: number }>(`SELECT house_base_capacity_rate_units::TEXT AS rate, house_schedule_id, version
     FROM corporation_capacity_policy_versions WHERE corporation_id = $1 AND status = 'ACTIVE'
       AND effective_from_game_day <= $2 AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)
@@ -83,9 +96,7 @@ export async function getV5CorporationCapacity(repository: PostgresRepository, c
 export async function quoteV5CorporationCapacityChange(repository: PostgresRepository, corporationId: string, delta: bigint, gameDay?: number): Promise<Record<string, unknown>> {
   const policy = await getActiveV5StandardCapacity(repository, gameDay);
   const corporation = await getV5CorporationCapacity(repository, corporationId, policy.standardTerritoryCapacity);
-  const pricing = (await repository.query<{ base_rate: string; schedule_id: string; version: number }>(`SELECT earth_base_capacity_rate_units::TEXT AS base_rate, earth_corporation_schedule_id AS schedule_id, version FROM v5_capacity_policy_versions WHERE status = 'ACTIVE' AND effective_from_game_day <= $1 AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1) ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [policy.gameDay])).rows[0];
-  if (!pricing) return { available: false, reason: 'No active EARTH capacity policy is available', corporationId };
-  const brackets = (await repository.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [pricing.schedule_id])).rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }));
-  const quote = quoteCapacityChange({ currentUsage: corporation.totalOccupiedUnits, delta, baseRate: BigInt(pricing.base_rate), brackets });
-  return { available: true, corporationId, gameDay: policy.gameDay, baseRateVersion: Number(pricing.version), scheduleId: pricing.schedule_id, currentUsage: quote.currentUsage.toString(), usageDelta: quote.delta.toString(), afterUsage: quote.afterUsage.toString(), currentChargeUnits: quote.currentCharge.totalCharge.toString(), afterChargeUnits: quote.afterCharge.totalCharge.toString(), incrementalChargeUnits: quote.incrementalCharge.toString(), currentBracket: quote.currentCharge.currentBracket, resultingBracket: quote.afterCharge.currentBracket };
+  const brackets = (await repository.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [policy.corporationScheduleId])).rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }));
+  const quote = quoteCapacityChange({ currentUsage: corporation.totalOccupiedUnits, delta, baseRate: policy.earthBaseRate, brackets });
+  return { available: true, corporationId, gameDay: policy.gameDay, baseRateVersion: Number(policy.policyVersion), scheduleId: policy.corporationScheduleId, currentUsage: quote.currentUsage.toString(), usageDelta: quote.delta.toString(), afterUsage: quote.afterUsage.toString(), currentChargeUnits: quote.currentCharge.totalCharge.toString(), afterChargeUnits: quote.afterCharge.totalCharge.toString(), incrementalChargeUnits: quote.incrementalCharge.toString(), currentBracket: quote.currentCharge.currentBracket, resultingBracket: quote.afterCharge.currentBracket };
 }

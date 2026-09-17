@@ -263,6 +263,10 @@ test('V5 capacity settlement consumes resolved Constitution values before legacy
   assert.match(settlement, /rulesVersion: string/);
   assert.match(settlement, /ruleSetId: snapshot\.id/);
   assert.match(settlement, /rules_version = EXCLUDED\.rules_version/);
+  assert.match(settlement, /snapshotFields/);
+  assert.match(settlement, /snapshotFields\.every/);
+  assert.match(quotes, /snapshotRules\['EARTH\.CAPACITY\.STANDARD'\]/);
+  assert.match(quotes, /corporationScheduleId/);
 });
 
 test('daily tax settlement consumes the assessed-day Constitution market rate', async () => {
