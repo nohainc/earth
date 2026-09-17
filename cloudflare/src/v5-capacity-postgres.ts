@@ -92,6 +92,46 @@ export async function getV5CorporationCapacity(repository: PostgresRepository, c
   return { corporationId, memberCount: BigInt(profile.member_count), residentialUnits: BigInt(profile.residential), privateBuildingUnits: BigInt(profile.productive), publicBuildingUnits: BigInt(profile.public_units), totalOccupiedUnits: total, standardTerritoryCapacity, requiredTerritoryUnits: required, utilizationNumerator: total, utilizationDenominator: standardTerritoryCapacity * required, generatedFrom: 'postgres-v5-structural-settlement-profile' };
 }
 
+/** Returns the Earth-wide pooled-capacity read model, including independent Houses. */
+export async function getV5EarthCapacity(repository: PostgresRepository, gameDay?: number): Promise<Record<string, unknown>> {
+  const policy = await getActiveV5StandardCapacity(repository, gameDay);
+  const [houses, corporations] = await Promise.all([
+    repository.query<{ house_count: string; independent_count: string; occupied_units: string }>(
+      `SELECT COUNT(*)::TEXT AS house_count,
+              COUNT(*) FILTER (WHERE corporation_id IS NULL)::TEXT AS independent_count,
+              COALESCE(SUM(total_capacity_units), 0)::TEXT AS occupied_units
+         FROM v5_house_settlement_profiles p
+         JOIN houses h ON h.id = p.house_id AND h.status = 'ACTIVE'`,
+    ),
+    repository.query<{ corporation_count: string; occupied_units: string; required_units: string }>(
+      `SELECT COUNT(*)::TEXT AS corporation_count,
+              COALESCE(SUM(total_occupied_capacity_units), 0)::TEXT AS occupied_units,
+              COALESCE(SUM(required_territory_units), 0)::TEXT AS required_units
+         FROM corporation_capacity_state_v5 s
+         JOIN corporations c ON c.id = s.corporation_id AND c.status = 'ACTIVE'
+        WHERE s.game_day = $1`,
+      [policy.gameDay],
+    ),
+  ]);
+  const house = houses.rows[0];
+  const corporation = corporations.rows[0];
+  const independentUnits = BigInt(house?.occupied_units ?? '0');
+  const corporationUnits = BigInt(corporation?.occupied_units ?? '0');
+  return {
+    gameDay: policy.gameDay,
+    standardTerritoryCapacity: policy.standardTerritoryCapacity.toString(),
+    earthBaseRate: policy.earthBaseRate.toString(),
+    activeHouseCount: Number(house?.house_count ?? 0),
+    independentHouseCount: Number(house?.independent_count ?? 0),
+    independentOccupiedUnits: independentUnits.toString(),
+    corporationCount: Number(corporation?.corporation_count ?? 0),
+    corporationOccupiedUnits: corporationUnits.toString(),
+    totalOccupiedUnits: (independentUnits + corporationUnits).toString(),
+    requiredTerritoryUnits: BigInt(corporation?.required_units ?? '0').toString(),
+    generatedFrom: 'postgres-v5-structural-settlement-profile',
+  };
+}
+
 /** Quote a Corporation public-footprint change against the EARTH rent policy. */
 export async function quoteV5CorporationCapacityChange(repository: PostgresRepository, corporationId: string, delta: bigint, gameDay?: number): Promise<Record<string, unknown>> {
   const policy = await getActiveV5StandardCapacity(repository, gameDay);

@@ -1,6 +1,11 @@
 part of 'earth_api.dart';
 
 extension EarthApiInstitutions on EarthApi {
+  Future<Map<String, dynamic>> getV5EarthCapacity() async {
+    final response = await _request('/api/v5/capacity');
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<Map<String, dynamic>> getV5HouseCapacity() async {
     final response = await _request('/api/v5/house/capacity');
     return Map<String, dynamic>.from(response as Map);

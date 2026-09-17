@@ -24,7 +24,7 @@ import { listWorldConditions } from './world-conditions-postgres.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { addMutualCreditGuarantee, createMutualCreditNetwork, getMutualCreditNetwork, joinMutualCreditNetwork, listMutualCreditNetworks, transferMutualCredit } from './mutual-credit-postgres.ts';
-import { getActiveV5StandardCapacity, getV5CorporationCapacity, getV5HouseCapacity } from './v5-capacity-postgres.ts';
+import { getActiveV5StandardCapacity, getV5CorporationCapacity, getV5EarthCapacity, getV5HouseCapacity } from './v5-capacity-postgres.ts';
 import { getV5Overview } from './v5-overview-postgres.ts';
 
 function toJsonSafe<T>(value: T): T {
@@ -66,6 +66,12 @@ export async function handleReadModelRoutes(
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 overview unavailable' }, { status: 400 });
     }
+  }
+  if (url.pathname === '/api/v5/capacity' && request.method === 'GET') {
+    if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const result = await withRepository(env, (repository) => getV5EarthCapacity(repository));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, capacity: toJsonSafe(result), persistence: 'planetscale-postgres' });
   }
   const v5CorporationCapacity = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/capacity$/);
   if (v5CorporationCapacity && request.method === 'GET') {

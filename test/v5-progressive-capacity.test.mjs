@@ -235,6 +235,17 @@ test('V5 Corporation admission consumes the canonical Constitution rule', async 
   assert.match(founding, /CORPORATION\.ADMISSION_POLICY/);
 });
 
+test('V5 exposes an Earth-wide capacity read model alongside House and Corporation views', async () => {
+  const capacity = await readFile(new URL('../cloudflare/src/v5-capacity-postgres.ts', import.meta.url), 'utf8');
+  const routes = await readFile(new URL('../cloudflare/src/read-model-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  assert.match(capacity, /getV5EarthCapacity/);
+  assert.match(capacity, /independentOccupiedUnits/);
+  assert.match(capacity, /requiredTerritoryUnits/);
+  assert.match(routes, /\/api\/v5\/capacity/);
+  assert.match(registry, /getV5EarthCapacity/);
+});
+
 test('V5 Constitution activation rolls back a failed change set atomically', async () => {
   const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
   assert.match(service, /SAVEPOINT \$\{savepoint\}/);

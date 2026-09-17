@@ -132,6 +132,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'GET', path: '/api/territories/{id}/rights', owner: 'BuildingRoutes', auth: 'AUTHENTICATED', service: 'listTerritoryRights', status: 'ACTIVE' },
   { method: 'GET', path: '/api/territories/{id}/commons', owner: 'BuildingRoutes', auth: 'AUTHENTICATED', service: 'getCommonsStatement', status: 'ACTIVE' },
   { method: 'GET', path: '/api/v5/house/capacity', owner: 'ReadModelRoutes', auth: 'HOUSE_SELF', service: 'getV5HouseCapacity', status: 'ACTIVE' },
+  { method: 'GET', path: '/api/v5/capacity', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'getV5EarthCapacity', status: 'ACTIVE' },
   { method: 'GET', path: '/api/v5/corporations/{id}/capacity', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'getV5CorporationCapacity', status: 'ACTIVE' },
   { method: 'GET', path: '/api/v5/corporations/{id}/membership', owner: 'InstitutionRoutes', auth: 'HOUSE_SELF', service: 'quoteV5CorporationMembership', status: 'ACTIVE' },
   { method: 'POST', path: '/api/v5/corporations/{id}/membership', owner: 'InstitutionRoutes', auth: 'HOUSE_SELF', service: 'applyV5CorporationMembership', status: 'ACTIVE' },
