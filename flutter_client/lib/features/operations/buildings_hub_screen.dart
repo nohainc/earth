@@ -107,12 +107,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     return (asDouble(project['progress']) ?? 0.0).clamp(0.0, 100.0);
   }
 
-  double _creditResult(Map<String, dynamic> building) {
-    final outputType = building['resource_output_type']?.toString();
-    final creditOutput = outputType == 'credits' || outputType == null
-        ? asDoubleOr(building['resource_output_amount'], 0)
-        : 0;
-    return creditOutput - asDoubleOr(building['daily_operating_credits'], 0);
+  double? _settlementNetCredits(Map<String, dynamic> building) {
+    return asDouble(building['settlement_net_credits']);
   }
 
   void _showBuildingFeedback(String message) {
@@ -1146,7 +1142,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             if (b['status'] == 'closed') return false;
             final cat = b['category']?.toString() ?? '';
             if (_selectedCategory == 'profitable') {
-              return _creditResult(b) > 0;
+              final netCredits = _settlementNetCredits(b);
+              return netCredits != null && netCredits > 0;
             }
             if (_selectedCategory == 'attention') {
               return b['status']?.toString() == 'under_construction';
@@ -1166,8 +1163,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           }).toList();
 
     if (_sortMode == 'profit') {
-      filteredBuildings
-          .sort((a, b) => _creditResult(b).compareTo(_creditResult(a)));
+      filteredBuildings.sort((a, b) {
+        final aValue = _settlementNetCredits(a);
+        final bValue = _settlementNetCredits(b);
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+        return bValue.compareTo(aValue);
+      });
     } else if (_sortMode == 'upkeep') {
       filteredBuildings.sort((a, b) =>
           asDoubleOr(a['daily_operating_credits'], 0)

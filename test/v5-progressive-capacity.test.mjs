@@ -635,6 +635,13 @@ test('V5 building operations do not project progress from client time', async ()
   assert.doesNotMatch(hub, /_localElapsedSeconds|_constructionProgressTimer|duration_minutes.*1440/);
 });
 
+test('V5 building profitability filters use settlement net credits', async () => {
+  const hub = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  assert.match(hub, /settlement_net_credits/);
+  assert.match(hub, /netCredits != null && netCredits > 0/);
+  assert.doesNotMatch(hub, /resource_output_amount.*daily_operating_credits/);
+});
+
 test('V5 governance UI exposes only Earth and Corporation scopes', async () => {
   const panel = await readFile(new URL('../flutter_client/lib/features/governance/governance_panels.dart', import.meta.url), 'utf8');
   assert.match(panel, /TabController\(length: 2/);
