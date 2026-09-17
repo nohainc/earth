@@ -91,8 +91,7 @@ async function assessCanonicalHouseIncomeTax(
 export async function settlePublicTaxesInTransaction(repository: PostgresRepository, day: number, shard = 0, shardCount = 1) {
   const assessedDay = day - 1;
   if (assessedDay < 1) return { ok: true, day, assessedDay, assessed: 0, paid: 0, arrears: 0 };
-  const [ruleResult, constitutionResult, corporationTaxResult, affiliationResult] = await Promise.all([
-    repository.query<TaxRule>(`SELECT id, tax_rule_id, category, rate_bps, tax_base_definition, base_reference, base_amount_units::TEXT, nexus_type, authority_type, authority_id, beneficiary_economic_id FROM tax_rule_versions WHERE effective_from_game_day <= $1 AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1) AND authority_type IN ('EARTH','TERRITORY_GOVERNANCE') ORDER BY id`, [assessedDay]),
+  const [constitutionResult, corporationTaxResult, affiliationResult] = await Promise.all([
     repository.query<{ rules_json: Record<string, unknown>; version_ids: Record<string, string> }>(`SELECT rules_json, version_ids
       FROM resolved_constitution_snapshots_v5
      WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [assessedDay]),
@@ -113,25 +112,27 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
   ]);
   const constitution = constitutionResult.rows[0];
   const constitutionRules = constitution?.rules_json ?? {};
-  const constitutionalCode = (rule: TaxRule): string | null => {
-    if (rule.authority_type !== 'EARTH') return null;
-    return rule.tax_rule_id === 'TAX-MARKET-TRANSACTION' || rule.tax_rule_id === 'TAX-OUC-MARKET'
-      ? 'EARTH.MARKET.TRANSACTION_TAX_RATE'
-      : rule.tax_rule_id === 'TAX-BASIC-LEVY' ? 'EARTH.TAX.BASIC_LEVY_RATE' : null;
+  const canonicalRate = (code: string): number => {
+    const value = constitutionRules[code];
+    if (value === undefined) throw new Error(`Canonical Earth tax snapshot is missing ${code} for assessed game day ${assessedDay}`);
+    const rate = Number(value);
+    if (!Number.isSafeInteger(rate) || rate < 0 || rate > 10_000) throw new Error(`Canonical Earth tax rate is invalid: ${code}`);
+    return rate;
   };
-  for (const rule of ruleResult.rows) {
-    const code = constitutionalCode(rule);
-    if (code && constitutionRules[code] === undefined) {
-      throw new Error(`Canonical Earth tax snapshot is missing ${code} for assessed game day ${assessedDay}`);
-    }
-  }
-  const constitutionalRate = (rule: TaxRule): { rate: bigint; versionId: string | null } | null => {
-    const ruleCode = constitutionalCode(rule);
-    if (!ruleCode) return null;
-    const value = constitutionRules[ruleCode];
-    return value === undefined ? null : { rate: BigInt(String(value)), versionId: constitution?.version_ids?.[ruleCode] ?? null };
-  };
-  const rules: TaxRule[] = [...ruleResult.rows];
+  const rules: TaxRule[] = [
+    {
+      id: constitution?.version_ids?.['EARTH.TAX.BASIC_LEVY_RATE'] ?? 'EARTH.TAX.BASIC_LEVY_RATE',
+      tax_rule_id: 'EARTH.TAX.BASIC_LEVY_RATE', category: 'basic_levy', rate_bps: canonicalRate('EARTH.TAX.BASIC_LEVY_RATE'),
+      tax_base_definition: 'fixed_daily_obligation', base_reference: 'fixed_daily_obligation', base_amount_units: '0',
+      nexus_type: 'EARTH', authority_type: 'EARTH', authority_id: 'EARTH', beneficiary_economic_id: 'ECON-EARTH-001',
+    },
+    {
+      id: constitution?.version_ids?.['EARTH.MARKET.TRANSACTION_TAX_RATE'] ?? 'EARTH.MARKET.TRANSACTION_TAX_RATE',
+      tax_rule_id: 'EARTH.MARKET.TRANSACTION_TAX_RATE', category: 'market_transaction', rate_bps: canonicalRate('EARTH.MARKET.TRANSACTION_TAX_RATE'),
+      tax_base_definition: 'external_market_trade', base_reference: 'external_market_trade', base_amount_units: '0',
+      nexus_type: 'EARTH', authority_type: 'EARTH', authority_id: 'EARTH', beneficiary_economic_id: 'ECON-EARTH-001',
+    },
+  ];
   const corporationMemberships = new Map<string, Set<string>>();
   for (const affiliation of affiliationResult.rows) {
     const housesForCorporation = corporationMemberships.get(affiliation.corporation_id) ?? new Set<string>();
@@ -145,9 +146,8 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
       if (rule.authority_type === 'TERRITORY_GOVERNANCE' && rule.authority_id !== house.territory_id) continue;
       if (rule.authority_type === 'CORPORATION' && !corporationMemberships.get(String(rule.authority_id))?.has(house.house_id)) continue;
       const base = await assessableBase(repository, rule, house.house_id, assessedDay);
-      const constitutional = constitutionalRate(rule);
-      const rateBps = constitutional?.rate ?? BigInt(rule.rate_bps);
-      const ruleVersion = constitutional?.versionId ?? rule.id;
+      const rateBps = BigInt(rule.rate_bps);
+      const ruleVersion = rule.id;
       const amount = base * rateBps / 10_000n;
       if (amount <= 0n) continue;
       const correlationId = `tax:${rule.id}:${house.house_id}:${assessedDay}`;

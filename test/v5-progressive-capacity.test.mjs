@@ -370,7 +370,7 @@ test('daily tax settlement consumes the assessed-day Constitution market rate', 
   const settlement = await readFile(new URL('../cloudflare/src/tax-settlement-postgres.ts', import.meta.url), 'utf8');
   assert.match(settlement, /resolved_constitution_snapshots_v5/);
   assert.match(settlement, /EARTH\.MARKET\.TRANSACTION_TAX_RATE/);
-  assert.match(settlement, /constitutionalRate\(rule\)/);
+  assert.match(settlement, /canonicalRate\('EARTH\.TAX\.BASIC_LEVY_RATE'\)/);
   assert.match(settlement, /CORPORATION\.HOUSE_INCOME_TAX/);
   assert.match(settlement, /EARTH\.TAX\.BASIC_LEVY_RATE/);
   assert.match(settlement, /corporationMemberships/);

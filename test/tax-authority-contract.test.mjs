@@ -28,5 +28,7 @@ test('V4 tax statements expose explicit public authority and nexus traceability'
 test('ordinary Organization membership is not accepted as tax authority', () => {
   const service = fs.readFileSync('cloudflare/src/tax-statement-postgres.ts', 'utf8');
   assert.doesNotMatch(service, /organization_memberships.*tax/i);
-  assert.match(service, /authority_type = 'TERRITORY_GOVERNANCE'/);
+  assert.match(service, /authority_type/);
+  assert.match(service, /getResolvedConstitutionForDay/);
+  assert.doesNotMatch(service, /TERRITORY_GOVERNANCE/);
 });
