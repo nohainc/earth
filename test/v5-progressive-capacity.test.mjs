@@ -840,6 +840,16 @@ test('V5 generic governance proposals cannot carry executable targets', async ()
   assert.match(routes, /status: 410/);
 });
 
+test('V5 retires territory-bound building construction mutations', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/real-estate-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  assert.match(routes, /Territory-bound construction is retired/);
+  assert.match(routes, /use \/api\/v5\/buildings/);
+  assert.match(routes, /status: 410/);
+  assert.match(registry, /path: '\/api\/real-estate\/purchase'.*status: 'REMOVED'/);
+  assert.match(registry, /path: '\/api\/real-estate\/quote'.*status: 'REMOVED'/);
+});
+
 test('V5 construction review quotes and executes the pooled path for independent Houses', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   const confirm = buildings.slice(buildings.indexOf('Future<void> _confirmConstruction'));

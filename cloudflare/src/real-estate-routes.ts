@@ -1,7 +1,7 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
-import { cancelConstructionProject, getConstructionQuote, getTerritoryCapacity, listConstructionProjects, purchaseBuildingInTerritory } from './territory-capacity-postgres.ts';
+import { cancelConstructionProject, getTerritoryCapacity, listConstructionProjects } from './territory-capacity-postgres.ts';
 import {
   startCorporationBuildingResearch,
   quoteCorporationBuildingResearch,
@@ -216,54 +216,11 @@ export async function handleRealEstateRoutes(
   }
 
   if (url.pathname === '/api/real-estate/quote' && request.method === 'GET') {
-    const territoryId = url.searchParams.get('territoryId')?.trim();
-    const buildingType = url.searchParams.get('buildingType')?.trim();
-    const viewerId = viewer.id;
-    if (!territoryId || !buildingType) return Response.json({ ok: false, error: 'Territory ID and building type are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => getConstructionQuote(repository, { ownerId: viewerId, territoryId, buildingType }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Construction quote unavailable' }, { status: 400 });
-    }
+    return Response.json({ ok: false, error: 'Territory-bound construction is retired; use the V5 pooled construction quote.' }, { status: 410 });
   }
 
   if (url.pathname === '/api/real-estate/purchase' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{
-      buildingType?: string;
-      name?: string;
-      territoryId?: string;
-      correlationId?: string;
-    }>(request);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.value;
-    const buildingType = body.buildingType?.trim();
-    const name = body.name?.trim() || '';
-    const territoryId = body.territoryId?.trim();
-    if (!buildingType || !territoryId) {
-      return Response.json({ ok: false, error: 'Building type and Territory ID are required' }, { status: 400 });
-    }
-    const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!correlationId) {
-      return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-    }
-    try {
-      const result = await withRepository(env, (repository) =>
-        purchaseBuildingInTerritory(repository, {
-          ownerId: viewer.id,
-          territoryId,
-          buildingType,
-          name,
-          correlationId,
-        }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Building construction failed';
-      return Response.json({ ok: false, error: message }, { status: /insufficient|exceeded|capacity|quota/i.test(message) ? 409 : 400 });
-    }
+    return Response.json({ ok: false, error: 'Territory-bound construction is retired; use /api/v5/buildings.' }, { status: 410 });
   }
 
   if (url.pathname === '/api/research/buildings' && request.method === 'POST') {
