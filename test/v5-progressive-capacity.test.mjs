@@ -39,7 +39,7 @@ test('V5 structural settlement profiles are rebuildable and independent Houses r
 
 test('V5 settlement profiles exclude inactive Houses from residential aggregates', async () => {
   const profiles = await readFile(new URL('../cloudflare/src/v5-settlement-profiles-postgres.ts', import.meta.url), 'utf8');
-  assert.match(profiles, /CASE WHEN \$7 = 'ACTIVE' THEN 1 ELSE 0 END/);
+  assert.match(profiles, /CASE WHEN \$7 = 'ACTIVE' THEN 1::BIGINT ELSE 0::BIGINT END/);
   assert.match(profiles, /JOIN houses h ON h\.id = hp\.house_id AND h\.status = 'ACTIVE'/);
 });
 
