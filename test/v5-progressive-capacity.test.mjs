@@ -628,6 +628,13 @@ test('V5 building research confirmation uses a server quote', async () => {
   assert.match(panel, /quotedDuration/);
 });
 
+test('V5 building operations do not project progress from client time', async () => {
+  const hub = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  assert.match(hub, /_authoritativeBuildingProgress/);
+  assert.match(hub, /_authoritativeResearchProgress/);
+  assert.doesNotMatch(hub, /_localElapsedSeconds|_constructionProgressTimer|duration_minutes.*1440/);
+});
+
 test('V5 governance UI exposes only Earth and Corporation scopes', async () => {
   const panel = await readFile(new URL('../flutter_client/lib/features/governance/governance_panels.dart', import.meta.url), 'utf8');
   assert.match(panel, /TabController\(length: 2/);

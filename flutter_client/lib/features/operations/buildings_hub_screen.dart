@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
@@ -35,9 +34,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   String _sortMode = 'default';
   String _plannerSelectedBlueprint = 'restaurant';
   Set<String>? _expandedBuildingGroups;
-  Timer? _constructionProgressTimer;
-  int _localElapsedSeconds = 0;
-  int? _serverClockTotalMinutes;
 
   bool get _hasActiveCorporation {
     final corporationId = widget.state.membership?['corporation_id']
@@ -73,67 +69,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _startConstructionTimer();
-  }
-
-  @override
-  void didUpdateWidget(covariant BuildingsHubScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final serverTotalMinutes =
-        asIntOr(widget.state.clock['totalGameMinutes'], 0);
-    if (_serverClockTotalMinutes != null &&
-        serverTotalMinutes != _serverClockTotalMinutes) {
-      _localElapsedSeconds = 0;
-    }
-    _serverClockTotalMinutes = serverTotalMinutes;
-    _startConstructionTimer();
-  }
-
-  @override
-  void dispose() {
-    _constructionProgressTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startConstructionTimer() {
-    final hasUnderConstruction = widget.state.buildings.any(
-        (b) => b is Map && b['status']?.toString() == 'under_construction');
-    final hasActiveResearch = (widget
-                .state.corporationBuildingResearch['projects'] as List?)
-            ?.any((p) =>
-                p is Map &&
-                (p['status']?.toString() == 'active' || p['status'] == null)) ??
-        false;
-    if (hasUnderConstruction || hasActiveResearch) {
-      if (_constructionProgressTimer == null ||
-          !_constructionProgressTimer!.isActive) {
-        _constructionProgressTimer =
-            Timer.periodic(const Duration(seconds: 1), (timer) {
-          if (!mounted) {
-            timer.cancel();
-            return;
-          }
-          setState(() {
-            _localElapsedSeconds++;
-          });
-        });
-      }
-    } else {
-      _constructionProgressTimer?.cancel();
-      _constructionProgressTimer = null;
-    }
-  }
-
   bool _isBuildingActive(Map<String, dynamic> b) {
     return b['status']?.toString() == 'active';
   }
 
   String _getInactiveReason(Map<String, dynamic> b) {
     final status = b['status']?.toString();
-    final progress = _calculateBuildingProgress(b);
+    final progress = _authoritativeBuildingProgress(b);
     if (status == 'under_construction') {
       return 'Construction in progress (${progress.toStringAsFixed(0)}% complete)';
     }
@@ -146,67 +88,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     return 'Inactive';
   }
 
-  double _calculateBuildingProgress(Map<String, dynamic> b) {
+  /// Progress is published by the construction/research read model. The
+  /// client never derives it from local time or an assumed duration.
+  double _authoritativeBuildingProgress(Map<String, dynamic> b) {
     final status = b['status']?.toString();
     if (status != 'under_construction') {
       return 100.0;
     }
-
-    final currentDay = asDoubleOr(widget.state.clock['day'], 1);
-    final currentMinuteOfDay = asDoubleOr(widget.state.clock['minute'], 0);
-    final baseAuthoritativeMinutes = asDoubleOr(
-      widget.state.clock['totalGameMinutes'],
-      ((currentDay - 1) * 1440.0) + currentMinuteOfDay,
-    );
-    // 1 real second = 1 game minute. Add local elapsed seconds so progress ticks every second
-    final authoritativeMinutes =
-        baseAuthoritativeMinutes + _localElapsedSeconds;
-
-    final startMinute = b['construction_started_minute'] != null
-        ? asDoubleOr(b['construction_started_minute'], 0)
-        : ((asDoubleOr(
-                    b['construction_started_game_day'] ?? b['created_game_day'],
-                    currentDay) -
-                1) *
-            1440.0);
-    final completeMinute = b['construction_complete_minute'] != null
-        ? asDoubleOr(b['construction_complete_minute'], startMinute + 1440.0)
-        : ((asDoubleOr(b['construction_complete_game_day'],
-                    (startMinute / 1440.0) + 2.0) -
-                1) *
-            1440.0);
-
-    final totalMinutes = math.max(1.0, completeMinute - startMinute);
-    final elapsed = math.max(0.0, authoritativeMinutes - startMinute);
-
-    final computed = (elapsed / totalMinutes) * 100.0;
-    if (computed >= 100.0) {
-      return 100.0;
-    }
-    return computed.clamp(0.0, 100.0);
+    return (asDouble(b['construction_progress']) ??
+            asDouble(b['progress']) ??
+            0.0)
+        .clamp(0.0, 100.0);
   }
 
-  double _calculateResearchProgress(Map<String, dynamic> project) {
+  double _authoritativeResearchProgress(Map<String, dynamic> project) {
     final status = project['status']?.toString();
     if (status == 'completed') return 100.0;
-    final currentDay = asDoubleOr(widget.state.clock['day'], 1);
-    final currentMinuteOfDay = asDoubleOr(widget.state.clock['minute'], 0);
-    final baseAuthoritativeMinutes = asDoubleOr(
-      widget.state.clock['totalGameMinutes'],
-      ((currentDay - 1) * 1440.0) + currentMinuteOfDay,
-    );
-    final authoritativeMinutes =
-        baseAuthoritativeMinutes + _localElapsedSeconds;
-
-    final startDay = asDoubleOr(project['started_game_day'], currentDay);
-    final startMinuteOfDay = asDoubleOr(project['started_game_minute'], 0);
-    final startMinute = ((startDay - 1) * 1440.0) + startMinuteOfDay;
-    final durationMinutes =
-        math.max(1.0, asDoubleOr(project['duration_minutes'], 1440.0));
-
-    final elapsed = math.max(0.0, authoritativeMinutes - startMinute);
-    final computed = (elapsed / durationMinutes) * 100.0;
-    return computed.clamp(0.0, 100.0);
+    return (asDouble(project['progress']) ?? 0.0).clamp(0.0, 100.0);
   }
 
   double _creditResult(Map<String, dynamic> building) {
@@ -1430,10 +1328,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       final avgProgress = constructionItems.isEmpty
           ? 100.0
           : constructionItems.fold<double>(
-                  0, (sum, b) => sum + _calculateBuildingProgress(b)) /
+              0, (sum, b) => sum + _authoritativeBuildingProgress(b)) /
               constructionItems.length;
       final allConstructed = items.every((b) =>
-          _calculateBuildingProgress(b) >= 100.0 &&
+        _authoritativeBuildingProgress(b) >= 100.0 &&
           b['status']?.toString() != 'under_construction');
       final aggregate = Map<String, dynamic>.from(first)
         ..['slot_footprint'] = totalSpace
@@ -3550,7 +3448,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final availableShares = math.max(0, totalShares - sharesSold);
 
     final bActive = _isBuildingActive(b);
-    final progressVal = _calculateBuildingProgress(b);
+    final progressVal = _authoritativeBuildingProgress(b);
     final isUnderConstruction = !bActive &&
         (b['status']?.toString() == 'under_construction' ||
             progressVal < 100.0);
@@ -3571,7 +3469,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     );
     final hasActiveResearch = activeResearchProject.isNotEmpty;
     final researchProgressVal = hasActiveResearch
-        ? _calculateResearchProgress(activeResearchProject)
+        ? _authoritativeResearchProgress(activeResearchProject)
         : 0.0;
     final researchTargetTier = hasActiveResearch
         ? asIntOr(activeResearchProject['target_tier'], tier + 1)
