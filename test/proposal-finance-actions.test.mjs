@@ -17,5 +17,7 @@ test('financial proposals use typed snapshots and existing Budget V2 services', 
   assert.match(execution, /setBudgetAuthorization/);
   assert.match(execution, /approveInstitutionGrant/);
   assert.match(execution, /spendInstitutionBudget/);
+  assert.match(execution, /Legacy tax rule execution is retired/);
+  assert.doesNotMatch(execution, /earth_create_tax_rule_version/);
   assert.doesNotMatch(execution, /UPDATE economic_accounts\s+SET\s+balance/i);
 });
