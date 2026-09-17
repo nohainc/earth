@@ -127,6 +127,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
         groups.add(rule.policyGroup);
         if (input.subjectType === 'EARTH' && rule.authorityModel === 'CORPORATION_LOCAL') throw new Error('Corporation-local rule cannot be amended at Earth scope');
         if (input.subjectType === 'CORPORATION' && rule.authorityModel === 'EARTH_LOCKED') throw new Error('Earth-locked rule cannot be amended at Corporation scope');
+        if (change.clearOverride && input.subjectType !== 'CORPORATION') throw new Error('Only a Corporation can clear its Earth-default override');
         if (change.clearOverride && rule.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
       }
       if (groups.size !== 1) throw new Error('A Constitution amendment must contain one policy group');

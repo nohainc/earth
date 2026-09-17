@@ -202,6 +202,11 @@ test('V5 Constitution activation rolls back a failed change set atomically', asy
   assert.match(service, /A Constitution change set is atomic/);
 });
 
+test('V5 override clearing is restricted to Corporation scope', async () => {
+  const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /Only a Corporation can clear its Earth-default override/);
+});
+
 test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');
