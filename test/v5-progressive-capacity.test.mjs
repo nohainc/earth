@@ -196,6 +196,7 @@ test('V5 constitutional rules enforce typed values and authority inheritance', (
 
 test('V5 governance snapshots and strict decision semantics are persisted in the migration', async () => {
   const migration = await readFile(new URL('../db/migrations/094_v5_governance_snapshots.sql', import.meta.url), 'utf8');
+  const electorateMigration = await readFile(new URL('../db/migrations/114_v5_electorate_snapshots.sql', import.meta.url), 'utf8');
   const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
   assert.match(migration, /electorate_snapshot_game_day/);
   assert.match(migration, /governance_rule_snapshot/);
@@ -204,6 +205,9 @@ test('V5 governance snapshots and strict decision semantics are persisted in the
   assert.match(service, /evaluateOneHouseVote/);
   assert.match(service, /electorate_size/);
   assert.match(service, /joined_game_day <=/);
+  assert.match(electorateMigration, /v5_governance_electorate_snapshots_v5/);
+  assert.match(service, /INSERT INTO v5_governance_electorate_snapshots_v5/);
+  assert.match(service, /FROM v5_governance_electorate_snapshots_v5 WHERE proposal_id = \$1 AND house_id = \$2/);
 });
 
 test('V5 constitutional amendments are typed, policy-group scoped change sets', async () => {
@@ -829,7 +833,7 @@ test('V5 capacity statement replay preserves the persisted obligation status', a
 test('V5 capacity statement schema accepts canonical House delinquency states', async () => {
   const migration = await readFile(new URL('../db/migrations/112_v5_capacity_statement_delinquency_status.sql', import.meta.url), 'utf8');
   const manifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.migrationVersion, 113);
+  assert.equal(manifest.migrationVersion, 114);
   for (const status of ['CURRENT', 'ARREARS', 'GRACE', 'EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED']) {
     assert.match(migration, new RegExp(`'${status}'`));
   }

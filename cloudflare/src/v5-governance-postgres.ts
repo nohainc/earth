@@ -86,13 +86,14 @@ async function canPropose(tx: PostgresRepository, humanId: string, subjectType: 
   return human;
 }
 
-async function canVote(tx: PostgresRepository, humanId: string, proposal: { subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; electorate_snapshot_game_day: number }): Promise<string> {
+async function canVote(tx: PostgresRepository, humanId: string, proposal: { id: string; electorate_snapshot_game_day: number }): Promise<string> {
   const human = (await tx.query<{ house_id: string }>("SELECT house_id FROM humans WHERE id = $1 AND status = 'ACTIVE'", [humanId])).rows[0];
   if (!human) throw new Error('Active Human not found');
-  if (proposal.subject_type === 'EARTH') {
-    const eligible = (await tx.query("SELECT 1 FROM houses WHERE id = $1 AND status = 'ACTIVE'", [human.house_id])).rows[0];
-    if (!eligible) throw new Error('House is not in the frozen Earth electorate');
-  } else if (!(await tx.query(`SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE' AND joined_game_day <= $3 AND (left_game_day IS NULL OR left_game_day >= $3)`, [human.house_id, proposal.subject_id, proposal.electorate_snapshot_game_day])).rows[0]) throw new Error('House was not in the frozen Corporation electorate');
+  const eligible = (await tx.query(
+    'SELECT 1 FROM v5_governance_electorate_snapshots_v5 WHERE proposal_id = $1 AND house_id = $2',
+    [proposal.id, human.house_id],
+  )).rows[0];
+  if (!eligible) throw new Error('House was not in the frozen V5 electorate');
   return human.house_id;
 }
 
@@ -197,6 +198,26 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     const effective = action.effectiveFromGameDay;
     await tx.query(`INSERT INTO v5_governance_proposals (id, subject_type, subject_id, action_type, payload, status, submitted_game_day, voting_start_game_day, voting_end_game_day, effective_from_game_day, created_by_human_id, correlation_id, quorum_bps, approval_bps, electorate_snapshot_game_day, electorate_size, governance_rule_snapshot, base_version_snapshot, policy_group)
       VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$7 + $13,$8,$9,$10,$11,$12,$7,$14,$15::JSONB,$16::JSONB,$17)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, governanceRuleSnapshot.votingPeriodDays, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
+    if (input.subjectType === 'CORPORATION') {
+      await tx.query(
+        `INSERT INTO v5_governance_electorate_snapshots_v5 (proposal_id, house_id, snapshot_game_day)
+         SELECT $1, ha.house_id, $2
+           FROM house_affiliations ha
+          WHERE ha.corporation_id = $3
+            AND ha.status = 'ACTIVE'
+            AND ha.joined_game_day <= $2
+            AND (ha.left_game_day IS NULL OR ha.left_game_day >= $2)`,
+        [proposalId, votingStart, input.subjectId],
+      );
+    } else {
+      await tx.query(
+        `INSERT INTO v5_governance_electorate_snapshots_v5 (proposal_id, house_id, snapshot_game_day)
+         SELECT $1, h.id, $2
+           FROM houses h
+          WHERE h.status = 'ACTIVE'`,
+        [proposalId, votingStart],
+      );
+    }
     if (input.actionType === 'CONSTITUTION_AMENDMENT') await tx.query(`INSERT INTO constitutional_change_sets_v5 (proposal_id, authority_type, authority_id, policy_group, changes, base_version_snapshot) VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB)`, [proposalId, input.subjectType, input.subjectType === 'EARTH' ? 'EARTH' : input.subjectId, policyGroup, JSON.stringify((proposalPayload as Record<string, unknown>).changes), JSON.stringify(baseVersionSnapshot)]);
     await createGameEvent(tx, { id: `V5-GOV-CREATED-${proposalId}`, category: 'GOVERNANCE', eventType: 'V5_POLICY_PROPOSAL_CREATED', gameDay: day, actorHumanId: input.humanId, subjectType: input.subjectType, subjectId: input.subjectId ?? 'EARTH', title: input.title.trim(), details: { proposalId, actionType: input.actionType, effectiveFromGameDay: effective, body: input.body?.trim() ?? '' }, correlationId: input.correlationId });
     return { ok: true, proposal: toJsonSafe((await tx.query('SELECT * FROM v5_governance_proposals WHERE id = $1', [proposalId])).rows[0]), correlationId: input.correlationId };
@@ -205,7 +226,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
 
 export async function castV5GovernanceVote(repository: PostgresRepository, input: { humanId: string; proposalId: string; choice: 'SUPPORT' | 'OPPOSE' | 'ABSTAIN'; correlationId: string }) {
   return repository.transaction(async (tx) => {
-    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; voting_start_game_day: number; voting_end_game_day: number; electorate_snapshot_game_day: number; status: string }>('SELECT subject_type, subject_id, voting_start_game_day, voting_end_game_day, electorate_snapshot_game_day, status FROM v5_governance_proposals WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
+    const proposal = (await tx.query<{ id: string; subject_type: 'EARTH' | 'CORPORATION'; subject_id: string | null; voting_start_game_day: number; voting_end_game_day: number; electorate_snapshot_game_day: number; status: string }>('SELECT id, subject_type, subject_id, voting_start_game_day, voting_end_game_day, electorate_snapshot_game_day, status FROM v5_governance_proposals WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
     if (!proposal || proposal.status !== 'VOTING') throw new Error('V5 governance proposal is not open for voting');
     const day = await currentDay(tx);
     if (day < proposal.voting_start_game_day || day > proposal.voting_end_game_day) throw new Error('V5 governance voting is not open');
