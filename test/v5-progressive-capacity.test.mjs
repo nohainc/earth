@@ -907,6 +907,15 @@ test('V5 Corporation client mutations do not fall back to Territory-bound endpoi
   assert.doesNotMatch(createSlice, /'territoryName'/);
 });
 
+test('Legacy Corporation mutation endpoints are retired after V5 cutover', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/institutions-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  assert.match(routes, /Legacy Corporation founding is retired/);
+  assert.match(routes, /Legacy Corporation membership is retired/);
+  assert.match(registry, /path: '\/api\/corporations'.*status: 'RETIRED'/);
+  assert.match(registry, /path: '\/api\/corporations\/\{id\}\/membership'.*status: 'RETIRED'/);
+});
+
 test('V5 operations UI has no dead legacy real-estate dialog path', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   assert.doesNotMatch(buildings, /real_estate_dialogs\.dart/);

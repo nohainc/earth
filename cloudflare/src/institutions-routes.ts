@@ -192,6 +192,8 @@ export async function handleInstitutionRoutes(
   }
 
   if (url.pathname === '/api/corporations' && request.method === 'POST') {
+    return Response.json({ ok: false, error: 'Legacy Corporation founding is retired; use /api/v5/corporations.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for migration/admin callers, not the player route. */
     const parsed = await parseJsonBody<{ name?: string; territoryName?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
@@ -261,6 +263,8 @@ export async function handleInstitutionRoutes(
 
   const corporationMembershipMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/membership$/);
   if (corporationMembershipMatch && (request.method === 'POST' || request.method === 'DELETE')) {
+    return Response.json({ ok: false, error: 'Legacy Corporation membership is retired; use the V5 membership command.' }, { status: 410 });
+    /* istanbul ignore next -- retained below for migration/admin callers, not the player route. */
     try {
       const result = await withRepository(env, (repository) =>
         changeCorporationMembership(repository, {
