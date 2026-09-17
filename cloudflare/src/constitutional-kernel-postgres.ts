@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { resolveConstitutionalRuleSet, type EffectiveRuleSet } from './v5-constitution.ts';
+import { CONSTITUTIONAL_RULE_DEFINITIONS, resolveConstitutionalRuleSet, type EffectiveRuleSet } from './v5-constitution.ts';
 
 type RuleRow = {
   id: string;
@@ -55,12 +55,26 @@ async function rulesFor(
 export async function resolveEffectiveConstitution(
   repository: PostgresRepository,
   input: { corporationId?: string; gameDay: number },
-): Promise<{ rules: EffectiveRuleSet; versionIds: Record<string, string>; gameDay: number }> {
+): Promise<{ rules: EffectiveRuleSet; versionIds: Record<string, string>; provenance: Record<string, 'EARTH' | 'CORPORATION'>; gameDay: number }> {
   const earth = await rulesFor(repository, 'EARTH', 'EARTH', input.gameDay);
-  if (!input.corporationId) return { rules: earth.values, versionIds: earth.versionIds, gameDay: input.gameDay };
+  if (!input.corporationId) {
+    return {
+      rules: earth.values,
+      versionIds: earth.versionIds,
+      provenance: Object.fromEntries(Object.keys(earth.values).map((code) => [code, 'EARTH'])) as Record<string, 'EARTH'>,
+      gameDay: input.gameDay,
+    };
+  }
   const corporation = await rulesFor(repository, 'CORPORATION', input.corporationId, input.gameDay);
   const rules = resolveConstitutionalRuleSet({ earth: earth.values, corporation: corporation.values });
-  return { rules, versionIds: { ...earth.versionIds, ...corporation.versionIds }, gameDay: input.gameDay };
+  const provenance: Record<string, 'EARTH' | 'CORPORATION'> = {};
+  for (const definition of CONSTITUTIONAL_RULE_DEFINITIONS) {
+    if (rules[definition.code] === undefined) continue;
+    if (definition.authorityModel === 'EARTH_LOCKED') provenance[definition.code] = 'EARTH';
+    else if (corporation.values[definition.code] !== undefined) provenance[definition.code] = 'CORPORATION';
+    else provenance[definition.code] = 'EARTH';
+  }
+  return { rules, versionIds: { ...earth.versionIds, ...corporation.versionIds }, provenance, gameDay: input.gameDay };
 }
 
 /**
@@ -78,11 +92,12 @@ export async function materializeResolvedConstitutionSnapshot(
   const id = `CONST-${input.authorityType}-${input.authorityId}-D${input.gameDay}`;
   await tx.query(
     `INSERT INTO resolved_constitution_snapshots_v5
-       (id, authority_type, authority_id, game_day, rules_json, version_ids)
-     VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB)
+       (id, authority_type, authority_id, game_day, rules_json, version_ids, provenance_json)
+     VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB,$7::JSONB)
      ON CONFLICT (authority_type, authority_id, game_day) DO UPDATE SET
-       rules_json = EXCLUDED.rules_json, version_ids = EXCLUDED.version_ids`,
-    [id, input.authorityType, input.authorityId, input.gameDay, JSON.stringify(resolved.rules, (_, value) => typeof value === 'bigint' ? value.toString() : value), JSON.stringify(resolved.versionIds)],
+       rules_json = EXCLUDED.rules_json, version_ids = EXCLUDED.version_ids,
+       provenance_json = EXCLUDED.provenance_json`,
+    [id, input.authorityType, input.authorityId, input.gameDay, JSON.stringify(resolved.rules, (_, value) => typeof value === 'bigint' ? value.toString() : value), JSON.stringify(resolved.versionIds), JSON.stringify(resolved.provenance)],
   );
   return { id, versionIds: resolved.versionIds };
 }
@@ -142,6 +157,7 @@ export async function getConstitutionReadModel(
     corporationId: input.corporationId ?? null,
     rules: toJsonSafe(resolved.rules),
     versionIds: resolved.versionIds,
+    provenance: resolved.provenance,
     definitions: toJsonSafe(definitionsResult.rows),
     history: toJsonSafe(history),
     scheduledChanges: toJsonSafe(scheduledResult.rows),

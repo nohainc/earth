@@ -226,6 +226,15 @@ test('V5 rule definitions expose stable calculation dispatch keys', async () => 
   assert.match(readModel, /amendment_class, calculation_key, allowed_values/);
 });
 
+test('V5 resolved Constitution snapshots persist authority provenance', async () => {
+  const migration = await readFile(new URL('../db/migrations/106_constitution_snapshot_provenance.sql', import.meta.url), 'utf8');
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  assert.match(migration, /provenance_json JSONB/);
+  assert.match(kernel, /provenance: Record<string, 'EARTH' \| 'CORPORATION'>/);
+  assert.match(kernel, /provenance_json/);
+  assert.match(kernel, /provenance: resolved.provenance/);
+});
+
 test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');
