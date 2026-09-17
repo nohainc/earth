@@ -104,6 +104,11 @@ export async function getHouseDailySummary(
       ORDER BY created_at, id`, [houseId, summaryDay]),
   ]);
 
+  const authoritative = statement.rows[0] as Record<string, unknown> | undefined;
+  if (!authoritative) {
+    throw new Error(`Daily summary is unavailable for completed game day ${summaryDay}`);
+  }
+
   // V5 is additive while older summary callers can still run against a
   // pre-V5 projection. Keep the optional read isolated so the core summary
   // remains available during rollout and migration catch-up.
@@ -145,9 +150,8 @@ export async function getHouseDailySummary(
     read: row.read_at != null,
   }));
 
-  const authoritative = statement.rows[0] as Record<string, unknown> | undefined;
-  const production = authoritative ? jsonObject(authoritative.production) : {};
-  const consumption = authoritative ? jsonObject(authoritative.consumption) : {};
+  const production = jsonObject(authoritative.production);
+  const consumption = jsonObject(authoritative.consumption);
   const resourceCodes = new Set([...Object.keys(production), ...Object.keys(consumption)]);
   const resourceDeltas = [...resourceCodes].sort().map((resource) => ({
     resource,
@@ -155,7 +159,7 @@ export async function getHouseDailySummary(
     consumed: units(consumption[resource]),
     net: units(production[resource]) - units(consumption[resource]),
   }));
-  const statementView = authoritative ? {
+  const statementView = {
     openingAssets: jsonObject(authoritative.opening_assets),
     closingAssets: jsonObject(authoritative.closing_assets),
     production: jsonObject(authoritative.production),
@@ -164,7 +168,7 @@ export async function getHouseDailySummary(
     obligations: authoritative.obligations ?? {},
     exceptions: authoritative.exceptions ?? {},
     netCreditUnits: String(authoritative.net_credit_units ?? '0'),
-  } : null;
+  };
 
   const highlights: Array<Record<string, unknown>> = [];
   if (expenses > income) highlights.push({

@@ -36,3 +36,18 @@ test('House Daily Summary derives deterministic values from V2 records', async (
   assert.deepEqual(result.highlights, []);
   assert.deepEqual(result.resources.deltas, [{ resource: 'FOOD', produced: 2, consumed: 1, net: 1 }]);
 });
+
+test('House Daily Summary fails closed when the completed-day statement is missing', async () => {
+  const repository = {
+    async query(sql) {
+      if (sql.toLowerCase().includes('from world_state')) return { rows: [{ game_day: 5 }] };
+      if (sql.toLowerCase().includes('from house_daily_statements')) return { rows: [] };
+      return { rows: [] };
+    },
+  };
+
+  await assert.rejects(
+    () => getHouseDailySummary(repository, 'HOUSE-1'),
+    /Daily summary is unavailable for completed game day 4/,
+  );
+});
