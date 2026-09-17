@@ -122,7 +122,7 @@ export async function getV5CorporationCapacity(repository: PostgresRepository, c
 /** Returns the Earth-wide pooled-capacity read model, including independent Houses. */
 export async function getV5EarthCapacity(repository: PostgresRepository, gameDay?: number): Promise<Record<string, unknown>> {
   const policy = await getActiveV5StandardCapacity(repository, gameDay);
-  const [houses, corporations] = await Promise.all([
+  const [houses, corporations, capacityRevenue, treasury, programCommitments] = await Promise.all([
     repository.query<{ house_count: string; independent_count: string; occupied_units: string }>(
       `SELECT COUNT(*)::TEXT AS house_count,
               COUNT(*) FILTER (WHERE corporation_id IS NULL)::TEXT AS independent_count,
@@ -139,9 +139,38 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
         WHERE s.game_day = $1`,
       [policy.gameDay],
     ),
+    repository.query<{ assessed: string; paid: string; arrears: string; game_day: string }>(
+      `SELECT COALESCE(SUM(assessed_units), 0)::TEXT AS assessed,
+              COALESCE(SUM(paid_units), 0)::TEXT AS paid,
+              COALESCE(SUM(assessed_units - paid_units), 0)::TEXT AS arrears,
+              COALESCE(MAX(game_day), 0)::TEXT AS game_day
+         FROM v5_capacity_obligations
+        WHERE capacity_level = 'CORPORATION'`,
+    ),
+    repository.query<{ account_type: string; balance_units: string }>(
+      `SELECT a.account_type, COALESCE(SUM(a.balance_units), 0)::TEXT AS balance_units
+         FROM economic_accounts a
+         JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+        WHERE o.id = 'EARTH'
+          AND a.asset_id = 1
+          AND a.account_type IN ('TREASURY', 'OPERATIONS', 'RESERVE')
+          AND a.status = 'ACTIVE'
+        GROUP BY a.account_type`,
+    ),
+    repository.query<{ authorized: string; committed: string; spent: string }>(
+      `SELECT COALESCE(SUM(authorized_units), 0)::TEXT AS authorized,
+              COALESCE(SUM(committed_units), 0)::TEXT AS committed,
+              COALESCE(SUM(spent_units), 0)::TEXT AS spent
+         FROM institution_budget_lines
+        WHERE institution_id = 'EARTH'
+          AND status IN ('ACTIVE', 'OPEN', 'APPROVED')`,
+    ),
   ]);
   const house = houses.rows[0];
   const corporation = corporations.rows[0];
+  const revenue = capacityRevenue.rows[0] ?? { assessed: '0', paid: '0', arrears: '0', game_day: '0' };
+  const earthAccounts = Object.fromEntries(treasury.rows.map((row) => [row.account_type.toLowerCase(), row.balance_units]));
+  const commitments = programCommitments.rows[0] ?? { authorized: '0', committed: '0', spent: '0' };
   const independentUnits = BigInt(house?.occupied_units ?? '0');
   const corporationUnits = BigInt(corporation?.occupied_units ?? '0');
   return {
@@ -155,6 +184,20 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
     corporationOccupiedUnits: corporationUnits.toString(),
     totalOccupiedUnits: (independentUnits + corporationUnits).toString(),
     requiredTerritoryUnits: BigInt(corporation?.required_units ?? '0').toString(),
+    fiscal: {
+      capacityRevenueAssessedUnits: revenue.assessed,
+      capacityRevenuePaidUnits: revenue.paid,
+      capacityRevenueArrearsUnits: revenue.arrears,
+      capacityRevenueAssessedGameDay: Number(revenue.game_day),
+      treasuryUnits: earthAccounts.treasury ?? '0',
+      operationsUnits: earthAccounts.operations ?? '0',
+      reserveUnits: earthAccounts.reserve ?? '0',
+      programCommitments: {
+        authorizedUnits: commitments.authorized,
+        committedUnits: commitments.committed,
+        spentUnits: commitments.spent,
+      },
+    },
     generatedFrom: 'postgres-v5-structural-settlement-profile',
   };
 }
