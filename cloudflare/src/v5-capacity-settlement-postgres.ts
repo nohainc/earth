@@ -43,7 +43,7 @@ async function account(tx: PostgresRepository, economicId: string, types: string
 
 async function recordObligation(tx: PostgresRepository, input: {
   level: 'HOUSE' | 'CORPORATION'; houseId?: string; corporationId?: string; payerEconomicId: string; beneficiaryEconomicId: string;
-  day: number; assessedDay: number; usage: bigint; baseRate: bigint; schedule: Schedule; assessed: bigint; sourceKey: string;
+  day: number; assessedDay: number; usage: bigint; baseRate: bigint; schedule: Schedule; assessed: bigint; sourceKey: string; rulesVersion: string;
 }): Promise<'PAID' | 'PARTIAL' | 'ARREARS' | 'EXISTING'> {
   const existing = (await tx.query<{ status: string }>('SELECT status FROM v5_capacity_obligations WHERE correlation_id = $1', [input.sourceKey])).rows[0];
   if (existing) return 'EXISTING';
@@ -53,8 +53,8 @@ async function recordObligation(tx: PostgresRepository, input: {
     (id, debtor_economic_id, creditor_economic_id, obligation_type, source_id, principal_due_units, due_game_day,
      priority_class, rule_version, status, created_game_day, debtor_account_purpose, creditor_account_purpose,
      nexus_type, authority_type, authority_id, base_reference, correlation_id)
-    VALUES ($1,$2,$3,'CAPACITY_RENT',$4,$5,$6,20,'v5-capacity-policy','DUE',$7,'WALLET','OPERATIONS','MEMBERSHIP','EARTH',$8,'physical_capacity_units',$9)
-    ON CONFLICT (correlation_id) DO NOTHING`, [financialId, input.payerEconomicId, input.beneficiaryEconomicId, input.sourceKey, input.assessed.toString(), input.day, input.day, input.level === 'HOUSE' ? (input.corporationId ?? 'EARTH') : 'EARTH', `v5-fin:${input.sourceKey}`]);
+    VALUES ($1,$2,$3,'CAPACITY_RENT',$4,$5,$6,20,$7,'DUE',$8,'WALLET','OPERATIONS','MEMBERSHIP','EARTH',$9,'physical_capacity_units',$10)
+    ON CONFLICT (correlation_id) DO NOTHING`, [financialId, input.payerEconomicId, input.beneficiaryEconomicId, input.sourceKey, input.assessed.toString(), input.day, input.rulesVersion, input.day, input.level === 'HOUSE' ? (input.corporationId ?? 'EARTH') : 'EARTH', `v5-fin:${input.sourceKey}`]);
   const subjectColumn = input.level === 'HOUSE' ? 'house_id' : 'corporation_id';
   const subjectId = input.level === 'HOUSE' ? input.houseId : input.corporationId;
   const priorObligations = (await tx.query<{ id: string; financial_obligation_id: string | null; assessed_units: string; paid_units: string }>(
@@ -88,7 +88,7 @@ async function recordObligation(tx: PostgresRepository, input: {
   let transactionId: string | null = null;
   const totalPaid = paidPrior + paid;
   if (totalPaid > 0n) {
-    const result = await tx.query<{ transaction_id: string }>(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','CAPACITY_RENT',$3,'v5-capacity-policy',$4::JSONB) AS transaction_id`, [`v5-payment:${input.sourceKey}`, input.day, input.level === 'HOUSE' ? input.houseId : input.corporationId, JSON.stringify([{ account_id: payer!.id, asset_id: 1, delta_units: (-totalPaid).toString() }, { account_id: beneficiary!.id, asset_id: 1, delta_units: totalPaid.toString() }])]);
+    const result = await tx.query<{ transaction_id: string }>(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','CAPACITY_RENT',$3,$4,$5::JSONB) AS transaction_id`, [`v5-payment:${input.sourceKey}`, input.day, input.level === 'HOUSE' ? input.houseId : input.corporationId, input.rulesVersion, JSON.stringify([{ account_id: payer!.id, asset_id: 1, delta_units: (-totalPaid).toString() }, { account_id: beneficiary!.id, asset_id: 1, delta_units: totalPaid.toString() }])]);
     transactionId = result.rows[0]?.transaction_id ?? null;
     if (priorObligations.length) {
       await tx.query(`UPDATE v5_capacity_obligations SET payment_transaction_id = COALESCE(payment_transaction_id, $2) WHERE id = ANY($1::TEXT[])`, [priorObligations.map((row) => row.id), transactionId]);
@@ -151,12 +151,13 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
   let paid = 0; let partial = 0; let arrears = 0; let houseAssessments = 0;
   for (const member of members) {
     const usage = 1n + member.buildingUnits;
-    const baseRate = member.corporationId === null
-      ? policy.earthBaseRate
+    const baseRateResolution = member.corporationId === null
+      ? { rate: policy.earthBaseRate, ruleSetId: policy.id }
       : await corporationBaseRate(tx, member.corporationId, assessedDay);
+    const baseRate = baseRateResolution?.rate ?? null;
     if (baseRate !== null) {
       const charge = calculateProgressiveCharge({ quantity: usage, baseRate, brackets: houseSchedule.brackets });
-      const result = await recordObligation(tx, { level: 'HOUSE', houseId: member.houseId, corporationId: member.corporationId ?? undefined, payerEconomicId: member.houseEconomicId, beneficiaryEconomicId: member.corporationEconomicId ?? 'ECON-EARTH-001', day, assessedDay, usage, baseRate, schedule: houseSchedule, assessed: charge.totalCharge, sourceKey: `house:${member.houseId}:${assessedDay}:${houseSchedule.id}:${member.corporationId ?? 'EARTH'}` });
+      const result = await recordObligation(tx, { level: 'HOUSE', houseId: member.houseId, corporationId: member.corporationId ?? undefined, payerEconomicId: member.houseEconomicId, beneficiaryEconomicId: member.corporationEconomicId ?? 'ECON-EARTH-001', day, assessedDay, usage, baseRate, schedule: houseSchedule, assessed: charge.totalCharge, rulesVersion: baseRateResolution.ruleSetId, sourceKey: `house:${member.houseId}:${assessedDay}:${houseSchedule.id}:${member.corporationId ?? 'EARTH'}` });
       await updateDelinquency(tx, 'HOUSE', member.houseId, assessedDay, result);
       const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'HOUSE' AND subject_id = $1`, [member.houseId])).rows[0];
       await applyHouseProductiveStatus(tx, member.houseId, delinquency?.status ?? 'CURRENT');
@@ -171,7 +172,7 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
             total_units = EXCLUDED.total_units, base_rate_units = EXCLUDED.base_rate_units,
             progressive_schedule_id = EXCLUDED.progressive_schedule_id, assessed_rent_units = EXCLUDED.assessed_rent_units,
             paid_rent_units = EXCLUDED.paid_rent_units, arrears_units = EXCLUDED.arrears_units,
-            delinquency_status = EXCLUDED.delinquency_status, rules_version = EXCLUDED.rules_version`, [member.houseId, member.corporationId, assessedDay, member.buildingUnits.toString(), usage.toString(), baseRate.toString(), houseSchedule.id, statement.assessed_units, statement.paid_units, (BigInt(statement.assessed_units) - BigInt(statement.paid_units)).toString(), result === 'PAID' ? 'CURRENT' : result === 'PARTIAL' ? 'ARREARS' : 'ARREARS', `v5-capacity-policy:${policy.version}`]);
+            delinquency_status = EXCLUDED.delinquency_status, rules_version = EXCLUDED.rules_version`, [member.houseId, member.corporationId, assessedDay, member.buildingUnits.toString(), usage.toString(), baseRate.toString(), houseSchedule.id, statement.assessed_units, statement.paid_units, (BigInt(statement.assessed_units) - BigInt(statement.paid_units)).toString(), result === 'PAID' ? 'CURRENT' : result === 'PARTIAL' ? 'ARREARS' : 'ARREARS', baseRateResolution.ruleSetId]);
       }
       if (result !== 'EXISTING') { houseAssessments += 1; if (result === 'PAID') paid += 1; else if (result === 'PARTIAL') partial += 1; else arrears += 1; }
     }
@@ -210,7 +211,7 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
         private_building_units_used = EXCLUDED.private_building_units_used, public_building_units_used = EXCLUDED.public_building_units_used,
         total_occupied_units = EXCLUDED.total_occupied_units, standard_territory_capacity_units = EXCLUDED.standard_territory_capacity_units,
         required_territory_units = EXCLUDED.required_territory_units, rules_version = EXCLUDED.rules_version, updated_at = CURRENT_TIMESTAMP`, [corporationId, assessedDay, units.residential.toString(), units.privateBuildings.toString(), units.publicBuildings.toString(), usage.toString(), policy.standardCapacity.toString(), requiredTerritories.toString(), `v5-capacity-policy:${policy.version}`]);
-    const result = await recordObligation(tx, { level: 'CORPORATION', corporationId, payerEconomicId: units.economicId, beneficiaryEconomicId: 'ECON-EARTH-001', day, assessedDay, usage, baseRate: policy.earthBaseRate, schedule: corporationSchedule, assessed: charge.totalCharge, sourceKey: `corporation:${corporationId}:${assessedDay}:${corporationSchedule.id}` });
+    const result = await recordObligation(tx, { level: 'CORPORATION', corporationId, payerEconomicId: units.economicId, beneficiaryEconomicId: 'ECON-EARTH-001', day, assessedDay, usage, baseRate: policy.earthBaseRate, schedule: corporationSchedule, assessed: charge.totalCharge, rulesVersion: policy.id, sourceKey: `corporation:${corporationId}:${assessedDay}:${corporationSchedule.id}` });
     await updateDelinquency(tx, 'CORPORATION', corporationId, assessedDay, result);
     const corporationStatus = (await tx.query<{ status: string; consecutive_missed_days: number }>(`SELECT status, consecutive_missed_days FROM v5_capacity_delinquency_state WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [corporationId])).rows[0];
     const outstanding = charge.totalCharge;
@@ -220,13 +221,13 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
   return { ok: true, day, assessedDay, houses: houseAssessments, corporations: corporationUnits.size, paid, partial, arrears, policyVersion: policy.version };
 }
 
-async function corporationBaseRate(tx: PostgresRepository, corporationId: string, day: number): Promise<bigint | null> {
-  const snapshot = (await tx.query<{ rules_json: Record<string, unknown> }>(`SELECT rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [corporationId, day])).rows[0];
+async function corporationBaseRate(tx: PostgresRepository, corporationId: string, day: number): Promise<{ rate: bigint; ruleSetId: string } | null> {
+  const snapshot = (await tx.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [corporationId, day])).rows[0];
   const snapshotRate = snapshot?.rules_json?.['CORPORATION.HOUSE_CAPACITY.BASE_RATE'];
-  if (snapshotRate !== undefined) return BigInt(String(snapshotRate));
+  if (snapshotRate !== undefined && snapshot) return { rate: BigInt(String(snapshotRate)), ruleSetId: snapshot.id };
   const row = (await tx.query<{ rate: string }>(`SELECT house_base_capacity_rate_units::TEXT AS rate FROM corporation_capacity_policy_versions
     WHERE corporation_id = $1 AND status = 'ACTIVE' AND effective_from_game_day <= $2
       AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)
     ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [corporationId, day])).rows[0];
-  return row ? BigInt(row.rate) : null;
+  return row ? { rate: BigInt(row.rate), ruleSetId: `v5-capacity-policy:${corporationId}:${day}` } : null;
 }
