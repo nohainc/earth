@@ -430,6 +430,10 @@ class Dashboard extends StatelessWidget {
             canonicalLoader: () => const EarthApi().getV5Constitution(
               corporationId: state.membership?['corporation_id']?.toString(),
             ),
+            onPreviewAmendment: (changes) => const EarthApi().previewV5ConstitutionAmendment(
+              corporationId: state.membership?['corporation_id']?.toString(),
+              changes: changes,
+            ),
             onProposeAmendment: (changes) async {
               final corporationId = state.membership?['corporation_id']?.toString();
               final preview = await const EarthApi().previewV5ConstitutionAmendment(

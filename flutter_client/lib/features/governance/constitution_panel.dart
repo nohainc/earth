@@ -6,10 +6,15 @@ import '../../shared/widgets/earth_page_cockpit.dart';
 class ConstitutionPanel extends StatefulWidget {
   final EarthState state;
   final Future<Map<String, dynamic>> Function()? canonicalLoader;
+  final Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> changes)? onPreviewAmendment;
   final Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> changes)? onProposeAmendment;
 
   const ConstitutionPanel(
-      {super.key, required this.state, this.canonicalLoader, this.onProposeAmendment});
+      {super.key,
+      required this.state,
+      this.canonicalLoader,
+      this.onPreviewAmendment,
+      this.onProposeAmendment});
 
   @override
   State<ConstitutionPanel> createState() => _ConstitutionPanelState();
@@ -543,6 +548,16 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     );
     if (result == null || !context.mounted || widget.onProposeAmendment == null) return;
     try {
+      if (widget.onPreviewAmendment != null) {
+        final preview = await widget.onPreviewAmendment!([result]);
+        if (!context.mounted) return;
+        if (preview['ok'] == false) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(preview['error']?.toString() ?? 'Amendment preview failed.')));
+          return;
+        }
+        final proceed = await _confirmPreview(context, preview);
+        if (!proceed || !context.mounted) return;
+      }
       final response = await widget.onProposeAmendment!([result]);
       if (!context.mounted) return;
       final ok = response['ok'] != false;
@@ -550,6 +565,49 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     } catch (error) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Amendment proposal failed: $error')));
     }
+  }
+
+  Future<bool> _confirmPreview(BuildContext context, Map<String, dynamic> preview) async {
+    final changes = preview['changes'] is List
+        ? (preview['changes'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final effects = preview['progressiveEffects'] is List
+        ? (preview['progressiveEffects'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    final lines = <Widget>[
+      Text('GAME DAY ${preview['gameDay'] ?? '—'} · SERVER-CALCULATED IMPACT', style: Theme.of(context).textTheme.labelSmall),
+      const SizedBox(height: 12),
+      for (final change in changes)
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text(change['ruleCode']?.toString() ?? 'Rule'),
+          subtitle: Text('${_formatCanonicalValue(change['currentValue'])}  →  ${_formatCanonicalValue(change['proposedValue'])}'),
+        ),
+      for (final effect in effects) ...[
+        const Divider(),
+        Text('PROGRESSIVE EFFECT · ${effect['ruleCode'] ?? 'RULE'}', style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 4),
+        ...((effect['effects'] is List ? effect['effects'] as List : const [])
+            .whereType<Map>()
+            .map((row) => Text(
+                  'QTY ${row['current']?['quantity'] ?? '—'}: ${row['current']?['totalCharge'] ?? '—'} → ${row['proposed']?['totalCharge'] ?? '—'} (Δ ${row['delta'] ?? '—'})',
+                  style: Theme.of(context).textTheme.bodySmall,
+                )),
+      ],
+    ];
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('REVIEW CONSTITUTION AMENDMENT'),
+            content: SizedBox(width: 520, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: lines))),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('CANCEL')),
+              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('SUBMIT PROPOSAL')),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   String _formatCanonicalValue(dynamic value) {
