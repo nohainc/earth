@@ -5,19 +5,9 @@ import { assertConstitutionalAmendableRule, getConstitutionalRuleDefinition } fr
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
 import { validateProposalActionSnapshot } from './proposal-actions.ts';
+import { toJsonSafe } from './json-safe.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
-
-/** PostgreSQL BIGINT values must cross the API boundary as decimal strings. */
-function toJsonSafe<T>(value: T): T {
-  if (typeof value === 'bigint') return value.toString() as T;
-  if (value instanceof Date) return value;
-  if (Array.isArray(value)) return value.map((item) => toJsonSafe(item)) as T;
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toJsonSafe(item)])) as T;
-  }
-  return value;
-}
 
 function currentDay(tx: PostgresRepository): Promise<number> {
   return tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'").then((result) => Number(result.rows[0]?.game_day ?? 1));

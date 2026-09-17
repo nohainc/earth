@@ -845,6 +845,16 @@ test('V5 command overview converts PostgreSQL bigint values at the JSON boundary
   assert.match(overview, /Number\(delinquencyRow\.consecutive_missed_days/);
 });
 
+test('V5 historical list read models share the JSON-safe database boundary', async () => {
+  const jsonSafe = await readFile(new URL('../cloudflare/src/json-safe.ts', import.meta.url), 'utf8');
+  assert.match(jsonSafe, /typeof value === 'bigint'/);
+  for (const file of ['v5-governance-postgres.ts', 'v5-membership-postgres.ts', 'v5-capacity-resolution-postgres.ts', 'v5-corporation-receivership-postgres.ts']) {
+    const source = await readFile(new URL(`../cloudflare/src/${file}`, import.meta.url), 'utf8');
+    assert.match(source, /from '\.\/json-safe\.ts'/, `${file} must use the shared JSON boundary`);
+    assert.match(source, /toJsonSafe\(/, `${file} must sanitize database rows`);
+  }
+});
+
 test('V5 world snapshot converts PostgreSQL bigint values at the JSON boundary', async () => {
   const world = await readFile(new URL('../cloudflare/src/world-postgres.ts', import.meta.url), 'utf8');
   assert.match(world, /PostgreSQL BIGINT values must have one explicit JSON wire representation/);

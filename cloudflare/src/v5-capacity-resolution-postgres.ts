@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { toJsonSafe } from './json-safe.ts';
 
 async function activeHouse(tx: PostgresRepository, humanId: string) {
   const row = (await tx.query<{ house_id: string; corporation_id: string | null }>(`SELECT h.house_id, ha.corporation_id
@@ -29,7 +30,7 @@ export async function listV5CapacityResolutionCases(repository: PostgresReposito
     const house = await activeHouse(tx, humanId);
     const cases = await tx.query(`SELECT c.*, COALESCE(jsonb_agg(jsonb_build_object('buildingId', a.building_id, 'footprintUnits', a.footprint_units, 'proceedsUnits', a.proceeds_units, 'resolvedGameDay', a.resolved_game_day) ORDER BY a.building_id) FILTER (WHERE a.building_id IS NOT NULL), '[]'::JSONB) AS assets
       FROM v5_capacity_resolution_cases c LEFT JOIN v5_capacity_resolution_assets a ON a.case_id = c.id WHERE c.house_id = $1 GROUP BY c.id ORDER BY c.opened_game_day DESC, c.id DESC`, [house.house_id]);
-    return { ok: true, houseId: house.house_id, cases: cases.rows };
+    return { ok: true, houseId: house.house_id, cases: toJsonSafe(cases.rows) };
   });
 }
 

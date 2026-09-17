@@ -5,6 +5,7 @@ import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
 import { calculateProgressiveCharge } from './v5-progressive.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
+import { toJsonSafe } from './json-safe.ts';
 
 type HouseContext = { houseId: string; currentCorporationId: string | null; buildingUnits: bigint };
 
@@ -263,7 +264,7 @@ export async function listV5MembershipApplications(repository: PostgresRepositor
       LEFT JOIN humans h ON h.house_id = a.house_id AND h.status = 'ACTIVE'
       WHERE a.corporation_id = $1 AND a.status = $2
       ORDER BY a.requested_game_day, a.id`, [input.corporationId, status]);
-    return { ok: true, corporationId: input.corporationId, status, applications: applications.rows };
+    return { ok: true, corporationId: input.corporationId, status, applications: toJsonSafe(applications.rows) };
   });
 }
 
