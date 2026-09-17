@@ -705,6 +705,14 @@ test('V5 building read model exposes latest settlement net resources', async () 
   assert.match(world, /FROM building_settlement_journals/);
 });
 
+test('V5 world catalog exposes authored building research economics', async () => {
+  const world = await readFile(new URL('../cloudflare/src/world-postgres.ts', import.meta.url), 'utf8');
+  const technology = await readFile(new URL('../flutter_client/lib/features/operations/technology_panel.dart', import.meta.url), 'utf8');
+  assert.match(world, /c\.research_credit_units, c\.research_duration_game_days/);
+  assert.match(technology, /bp\['research_credit_units'\]/);
+  assert.match(technology, /bp\['research_duration_game_days'\]/);
+});
+
 test('V5 Territory containers reconcile with exact counts and monotonic sequences', async () => {
   const containers = await readFile(new URL('../cloudflare/src/v5-territory-containers-postgres.ts', import.meta.url), 'utf8');
   assert.match(containers, /const required = BigInt\(state\.required_territory_units\)/);

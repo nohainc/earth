@@ -36,6 +36,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     repository.query(`SELECT c.id, c.code, c.code AS building_type, c.family_code, c.tier, c.tier_formula_version,
                              c.economic_role, c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                              c.construction_credit_units, c.construction_minutes,
+                             c.research_credit_units, c.research_duration_game_days,
                              c.operating_credit_units, c.service_type, c.service_capacity_units,
                              c.slot_footprint, c.definition_version,
                              COALESCE(jsonb_agg(jsonb_build_object(
@@ -48,7 +49,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                         LEFT JOIN building_catalog_resource_flows f ON f.catalog_id = c.id
                        GROUP BY c.id, c.code, c.family_code, c.tier, c.tier_formula_version,
                                 c.economic_role, c.ownership_scope, c.construction_credit_units,
-                                c.construction_minutes, c.operating_credit_units, c.service_type,
+                                c.construction_minutes, c.research_credit_units, c.research_duration_game_days,
+                                c.operating_credit_units, c.service_type,
                                 c.service_capacity_units, c.slot_footprint, c.definition_version
                        ORDER BY c.code, c.tier, c.id`),
     viewerHouseId ? repository.query(`SELECT b.id, b.territory_id, b.catalog_id, b.status, b.started_game_day,

@@ -310,12 +310,16 @@ class _CorporateBuildingResearchPanelState
                     bp['construction_credit_units'] ?? bp['cost_credits'], 0);
                 final slots = math.max(1, asIntOr(bp['slot_footprint'], 1));
                 final nextResearchCost = asDoubleOr(
-                    bp['research_credit_cost_units'] ??
+                    bp['research_credit_units'] ??
+                        bp['research_credit_cost_units'] ??
                         bp['researchCost'] ??
                         bp['research_cost'],
                     0);
                 final durationDays = asIntOr(
-                    bp['research_duration_days'] ?? bp['duration_days'], 0);
+                    bp['research_duration_game_days'] ??
+                        bp['research_duration_days'] ??
+                        bp['duration_days'],
+                    0);
 
                 final activeProject = activeProjectMap[type];
                 final isResearching = activeProject != null;
