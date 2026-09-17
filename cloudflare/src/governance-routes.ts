@@ -75,6 +75,9 @@ export async function handleGovernanceRoutes(
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId || !parsed.value.subjectType || !parsed.value.actionType || !parsed.value.payload || !parsed.value.title?.trim()) return Response.json({ ok: false, error: 'Subject, action, payload, title, and idempotency key are required' }, { status: 400 });
+    if (parsed.value.actionType !== 'CONSTITUTION_AMENDMENT') {
+      return Response.json({ ok: false, error: 'Legacy V5 policy actions are retired; submit a typed CONSTITUTION_AMENDMENT change set.' }, { status: 410 });
+    }
     try {
       const result = await withRepository(env, (repository) => createV5GovernanceProposal(repository, { humanId: viewer.id, subjectType: parsed.value.subjectType!, subjectId: parsed.value.subjectId ?? null, actionType: parsed.value.actionType!, payload: parsed.value.payload!, title: parsed.value.title!, body: parsed.value.body, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

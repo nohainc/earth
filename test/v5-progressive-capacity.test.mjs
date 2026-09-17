@@ -403,6 +403,12 @@ test('V5 governance read model is scoped to Earth and active Corporation affilia
   assert.match(route, /governance\/v5\/proposals.*GET/);
 });
 
+test('V5 public governance accepts only typed Constitution amendment change sets', async () => {
+  const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
+  assert.match(route, /Legacy V5 policy actions are retired/);
+  assert.match(route, /parsed\.value\.actionType !== 'CONSTITUTION_AMENDMENT'/);
+});
+
 test('V5 Finance exposes server-authoritative liquidity and next settlement', async () => {
   const route = await readFile(new URL('../cloudflare/src/finance-routes.ts', import.meta.url), 'utf8');
   const client = await readFile(new URL('../flutter_client/lib/features/finance/personal_finance_panel.dart', import.meta.url), 'utf8');

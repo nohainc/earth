@@ -161,7 +161,10 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       const currentVersions = (await tx.query<{ rule_code: string; id: string }>(`SELECT rule_code, id FROM constitutional_rule_versions_v5 WHERE authority_type = $1 AND authority_id = $2 AND status = 'ACTIVE' AND effective_to_game_day IS NULL AND rule_code = ANY($3::TEXT[])`, [authorityType, authorityId, codes])).rows;
       for (const version of currentVersions) baseVersionSnapshot[version.rule_code] = version.id;
       const changes = (action.changes ?? []).map((change) => ({ ...change, baseVersionId: change.baseVersionId ?? (baseVersionSnapshot[change.ruleCode] as string | undefined) }));
-      proposalPayload = { ...input.payload, changes };
+      // Persist exactly the payload that was validated. In particular, the
+      // effective day may have been normalized above when a client supplied a
+      // stale/past day; activation must never consume the pre-normalized copy.
+      proposalPayload = { ...proposalInputPayload, changes };
     }
     const proposalId = `V5-GOV-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const effective = action.effectiveFromGameDay;
