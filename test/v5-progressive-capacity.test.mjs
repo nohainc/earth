@@ -231,6 +231,13 @@ test('V5 active policy-group exclusivity is enforced by PostgreSQL', async () =>
   assert.match(migration, /status IN \('VOTING', 'PASSED', 'SCHEDULED'\)/);
 });
 
+test('V5 amendments lock both existing and absent base versions', async () => {
+  const source = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(source, /baseVersionSnapshot\[code\] = null/);
+  assert.match(source, /Object\.prototype\.hasOwnProperty\.call\(base, change\.ruleCode\)/);
+  assert.match(source, /current\?\.id \?\? null/);
+});
+
 test('V5 rule definitions expose stable calculation dispatch keys', async () => {
   const registry = await readFile(new URL('../cloudflare/src/v5-constitution.ts', import.meta.url), 'utf8');
   const migration = await readFile(new URL('../db/migrations/105_constitution_calculation_keys.sql', import.meta.url), 'utf8');

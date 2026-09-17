@@ -159,6 +159,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       const authorityId = input.subjectType === 'EARTH' ? 'EARTH' : String(input.subjectId);
       const codes = (action.changes ?? []).map((change) => change.ruleCode);
       const currentVersions = (await tx.query<{ rule_code: string; id: string }>(`SELECT rule_code, id FROM constitutional_rule_versions_v5 WHERE authority_type = $1 AND authority_id = $2 AND status = 'ACTIVE' AND effective_to_game_day IS NULL AND rule_code = ANY($3::TEXT[])`, [authorityType, authorityId, codes])).rows;
+      for (const code of codes) baseVersionSnapshot[code] = null;
       for (const version of currentVersions) baseVersionSnapshot[version.rule_code] = version.id;
       const changes = (action.changes ?? []).map((change) => ({ ...change, baseVersionId: change.baseVersionId ?? (baseVersionSnapshot[change.ruleCode] as string | undefined) }));
       // Persist exactly the payload that was validated. In particular, the
@@ -267,11 +268,11 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
     if (!proposal) throw new Error('Constitution amendment proposal not found');
     const authorityType = proposal.subject_type;
     const authorityId = authorityType === 'EARTH' ? 'EARTH' : String(proposal.subject_id);
-    const base = (await tx.query<{ base_version_snapshot: Record<string, string> }>('SELECT base_version_snapshot FROM constitutional_change_sets_v5 WHERE proposal_id = $1', [row.proposal_id])).rows[0]?.base_version_snapshot ?? {};
+    const base = (await tx.query<{ base_version_snapshot: Record<string, string | null> }>('SELECT base_version_snapshot FROM constitutional_change_sets_v5 WHERE proposal_id = $1', [row.proposal_id])).rows[0]?.base_version_snapshot ?? {};
     for (const change of action.changes ?? []) {
-      if (base[change.ruleCode]) {
+      if (Object.prototype.hasOwnProperty.call(base, change.ruleCode)) {
         const current = (await tx.query<{ id: string }>(`SELECT id FROM constitutional_rule_versions_v5 WHERE rule_code = $1 AND authority_type = $2 AND authority_id = $3 AND status = 'ACTIVE' AND effective_to_game_day IS NULL`, [change.ruleCode, authorityType, authorityId])).rows[0];
-        if (current?.id !== base[change.ruleCode]) throw new Error(`STALE constitutional amendment: ${change.ruleCode}`);
+        if ((current?.id ?? null) !== base[change.ruleCode]) throw new Error(`STALE constitutional amendment: ${change.ruleCode}`);
       }
       if (change.clearOverride) {
         await tx.query(`UPDATE constitutional_rule_versions_v5 SET status = 'RETIRED', effective_to_game_day = $3 WHERE rule_code = $1 AND authority_type = 'CORPORATION' AND authority_id = $2 AND status = 'ACTIVE' AND effective_to_game_day IS NULL`, [change.ruleCode, authorityId, effective - 1]);
