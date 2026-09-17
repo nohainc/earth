@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
@@ -48,6 +47,23 @@ class _CorporateBuildingResearchPanelState
     if (raw == null) return null;
     final parsed = double.tryParse(raw.toString());
     return parsed?.clamp(0.0, 100.0);
+  }
+
+  bool _hasAuthoritativeResearchBlueprint(Map<String, dynamic> blueprint) {
+    return asDouble(blueprint['construction_credit_units'] ??
+                blueprint['cost_credits']) !=
+            null &&
+        asInt(blueprint['slot_footprint']) != null &&
+        asDouble(blueprint['research_credit_units'] ??
+                blueprint['research_credit_cost_units'] ??
+                blueprint['researchCost'] ??
+                blueprint['research_cost']) !=
+            null &&
+        asInt(blueprint['research_duration_game_days'] ??
+                blueprint['research_duration_days'] ??
+                blueprint['duration_days']) !=
+            null &&
+        asInt(blueprint['construction_minutes']) != null;
   }
 
   String _buildingAssetPath(String type) {
@@ -190,7 +206,9 @@ class _CorporateBuildingResearchPanelState
       }
     }
 
-    final allBlueprints = blueprintCatalogMap.values.toList();
+    final allBlueprints = blueprintCatalogMap.values
+        .where(_hasAuthoritativeResearchBlueprint)
+        .toList();
 
     final privateCount = allBlueprints.where((b) {
       final oc = b['ownership_class']?.toString() ?? 'private';
@@ -225,16 +243,16 @@ class _CorporateBuildingResearchPanelState
       final bType = b['building_type']?.toString() ?? '';
       final aTier = (unlockedTiers[aType] ?? 1) + 1;
       final bTier = (unlockedTiers[bType] ?? 1) + 1;
-      final aCost = asDoubleOr(
-          a['research_credit_cost_units'] ??
+      final aCost = asDouble(
+          a['research_credit_units'] ??
+              a['research_credit_cost_units'] ??
               a['researchCost'] ??
-              a['research_cost'],
-          0);
-      final bCost = asDoubleOr(
-          b['research_credit_cost_units'] ??
+              a['research_cost'])!;
+      final bCost = asDouble(
+          b['research_credit_units'] ??
+              b['research_credit_cost_units'] ??
               b['researchCost'] ??
-              b['research_cost'],
-          0);
+              b['research_cost'])!;
       final costCmp = aCost.compareTo(bCost);
       if (costCmp != 0) return costCmp;
       return (a['name']?.toString() ?? '')
@@ -306,20 +324,18 @@ class _CorporateBuildingResearchPanelState
                 final currentTier = unlockedTiers[type] ?? 1;
                 final targetTier = currentTier + 1;
 
-                final baseCost = asDoubleOr(
-                    bp['construction_credit_units'] ?? bp['cost_credits'], 0);
-                final slots = math.max(1, asIntOr(bp['slot_footprint'], 1));
-                final nextResearchCost = asDoubleOr(
+                final baseCost = asDouble(
+                    bp['construction_credit_units'] ?? bp['cost_credits'])!;
+                final slots = asInt(bp['slot_footprint'])!;
+                final nextResearchCost = asDouble(
                     bp['research_credit_units'] ??
                         bp['research_credit_cost_units'] ??
                         bp['researchCost'] ??
-                        bp['research_cost'],
-                    0);
-                final durationDays = asIntOr(
+                        bp['research_cost'])!;
+                final durationDays = asInt(
                     bp['research_duration_game_days'] ??
                         bp['research_duration_days'] ??
-                        bp['duration_days'],
-                    0);
+                        bp['duration_days'])!;
 
                 final activeProject = activeProjectMap[type];
                 final isResearching = activeProject != null;
@@ -344,27 +360,26 @@ class _CorporateBuildingResearchPanelState
                           );
                 final civicBenefit = bp['civicBenefit']?.toString();
 
-                // 1. Cost line entries (CapEx +70% per tier)
+                // Show next-tier economics only when the catalog publishes them.
                 final costCreditsCur = baseCost;
-                final costCreditsNext = asDoubleOr(
-                    bp['next_construction_credit_units'] ?? baseCost, baseCost);
+                final costCreditsNext = asDouble(
+                    bp['next_construction_credit_units']);
                 final matBase = 0.0;
                 final compBase = 0.0;
                 final computeBase = 0.0;
 
-                // 2. Upkeep Inputs (Daily Upkeep +12% per tier)
                 final upkeepInputs =
                     <(IconData, Color, String, double, double)>[];
 
-                // 3. Output entries (Output +25% per tier)
                 final outputItems =
                     <(IconData, Color, String, double, double)>[];
 
-                // 4. Operating Expenses (+12% per tier)
+                // Operating economics are read from the catalog, never scaled locally.
                 final opCreditsBase = asDoubleOr(
                     bp['operating_credit_units'] ?? bp['operating_credits'], 0);
-                final opCreditsNext = asDoubleOr(
-                    bp['next_operating_credit_units'] ?? bp['next_operating_credits'], opCreditsBase);
+                final opCreditsNext = asDouble(
+                    bp['next_operating_credit_units'] ??
+                        bp['next_operating_credits']);
                 final opEnergyBase = 0.0;
                 final opFoodBase = 0.0;
                 final opMaterialsBase = 0.0;
@@ -378,15 +393,13 @@ class _CorporateBuildingResearchPanelState
                     opComponentsBase > 0 ||
                     opComputeBase > 0;
 
-                // Build Time (Slot × Tier construction days)
                 final tierDaysCurrent =
-                    (asDoubleOr(bp['construction_minutes'], 0) / 1440).ceil();
-                final tierDaysNext = (asDoubleOr(
-                            bp['next_construction_minutes'] ??
-                                bp['construction_minutes'],
-                            0) /
-                        1440)
-                    .ceil();
+                    (asDouble(bp['construction_minutes'])! / 1440).ceil();
+                final nextConstructionMinutes =
+                    asDouble(bp['next_construction_minutes']);
+                final tierDaysNext = nextConstructionMinutes == null
+                    ? null
+                    : (nextConstructionMinutes / 1440).ceil();
 
                 Widget buildCardBody({bool fillHeight = false}) {
                   return Container(
@@ -488,7 +501,7 @@ class _CorporateBuildingResearchPanelState
                         ),
                         const SizedBox(height: 10),
 
-                        // Row 1: COST (CapEx +70% and Construction Time)
+                        // Row 1: authoritative construction cost and duration.
                         Wrap(
                           spacing: 6,
                           runSpacing: 4,
@@ -502,7 +515,9 @@ class _CorporateBuildingResearchPanelState
                               color: EarthResourceColors.credits,
                             ),
                             Text(
-                              '${formatWholeNumber(costCreditsCur)} -> ${formatWholeNumber(costCreditsNext)} C',
+                              costCreditsNext == null
+                                  ? '${formatWholeNumber(costCreditsCur)} C'
+                                  : '${formatWholeNumber(costCreditsCur)} -> ${formatWholeNumber(costCreditsNext)} C',
                               style: context.widgetFooterStyle,
                             ),
                             if (matBase > 0) ...[
@@ -550,7 +565,9 @@ class _CorporateBuildingResearchPanelState
                               color: Colors.amber,
                             ),
                             Text(
-                              '${tierDaysCurrent}d -> ${tierDaysNext}d',
+                              tierDaysNext == null
+                                  ? '${tierDaysCurrent}d'
+                                  : '${tierDaysCurrent}d -> ${tierDaysNext}d',
                               style: context.widgetFooterStyle,
                             ),
                           ],
@@ -617,7 +634,9 @@ class _CorporateBuildingResearchPanelState
                                   color: EarthResourceColors.credits,
                                 ),
                                 Text(
-                                  '-${formatWholeNumber(opCreditsBase)} -> -${formatWholeNumber(opCreditsNext)} C / DAY',
+                                  opCreditsNext == null
+                                      ? '-${formatWholeNumber(opCreditsBase)} C / DAY'
+                                      : '-${formatWholeNumber(opCreditsBase)} -> -${formatWholeNumber(opCreditsNext)} C / DAY',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -1022,18 +1041,18 @@ class _CorporateBuildingResearchPanelState
     required int costCredits,
     required int durationDays,
     required double costCreditsCur,
-    required double costCreditsNext,
+    required double? costCreditsNext,
     required List<(IconData, Color, String, double, double)> upkeepInputs,
     required List<(IconData, Color, String, double, double)> outputItems,
     required double opCreditsBase,
-    required double opCreditsNext,
+    required double? opCreditsNext,
     required double opEnergyBase,
     required double opMaterialsBase,
     required double opComponentsBase,
     required double opComputeBase,
     required String ownership,
     required int tierDaysCurrent,
-    required int tierDaysNext,
+    required int? tierDaysNext,
     required Map<String, dynamic> serverQuote,
   }) async {
     EarthAudioEngine.instance.playClick();
@@ -1197,7 +1216,9 @@ class _CorporateBuildingResearchPanelState
                             size: 13, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
                         Text(
-                          '${formatWholeNumber(costCreditsCur)} → ${formatWholeNumber(costCreditsNext)}',
+                          costCreditsNext == null
+                              ? formatWholeNumber(costCreditsCur)
+                              : '${formatWholeNumber(costCreditsCur)} → ${formatWholeNumber(costCreditsNext)}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -1219,7 +1240,9 @@ class _CorporateBuildingResearchPanelState
                             size: 13, color: Colors.amber),
                         const SizedBox(width: 4),
                         Text(
-                          '$tierDaysCurrent d → $tierDaysNext d',
+                          tierDaysNext == null
+                              ? '$tierDaysCurrent d'
+                              : '$tierDaysCurrent d → $tierDaysNext d',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -1308,7 +1331,9 @@ class _CorporateBuildingResearchPanelState
                               size: 13, color: EarthResourceColors.credits),
                           const SizedBox(width: 4),
                           Text(
-                            '-${formatWholeNumber(opCreditsBase)} → -${formatWholeNumber(opCreditsNext)}',
+                            opCreditsNext == null
+                                ? '-${formatWholeNumber(opCreditsBase)}'
+                                : '-${formatWholeNumber(opCreditsBase)} → -${formatWholeNumber(opCreditsNext)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,

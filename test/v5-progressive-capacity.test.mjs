@@ -825,6 +825,15 @@ test('V5 building catalog fails closed when authoritative construction economics
   assert.doesNotMatch(buildings, /item\['construction_days'\], footprint \*\s+asIntOr/);
 });
 
+test('V5 research cards do not synthesize next-tier economics', async () => {
+  const technology = await readFile(new URL('../flutter_client/lib/features/operations/technology_panel.dart', import.meta.url), 'utf8');
+  assert.match(technology, /_hasAuthoritativeResearchBlueprint/);
+  assert.match(technology, /where\(_hasAuthoritativeResearchBlueprint\)/);
+  assert.doesNotMatch(technology, /CapEx \+70% per tier/);
+  assert.doesNotMatch(technology, /Output \+25% per tier/);
+  assert.doesNotMatch(technology, /Slot × Tier construction days/);
+});
+
 test('V5 construction review quotes and executes the pooled path for independent Houses', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   const confirm = buildings.slice(buildings.indexOf('Future<void> _confirmConstruction'));
