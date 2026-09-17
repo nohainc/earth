@@ -283,3 +283,11 @@ test('V5 Territory view is read-only physical capacity context', async () => {
   assert.match(panel, /does not create a political or placement choice/);
   assert.doesNotMatch(panel, /MANAGE USE RIGHTS|Acquire or release use rights/);
 });
+
+test('V5 command overview converts PostgreSQL bigint values at the JSON boundary', async () => {
+  const overview = await readFile(new URL('../cloudflare/src/v5-overview-postgres.ts', import.meta.url), 'utf8');
+  assert.match(overview, /typeof value === 'bigint'/);
+  assert.match(overview, /capacity: toJsonSafe\(capacity\)/);
+  assert.match(overview, /latestStatement: toJsonSafe/);
+  assert.match(overview, /Number\(delinquencyRow\.consecutive_missed_days/);
+});

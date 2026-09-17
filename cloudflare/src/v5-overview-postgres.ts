@@ -1,6 +1,16 @@
 import type { PostgresRepository } from './repository.ts';
 import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
 
+/** Convert database bigint values to the JSON wire representation. */
+function toJsonSafe<T>(value: T): T {
+  if (typeof value === 'bigint') return value.toString() as T;
+  if (Array.isArray(value)) return value.map((item) => toJsonSafe(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toJsonSafe(item)])) as T;
+  }
+  return value;
+}
+
 /**
  * Canonical V5 Command overview. This deliberately contains only persisted
  * facts and server-owned attention items; it does not synthesize objectives,
@@ -48,7 +58,7 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
       riskLevel: delinquencyRow.status === 'PRODUCTIVE_CAPACITY_SUSPENDED' ? 'critical' : 'high',
       primaryActionLabel: 'Review Finance',
       status: delinquencyRow.status,
-      missedDays: delinquencyRow.consecutive_missed_days,
+      missedDays: Number(delinquencyRow.consecutive_missed_days ?? 0),
       targetSection: 'finance',
       urgencyScore: delinquencyRow.status === 'PRODUCTIVE_CAPACITY_SUSPENDED' ? 100 : 90,
     });
@@ -65,10 +75,10 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
       status: houseRow.status,
       corporationId: affiliation.rows[0]?.corporation_id ?? null,
     },
-    capacity,
+    capacity: toJsonSafe(capacity),
     finance: {
       availableWalletUnits: wallet.rows[0]?.balance_units ?? '0',
-      latestStatement: statement.rows[0] ?? null,
+      latestStatement: toJsonSafe(statement.rows[0] ?? null),
     },
     attention,
     generatedFrom: 'postgres-canonical-facts-v5',
