@@ -352,18 +352,22 @@ export async function handleFinanceRoutes(
 
   if (url.pathname === '/api/finance' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [account, rules] = await Promise.all([
+      const [account, canonicalTaxStatement] = await Promise.all([
         repository.query(`SELECT a.id::TEXT AS account_id, o.id AS owner_id, a.balance_units::TEXT AS balance_units, 'CREDIT' AS currency
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
                            WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'`, [viewer.house_id]),
-        repository.query(`SELECT DISTINCT ON (tax_rule_id) tax_rule_id AS id, scope, category, rate_bps, version,
-                                 tax_base_definition, effective_from_game_day, effective_to_game_day
-                            FROM tax_rule_versions
-                           WHERE effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
-                             AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
-                           ORDER BY tax_rule_id, effective_from_game_day DESC, version DESC`),
+        getTaxStatement(repository, viewer.id).catch(() => null),
       ]);
-      return { account: account.rows[0] ?? null, taxRules: rules.rows };
+      return {
+        account: account.rows[0] ?? null,
+        taxRules: canonicalTaxStatement?.activeRules ?? [],
+        constitutionalRules: canonicalTaxStatement?.constitutionalTaxRules ?? {},
+        constitutionalVersionIds: canonicalTaxStatement?.constitutionalTaxVersionIds ?? {},
+        progressiveSchedules: canonicalTaxStatement?.progressiveSchedules ?? {},
+        generatedFrom: canonicalTaxStatement
+          ? 'postgres-constitutional-tax-v5'
+          : 'unavailable-canonical-tax-statement',
+      };
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
