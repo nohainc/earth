@@ -24,6 +24,7 @@ export const CONSTITUTIONAL_RULE_DEFINITIONS: readonly ConstitutionalRuleDefinit
   { code: 'CORPORATION.GOVERNANCE.VOTING_PERIOD_DAYS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'GAME_DAYS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY' },
   { code: 'CORPORATION.GOVERNANCE.IMPLEMENTATION_DELAY_DAYS', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'GAME_DAYS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'GOVERNANCE_POLICY' },
   { code: 'EARTH.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_HOUSE_INCOME_TAX' },
+  { code: 'EARTH.TAX.BASIC_LEVY_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_BASIC_LEVY' },
   { code: 'EARTH.MARKET.TRANSACTION_TAX_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_MARKET_TAX' },
   { code: 'CORPORATION.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION_HOUSE_INCOME_TAX' },
   { code: 'CORPORATION.TAX.INCOME_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION' },

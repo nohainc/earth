@@ -219,6 +219,7 @@ test('daily tax settlement consumes the assessed-day Constitution market rate', 
   assert.match(settlement, /EARTH\.MARKET\.TRANSACTION_TAX_RATE/);
   assert.match(settlement, /constitutionalRate\(rule\)/);
   assert.match(settlement, /CORPORATION\.TAX\.INCOME_RATE/);
+  assert.match(settlement, /EARTH\.TAX\.BASIC_LEVY_RATE/);
   assert.match(settlement, /corporationMemberships/);
   assert.match(settlement, /nexus_type: 'MEMBERSHIP'/);
 });

@@ -63,8 +63,12 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
   ]);
   const constitutionRules = constitutionResult.rows[0]?.rules_json ?? {};
   const constitutionalRate = (rule: TaxRule): bigint | null => {
-    if (rule.authority_type !== 'EARTH' || rule.tax_rule_id !== 'TAX-MARKET-TRANSACTION') return null;
-    const value = constitutionRules['EARTH.MARKET.TRANSACTION_TAX_RATE'];
+    if (rule.authority_type !== 'EARTH') return null;
+    const ruleCode = rule.tax_rule_id === 'TAX-MARKET-TRANSACTION' || rule.tax_rule_id === 'TAX-OUC-MARKET'
+      ? 'EARTH.MARKET.TRANSACTION_TAX_RATE'
+      : rule.tax_rule_id === 'TAX-BASIC-LEVY' ? 'EARTH.TAX.BASIC_LEVY_RATE' : null;
+    if (!ruleCode) return null;
+    const value = constitutionRules[ruleCode];
     return value === undefined ? null : BigInt(String(value));
   };
   const rules: TaxRule[] = [...ruleResult.rows];
