@@ -4,7 +4,6 @@ import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { getAuthoritativeGameTime } from './game-clock.ts';
-import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
 import { proposalActionHandler, validateProposalActionSnapshot } from './proposal-actions.ts';
 import { attemptProposalFunding } from './proposal-funding.ts';
 import { createGameEvent } from './game-events-postgres.ts';
@@ -687,23 +686,6 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       await finishAction('completed', { executionStatus: 'started', buildingId });
       await tx.query('INSERT INTO game_events (id,category,event_type,game_day,subject_type,subject_id,title,details,correlation_id) VALUES ($1,\'BUILDING\',\'BUILDING_CONSTRUCTION_STARTED\',$2,\'BUILDING\',$3,$4,$5,$6)', [crypto.randomUUID(), day, buildingId, `Municipal Megaproject ${spec.name} construction started`, toNanoMarkup({ proposalId: current.id, buildingId, cityId: current.institution_id }), current.id]);
       return { ok: true, executionStatus: 'started', buildingId, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
-    }
-
-    if (category === 'technology' || category === 'research') {
-      const buildingType = String(value.buildingType ?? value.building_type ?? '').trim();
-      if (!buildingType) {
-        await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped', funding_block_reason = 'Missing building type in research proposal' WHERE id = $1", [current.id]);
-        await finishAction('completed', { executionStatus: 'skipped' });
-        return { ok: true, executionStatus: 'skipped', reason: 'Missing building type in research proposal', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
-      }
-      const result = await startCorporationBuildingResearchInTransaction(tx, {
-        humanId: current.created_by_human_id ?? input.humanId,
-        buildingType,
-        correlationId: `proposal-research:${current.id}`,
-      });
-      await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, started_at = CURRENT_TIMESTAMP, started_game_day = $2, started_action_id = $3, execution_status = 'started', funding_block_reason = NULL WHERE id = $1", [current.id, day, result.project?.id ?? null]);
-      await finishAction('completed', { executionStatus: 'started', researchProjectId: result.project?.id ?? null });
-      return { ok: true, executionStatus: 'started', researchProject: result.project, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
 
     // Historical V2 records may still contain this action, but it must never

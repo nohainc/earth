@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { assertConstitutionalAmendableRule, validateConstitutionalRuleValue } from './v5-constitution.ts';
 import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
+import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
 
 export type ProposalActionContext = {
   repository: PostgresRepository;
@@ -116,6 +117,26 @@ const startResearchHandler: ProposalActionHandler = {
     if (!action.researchProjectId && !action.buildingType) throw new Error('Research action requires a research snapshot');
   },
   validateExecution: async () => undefined,
+  execute: async ({ repository, proposal, action }) => {
+    const buildingType = String(action.buildingType ?? action.building_type ?? '').trim();
+    if (!buildingType) throw new Error('Research action requires a building type snapshot');
+    const humanId = String(proposal.created_by_human_id ?? '').trim();
+    if (!humanId) throw new Error('Research action requires its proposing human snapshot');
+    const result = await startCorporationBuildingResearchInTransaction(repository, {
+      humanId,
+      buildingType,
+      correlationId: `proposal-research:${String(proposal.id)}`,
+    });
+    return {
+      executionStatus: 'started',
+      researchProjectId: result.project && typeof result.project === 'object'
+        ? String((result.project as Record<string, unknown>).id ?? '') || null
+        : null,
+      researchProject: result.project,
+      catalogId: result.catalogId,
+      correlationId: result.correlationId,
+    };
+  },
 };
 
 function requiredFields(action: Record<string, unknown>, fields: string[], label: string): void {
