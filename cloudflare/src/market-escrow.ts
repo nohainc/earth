@@ -52,12 +52,12 @@ export async function ensureMarketEscrow(tx: PostgresRepository, ownerId: string
 
 export async function postEscrowTransaction(tx: PostgresRepository, day: number, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<boolean> {
   if (entries.length < 2) throw new Error('Escrow movement requires at least two entries');
-  const result = await tx.query<{ transaction_id: string; created: boolean }>(
-    `SELECT transaction_id, created FROM earth_post_transaction($1, $2, 0, 'MARKET_TRADE', 'MARKET', $3, 'market-v4', $4::jsonb)`,
+  const result = await tx.query<{ transaction_id: string }>(
+    `SELECT earth_post_transaction($1, $2, 0, 'MARKET_TRADE', 'MARKET', $3, 'market-v4', $4::jsonb) AS transaction_id`,
     [correlationId, day, sourceId, JSON.stringify(entries.map((entry) => ({ account_id: entry.accountId, asset_id: entry.assetId, delta_units: entry.delta.toString(), reason_code: entry.reason })))],
   );
   if (!result.rows[0]) throw new Error('Market escrow transaction returned no result');
-  return Boolean(result.rows[0].created);
+  return Boolean(result.rows[0].transaction_id);
 }
 
 export async function postSettlementBatch(tx: PostgresRepository, day: number, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<{ transactionId: string; created: boolean }> {
@@ -99,21 +99,60 @@ export async function reserveForOrder(tx: PostgresRepository, input: { ownerId: 
   return escrowAccountId;
 }
 
-export async function releaseReservation(tx: PostgresRepository, reservation: MarketReservation, gameDay: number, sourceAccountId: string, unfillableUnits: bigint): Promise<void> {
-  if (unfillableUnits <= 0n) return;
-  await postEscrowTransaction(tx, gameDay, `market-order:${reservation.order_id}:release:${gameDay}`, reservation.order_id, [
-    { accountId: reservation.escrow_account_id, delta: -unfillableUnits, assetId: reservation.asset_id, reason: 'market_order_release' },
-    { accountId: sourceAccountId, delta: unfillableUnits, assetId: reservation.asset_id, reason: 'market_order_release' },
+export type ReleaseReservationInput = {
+  escrowAccountId: string;
+  destinationAccountId: string;
+  assetId: number;
+  amountUnits: bigint;
+  orderId: string;
+  gameDay: number;
+  reason?: string;
+};
+
+export async function releaseReservation(
+  tx: PostgresRepository,
+  inputOrReservation: ReleaseReservationInput | MarketReservation,
+  gameDay?: number,
+  sourceAccountId?: string,
+  unfillableUnits?: bigint,
+): Promise<void> {
+  const input: ReleaseReservationInput = 'escrowAccountId' in inputOrReservation
+    ? inputOrReservation
+    : {
+        escrowAccountId: inputOrReservation.escrow_account_id,
+        destinationAccountId: sourceAccountId!,
+        assetId: inputOrReservation.asset_id,
+        amountUnits: unfillableUnits ?? 0n,
+        orderId: inputOrReservation.order_id,
+        gameDay: gameDay ?? 0,
+        reason: 'market_order_release',
+      };
+  if (input.amountUnits <= 0n) return;
+  await postEscrowTransaction(tx, input.gameDay, `market-order:${input.orderId}:release:${input.gameDay}`, input.orderId, [
+    { accountId: input.escrowAccountId, delta: -input.amountUnits, assetId: input.assetId, reason: input.reason ?? 'market_order_release' },
+    { accountId: input.destinationAccountId, delta: input.amountUnits, assetId: input.assetId, reason: input.reason ?? 'market_order_release' },
   ]);
   await tx.query(
-    `UPDATE market_order_reservations SET remaining_units = (remaining_units - $1), status = CASE WHEN remaining_units - $1 = 0 THEN 'RELEASED' ELSE status END WHERE id = $2`,
-    [unfillableUnits.toString(), reservation.id],
+    `UPDATE market_order_reservations
+        SET remaining_units = GREATEST(0, remaining_units - $1::BIGINT),
+            status = CASE WHEN remaining_units - $1::BIGINT <= 0 THEN 'RELEASED' ELSE status END
+      WHERE order_id = $2 AND asset_id = $3`,
+    [input.amountUnits.toString(), input.orderId, input.assetId],
   );
 }
 
-export async function updateReservationRemaining(tx: PostgresRepository, reservationId: string, remainingUnits: bigint): Promise<void> {
+export async function updateReservationRemaining(
+  tx: PostgresRepository,
+  orderId: string,
+  assetId: number,
+  consumedUnits: bigint,
+  finalStatus?: 'CONSUMED' | 'RELEASED',
+): Promise<void> {
   await tx.query(
-    `UPDATE market_order_reservations SET remaining_units = $1, status = CASE WHEN $1 = 0 THEN 'CONSUMED' ELSE status END WHERE id = $2`,
-    [remainingUnits.toString(), reservationId],
+    `UPDATE market_order_reservations
+        SET remaining_units = GREATEST(0, remaining_units - $1::BIGINT),
+            status = CASE WHEN remaining_units - $1::BIGINT <= 0 THEN COALESCE($4, 'CONSUMED') ELSE status END
+      WHERE order_id = $2 AND asset_id = $3`,
+    [consumedUnits.toString(), orderId, assetId, finalStatus ?? null],
   );
 }

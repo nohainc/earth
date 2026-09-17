@@ -24,10 +24,13 @@ export async function getCorporationFiscalState(repository: PostgresRepository, 
     // policy from tax_rule_versions is read from the resolved Constitution snapshot below; returning
     // the legacy columns would invite clients to choose the wrong source.
     repository.query('SELECT c.id, i.name, c.status, c.admission_policy FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1', [corporationId]),
-    repository.query(`SELECT a.id::TEXT AS account_id, a.account_type, a.balance_units::TEXT AS balance_units
-      FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-      WHERE o.id = $1 AND o.owner_type = 'CORPORATION' AND a.asset_id = 1 AND a.status = 'ACTIVE'
-      ORDER BY a.account_type`, [corporationId]),
+    repository.query(`SELECT a.id::TEXT AS account_id, a.asset_id, ea.code AS asset_code, ea.code AS asset_name,
+             ea.asset_kind, a.account_type, a.balance_units::TEXT AS balance_units
+      FROM economic_accounts a
+      JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+      JOIN economic_assets ea ON ea.id = a.asset_id
+      WHERE o.id = $1 AND o.owner_type = 'CORPORATION' AND a.status = 'ACTIVE'
+      ORDER BY a.asset_id, a.account_type`, [corporationId]),
     repository.query(`SELECT l.*, bc.category_code, bc.spending_class, bc.priority
       FROM institution_budget_lines l JOIN budget_categories bc ON bc.id = l.category_id
       WHERE l.institution_id = $1 ORDER BY bc.priority, bc.category_code`, [corporationId]),
@@ -43,9 +46,38 @@ export async function getCorporationFiscalState(repository: PostgresRepository, 
   const canonical = constitution.rows[0] ?? null;
   const constitutionalTaxRules = canonical ? Object.fromEntries(Object.entries(canonical.rules_json ?? {}).filter(([code]) => code.includes('.TAX') || code === 'CORPORATION.HOUSE_INCOME_TAX')) : {};
   const constitutionalTaxVersionIds = canonical ? Object.fromEntries(Object.entries(canonical.version_ids ?? {}).filter(([code]) => code.includes('.TAX') || code === 'CORPORATION.HOUSE_INCOME_TAX')) : {};
+  
+  const resourceBalances: Record<string, string> = {
+    energy: '0',
+    food: '0',
+    material: '0',
+    components: '0',
+    compute: '0',
+  };
+  const creditBalances: Record<string, string> = {
+    treasury: '0',
+    operations: '0',
+    reserve: '0',
+  };
+
+  for (const acct of accounts.rows as Array<{ asset_code: string; account_type: string; balance_units: string }>) {
+    const key = acct.asset_code.toLowerCase();
+    if (acct.account_type === 'INVENTORY' && key in resourceBalances) {
+      resourceBalances[key] = acct.balance_units;
+    }
+    if (acct.asset_code === 'CREDIT') {
+      const typeKey = acct.account_type.toLowerCase();
+      if (typeKey in creditBalances) {
+        creditBalances[typeKey] = acct.balance_units;
+      }
+    }
+  }
+
   return {
     corporation: corporation.rows[0],
     accounts: accounts.rows,
+    resourceBalances,
+    creditBalances,
     budgets: budgets.rows,
     constitutionalTaxRules,
     constitutionalTaxVersionIds,

@@ -53,17 +53,23 @@ export async function getHouseFinancialProjection(repository: PostgresRepository
 export async function getInstitutionFinancialProjection(repository: PostgresRepository, institutionId: string): Promise<Record<string, unknown>> {
   const owner = (await repository.query<{ economic_id: string; owner_type: string }>('SELECT economic_id, owner_type FROM owner_registry WHERE id = $1 AND owner_type IN (\'EARTH\', \'CORPORATION\')', [institutionId])).rows[0];
   if (!owner) throw new Error('Institution financial owner not found');
-  const [accounts, lines, flows] = await Promise.all([
+  const [accounts, resourceAccounts, lines, flows] = await Promise.all([
     repository.query<{ account_type: string; balance_units: string }>(`SELECT account_type, COALESCE(SUM(balance_units), 0)::TEXT AS balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type IN ('TREASURY', 'OPERATIONS', 'RESERVE') AND status = 'ACTIVE' GROUP BY account_type`, [owner.economic_id]),
+    repository.query<{ code: string; balance_units: string }>(`SELECT lower(ea.code) AS code, COALESCE(SUM(a.balance_units), 0)::TEXT AS balance_units FROM economic_accounts a JOIN economic_assets ea ON ea.id = a.asset_id WHERE a.owner_economic_id = $1 AND a.account_type = 'INVENTORY' AND ea.asset_kind = 'RESOURCE' AND a.status = 'ACTIVE' GROUP BY ea.code`, [owner.economic_id]),
     repository.query<{ authorized: string; committed: string; spent: string }>(`SELECT COALESCE(SUM(authorized_units), 0)::TEXT AS authorized, COALESCE(SUM(committed_units), 0)::TEXT AS committed, COALESCE(SUM(spent_units), 0)::TEXT AS spent FROM institution_budget_lines WHERE institution_id = $1`, [institutionId]),
     ledgerFlows(repository, owner.economic_id),
   ]);
   const cash = Object.fromEntries(accounts.rows.map((row) => [row.account_type.toLowerCase(), row.balance_units]));
+  const resourceBalances: Record<string, string> = {
+    energy: '0', food: '0', material: '0', components: '0', compute: '0',
+    ...Object.fromEntries(resourceAccounts.rows.map((row) => [row.code, row.balance_units])),
+  };
   const budget = lines.rows[0] ?? { authorized: '0', committed: '0', spent: '0' };
   return {
     scope: owner.owner_type, principalId: institutionId, treasuryUnits: cash.treasury ?? '0', operationsUnits: cash.operations ?? '0', reserveUnits: cash.reserve ?? '0',
+    resourceBalances,
     authorizedUnits: budget.authorized, committedUnits: budget.committed, spentUnits: budget.spent,
     availableUnits: (BigInt(budget.authorized) - BigInt(budget.committed) - BigInt(budget.spent)).toString(),
-    revenueUnits: total(flows.rows, 'inflow_units'), expenseUnits: total(flows.rows, 'outflow_units'), byTransactionKind: flows.rows,
+    revenueUnits: total(flows, 'inflow_units'), expenseUnits: total(flows, 'outflow_units'), byTransactionKind: flows,
   };
 }

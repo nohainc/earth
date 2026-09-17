@@ -22,7 +22,16 @@ export async function getActiveV5StandardCapacity(repository: PostgresRepository
       gameDay: day,
     };
   }
-  throw new Error(`Canonical Earth capacity snapshot is unavailable for game day ${day}`);
+  const { resolveEffectiveConstitution } = await import('./constitutional-kernel-postgres.ts');
+  const resolved = await resolveEffectiveConstitution(repository, { gameDay: day });
+  return {
+    standardTerritoryCapacity: BigInt(String(resolved.rules['EARTH.CAPACITY.STANDARD'] ?? 100)),
+    earthBaseRate: BigInt(String(resolved.rules['EARTH.CAPACITY.BASE_RATE'] ?? 1000)),
+    houseScheduleId: String(resolved.rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'] ?? 'EARTH-HOUSE-CAPACITY-DEFAULT'),
+    corporationScheduleId: String(resolved.rules['EARTH.CAPACITY.PROGRESSIVE_SCHEDULE'] ?? 'EARTH-CORP-CAPACITY-DEFAULT'),
+    policyVersion: `CONST-EARTH-EARTH-D${day}`,
+    gameDay: day,
+  };
 }
 
 export async function getV5HouseCapacity(repository: PostgresRepository, houseId: string): Promise<HouseCapacity & { generatedFrom: string }> {

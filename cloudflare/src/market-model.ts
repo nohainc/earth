@@ -49,19 +49,21 @@ export function spotInstrumentSymbol(product: string): string {
 }
 
 export async function getActiveSpotInstrument(repo: PostgresRepository, product: string): Promise<MarketInstrument | null> {
+  const normalized = product.trim().toUpperCase();
+  const symbol = spotInstrumentSymbol(normalized);
   const result = await repo.query<MarketInstrument>(
-    `SELECT id, symbol, instrument_type, base_asset_id, quote_asset_id,
+    `SELECT id, symbol, instrument_type, asset_id, asset_id AS base_asset_id, quote_asset_id,
             lot_size_units, price_tick_units, status, rules_version
        FROM market_instruments
-      WHERE symbol = $1 AND instrument_type = 'SPOT' AND status = 'ACTIVE'`,
-    [spotInstrumentSymbol(product)],
+      WHERE (symbol = $1 OR symbol = $2 OR id = $1) AND instrument_type = 'SPOT' AND status = 'ACTIVE'`,
+    [symbol, normalized],
   );
   return result.rows[0] ?? null;
 }
 
 export async function getActiveMarketInstrument(repo: PostgresRepository, instrumentId: string): Promise<MarketInstrument | null> {
   const result = await repo.query<MarketInstrument>(
-    `SELECT id, symbol, instrument_type, base_asset_id, quote_asset_id,
+    `SELECT id, symbol, instrument_type, asset_id, asset_id AS base_asset_id, quote_asset_id,
             lot_size_units, price_tick_units, status, rules_version
        FROM market_instruments WHERE id = $1 AND instrument_type = 'SPOT' AND status = 'ACTIVE'`,
     [instrumentId],

@@ -9,7 +9,22 @@ import { clearMarketAuction } from './market-clearing-engine.ts';
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 
-type MarketOrderInput = { humanId: string; product: string; side: 'buy' | 'sell'; quantity: number | string; limitPrice: number | string; correlationId: string; instrumentId?: string; sourceType?: 'MANUAL' | 'HOUSE_POLICY'; policyId?: string; policyBudgetId?: string; goodTilGameDay?: number };
+type MarketOrderInput = {
+  humanId: string;
+  product: string;
+  side: 'buy' | 'sell';
+  quantity: number | string;
+  limitPrice: number | string;
+  correlationId: string;
+  instrumentId?: string;
+  ownerId?: string;
+  corporationId?: string;
+  ownerEconomicId?: string;
+  sourceType?: 'MANUAL' | 'HOUSE_POLICY' | 'CORPORATION_POLICY' | 'CORPORATION';
+  policyId?: string;
+  policyBudgetId?: string;
+  goodTilGameDay?: number;
+};
 
 const assetIds: Record<string, number> = {
   food: MARKET_ASSET_IDS.FOOD,
@@ -51,24 +66,73 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
     const reservedCents = input.side === 'buy' ? calculateQuoteUnits(quantityUnits, limitPriceUnits) + calculateFeeUnits(calculateQuoteUnits(quantityUnits, limitPriceUnits), buyerFeeRate) : 0n;
     const buyerFeeBps = input.side === 'buy' ? displayRateToBps(buyerFeeRate) : 0;
     const batchId = await ensureMarketBatch(tx, Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), Number((await tx.query<{ game_minute: number }>("SELECT game_minute FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_minute ?? 0));
-    const owner = await tx.query<{ economic_id: string }>(
-      "SELECT o.economic_id::TEXT AS economic_id FROM humans h JOIN owner_registry o ON o.id = h.house_id AND o.owner_type = 'HOUSE' WHERE h.id = $1",
-      [input.humanId],
-    );
-    if (!owner.rows[0]) throw new Error('House economic owner is not provisioned');
-    const sourceAccount = await marketAccount(tx, input.humanId, input.side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.base_asset_id);
-    if (!sourceAccount) throw new Error('House market source account is missing');
+    
+    let ownerEconomicId: string;
+    let ownerRegistryId: string;
+    let ownerType: string;
+
+    const requestedOwnerId = input.ownerId || input.corporationId || input.ownerEconomicId;
+    if (requestedOwnerId) {
+      const ownerRes = await tx.query<{ id: string; economic_id: string; owner_type: string }>(
+        `SELECT o.id::TEXT, o.economic_id::TEXT, o.owner_type::TEXT
+           FROM owner_registry o
+          WHERE (o.id = $1 OR o.economic_id = $1)
+            AND o.owner_type IN ('HOUSE', 'CORPORATION')
+          LIMIT 1`,
+        [requestedOwnerId],
+      );
+      if (!ownerRes.rows[0]) throw new Error('Requested market owner is not provisioned');
+      const row = ownerRes.rows[0];
+      if (row.owner_type === 'CORPORATION') {
+        const authorized = await tx.query(
+          `SELECT 1 FROM institution_governance_roles
+            WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
+              AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')
+            UNION
+            SELECT 1 FROM house_affiliations ha
+            JOIN humans h ON h.house_id = ha.house_id
+            WHERE ha.corporation_id = $1 AND h.id = $2 AND ha.status = 'ACTIVE'`,
+          [row.id, input.humanId],
+        );
+        if (!authorized.rows[0]) throw new Error('Corporation market order authorization required');
+      } else if (row.owner_type === 'HOUSE') {
+        const authorized = await tx.query(
+          `SELECT 1 FROM humans WHERE id = $1 AND house_id = $2 AND status = 'ACTIVE'`,
+          [input.humanId, row.id],
+        );
+        if (!authorized.rows[0]) throw new Error('House market order authorization required');
+      }
+      ownerEconomicId = row.economic_id;
+      ownerRegistryId = row.id;
+      ownerType = row.owner_type;
+    } else {
+      const ownerRes = await tx.query<{ id: string; economic_id: string }>(
+        "SELECT o.id::TEXT, o.economic_id::TEXT FROM humans h JOIN owner_registry o ON o.id = h.house_id AND o.owner_type = 'HOUSE' WHERE h.id = $1",
+        [input.humanId],
+      );
+      if (!ownerRes.rows[0]) throw new Error('House economic owner is not provisioned');
+      ownerEconomicId = ownerRes.rows[0].economic_id;
+      ownerRegistryId = ownerRes.rows[0].id;
+      ownerType = 'HOUSE';
+    }
+
+    const assetIdToReserve = input.side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.base_asset_id;
+    const sourceAccount = await marketEconomicAccount(tx, ownerEconomicId, assetIdToReserve);
+    if (!sourceAccount) throw new Error(`${ownerType === 'CORPORATION' ? 'Corporation' : 'House'} market source account is missing`);
     if (input.side === 'buy') {
       const balance = await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [sourceAccount]);
       if (!balance.rows[0] || BigInt(balance.rows[0].balance_units) < reservedCents) throw new Error('Insufficient Credits to reserve this order');
+    } else {
+      const balance = await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1 FOR UPDATE', [sourceAccount]);
+      if (!balance.rows[0] || BigInt(balance.rows[0].balance_units) < quantityUnits) throw new Error('Insufficient resource balance to reserve this order');
     }
     const orderId = crypto.randomUUID();
     await tx.query(
       `INSERT INTO market_orders (id, batch_id, instrument_id, owner_economic_id, side, quantity_units, remaining_units, limit_price_units, buyer_fee_bps, status, rules_version, correlation_id, source_type, policy_id, policy_budget_id, good_til_game_day)
        VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'OPEN', $9, $10, $11, $12, $13, $14)`,
-      [orderId, batchId, instrument.id, owner.rows[0].economic_id, input.side.toUpperCase(), quantityUnits.toString(), limitPriceUnits.toString(), buyerFeeBps, instrument.rules_version, input.correlationId, input.sourceType ?? 'MANUAL', input.policyId ?? null, input.policyBudgetId ?? null, input.goodTilGameDay ?? null],
+      [orderId, batchId, instrument.id, ownerEconomicId, input.side.toUpperCase(), quantityUnits.toString(), limitPriceUnits.toString(), buyerFeeBps, instrument.rules_version, input.correlationId, input.sourceType ?? 'MANUAL', input.policyId ?? null, input.policyBudgetId ?? null, input.goodTilGameDay ?? null],
     );
-    await reserveForOrder(tx, { ownerId: input.humanId, assetId: input.side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.base_asset_id, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' });
+    await reserveForOrder(tx, { ownerId: ownerRegistryId, assetId: assetIdToReserve, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' });
     await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0));
     const order = await tx.query('SELECT * FROM market_orders WHERE id = $1', [orderId]);
     return { ok: true, order: order.rows[0], correlationId: input.correlationId };
@@ -80,8 +144,8 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
     const instrument = instrumentId ? await getActiveMarketInstrument(tx, instrumentId) : await getActiveSpotInstrument(tx, product);
     if (!instrument) throw new Error('Unknown or inactive market instrument');
     const orders = await tx.query<Record<string, unknown>>(
-      `SELECT * FROM market_orders WHERE batch_id = $1 AND status IN ('OPEN','PARTIAL') AND remaining_units > 0 ORDER BY created_at, id FOR UPDATE`,
-      [batchId],
+      `SELECT * FROM market_orders WHERE batch_id = $1 AND instrument_id = $2 AND status IN ('OPEN','PARTIAL') AND remaining_units > 0 ORDER BY created_at, id FOR UPDATE`,
+      [batchId, instrument.id],
     );
     const buys = orders.rows.filter((row) => row.side === 'BUY');
     const sells = orders.rows.filter((row) => row.side === 'SELL');
@@ -177,17 +241,46 @@ export async function listMarketOrders(repository: PostgresRepository, product: 
 export async function cancelMarketOrder(repository: PostgresRepository, input: { orderId: string; humanId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const order = await tx.query<Record<string, unknown>>(
-      `SELECT o.* FROM market_orders o JOIN humans h ON h.house_id = (SELECT id FROM owner_registry WHERE economic_id = o.owner_economic_id) WHERE o.id = $1 AND h.id = $2 AND o.status IN ('OPEN','PARTIAL') FOR UPDATE`,
-      [input.orderId, input.humanId],
+      `SELECT o.*, reg.id AS owner_id, reg.owner_type
+         FROM market_orders o
+         JOIN owner_registry reg ON reg.economic_id = o.owner_economic_id
+        WHERE o.id = $1 AND o.status IN ('OPEN','PARTIAL')
+        FOR UPDATE`,
+      [input.orderId],
     );
     if (!order.rows[0]) throw new Error('Open order not found for this Human');
     const current = order.rows[0];
+    const isHouseAuthorized = await tx.query(
+      `SELECT 1 FROM humans WHERE id = $1 AND house_id = $2 AND status = 'ACTIVE'`,
+      [input.humanId, current.owner_id],
+    );
+    const isCorpAuthorized = await tx.query(
+      `SELECT 1 FROM institution_governance_roles
+        WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
+          AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')
+        UNION
+        SELECT 1 FROM house_affiliations ha
+        JOIN humans h ON h.house_id = ha.house_id
+        WHERE ha.corporation_id = $1 AND h.id = $2 AND ha.status = 'ACTIVE'`,
+      [current.owner_id, input.humanId],
+    );
+    if (!isHouseAuthorized.rows[0] && !isCorpAuthorized.rows[0]) {
+      throw new Error('Open order not found for this Human');
+    }
     const reservation = await getMarketReservation(tx, input.orderId);
     const instrument = await getActiveMarketInstrument(tx, String(current.instrument_id));
     if (!reservation || !instrument) throw new Error('Market reservation is missing');
-    const destination = await marketAccount(tx, input.humanId, reservation.asset_id);
-    if (!destination) throw new Error('House refund account is missing');
-    await releaseReservation(tx, { escrowAccountId: reservation.escrow_account_id, destinationAccountId: destination, assetId: reservation.asset_id, amountUnits: BigInt(reservation.remaining_units), orderId: input.orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: 'market_order_cancellation' });
+    const destination = await marketEconomicAccount(tx, String(current.owner_economic_id), reservation.asset_id);
+    if (!destination) throw new Error('Refund account is missing');
+    await releaseReservation(tx, {
+      escrowAccountId: reservation.escrow_account_id,
+      destinationAccountId: destination,
+      assetId: reservation.asset_id,
+      amountUnits: BigInt(reservation.remaining_units),
+      orderId: input.orderId,
+      gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0),
+      reason: 'market_order_cancellation',
+    });
     await tx.query("UPDATE market_orders SET status = 'CANCELLED', remaining_units = 0 WHERE id = $1", [input.orderId]);
     return { ok: true, orderId: input.orderId, released: reservation.remaining_units, side: current.side };
   });

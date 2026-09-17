@@ -71,9 +71,9 @@ export async function rebuildV5CorporationSettlementProfile(
        COUNT(hp.house_id)::INTEGER,
        COALESCE(SUM(hp.residential_capacity_units), 0),
        COALESCE(SUM(hp.productive_capacity_units), 0),
-       COALESCE(public_facts.capacity_units, 0),
-       COALESCE(SUM(hp.total_capacity_units), 0) + COALESCE(public_facts.capacity_units, 0),
-       COALESCE(public_facts.building_count, 0)::INTEGER,
+       COALESCE(MAX(public_facts.capacity_units), 0),
+       COALESCE(SUM(hp.total_capacity_units), 0) + COALESCE(MAX(public_facts.capacity_units), 0),
+       COALESCE(MAX(public_facts.building_count), 0)::INTEGER,
        $2, $3, FALSE, NULL
      FROM v5_house_settlement_profiles hp
      JOIN houses h ON h.id = hp.house_id AND h.status = 'ACTIVE'
@@ -97,7 +97,7 @@ export async function rebuildV5CorporationSettlementProfile(
        profile_version = EXCLUDED.profile_version,
        source_game_day = EXCLUDED.source_game_day,
        dirty = FALSE, dirty_reason = NULL, updated_at = CURRENT_TIMESTAMP`,
-    [corporationId, gameDay, V5_SETTLEMENT_PROFILE_VERSION],
+    [corporationId, V5_SETTLEMENT_PROFILE_VERSION, gameDay],
   );
 }
 

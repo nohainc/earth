@@ -85,9 +85,15 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
       const earth = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a WHERE a.owner_economic_id = 'ECON-EARTH-001' AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE' LIMIT 1`)).rows[0];
       const treasury = (await tx.query<{ id: string }>(`SELECT id::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY' AND status = 'ACTIVE' LIMIT 1`, [economicId])).rows[0];
       if (!wallet || (policy.fee > 0n && !earth) || !treasury || BigInt(wallet.balance_units) < requiredFounderFunds) throw new Error('Insufficient CREDIT for Corporation founding fee and reserve');
-      const entries = [];
-      if (policy.fee > 0n) { entries.push({ account_id: wallet.id, asset_id: 1, delta_units: (-policy.fee).toString() }); entries.push({ account_id: earth!.id, asset_id: 1, delta_units: policy.fee.toString() }); }
-      if (policy.reserve > 0n) { entries.push({ account_id: wallet.id, asset_id: 1, delta_units: (-policy.reserve).toString() }); entries.push({ account_id: treasury.id, asset_id: 1, delta_units: policy.reserve.toString() }); }
+      const entries = [
+        { account_id: wallet.id, asset_id: 1, delta_units: (-requiredFounderFunds).toString() },
+      ];
+      if (policy.fee > 0n) {
+        entries.push({ account_id: earth!.id, asset_id: 1, delta_units: policy.fee.toString() });
+      }
+      if (policy.reserve > 0n) {
+        entries.push({ account_id: treasury.id, asset_id: 1, delta_units: policy.reserve.toString() });
+      }
       await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','CORPORATION_FOUNDING_FEE',$3,$4,$5::JSONB)`, [input.correlationId, day, id, earthCapacityPolicy.policyVersion, JSON.stringify(entries)]);
     }
     await tx.query(`INSERT INTO v5_corporation_founding_commands (correlation_id, corporation_id, created_game_day) VALUES ($1,$2,$3)`, [input.correlationId, id, day]);

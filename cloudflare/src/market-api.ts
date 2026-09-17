@@ -216,26 +216,35 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (myOrders) {
+      const corpId = url.searchParams.get('corporationId')?.trim();
       const result = await withRepository(env, async (repository) => {
-        const rows = await repository.query<Record<string, unknown>>(
-          `SELECT market_orders.*
-             FROM market_orders
-             JOIN owner_registry owner ON owner.economic_id = market_orders.owner_economic_id
-            WHERE owner.id = (SELECT house_id FROM humans WHERE id = $1)
-            ORDER BY market_orders.created_at DESC LIMIT 500`, [viewer!.id]);
+        const rows = corpId
+          ? await repository.query<Record<string, unknown>>(
+              `SELECT market_orders.*
+                 FROM market_orders
+                 JOIN owner_registry owner ON owner.economic_id = market_orders.owner_economic_id
+                WHERE owner.id = $1 AND owner.owner_type = 'CORPORATION'
+                ORDER BY market_orders.created_at DESC LIMIT 500`, [corpId])
+          : await repository.query<Record<string, unknown>>(
+              `SELECT market_orders.*
+                 FROM market_orders
+                 JOIN owner_registry owner ON owner.economic_id = market_orders.owner_economic_id
+                WHERE owner.id = (SELECT house_id FROM humans WHERE id = $1)
+                ORDER BY market_orders.created_at DESC LIMIT 500`, [viewer!.id]);
         return { orders: rows.rows.map((row) => serializeOrder(row, Number(row.instrument_base_asset_id ?? row.base_asset_id ?? MARKET_ASSET_IDS.MATERIAL))) };
       });
       if (!result) return unavailable();
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (orderQuote) {
-      const parsed = await parseJsonBody<{ product?: string; quantity?: number | string; limitPrice?: number | string; side?: string; instrumentId?: string }>(request);
+      const parsed = await parseJsonBody<{ product?: string; quantity?: number | string; limitPrice?: number | string; side?: string; instrumentId?: string; corporationId?: string; ownerId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const product = body.product?.trim().toLowerCase() ?? '';
       const side = body.side === 'sell' ? 'sell' : 'buy';
       const quantity = Number(body.quantity);
       const limitPrice = Number(body.limitPrice);
+      const corpId = body.corporationId || (body.ownerId?.startsWith('CORP-') ? body.ownerId : null);
       if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) {
         return Response.json({ ok: false, error: 'A positive product, quantity, and limit price are required' }, { status: 400 });
       }
@@ -250,15 +259,25 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
         const feeRate = side === 'buy' ? await marketFeeRate(repository, viewer!.id) : '0';
         const feeUnits = calculateFeeUnits(quoteUnits, feeRate);
         const assetId = side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.asset_id;
-        const balances = await repository.query<{ available_units: string; reserved_units: string }>(
-          `SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS available_units,
-                  COALESCE((SELECT SUM(r.remaining_units) FROM market_order_reservations r
-                    WHERE r.escrow_account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = a.owner_economic_id)
-                      AND r.asset_id = $2 AND r.status = 'ACTIVE'), 0)::TEXT AS reserved_units
-             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-            WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = $2
-              AND a.account_type IN ('WALLET','INVENTORY') AND a.status = 'ACTIVE'
-            GROUP BY a.owner_economic_id`, [viewer!.house_id, assetId]);
+        const balances = corpId
+          ? await repository.query<{ available_units: string; reserved_units: string }>(
+              `SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS available_units,
+                      COALESCE((SELECT SUM(r.remaining_units) FROM market_order_reservations r
+                        WHERE r.escrow_account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = a.owner_economic_id)
+                          AND r.asset_id = $2 AND r.status = 'ACTIVE'), 0)::TEXT AS reserved_units
+                 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+                WHERE o.id = $1 AND o.owner_type = 'CORPORATION' AND a.asset_id = $2
+                  AND a.account_type IN ('TREASURY','INVENTORY') AND a.status = 'ACTIVE'
+                GROUP BY a.owner_economic_id`, [corpId, assetId])
+          : await repository.query<{ available_units: string; reserved_units: string }>(
+              `SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS available_units,
+                      COALESCE((SELECT SUM(r.remaining_units) FROM market_order_reservations r
+                        WHERE r.escrow_account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = a.owner_economic_id)
+                          AND r.asset_id = $2 AND r.status = 'ACTIVE'), 0)::TEXT AS reserved_units
+                 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+                WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = $2
+                  AND a.account_type IN ('WALLET','INVENTORY') AND a.status = 'ACTIVE'
+                GROUP BY a.owner_economic_id`, [viewer!.house_id, assetId]);
         const world = (await repository.query<{ game_day: string; game_minute: string }>(
           "SELECT game_day::TEXT, game_minute::TEXT FROM world_state WHERE id = 'WORLD'",
         )).rows[0];
@@ -286,7 +305,7 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (orderPost) {
-      const parsed = await parseJsonBody<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string; instrumentId?: string }>(request);
+      const parsed = await parseJsonBody<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string; instrumentId?: string; corporationId?: string; ownerId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const product = body.product?.trim().toLowerCase() ?? '';
@@ -297,7 +316,7 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0 || !correlationId) {
         return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
       }
-      const result = await withRepository(env, (repository) => submitMarketOrder(repository, { humanId: viewer!.id, product, side, quantity, limitPrice, correlationId, instrumentId: body.instrumentId }));
+      const result = await withRepository(env, (repository) => submitMarketOrder(repository, { humanId: viewer!.id, product, side, quantity, limitPrice, correlationId, instrumentId: body.instrumentId, corporationId: body.corporationId, ownerId: body.ownerId }));
       if (!result) return unavailable();
       const order = result.order && typeof result.order === 'object' ? serializeOrder(result.order as Record<string, unknown>) : result.order;
       return Response.json({ ...result, order, persistence: 'planetscale-postgres' });
