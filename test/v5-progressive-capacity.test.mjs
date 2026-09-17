@@ -837,6 +837,13 @@ test('V5 world snapshot converts PostgreSQL bigint values at the JSON boundary',
   assert.match(world, /return toJsonSafe\(\{/);
 });
 
+test('V5 Earth capacity totals include independent House direct-to-Earth obligations', async () => {
+  const capacity = await readFile(new URL('../cloudflare/src/v5-capacity-postgres.ts', import.meta.url), 'utf8');
+  assert.match(capacity, /capacity_level = 'CORPORATION'[\s\S]*capacity_level = 'HOUSE' AND corporation_id IS NULL/);
+  assert.match(capacity, /independentUnits \+ corporationUnits \+ policy\.standardTerritoryCapacity/);
+  assert.doesNotMatch(capacity, /requiredTerritoryUnits: BigInt\(corporation\?\.required_units/);
+});
+
 test('V5 upgrade review is quote-only and does not derive tier economics in Flutter', async () => {
   const dialog = await readFile(new URL('../flutter_client/lib/features/operations/building_detail_upgrade_dialog.dart', import.meta.url), 'utf8');
   assert.match(dialog, /quoteBuildingUpgrade/);

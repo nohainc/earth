@@ -130,10 +130,9 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
          FROM v5_house_settlement_profiles p
          JOIN houses h ON h.id = p.house_id AND h.status = 'ACTIVE'`,
     ),
-    repository.query<{ corporation_count: string; occupied_units: string; required_units: string }>(
-  `SELECT COUNT(*)::TEXT AS corporation_count,
-              COALESCE(SUM(total_occupied_capacity_units), 0)::TEXT AS occupied_units,
-              COALESCE(SUM(required_territory_units), 0)::TEXT AS required_units
+    repository.query<{ corporation_count: string; occupied_units: string }>(
+      `SELECT COUNT(*)::TEXT AS corporation_count,
+              COALESCE(SUM(total_occupied_capacity_units), 0)::TEXT AS occupied_units
          FROM corporation_capacity_state_v5 s
          JOIN corporations c ON c.id = s.corporation_id AND c.status = 'ACTIVE'
         WHERE s.game_day = $1`,
@@ -145,7 +144,8 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
               COALESCE(SUM(assessed_units - paid_units), 0)::TEXT AS arrears,
               COALESCE(MAX(game_day), 0)::TEXT AS game_day
          FROM v5_capacity_obligations
-        WHERE capacity_level = 'CORPORATION'`,
+        WHERE capacity_level = 'CORPORATION'
+           OR (capacity_level = 'HOUSE' AND corporation_id IS NULL)`,
     ),
     repository.query<{ account_type: string; balance_units: string }>(
       `SELECT a.account_type, COALESCE(SUM(a.balance_units), 0)::TEXT AS balance_units
@@ -183,7 +183,9 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
     corporationCount: Number(corporation?.corporation_count ?? 0),
     corporationOccupiedUnits: corporationUnits.toString(),
     totalOccupiedUnits: (independentUnits + corporationUnits).toString(),
-    requiredTerritoryUnits: BigInt(corporation?.required_units ?? '0').toString(),
+    requiredTerritoryUnits: (independentUnits + corporationUnits) === 0n
+      ? '0'
+      : ((independentUnits + corporationUnits + policy.standardTerritoryCapacity - 1n) / policy.standardTerritoryCapacity).toString(),
     fiscal: {
       capacityRevenueAssessedUnits: revenue.assessed,
       capacityRevenuePaidUnits: revenue.paid,
