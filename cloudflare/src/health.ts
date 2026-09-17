@@ -73,7 +73,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
           COUNT(*) FILTER (WHERE processed_at IS NULL AND attempts > 0)::integer AS retrying,
           COUNT(*) FILTER (WHERE processed_at IS NULL AND locked_at IS NOT NULL AND locked_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes')::integer AS stale_locks,
           COUNT(*) FILTER (WHERE last_error LIKE 'DEAD_LETTER%')::integer AS dead_lettered,
-          COUNT(*) FILTER (WHERE attempts >= 5)::integer AS failed,
+          COUNT(*) FILTER (WHERE processed_at IS NULL AND attempts >= 5)::integer AS failed,
           EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MIN(created_at) FILTER (WHERE processed_at IS NULL)))::numeric AS oldest_pending_age,
           MAX(processed_at)::text AS last_delivery
         FROM event_outbox
