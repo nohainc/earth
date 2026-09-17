@@ -815,7 +815,19 @@ class _CorporateBuildingResearchPanelState
                                         height: 32,
                                         onPressed: isButtonDisabled
                                             ? null
-                                            : () => _confirmAndStartResearch(
+                                            : () async {
+                                                try {
+                                                  final quote = await const EarthApi()
+                                                      .quoteCorporationBuildingResearch(type);
+                                                  if (!context.mounted || quote['ok'] != true) {
+                                                    if (context.mounted) {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        SnackBar(content: Text(quote['error']?.toString() ?? 'Research quote unavailable')),
+                                                      );
+                                                    }
+                                                    return;
+                                                  }
+                                                  await _confirmAndStartResearch(
                                                   context,
                                                   type: type,
                                                   name: name,
@@ -842,7 +854,16 @@ class _CorporateBuildingResearchPanelState
                                                   tierDaysCurrent:
                                                       tierDaysCurrent,
                                                   tierDaysNext: tierDaysNext,
-                                                ),
+                                                  serverQuote: quote,
+                                                );
+                                                } catch (error) {
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text('Research quote unavailable: $error')),
+                                                    );
+                                                  }
+                                                }
+                                              },
                                       ),
                                     ),
                                   ),
@@ -1009,11 +1030,18 @@ class _CorporateBuildingResearchPanelState
     required String ownership,
     required int tierDaysCurrent,
     required int tierDaysNext,
+    required Map<String, dynamic> serverQuote,
   }) async {
     EarthAudioEngine.instance.playClick();
     final isPrivate = ownership == 'private';
     final fundingSource =
         isPrivate ? 'your personal account' : 'your corporation treasury';
+    final quote = serverQuote['quote'] is Map
+        ? Map<String, dynamic>.from(serverQuote['quote'] as Map)
+        : const <String, dynamic>{};
+    final quotedCost = int.tryParse(quote['researchCostUnits']?.toString() ?? '');
+    final quotedDuration = int.tryParse(quote['durationDays']?.toString() ?? '');
+    if (quotedCost == null || quotedDuration == null) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1073,8 +1101,8 @@ class _CorporateBuildingResearchPanelState
             children: [
               Text(
                 isPrivate
-                    ? 'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.'
-                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(costCredits)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for the corporation\'s territories.',
+                    ? 'Starting this research project will charge ${formatCreditsAmount(quotedCost)} from $fundingSource to develop Tier $targetTier blueprints.'
+                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(quotedCost)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for the corporation\'s territories.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -1102,7 +1130,7 @@ class _CorporateBuildingResearchPanelState
                         const Icon(Icons.account_balance_wallet_outlined,
                             size: 14, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
-                        Text('${formatWholeNumber(costCredits)} C',
+                        Text('${formatWholeNumber(quotedCost)} C',
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -1121,7 +1149,7 @@ class _CorporateBuildingResearchPanelState
                             size: 14, color: cyanAccentColor),
                         const SizedBox(width: 4),
                         Text(
-                            '$durationDays ${durationDays == 1 ? "Day" : "Days"}',
+                            '$quotedDuration ${quotedDuration == 1 ? "Day" : "Days"}',
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -1319,7 +1347,7 @@ class _CorporateBuildingResearchPanelState
             'CORP-0001';
         await widget.action(() => const EarthApi().createProposal(
               'Research $name (Tier $targetTier)',
-              'Corporation proposal to research and unlock blueprints for $name Tier $targetTier. Duration: $durationDays days, Estimated R&D funding: ${formatWholeNumber(costCredits)} C from corporation treasury.',
+              'Corporation proposal to research and unlock blueprints for $name Tier $targetTier. Duration: $quotedDuration days, Estimated R&D funding: ${formatWholeNumber(quotedCost)} C from corporation treasury.',
               institutionId: corpId,
               targetCategory: 'technology',
               targetValue: {

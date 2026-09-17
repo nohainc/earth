@@ -620,6 +620,14 @@ test('V5 building research progress is read-only on the client', async () => {
   assert.match(panel, /projectProgress == null/);
 });
 
+test('V5 building research confirmation uses a server quote', async () => {
+  const panel = await readFile(new URL('../flutter_client/lib/features/operations/technology_panel.dart', import.meta.url), 'utf8');
+  assert.match(panel, /quoteCorporationBuildingResearch\(type\)/);
+  assert.match(panel, /required Map<String, dynamic> serverQuote/);
+  assert.match(panel, /quotedCost/);
+  assert.match(panel, /quotedDuration/);
+});
+
 test('V5 governance UI exposes only Earth and Corporation scopes', async () => {
   const panel = await readFile(new URL('../flutter_client/lib/features/governance/governance_panels.dart', import.meta.url), 'utf8');
   assert.match(panel, /TabController\(length: 2/);
