@@ -272,27 +272,53 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     final versionIds = canonical['versionIds'] is Map
         ? Map<String, dynamic>.from(canonical['versionIds'] as Map)
         : const <String, dynamic>{};
-    return EarthSection(
-      title: 'CURRENT CONSTITUTION POLICY · DAY ${canonical['gameDay'] ?? '—'}',
-      showSurface: false,
-      child: rules.isEmpty
-          ? const EarthEmptyState(
-              message: 'No effective typed policy values are available.',
-              icon: Icons.rule_outlined,
-            )
-          : EarthDataList(
-              children: rules.map((entry) {
-                final value = _formatCanonicalValue(entry.value);
-                final version = versionIds[entry.key]?.toString();
+    final scheduled = canonical['scheduledChanges'] is List
+        ? (canonical['scheduledChanges'] as List).whereType<Map>().toList()
+        : const <Map>[];
+    return Column(
+      children: [
+        EarthSection(
+          title: 'CURRENT CONSTITUTION POLICY · DAY ${canonical['gameDay'] ?? '—'}',
+          showSurface: false,
+          child: rules.isEmpty
+              ? const EarthEmptyState(
+                  message: 'No effective typed policy values are available.',
+                  icon: Icons.rule_outlined,
+                )
+              : EarthDataList(
+                  children: rules.map((entry) {
+                    final value = _formatCanonicalValue(entry.value);
+                    final version = versionIds[entry.key]?.toString();
+                    return EarthDataRow(
+                      title: entry.key,
+                      subtitle: version == null ? value : '$value · $version',
+                      leading: Icon(Icons.rule_outlined,
+                          size: context.iconSize, color: context.primaryColor),
+                      showDivider: entry.key != rules.last.key,
+                    );
+                  }).toList(),
+                ),
+        ),
+        if (scheduled.isNotEmpty)
+          EarthSection(
+            title: 'SCHEDULED CONSTITUTION CHANGES',
+            showSurface: false,
+            child: EarthDataList(
+              children: scheduled.map((change) {
+                final value = change['value_json'] is Map
+                    ? _formatCanonicalValue(change['value_json'])
+                    : '—';
                 return EarthDataRow(
-                  title: entry.key,
-                  subtitle: version == null ? value : '$value · $version',
-                  leading: Icon(Icons.rule_outlined,
+                  title: change['rule_code']?.toString() ?? 'Rule',
+                  subtitle: 'DAY ${change['effective_from_game_day'] ?? '—'} · $value',
+                  leading: Icon(Icons.schedule_outlined,
                       size: context.iconSize, color: context.primaryColor),
-                  showDivider: entry.key != rules.last.key,
+                  showDivider: change != scheduled.last,
                 );
               }).toList(),
             ),
+          ),
+      ],
     );
   }
 
