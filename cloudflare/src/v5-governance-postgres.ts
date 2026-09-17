@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
 import { DEFAULT_V5_GOVERNANCE_RULE, getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { evaluateOneHouseVote } from './governance-decision.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -167,9 +168,8 @@ export async function resolveV5GovernanceProposal(repository: PostgresRepository
     if (day <= Number(proposal.voting_end_game_day)) throw new Error('V5 governance voting period is still open');
     const support = Number(proposal.support_votes); const oppose = Number(proposal.oppose_votes); const abstain = Number(proposal.abstain_votes);
     const electorateSize = Number(proposal.electorate_size);
-    const quorumMet = electorateSize > 0 && (support + oppose + abstain) * 10000 >= electorateSize * Number(proposal.quorum_bps);
-    const decisive = support + oppose;
-    const passed = quorumMet && decisive > 0 && support > oppose && support * 10000 >= decisive * Number(proposal.approval_bps);
+    const decision = evaluateOneHouseVote({ support, oppose, abstain, electorateSize, quorumBps: Number(proposal.quorum_bps), approvalBps: Number(proposal.approval_bps) });
+    const { quorumMet, passed } = decision;
     const status = passed ? 'SCHEDULED' : 'REJECTED';
     await tx.query('UPDATE v5_governance_proposals SET status = $1, quorum_met = $2 WHERE id = $3', [passed ? 'PASSED' : status, quorumMet, proposalId]);
     if (passed) {

@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import type { VotingMethod } from './governance-voting.ts';
 import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
+import { evaluateOneHouseVote } from './governance-decision.ts';
 
 const ACTIONS = new Set(['ORGANIZATION_BUDGET_SPEND', 'TAX_RULE', 'PUBLIC_PROJECT', 'RESEARCH_FUNDING', 'CHARTER_CHANGE', 'WORLD_CONDITION', 'ORGANIZATION_TECHNOLOGY_ADOPTION']);
 const VOTING_METHODS = new Set<VotingMethod>(['ONE_HOUSE_ONE_VOTE', 'DELEGATED', 'SHARE_WEIGHTED', 'QUADRATIC_VOICE']);
@@ -126,9 +127,9 @@ export async function resolveGovernanceProposalV4(repository: PostgresRepository
     const day = await currentDay(tx);
     if (day <= Number(proposal.voting_end_game_day)) throw new Error('Voting period is still open');
     const electorate = proposal.subject_type === 'ORGANIZATION' ? await tx.query('SELECT COUNT(*)::INTEGER AS count FROM organization_memberships WHERE organization_id = $1 AND status = \'ACTIVE\'', [proposal.subject_id]) : await tx.query("SELECT COUNT(*)::INTEGER AS count FROM houses WHERE status = 'ACTIVE'");
-    const voters = Number(proposal.support_votes) + Number(proposal.oppose_votes);
-    const quorumMet = voters * 10000 >= Math.max(1, Number(electorate.rows[0]?.count ?? 0)) * Number(object(proposal.rule_snapshot).quorumBps ?? 5000);
-    const passed = quorumMet && Number(proposal.support_votes) > Number(proposal.oppose_votes);
+    const ballots = await tx.query<{ abstain: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'ABSTAIN')::TEXT AS abstain FROM governance_ballots_v4 WHERE proposal_id = $1`, [proposalId]);
+    const decision = evaluateOneHouseVote({ support: Number(proposal.support_votes), oppose: Number(proposal.oppose_votes), abstain: Number(ballots.rows[0]?.abstain ?? 0), electorateSize: Number(electorate.rows[0]?.count ?? 0), quorumBps: Number(object(proposal.rule_snapshot).quorumBps ?? 5000), approvalBps: Number(object(proposal.rule_snapshot).approvalBps ?? 5000) });
+    const { quorumMet, passed } = decision;
     const status = passed ? 'PASSED' : 'REJECTED';
     await tx.query('UPDATE governance_proposals_v4 SET status = $1 WHERE id = $2', [status, proposalId]);
     if (passed && proposal.action_type === 'WORLD_CONDITION') {

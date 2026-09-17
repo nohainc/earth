@@ -6,6 +6,7 @@ import { aggregateCorporationCapacity, calculateHouseCapacity, quoteCapacityChan
 import { previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
 import { runV5ShadowSimulation } from '../cloudflare/src/v5-shadow-simulation.ts';
 import { CONSTITUTIONAL_RULE_DEFINITIONS, DEFAULT_V5_GOVERNANCE_RULE, resolveConstitutionalRuleSet, validateConstitutionalRuleValue } from '../cloudflare/src/v5-constitution.ts';
+import { evaluateOneHouseVote } from '../cloudflare/src/governance-decision.ts';
 
 const brackets = [
   { ordinal: 1, lowerBound: 0n, upperBound: 1n, multiplierNumerator: 1n, multiplierDenominator: 1n },
@@ -116,6 +117,13 @@ test('V5 governance validates future policies and previews proposed brackets', (
   assert.ok(preview[2].delta > 0n);
 });
 
+test('V4 and V5 share strict one-House voting semantics', () => {
+  assert.equal(evaluateOneHouseVote({ support: 1, oppose: 1, abstain: 2, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).quorumMet, true);
+  assert.equal(evaluateOneHouseVote({ support: 1, oppose: 1, abstain: 2, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).passed, false);
+  assert.equal(evaluateOneHouseVote({ support: 1, oppose: 0, abstain: 1, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).quorumMet, true);
+  assert.equal(evaluateOneHouseVote({ support: 1, oppose: 0, abstain: 1, electorateSize: 4, quorumBps: 5000, approvalBps: 5000 }).passed, true);
+});
+
 test('V5 constitutional rules enforce typed values and authority inheritance', () => {
   assert.deepEqual(DEFAULT_V5_GOVERNANCE_RULE, { quorumBps: 2500, approvalBps: 5000, votingPeriodDays: 3, implementationDelayDays: 0 });
   assert.ok(CONSTITUTIONAL_RULE_DEFINITIONS.some((rule) => rule.code === 'EARTH.CAPACITY.STANDARD'));
@@ -146,7 +154,7 @@ test('V5 governance snapshots and strict decision semantics are persisted in the
   assert.match(migration, /governance_rule_snapshot/);
   assert.match(migration, /base_version_snapshot/);
   assert.match(service, /abstain_votes/);
-  assert.match(service, /support > oppose/);
+  assert.match(service, /evaluateOneHouseVote/);
   assert.match(service, /electorate_size/);
   assert.match(service, /joined_game_day <=/);
 });
