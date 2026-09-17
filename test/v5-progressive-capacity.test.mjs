@@ -235,6 +235,14 @@ test('V5 resolved Constitution snapshots persist authority provenance', async ()
   assert.match(kernel, /provenance: resolved.provenance/);
 });
 
+test('V5 Constitution snapshots are immutable once materialized', async () => {
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  assert.match(kernel, /ON CONFLICT \(authority_type, authority_id, game_day\) DO NOTHING/);
+  assert.match(kernel, /Constitution snapshot disappeared after conflict/);
+  assert.match(kernel, /SELECT id, version_ids/);
+  assert.doesNotMatch(kernel, /ON CONFLICT \(authority_type, authority_id, game_day\) DO UPDATE/);
+});
+
 test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');

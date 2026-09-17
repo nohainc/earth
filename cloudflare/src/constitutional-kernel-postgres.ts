@@ -90,16 +90,23 @@ export async function materializeResolvedConstitutionSnapshot(
     gameDay: input.gameDay,
   });
   const id = `CONST-${input.authorityType}-${input.authorityId}-D${input.gameDay}`;
-  await tx.query(
+  const inserted = await tx.query<{ id: string; version_ids: Record<string, string> }>(
     `INSERT INTO resolved_constitution_snapshots_v5
        (id, authority_type, authority_id, game_day, rules_json, version_ids, provenance_json)
      VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB,$7::JSONB)
-     ON CONFLICT (authority_type, authority_id, game_day) DO UPDATE SET
-       rules_json = EXCLUDED.rules_json, version_ids = EXCLUDED.version_ids,
-       provenance_json = EXCLUDED.provenance_json`,
+     ON CONFLICT (authority_type, authority_id, game_day) DO NOTHING
+     RETURNING id, version_ids`,
     [id, input.authorityType, input.authorityId, input.gameDay, JSON.stringify(resolved.rules, (_, value) => typeof value === 'bigint' ? value.toString() : value), JSON.stringify(resolved.versionIds), JSON.stringify(resolved.provenance)],
   );
-  return { id, versionIds: resolved.versionIds };
+  if (inserted.rows[0]) return { id: inserted.rows[0].id, versionIds: inserted.rows[0].version_ids };
+  const existing = (await tx.query<{ id: string; version_ids: Record<string, string> }>(
+    `SELECT id, version_ids
+       FROM resolved_constitution_snapshots_v5
+      WHERE authority_type = $1 AND authority_id = $2 AND game_day = $3`,
+    [input.authorityType, input.authorityId, input.gameDay],
+  )).rows[0];
+  if (!existing) throw new Error('Constitution snapshot disappeared after conflict');
+  return { id: existing.id, versionIds: existing.version_ids };
 }
 
 export async function getConstitutionReadModel(
