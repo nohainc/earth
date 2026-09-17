@@ -27,6 +27,7 @@ function rate(value: unknown): number | null {
  * tax execution.
  */
 // @mutation-boundary caller-owned-transaction reconciliation-only
+// @mutation-boundary deterministic-settlement
 export async function reconcileV5TaxRulesInTransaction(tx: PostgresRepository, day: number): Promise<Record<string, unknown>> {
   const assessedDay = day - 1;
   if (assessedDay < 1) return { ok: true, day, assessedDay, rulesCompared: 0, matches: 0, mismatches: 0, missingCanonical: 0 };

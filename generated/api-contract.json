@@ -833,6 +833,14 @@
     },
     {
       "method": "GET",
+      "path": "/api/v5/capacity",
+      "owner": "ReadModelRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "getV5EarthCapacity",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
       "path": "/api/v5/corporations/{id}/capacity",
       "owner": "ReadModelRoutes",
       "auth": "AUTHENTICATED",
