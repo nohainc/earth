@@ -277,7 +277,7 @@
       "owner": "HouseRoutes",
       "auth": "HOUSE_SELF",
       "service": "quoteHouseMove",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -285,7 +285,7 @@
       "owner": "HouseRoutes",
       "auth": "HOUSE_SELF",
       "service": "moveHouseResidence",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -421,6 +421,70 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "quoteV5Building",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/buildings/{id}/upgrade",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "upgradeBuilding",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/buildings/{id}/upgrade-quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingUpgrade",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/buildings/{id}/policy",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "setBuildingOperatingMode",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/buildings/{id}/policy-quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingOperatingMode",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/buildings/{id}/demolish",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "decommissionBuilding",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/buildings/{id}/demolition-quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingDemolition",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/buildings/{id}/capital-options",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getBuildingCapitalOptions",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/buildings/{id}/capital-projects",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "startBuildingCapitalProject",
       "status": "ACTIVE"
     },
     {
@@ -581,7 +645,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "purchaseBuilding",
-      "status": "ACTIVE"
+      "status": "REMOVED"
     },
     {
       "method": "GET",
@@ -597,7 +661,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "getBuildingCapitalOptions",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -605,7 +669,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "startBuildingCapitalProject",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -613,7 +677,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "upgradeBuilding",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -621,7 +685,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "quoteBuildingUpgrade",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -629,7 +693,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "setBuildingOperatingMode",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -637,7 +701,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "quoteBuildingOperatingMode",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -645,7 +709,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "decommissionBuilding",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -653,7 +717,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "quoteBuildingDemolition",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -669,7 +733,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "constructionQuote",
-      "status": "ACTIVE"
+      "status": "REMOVED"
     },
     {
       "method": "POST",
@@ -789,7 +853,7 @@
       "owner": "InstitutionRoutes",
       "auth": "HUMAN_SELF",
       "service": "createCorporation",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -1037,7 +1101,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "acquireTerritoryRight",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -1045,7 +1109,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "releaseTerritoryRight",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -1061,7 +1125,7 @@
       "owner": "InstitutionRoutes",
       "auth": "HOUSE_SELF",
       "service": "joinCorporation",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "DELETE",
@@ -1069,7 +1133,7 @@
       "owner": "InstitutionRoutes",
       "auth": "HOUSE_SELF",
       "service": "leaveCorporation",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -1438,6 +1502,14 @@
       "auth": "INSTITUTION_ROLE",
       "service": "amendRules",
       "status": "RETIRED"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/rules",
+      "owner": "GovernanceRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "getConstitutionReadModel",
+      "status": "ACTIVE"
     },
     {
       "method": "GET",

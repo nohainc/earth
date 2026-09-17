@@ -11,24 +11,6 @@ extension EarthApiRealEstate on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> acquireTerritoryRight({required String territoryId, String slotQuantity = '1', int termDays = 30}) async {
-    final response = await _request('/api/real-estate/rights', method: 'POST', body: {
-      'territoryId': territoryId,
-      'slotClass': 'PRIVATE',
-      'slotQuantity': slotQuantity,
-      'termDays': termDays,
-      'correlationId': newClientCorrelationId('ACQUIRE-RIGHT'),
-    });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> releaseTerritoryRight({required String rightId}) async {
-    final response = await _request('/api/real-estate/rights/${Uri.encodeComponent(rightId)}/release', method: 'POST', body: {
-      'correlationId': newClientCorrelationId('RELEASE-RIGHT'),
-    });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
   Future<Map<String, dynamic>> getBuildingCapitalOptions({required String buildingId}) async {
     final response = await _request('/api/v5/buildings/$buildingId/capital-options');
     return Map<String, dynamic>.from(response as Map);

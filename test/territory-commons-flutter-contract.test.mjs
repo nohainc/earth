@@ -10,12 +10,12 @@ test('Flutter exposes Territory rights and commons as a decision-first read surf
   const sidebar = fs.readFileSync('flutter_client/lib/features/command_center/sidebar.dart', 'utf8');
   assert.match(api, /territoryRights/);
   assert.match(api, /commonsStatement/);
-  assert.match(api, /acquireTerritoryRight/);
-  assert.match(api, /releaseTerritoryRight/);
-  assert.match(panel, /time-bounded use right/);
+  assert.doesNotMatch(api, /acquireTerritoryRight|releaseTerritoryRight/);
+  assert.match(panel, /Read-only physical context/);
+  assert.doesNotMatch(panel, /ACQUIRE USE RIGHT|RELEASE USE RIGHT|RELOCATE PRIMARY RESIDENCY/);
   assert.match(panel, /server-derived/);
   assert.match(dashboard, /territory-commons/);
   assert.match(command, /getHouseResidency/);
   assert.match(command, /commonsStatement/);
-  assert.match(sidebar, /territory-commons/);
+  assert.match(sidebar, /NavigationRegistry/);
 });
