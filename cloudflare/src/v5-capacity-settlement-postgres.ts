@@ -3,7 +3,7 @@ import type { PostgresRepository } from './repository.ts';
 // @mutation-boundary caller-owned-transaction
 import { calculateProgressiveCharge, type ProgressiveBracket } from './v5-progressive.ts';
 
-type Policy = { id: string; earthBaseRate: bigint; standardCapacity: bigint; corporationScheduleId: string; houseScheduleId: string; version: number };
+type Policy = { id: string; earthBaseRate: bigint; standardCapacity: bigint; corporationScheduleId: string; houseScheduleId: string };
 type Schedule = { id: string; brackets: ProgressiveBracket[] };
 type Member = { houseId: string; corporationId: string | null; houseEconomicId: string; corporationEconomicId: string | null; buildingUnits: bigint };
 
@@ -32,7 +32,6 @@ async function activePolicy(tx: PostgresRepository, day: number): Promise<Policy
       standardCapacity: BigInt(String(snapshotRules['EARTH.CAPACITY.STANDARD'])),
       corporationScheduleId: String(snapshotRules['EARTH.CAPACITY.PROGRESSIVE_SCHEDULE']),
       houseScheduleId: String(snapshotRules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE']),
-      version: 0,
     };
   }
   throw new Error(`Canonical Earth capacity snapshot is unavailable for assessed game day ${day}`);
@@ -215,12 +214,12 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
     const requiredTerritories = usage === 0n ? 0n : (usage + policy.standardCapacity - 1n) / policy.standardCapacity;
     await tx.query(`INSERT INTO corporation_capacity_state_v5
       (corporation_id, game_day, residential_units_used, private_building_units_used, public_building_units_used,
-       total_occupied_units, standard_territory_capacity_units, required_territory_units, rules_version)
+      total_occupied_units, standard_territory_capacity_units, required_territory_units, rules_version)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       ON CONFLICT (corporation_id, game_day) DO UPDATE SET residential_units_used = EXCLUDED.residential_units_used,
         private_building_units_used = EXCLUDED.private_building_units_used, public_building_units_used = EXCLUDED.public_building_units_used,
         total_occupied_units = EXCLUDED.total_occupied_units, standard_territory_capacity_units = EXCLUDED.standard_territory_capacity_units,
-        required_territory_units = EXCLUDED.required_territory_units, rules_version = EXCLUDED.rules_version, updated_at = CURRENT_TIMESTAMP`, [corporationId, assessedDay, units.residential.toString(), units.privateBuildings.toString(), units.publicBuildings.toString(), usage.toString(), policy.standardCapacity.toString(), requiredTerritories.toString(), `v5-capacity-policy:${policy.version}`]);
+        required_territory_units = EXCLUDED.required_territory_units, rules_version = EXCLUDED.rules_version, updated_at = CURRENT_TIMESTAMP`, [corporationId, assessedDay, units.residential.toString(), units.privateBuildings.toString(), units.publicBuildings.toString(), usage.toString(), policy.standardCapacity.toString(), requiredTerritories.toString(), policy.id]);
     const result = await recordObligation(tx, { level: 'CORPORATION', corporationId, payerEconomicId: units.economicId, beneficiaryEconomicId: 'ECON-EARTH-001', day, assessedDay, usage, baseRate: policy.earthBaseRate, schedule: corporationSchedule, assessed: charge.totalCharge, rulesVersion: policy.id, sourceKey: `corporation:${corporationId}:${assessedDay}:${corporationSchedule.id}` });
     await updateDelinquency(tx, 'CORPORATION', corporationId, assessedDay, result);
     const corporationStatus = (await tx.query<{ status: string; consecutive_missed_days: number }>(`SELECT status, consecutive_missed_days FROM v5_capacity_delinquency_state WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [corporationId])).rows[0];
@@ -228,7 +227,7 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
     await ensureCorporationReceivershipCase(tx, corporationId, corporationStatus?.status ?? 'CURRENT', assessedDay, outstanding);
     if (result !== 'EXISTING') { if (result === 'PAID') paid += 1; else if (result === 'PARTIAL') partial += 1; else arrears += 1; }
   }
-  return { ok: true, day, assessedDay, houses: houseAssessments, corporations: corporationUnits.size, paid, partial, arrears, policyVersion: policy.version };
+  return { ok: true, day, assessedDay, houses: houseAssessments, corporations: corporationUnits.size, paid, partial, arrears, policyVersion: policy.id };
 }
 
 async function corporationBaseRate(tx: PostgresRepository, corporationId: string, day: number): Promise<{ rate: bigint; ruleSetId: string }> {
