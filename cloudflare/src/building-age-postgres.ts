@@ -1,7 +1,55 @@
 import type { PostgresRepository } from './repository.ts';
 import { assessBuildingAge } from './building-age.ts';
 import { createGameEvent } from './game-events-postgres.ts';
-import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+
+async function startCorporationCapitalProject(
+  repository: PostgresRepository,
+  input: { buildingId: string; humanId: string; projectKind: 'OVERHAUL' | 'GENERATION_RETROFIT'; targetGenerationId?: string; correlationId: string },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
+    if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: input.buildingId, correlationId: input.correlationId };
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const building = (await tx.query<{ id: string; corporation_id: string; owner_economic_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string }>(
+      `SELECT b.id, owner.id AS corporation_id, b.owner_economic_id, b.catalog_id, c.construction_credit_units::TEXT,
+              c.definition_version, b.status
+         FROM buildings b
+         JOIN building_catalog c ON c.id = b.catalog_id
+         JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id AND owner.owner_type = 'CORPORATION'
+         JOIN humans h ON h.id = $2 AND h.status = 'ACTIVE'
+         JOIN house_affiliations affiliation ON affiliation.house_id = h.house_id
+           AND affiliation.corporation_id = owner.id AND affiliation.status = 'ACTIVE'
+        WHERE b.id = $1 FOR UPDATE`, [input.buildingId, input.humanId],
+    )).rows[0];
+    if (!building) throw new Error('Building not found or not owned by the active Corporation');
+    const authorized = await tx.query(
+      `SELECT 1 FROM institution_governance_roles
+        WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
+          AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')`, [building.corporation_id, input.humanId],
+    );
+    if (!authorized.rows[0]) throw new Error('Corporation governance authorization is required');
+    if (building.status !== 'ACTIVE') throw new Error('Only an active building can start a capital project');
+    if ((await tx.query('SELECT id FROM construction_projects WHERE building_id = $1 AND status = \'IN_PROGRESS\'', [input.buildingId])).rows[0]) throw new Error('This building already has a capital project in progress');
+    if (input.projectKind === 'GENERATION_RETROFIT') {
+      if (!input.targetGenerationId) throw new Error('A target technology generation is required for retrofit');
+      const target = (await tx.query<{ effective_from_game_day: number }>(`SELECT d.effective_from_game_day FROM technology_generations g JOIN technology_discoveries d ON d.generation_id = g.id WHERE g.id = $1`, [input.targetGenerationId])).rows[0];
+      if (!target || Number(target.effective_from_game_day) > day) throw new Error('Technology generation is not discovered and effective');
+    }
+    const multiplier = input.projectKind === 'OVERHAUL' ? 7500n : 4000n;
+    const cost = BigInt(building.construction_credit_units) * multiplier / 10000n;
+    const treasury = (await tx.query<{ id: string; balance_units: string }>(`SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY' AND status = 'ACTIVE' FOR UPDATE`, [building.owner_economic_id])).rows[0];
+    const sink = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND o.owner_type = 'SYSTEM' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`)).rows[0];
+    if (!treasury || !sink || BigInt(treasury.balance_units) < cost) throw new Error('Insufficient Corporation Treasury for capital project');
+    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER',$3,$4,'capital-project-v5',$5::JSONB)`, [input.correlationId, day, input.projectKind, input.buildingId, JSON.stringify([{ account_id: treasury.id, asset_id: 1, delta_units: (-cost).toString() }, { account_id: sink.id, asset_id: 1, delta_units: cost.toString() }])]);
+    const projectId = `PROJECT-CAPITAL-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+    await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,NULL,$4,$5,'{}'::JSONB,$6,$7,'IN_PROGRESS',$8,NULL,$9,$10)`, [projectId, building.id, building.owner_economic_id, building.catalog_id, cost.toString(), day, day + 1, input.correlationId, input.projectKind, input.targetGenerationId ?? null]);
+    await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION' WHERE id = $1", [building.id]);
+    await rebuildV5CorporationSettlementProfile(tx, building.corporation_id, day);
+    await createGameEvent(tx, { id: `CAPITAL-PROJECT-STARTED-${input.correlationId}`, category: 'BUILDING', eventType: 'CAPITAL_PROJECT_STARTED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: `${input.projectKind === 'OVERHAUL' ? 'Building overhaul' : 'Technology retrofit'} started`, details: { projectId, buildingId: building.id, projectKind: input.projectKind, targetGenerationId: input.targetGenerationId ?? null, creditCostUnits: cost.toString(), expectedCompletionGameDay: day + 1, ownerType: 'CORPORATION', capacityModel: 'V5_POOLED', territoryPlacement: null }, correlationId: input.correlationId });
+    return { ok: true, projectId, ownerType: 'CORPORATION', projectKind: input.projectKind, targetGenerationId: input.targetGenerationId ?? null, creditCostUnits: cost.toString(), expectedCompletionGameDay: day + 1, correlationId: input.correlationId };
+  });
+}
 
 export async function getBuildingCapitalOptions(repository: PostgresRepository, buildingId: string): Promise<Record<string, unknown>> {
   const day = Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
@@ -55,6 +103,10 @@ export async function startBuildingCapitalProject(
   repository: PostgresRepository,
   input: { buildingId: string; humanId: string; projectKind: 'OVERHAUL' | 'GENERATION_RETROFIT'; targetGenerationId?: string; correlationId: string },
 ): Promise<Record<string, unknown>> {
+  const owner = (await repository.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
+    `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
+  )).rows[0];
+  if (owner?.owner_type === 'CORPORATION') return startCorporationCapitalProject(repository, input);
   return repository.transaction(async (tx) => {
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const building = (await tx.query<{ id: string; owner_economic_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string; house_id: string }>(
