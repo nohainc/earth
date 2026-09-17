@@ -569,6 +569,14 @@ test('Constitution UI renders the canonical V5 registry instead of requiring leg
   assert.match(panel, /hasCanonicalRules/);
 });
 
+test('V5 Constitution client proposals use an explicit canonical effective day', async () => {
+  const client = await readFile(new URL('../flutter_client/lib/core/api/earth_api_governance.dart', import.meta.url), 'utf8');
+  const dashboard = await readFile(new URL('../flutter_client/lib/features/command_center/dashboard.dart', import.meta.url), 'utf8');
+  assert.match(client, /effectiveFromGameDay \?\? await _nextV5ConstitutionGameDay/);
+  assert.match(client, /'effectiveFromGameDay': effectiveDay/);
+  assert.match(dashboard, /effectiveFromGameDay:/);
+});
+
 test('V5 client finance projections consume server policy multipliers', async () => {
   const finance = await readFile(new URL('../flutter_client/lib/features/finance/personal_finance_panel.dart', import.meta.url), 'utf8');
   const institutions = await readFile(new URL('../flutter_client/lib/features/institutions/institutions_panels.dart', import.meta.url), 'utf8');

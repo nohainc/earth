@@ -437,12 +437,21 @@ class Dashboard extends StatelessWidget {
                 changes: changes,
               );
               if (preview['ok'] == false) return preview;
+              final previewGameDay =
+                  int.tryParse(preview['gameDay']?.toString() ?? '');
+              if (previewGameDay == null || previewGameDay < 1) {
+                return {
+                  'ok': false,
+                  'error': 'Canonical Constitution game day is unavailable.',
+                };
+              }
               return const EarthApi().proposeV5ConstitutionAmendment(
                 subjectType: corporationId == null ? 'EARTH' : 'CORPORATION',
                 subjectId: corporationId,
                 title: 'Constitution amendment proposal',
                 body: 'Typed Constitution amendment submitted from the canonical policy editor.',
                 changes: changes,
+                effectiveFromGameDay: previewGameDay + 1,
               );
             },
           ),
