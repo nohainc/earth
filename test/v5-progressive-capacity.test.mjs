@@ -219,6 +219,13 @@ test('V5 constitutional amendments are typed, policy-group scoped change sets', 
   assert.match(migration, /CREATE TABLE constitutional_change_sets_v5/);
 });
 
+test('V5 Constitution amendments cannot reference a missing progressive schedule', async () => {
+  const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /assertExistingProgressiveSchedule/);
+  assert.match(service, /status = 'ACTIVE'/);
+  assert.match(service, /Progressive schedule is not an active canonical policy/);
+});
+
 test('V5 Constitution activation rolls back a failed change set atomically', async () => {
   const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
   assert.match(service, /SAVEPOINT \$\{savepoint\}/);

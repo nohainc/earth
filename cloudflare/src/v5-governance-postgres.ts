@@ -41,6 +41,21 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
   return action;
 }
 
+async function assertExistingProgressiveSchedule(
+  tx: PostgresRepository,
+  scheduleId: string,
+): Promise<void> {
+  const schedule = (await tx.query<{ id: string }>(
+    `SELECT id
+       FROM progressive_policy_schedules
+      WHERE id = $1 AND status = 'ACTIVE'`,
+    [scheduleId],
+  )).rows[0];
+  if (!schedule) {
+    throw new Error(`Progressive schedule is not an active canonical policy: ${scheduleId}`);
+  }
+}
+
 async function governancePolicy(tx: PostgresRepository, subjectType: 'EARTH' | 'CORPORATION', subjectId: string | null, gameDay: number) {
   const resolved = await resolveEffectiveConstitution(tx, {
     gameDay,
@@ -133,6 +148,9 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
         if (input.subjectType === 'CORPORATION' && rule.authorityModel === 'EARTH_LOCKED') throw new Error('Earth-locked rule cannot be amended at Corporation scope');
         if (change.clearOverride && input.subjectType !== 'CORPORATION') throw new Error('Only a Corporation can clear its Earth-default override');
         if (change.clearOverride && rule.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
+        if (rule.valueType === 'PROGRESSIVE_SCHEDULE_REF' && typeof change.value === 'string') {
+          await assertExistingProgressiveSchedule(tx, change.value);
+        }
       }
       if (groups.size !== 1) throw new Error('A Constitution amendment must contain one policy group');
     }
