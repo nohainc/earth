@@ -9,6 +9,7 @@ import { isFinancialProposalAction, proposalActionHandler, validateProposalActio
 import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
 import { attemptProposalFunding } from './proposal-funding.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -172,10 +173,24 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       ruleRow = inserted.rows[0];
     }
     if (!ruleRow) throw new Error('An active governance rule version is required');
-    const quorum = Number(ruleRow.quorum_threshold);
-    const approvalThreshold = Number(ruleRow.approval_threshold);
-    const votingPeriodDays = Number(ruleRow.voting_period_days ?? COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays);
-    const implementationDelay = Number(ruleRow.implementation_delay_days ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays);
+    const institutionKind = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1', [input.institutionId])).rows[0]?.kind;
+    const canonical = institutionKind === 'CORPORATION'
+      ? await resolveEffectiveConstitution(tx, { corporationId: input.institutionId, gameDay: Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1) })
+      : null;
+    const canonicalValue = (code: string): number | null => {
+      const value = canonical?.rules[code];
+      if (value === undefined) return null;
+      const parsed = Number(value);
+      return Number.isSafeInteger(parsed) ? parsed : null;
+    };
+    const quorum = canonicalValue('CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS') !== null
+      ? (canonicalValue('CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS') as number) / 10_000
+      : Number(ruleRow.quorum_threshold);
+    const approvalThreshold = canonicalValue('CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS') !== null
+      ? (canonicalValue('CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS') as number) / 10_000
+      : Number(ruleRow.approval_threshold);
+    const votingPeriodDays = canonicalValue('CORPORATION.GOVERNANCE.VOTING_PERIOD_DAYS') ?? Number(ruleRow.voting_period_days ?? COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays);
+    const implementationDelay = canonicalValue('CORPORATION.GOVERNANCE.IMPLEMENTATION_DELAY_DAYS') ?? Number(ruleRow.implementation_delay_days ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays);
     if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(votingPeriodDays) || votingPeriodDays < 1 || votingPeriodDays > 90 || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) throw new Error('Governance rule parameters are invalid');
     const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const world = await tx.query<{ genesis_at: string | null }>("SELECT genesis_at FROM world_state WHERE id = 'WORLD' FOR UPDATE");
