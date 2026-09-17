@@ -275,6 +275,12 @@ test('V5 Constitution snapshots are immutable once materialized', async () => {
   assert.doesNotMatch(kernel, /ON CONFLICT \(authority_type, authority_id, game_day\) DO UPDATE/);
 });
 
+test('Constitution resolver preserves retired versions for historical game-day replay', async () => {
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  assert.match(kernel, /v\.status IN \('ACTIVE', 'RETIRED'\)/);
+  assert.match(kernel, /effective_to_game_day IS NULL OR v\.effective_to_game_day >= \$3/);
+});
+
 test('V5 persisted policy groups match the canonical runtime registry', async () => {
   const migration = await readFile(new URL('../db/migrations/107_normalize_constitution_policy_groups.sql', import.meta.url), 'utf8');
   assert.match(migration, /SET policy_group = CASE/);

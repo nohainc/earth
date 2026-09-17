@@ -32,7 +32,7 @@ async function rulesFor(
     `SELECT v.id, v.rule_code, v.authority_type, v.authority_id, v.value_json, v.version
        FROM constitutional_rule_versions_v5 v
       WHERE v.authority_type = $1 AND v.authority_id = $2
-        AND v.status = 'ACTIVE' AND v.effective_from_game_day <= $3
+        AND v.status IN ('ACTIVE', 'RETIRED') AND v.effective_from_game_day <= $3
         AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= $3)
       ORDER BY v.rule_code, v.effective_from_game_day DESC, v.version DESC`,
     [authorityType, authorityId, gameDay],
