@@ -13,8 +13,7 @@ import {
 import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
 import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVotingSettings, resolveGovernanceProposalV4, setOrganizationVotingSettings } from './governance-v4-postgres.ts';
 import { castV5GovernanceVote, createV5GovernanceProposal, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
-import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
-import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
+import { getConstitutionReadModel, getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
 import { previewConstitutionAmendment } from './v5-governance.ts';
 
@@ -37,8 +36,8 @@ export async function handleGovernanceRoutes(
         }
         const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
         const gameDay = Number(world?.game_day ?? 1);
-        const current = await resolveEffectiveConstitution(repository, { corporationId, gameDay });
-        const earth = corporationId ? await resolveEffectiveConstitution(repository, { gameDay }) : undefined;
+        const current = await getResolvedConstitutionForDay(repository, { corporationId, gameDay });
+        const earth = corporationId ? await getResolvedConstitutionForDay(repository, { gameDay }) : undefined;
         for (const change of parsed.value.changes!) {
           const definition = getConstitutionalRuleDefinition(String(change.ruleCode ?? ''));
           if (!corporationId && definition.authorityModel === 'CORPORATION_LOCAL') throw new Error('Corporation-local rule cannot be previewed at Earth scope');
