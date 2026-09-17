@@ -25,11 +25,11 @@ async function canGovern(tx: PostgresRepository, humanId: string, subjectType: '
   return human.house_id;
 }
 
-async function canVote(tx: PostgresRepository, humanId: string, subjectType: 'EARTH' | 'ORGANIZATION', subjectId: string | null): Promise<string> {
+async function canVote(tx: PostgresRepository, humanId: string, subjectType: 'EARTH' | 'ORGANIZATION', subjectId: string | null, electorateSnapshotGameDay: number): Promise<string> {
   const human = (await tx.query<{ house_id: string }>("SELECT house_id FROM humans WHERE id = $1 AND status = 'ACTIVE'", [humanId])).rows[0];
   if (!human) throw new Error('Active Human not found');
   if (subjectType === 'ORGANIZATION') {
-    const member = await tx.query("SELECT 1 FROM organization_memberships WHERE organization_id = $1 AND house_id = $2 AND status = 'ACTIVE'", [subjectId, human.house_id]);
+    const member = await tx.query("SELECT 1 FROM organization_memberships WHERE organization_id = $1 AND house_id = $2 AND status = 'ACTIVE' AND joined_game_day <= $3 AND (left_game_day IS NULL OR left_game_day >= $3)", [subjectId, human.house_id, electorateSnapshotGameDay]);
     if (!member.rows[0]) throw new Error('Organization membership is required to vote');
   }
   return human.house_id;
@@ -97,8 +97,9 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
     await canGovern(tx, input.humanId, input.subjectType, input.subjectId);
     validateAction(input.actionType, input.actionSnapshot);
     const submitted = await currentDay(tx);
+    const votingStart = submitted + 1;
     const electorate = input.subjectType === 'ORGANIZATION'
-      ? await tx.query<{ count: string }>("SELECT COUNT(DISTINCT house_id)::TEXT AS count FROM organization_memberships WHERE organization_id = $1 AND status = 'ACTIVE'", [input.subjectId])
+      ? await tx.query<{ count: string }>("SELECT COUNT(DISTINCT house_id)::TEXT AS count FROM organization_memberships WHERE organization_id = $1 AND status = 'ACTIVE' AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)", [input.subjectId, votingStart])
       : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'");
     const rule = {
       quorumBps: 5000,
@@ -106,7 +107,7 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
       votingPeriodDays: 2,
       implementationDelayDays: 1,
       ...(input.ruleSnapshot ?? {}),
-      electorateSnapshotGameDay: submitted,
+      electorateSnapshotGameDay: votingStart,
       electorateSize: Number(electorate.rows[0]?.count ?? 0),
     };
     const proposalId = `GOV4-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
@@ -118,11 +119,11 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
 
 export async function castGovernanceVoteV4(repository: PostgresRepository, input: { proposalId: string; humanId: string; choice: 'SUPPORT' | 'OPPOSE' | 'ABSTAIN'; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'ORGANIZATION'; subject_id: string | null; voting_end_game_day: number; status: string }>('SELECT subject_type, subject_id, voting_end_game_day, status FROM governance_proposals_v4 WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
+    const proposal = (await tx.query<{ subject_type: 'EARTH' | 'ORGANIZATION'; subject_id: string | null; voting_end_game_day: number; status: string; rule_snapshot: Record<string, unknown> }>('SELECT subject_type, subject_id, voting_end_game_day, status, rule_snapshot FROM governance_proposals_v4 WHERE id = $1 FOR UPDATE', [input.proposalId])).rows[0];
     if (!proposal || proposal.status !== 'VOTING') throw new Error('Governance proposal is not open for voting');
     const day = await currentDay(tx);
     if (day > proposal.voting_end_game_day) throw new Error('Governance voting deadline has passed');
-    const houseId = await canVote(tx, input.humanId, proposal.subject_type, proposal.subject_id);
+    const houseId = await canVote(tx, input.humanId, proposal.subject_type, proposal.subject_id, Number(object(proposal.rule_snapshot).electorateSnapshotGameDay ?? 0));
     await tx.query(`INSERT INTO governance_ballots_v4 (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (proposal_id, house_id) DO UPDATE SET choice = EXCLUDED.choice, cast_by_human_id = EXCLUDED.cast_by_human_id, cast_game_day = EXCLUDED.cast_game_day, correlation_id = EXCLUDED.correlation_id`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);
     const totals = await tx.query<{ support: string; oppose: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'SUPPORT')::TEXT AS support, COUNT(*) FILTER (WHERE choice = 'OPPOSE')::TEXT AS oppose FROM governance_ballots_v4 WHERE proposal_id = $1`, [input.proposalId]);
     await tx.query('UPDATE governance_proposals_v4 SET support_votes = $1, oppose_votes = $2 WHERE id = $3', [totals.rows[0]?.support ?? '0', totals.rows[0]?.oppose ?? '0', input.proposalId]);
