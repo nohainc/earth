@@ -10,7 +10,6 @@ import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'building_detail_upgrade_dialog.dart';
-import 'real_estate_dialogs.dart';
 
 class BuildingsHubScreen extends StatefulWidget {
   final EarthState state;

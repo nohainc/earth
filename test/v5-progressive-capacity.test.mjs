@@ -746,6 +746,15 @@ test('V5 construction review quotes and executes the pooled path for independent
   assert.match(confirm, /REPORTED AFTER GAME-DAY SETTLEMENT/);
 });
 
+test('V5 operations UI has no dead legacy real-estate dialog path', async () => {
+  const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  assert.doesNotMatch(buildings, /real_estate_dialogs\.dart/);
+  await assert.rejects(
+    readFile(new URL('../flutter_client/lib/features/operations/real_estate_dialogs.dart', import.meta.url)),
+    /ENOENT/,
+  );
+});
+
 test('V5 corporation lifecycle supports name reuse, leadership delegation, and graceful dissolution', async () => {
   const founding = await readFile(new URL('../cloudflare/src/v5-founding-postgres.ts', import.meta.url), 'utf8');
   assert.match(founding, /lower\(name\) = lower\(\$1\) AND status = \\'ACTIVE\\'/);
