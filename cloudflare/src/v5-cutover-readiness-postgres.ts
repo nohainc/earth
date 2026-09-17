@@ -27,7 +27,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
        AND EXISTS (SELECT 1 FROM resolved_constitution_snapshots_v5 s
                     WHERE s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1
                       AND s.rules_json ? 'CORPORATION.HOUSE_CAPACITY.BASE_RATE'
-                      AND s.rules_json ? 'CORPORATION.TAX.INCOME_RATE'
+                      AND s.rules_json ? 'CORPORATION.HOUSE_INCOME_TAX'
                       AND s.rules_json ? 'CORPORATION.TAX.CORPORATE_RATE')`, [assessedGameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM corporations c
@@ -52,6 +52,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
       FROM resolved_constitution_snapshots_v5
      WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1
        AND rules_json ? 'EARTH.CAPACITY.STANDARD'
+       AND rules_json ? 'EARTH.HOUSE_INCOME_TAX'
        AND rules_json ? 'EARTH.TAX.BASIC_LEVY_RATE'
        AND rules_json ? 'EARTH.MARKET.TRANSACTION_TAX_RATE'`, [assessedGameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
