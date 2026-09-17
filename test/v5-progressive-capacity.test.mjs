@@ -510,6 +510,9 @@ test('V5 public governance accepts only typed Constitution amendment change sets
   const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
   assert.match(route, /actionType\?: 'CONSTITUTION_AMENDMENT'/);
   assert.doesNotMatch(route, /actionType\?: 'CONSTITUTION_AMENDMENT' \| 'EARTH_CAPACITY_POLICY'/);
+  const service = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /Legacy V5 policy actions are retired/);
+  assert.match(service, /input\.actionType !== 'CONSTITUTION_AMENDMENT'/);
 });
 
 test('V5 Finance exposes server-authoritative liquidity and next settlement', async () => {

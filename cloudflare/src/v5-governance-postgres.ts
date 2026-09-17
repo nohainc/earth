@@ -124,6 +124,13 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
   return repository.transaction(async (tx) => {
     const prior = (await tx.query('SELECT * FROM v5_governance_proposals WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior) return { ok: true, alreadyProcessed: true, proposal: prior, correlationId: input.correlationId };
+    // Specialized V5 actions were the bootstrap bridge for capacity and
+    // admission. New gameplay proposals must use one typed Constitution
+    // change-set lifecycle; the legacy activation branches below remain only
+    // for replaying already-persisted migration records.
+    if (input.actionType !== 'CONSTITUTION_AMENDMENT') {
+      throw new Error('Legacy V5 policy actions are retired; submit a Constitution amendment proposal.');
+    }
     if (input.subjectType === 'EARTH' && ['CORPORATION_HOUSE_RATE', 'CORPORATION_ADMISSION_POLICY'].includes(input.actionType) || input.subjectType === 'CORPORATION' && input.actionType === 'EARTH_CAPACITY_POLICY') throw new Error('Policy subject and action scope do not match');
     await canPropose(tx, input.humanId, input.subjectType, input.subjectId);
     const day = await currentDay(tx);
