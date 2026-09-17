@@ -559,6 +559,14 @@ test('Constitution UI submits typed amendments through preview before proposal c
   assert.match(dashboard, /proposeV5ConstitutionAmendment/);
 });
 
+test('Constitution UI renders the canonical V5 registry instead of requiring legacy articles', async () => {
+  const panel = await readFile(new URL('../flutter_client/lib/features/governance/constitution_panel.dart', import.meta.url), 'utf8');
+  assert.match(panel, /canonicalDefinitions is List && canonicalDefinitions\.isNotEmpty/);
+  assert.match(panel, /_resolveAllRules\(canonical\)/);
+  assert.match(panel, /_categoryForArticle/);
+  assert.match(panel, /hasCanonicalRules/);
+});
+
 test('V5 client finance projections consume server policy multipliers', async () => {
   const finance = await readFile(new URL('../flutter_client/lib/features/finance/personal_finance_panel.dart', import.meta.url), 'utf8');
   const institutions = await readFile(new URL('../flutter_client/lib/features/institutions/institutions_panels.dart', import.meta.url), 'utf8');

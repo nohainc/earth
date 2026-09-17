@@ -44,7 +44,25 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     );
   }
 
-  List<Map<String, dynamic>> _resolveAllRules() {
+  List<Map<String, dynamic>> _resolveAllRules(
+      Map<String, dynamic>? canonical) {
+    final canonicalDefinitions = canonical?['definitions'];
+    if (canonicalDefinitions is List && canonicalDefinitions.isNotEmpty) {
+      return canonicalDefinitions.whereType<Map>().map((definition) {
+        final row = Map<String, dynamic>.from(definition);
+        final article = row['article_code']?.toString().toUpperCase() ?? '';
+        return {
+          'id': row['rule_code'] ?? 'UNKNOWN_RULE',
+          'rule_number': article,
+          'title': row['rule_code'] ?? 'Constitutional rule',
+          'description':
+              'Typed ${row['value_type'] ?? 'policy'} rule under the $article article.',
+          'category': _categoryForArticle(article),
+          'authority_model': row['authority_model'],
+        };
+      }).toList(growable: false);
+    }
+
     final serverRules = widget.state.json['constitutionalRules'] is List
         ? (widget.state.json['constitutionalRules'] as List)
             .whereType<Map>()
@@ -58,12 +76,28 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     return serverRules;
   }
 
+  String _categoryForArticle(String article) {
+    switch (article) {
+      case 'TAXATION':
+        return 'TAXATION & FISCAL';
+      case 'CORPORATION_GOVERNANCE':
+        return 'DEMOCRACY & GOVERNANCE';
+      case 'TERRITORY_CAPACITY':
+        return 'RESOURCES & PROPERTY';
+      default:
+        return 'AMENDMENTS & CONSTITUTION';
+    }
+  }
+
   Widget _buildContent(BuildContext context, Map<String, dynamic>? canonical,
       {bool canonicalUnavailable = false}) {
-    final allRules = _resolveAllRules();
+    final allRules = _resolveAllRules(canonical);
     final serverRules = widget.state.json['constitutionalRules'];
-    final hasServerRules =
-        !canonicalUnavailable && serverRules is List && serverRules.isNotEmpty;
+    final canonicalDefinitions = canonical?['definitions'];
+    final hasCanonicalRules = canonicalDefinitions is List &&
+        canonicalDefinitions.isNotEmpty;
+    final hasServerRules = !canonicalUnavailable &&
+        (hasCanonicalRules || (serverRules is List && serverRules.isNotEmpty));
     final query = _searchQuery.trim().toLowerCase();
 
     final filteredRules = allRules.where((rule) {
