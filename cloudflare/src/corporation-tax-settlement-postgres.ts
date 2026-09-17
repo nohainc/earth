@@ -16,15 +16,34 @@ export async function settleCorporationIncomeTax(
   const assessedDay = day - 1;
   if (assessedDay < 1) return { ok: true, day, assessedDay, assessed: 0, paid: 0, arrears: 0 };
 
+  const missingSnapshots = (await tx.query<{ count: string }>(`
+    SELECT COUNT(*)::TEXT AS count
+      FROM corporations c
+     WHERE c.status = 'ACTIVE'
+       AND NOT EXISTS (
+         SELECT 1
+           FROM resolved_constitution_snapshots_v5 snap
+          WHERE snap.authority_type = 'CORPORATION'
+            AND snap.authority_id = c.id
+            AND snap.game_day = $1
+            AND snap.rules_json ? 'CORPORATION.TAX.CORPORATE_RATE'
+            AND snap.version_ids ? 'CORPORATION.TAX.CORPORATE_RATE'
+       )
+  `, [assessedDay])).rows[0];
+  if (Number(missingSnapshots?.count ?? 0) > 0) {
+    throw new Error(`Canonical Corporation tax snapshots are unavailable for assessed game day ${assessedDay}`);
+  }
+
   const corporations = (await tx.query<CorporationTaxRow>(`
     SELECT c.id, oe.economic_id,
-           COALESCE((snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER, (c.tax_charter->>'corporateTaxBps')::INTEGER, 0) AS corporate_tax_bps,
-           COALESCE(snap.version_ids->>'CORPORATION.TAX.CORPORATE_RATE', 'legacy-corporation-tax-v' || c.tax_charter_version::TEXT) AS tax_rule_version
+           (snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER AS corporate_tax_bps,
+           snap.version_ids->>'CORPORATION.TAX.CORPORATE_RATE' AS tax_rule_version
       FROM corporations c
       JOIN owner_registry oe ON oe.id = c.id AND oe.owner_type = 'CORPORATION'
-     LEFT JOIN resolved_constitution_snapshots_v5 snap ON snap.authority_type = 'CORPORATION' AND snap.authority_id = c.id AND snap.game_day = $1
+      JOIN resolved_constitution_snapshots_v5 snap ON snap.authority_type = 'CORPORATION' AND snap.authority_id = c.id AND snap.game_day = $1
      WHERE c.status = 'ACTIVE'
-       AND COALESCE((snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER, (c.tax_charter->>'corporateTaxBps')::INTEGER, 0) > 0
+       AND snap.rules_json ? 'CORPORATION.TAX.CORPORATE_RATE'
+       AND (snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER > 0
      ORDER BY c.id
   `, [assessedDay])).rows;
   let assessed = 0;

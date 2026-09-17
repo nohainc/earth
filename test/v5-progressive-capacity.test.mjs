@@ -371,11 +371,13 @@ test('House and Corporation fiscal read models expose canonical tax rules and pr
 
 test('Corporation tax settlement selects canonical rates and rule provenance', async () => {
   const settlement = await readFile(new URL('../cloudflare/src/corporation-tax-settlement-postgres.ts', import.meta.url), 'utf8');
-  assert.match(settlement, /COALESCE\(\(snap\.rules_json->>'CORPORATION\.TAX\.CORPORATE_RATE'/);
+  assert.match(settlement, /Canonical Corporation tax snapshots are unavailable/);
   assert.match(settlement, /snap\.version_ids->>'CORPORATION\.TAX\.CORPORATE_RATE'/);
   assert.match(settlement, /corporation\.tax_rule_version/);
   assert.match(settlement, /earth_post_transaction\(\$1,\$2,1439/);
   assert.doesNotMatch(settlement, /corporation-tax-v4/);
+  assert.doesNotMatch(settlement, /tax_charter->>'corporateTaxBps'/);
+  assert.doesNotMatch(settlement, /legacy-corporation-tax-v/);
 });
 
 test('V5 Constitution read model exposes resolved values, provenance, and history', async () => {
