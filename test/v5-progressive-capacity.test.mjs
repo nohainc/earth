@@ -200,6 +200,13 @@ test('V5 capacity settlement consumes resolved Constitution values before legacy
   assert.match(settlement, /CORPORATION\.HOUSE_CAPACITY\.BASE_RATE/);
 });
 
+test('daily tax settlement consumes the assessed-day Constitution market rate', async () => {
+  const settlement = await readFile(new URL('../cloudflare/src/tax-settlement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(settlement, /resolved_constitution_snapshots_v5/);
+  assert.match(settlement, /EARTH\.MARKET\.TRANSACTION_TAX_RATE/);
+  assert.match(settlement, /constitutionalRate\(rule\)/);
+});
+
 test('V5 Constitution read model exposes resolved values, provenance, and history', async () => {
   const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
   const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');

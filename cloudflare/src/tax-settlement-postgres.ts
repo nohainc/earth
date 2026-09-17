@@ -39,14 +39,27 @@ async function payObligation(tx: PostgresRepository, input: { obligationId: stri
 export async function settlePublicTaxesInTransaction(repository: PostgresRepository, day: number, shard = 0, shardCount = 1) {
   const assessedDay = day - 1;
   if (assessedDay < 1) return { ok: true, day, assessedDay, assessed: 0, paid: 0, arrears: 0 };
-  const rules = (await repository.query<TaxRule>(`SELECT id, tax_rule_id, category, rate_bps, tax_base_definition, base_reference, base_amount_units::TEXT, nexus_type, authority_type, authority_id, beneficiary_economic_id FROM tax_rule_versions WHERE effective_from_game_day <= $1 AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1) AND authority_type IN ('EARTH','TERRITORY_GOVERNANCE') ORDER BY id`, [assessedDay])).rows;
+  const [ruleResult, constitutionResult] = await Promise.all([
+    repository.query<TaxRule>(`SELECT id, tax_rule_id, category, rate_bps, tax_base_definition, base_reference, base_amount_units::TEXT, nexus_type, authority_type, authority_id, beneficiary_economic_id FROM tax_rule_versions WHERE effective_from_game_day <= $1 AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1) AND authority_type IN ('EARTH','TERRITORY_GOVERNANCE') ORDER BY id`, [assessedDay]),
+    repository.query<{ rules_json: Record<string, unknown> }>(`SELECT rules_json
+      FROM resolved_constitution_snapshots_v5
+     WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [assessedDay]),
+  ]);
+  const constitutionRules = constitutionResult.rows[0]?.rules_json ?? {};
+  const constitutionalRate = (rule: TaxRule): bigint | null => {
+    if (rule.authority_type !== 'EARTH' || rule.tax_rule_id !== 'TAX-MARKET-TRANSACTION') return null;
+    const value = constitutionRules['EARTH.MARKET.TRANSACTION_TAX_RATE'];
+    return value === undefined ? null : BigInt(String(value));
+  };
+  const rules = ruleResult.rows;
   const houses = (await repository.query<{ house_id: string; economic_id: string; territory_id: string | null }>(`SELECT h.id AS house_id, o.economic_id, r.territory_id FROM houses h JOIN owner_registry o ON o.id = h.id AND o.owner_type = 'HOUSE' LEFT JOIN house_residencies r ON r.house_id = h.id AND r.residency_class = 'PRIMARY' AND r.status = 'ACTIVE' WHERE h.status = 'ACTIVE' AND MOD(ABS(hashtextextended(h.id,0)),$1) = $2 ORDER BY h.id`, [shardCount, shard])).rows;
   let assessed = 0; let paid = 0; let arrears = 0;
   for (const house of houses) {
     for (const rule of rules) {
       if (rule.authority_type === 'TERRITORY_GOVERNANCE' && rule.authority_id !== house.territory_id) continue;
       const base = await assessableBase(repository, rule, house.house_id, assessedDay);
-      const amount = base * BigInt(rule.rate_bps) / 10_000n;
+      const rateBps = constitutionalRate(rule) ?? BigInt(rule.rate_bps);
+      const amount = base * rateBps / 10_000n;
       if (amount <= 0n) continue;
       const correlationId = `tax:${rule.id}:${house.house_id}:${assessedDay}`;
       const result = await (async (tx) => {
