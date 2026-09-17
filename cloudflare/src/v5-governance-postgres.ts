@@ -201,7 +201,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     if (input.subjectType === 'CORPORATION') {
       await tx.query(
         `INSERT INTO v5_governance_electorate_snapshots_v5 (proposal_id, house_id, snapshot_game_day)
-         SELECT $1, ha.house_id, $2
+         SELECT DISTINCT $1, ha.house_id, $2
            FROM house_affiliations ha
           WHERE ha.corporation_id = $3
             AND ha.status = 'ACTIVE'
