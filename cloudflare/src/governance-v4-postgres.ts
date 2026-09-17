@@ -25,13 +25,11 @@ async function canGovern(tx: PostgresRepository, humanId: string, subjectType: '
   return human.house_id;
 }
 
-async function canVote(tx: PostgresRepository, humanId: string, subjectType: 'EARTH' | 'ORGANIZATION', subjectId: string | null, electorateSnapshotGameDay: number): Promise<string> {
+async function canVote(tx: PostgresRepository, humanId: string, proposalId: string): Promise<string> {
   const human = (await tx.query<{ house_id: string }>("SELECT house_id FROM humans WHERE id = $1 AND status = 'ACTIVE'", [humanId])).rows[0];
   if (!human) throw new Error('Active Human not found');
-  if (subjectType === 'ORGANIZATION') {
-    const member = await tx.query("SELECT 1 FROM organization_memberships WHERE organization_id = $1 AND house_id = $2 AND status = 'ACTIVE' AND joined_game_day <= $3 AND (left_game_day IS NULL OR left_game_day >= $3)", [subjectId, human.house_id, electorateSnapshotGameDay]);
-    if (!member.rows[0]) throw new Error('Organization membership is required to vote');
-  }
+  const eligible = await tx.query('SELECT 1 FROM governance_electorate_snapshots_v4 WHERE proposal_id = $1 AND house_id = $2', [proposalId, human.house_id]);
+  if (!eligible.rows[0]) throw new Error('House was not in the frozen V4 electorate');
   return human.house_id;
 }
 
@@ -115,6 +113,18 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
     };
     const proposalId = `GOV4-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     await tx.query(`INSERT INTO governance_proposals_v4 (id, subject_type, subject_id, title, body, action_type, action_snapshot, rule_snapshot, submitted_game_day, voting_start_game_day, voting_end_game_day, execution_game_day, correlation_id, created_by_human_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8::JSONB,$9,$9,$10,$11,$12,$13)`, [proposalId, input.subjectType, input.subjectId, input.title.trim(), input.body?.trim() ?? '', input.actionType, JSON.stringify(input.actionSnapshot), JSON.stringify(rule), submitted, submitted + 1, submitted + 1 + Number(rule.votingPeriodDays) + Number(rule.implementationDelayDays), input.correlationId, input.humanId]);
+    if (input.subjectType === 'ORGANIZATION') {
+      await tx.query(`INSERT INTO governance_electorate_snapshots_v4 (proposal_id, house_id, snapshot_game_day)
+        SELECT $1, house_id, $2
+          FROM organization_memberships
+         WHERE organization_id = $3 AND status = 'ACTIVE'
+           AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)
+        ON CONFLICT (proposal_id, house_id) DO NOTHING`, [proposalId, submitted + 1, input.subjectId]);
+    } else {
+      await tx.query(`INSERT INTO governance_electorate_snapshots_v4 (proposal_id, house_id, snapshot_game_day)
+        SELECT $1, id, $2 FROM houses WHERE status = 'ACTIVE'
+        ON CONFLICT (proposal_id, house_id) DO NOTHING`, [proposalId, submitted + 1]);
+    }
     await createGameEvent(tx, { id: `GOV4-CREATED-${proposalId}`, category: 'GOVERNANCE', eventType: 'GOVERNANCE_PROPOSAL_CREATED', gameDay: submitted, actorHumanId: input.humanId, subjectType: input.subjectType, subjectId: input.subjectId ?? 'EARTH', title: input.title.trim(), details: { proposalId, actionType }, correlationId: input.correlationId });
     return { ok: true, proposal: (await tx.query('SELECT * FROM governance_proposals_v4 WHERE id = $1', [proposalId])).rows[0], correlationId: input.correlationId };
   });
@@ -126,7 +136,7 @@ export async function castGovernanceVoteV4(repository: PostgresRepository, input
     if (!proposal || proposal.status !== 'VOTING') throw new Error('Governance proposal is not open for voting');
     const day = await currentDay(tx);
     if (day > proposal.voting_end_game_day) throw new Error('Governance voting deadline has passed');
-    const houseId = await canVote(tx, input.humanId, proposal.subject_type, proposal.subject_id, Number(object(proposal.rule_snapshot).electorateSnapshotGameDay ?? 0));
+    const houseId = await canVote(tx, input.humanId, input.proposalId);
     await tx.query(`INSERT INTO governance_ballots_v4 (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (proposal_id, house_id) DO UPDATE SET choice = EXCLUDED.choice, cast_by_human_id = EXCLUDED.cast_by_human_id, cast_game_day = EXCLUDED.cast_game_day, correlation_id = EXCLUDED.correlation_id`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);
     const totals = await tx.query<{ support: string; oppose: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'SUPPORT')::TEXT AS support, COUNT(*) FILTER (WHERE choice = 'OPPOSE')::TEXT AS oppose FROM governance_ballots_v4 WHERE proposal_id = $1`, [input.proposalId]);
     await tx.query('UPDATE governance_proposals_v4 SET support_votes = $1, oppose_votes = $2 WHERE id = $3', [totals.rows[0]?.support ?? '0', totals.rows[0]?.oppose ?? '0', input.proposalId]);
