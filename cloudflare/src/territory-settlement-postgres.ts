@@ -29,7 +29,7 @@ export async function settleCorporationDynamics(repository: PostgresRepository, 
       active_research_project_count: string;
       organization_financial_status: string | null;
     }>(`WITH corporation_economies AS (
-      SELECT economic_id FROM owner_registry WHERE owner_type = 'CORPORATION' AND economic_id = $1
+      SELECT economic_id FROM owner_registry WHERE owner_type = 'CORPORATION' AND (id = $1 OR economic_id = $1)
       UNION
       SELECT oe.economic_id
         FROM organization_legacy_map lm
@@ -45,7 +45,7 @@ export async function settleCorporationDynamics(repository: PostgresRepository, 
       (SELECT COUNT(*) FROM territories WHERE corporation_id = $2 AND status = 'ACTIVE')::TEXT AS active_territory_count,
       (SELECT COUNT(DISTINCT house_id) FROM house_affiliations WHERE corporation_id = $2 AND status = 'ACTIVE')::TEXT AS active_house_count,
       (SELECT COUNT(*) FROM corporation_buildings)::TEXT AS active_building_count,
-      (SELECT COALESCE(SUM(c.service_capacity_units), 0) FROM corporation_buildings b JOIN building_catalog c ON c.id = b.catalog_id WHERE c.economic_role = 'SERVICE')::TEXT AS service_capacity_units,
+      (SELECT COALESCE(SUM(c.service_capacity_units), 0) FROM corporation_buildings b JOIN building_catalog c ON c.id = b.catalog_id WHERE c.economic_role IN ('SERVICE', 'INFRASTRUCTURE'))::TEXT AS service_capacity_units,
       (SELECT COALESCE(SUM(sa.allocated_units), 0) FROM service_allocations sa JOIN corporation_economies ce ON ce.economic_id = sa.provider_economic_id WHERE sa.game_day = $3)::TEXT AS service_allocated_units,
       (SELECT COALESCE(SUM(c.operating_credit_units), 0) FROM corporation_buildings b JOIN building_catalog c ON c.id = b.catalog_id)::TEXT AS operating_cost_units,
       (SELECT COALESCE(SUM(sa.price_units), 0) FROM service_allocations sa JOIN corporation_economies ce ON ce.economic_id = sa.provider_economic_id WHERE sa.game_day = $3)::TEXT AS service_revenue_units,

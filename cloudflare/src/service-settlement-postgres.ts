@@ -96,7 +96,17 @@ export async function settleHouseNeedsAndServices(tx: PostgresRepository, day: n
       remainingCapacity.set(`${provider.territory_id}:${provider.service_code}:${provider.economic_id}`, units(provider.capacity_units));
     }
   }
-  let allocations = 0; let shortfalls = 0;
+  type HouseDemandState = {
+    house: House;
+    rule: NeedRule;
+    demand: bigint;
+    remaining: bigint;
+    allocated: bigint;
+    availableCapacity: bigint;
+  };
+
+  const houseStates: HouseDemandState[] = [];
+
   for (const house of houses) {
     const residentDemand = units(house.residents);
     for (const rule of rules) {
@@ -106,26 +116,67 @@ export async function settleHouseNeedsAndServices(tx: PostgresRepository, day: n
       const demand = applyConditionStack(residentDemand * units(rule.demand_units_per_human), modifiersFor('DEMAND_MULTIPLIER', rule.service_type_code, house.territory_id));
       const providerRows = providerMap.get(`${house.territory_id}:${rule.service_type_code}`) ?? [];
       const availableCapacity = providerRows.reduce((sum, provider) => sum + (remainingCapacity.get(`${provider.territory_id}:${provider.service_code}:${provider.economic_id}`) ?? 0n), 0n);
-      let remaining = demand;
-      let allocated = 0n;
-      for (const provider of providerRows) {
-        if (remaining <= 0n) break;
+      houseStates.push({
+        house,
+        rule,
+        demand,
+        remaining: demand,
+        allocated: 0n,
+        availableCapacity,
+      });
+    }
+  }
+
+  let allocations = 0; let shortfalls = 0;
+
+  // Pass 1: Self-provisioning (Houses consume from their own facilities in the territory first at 0 fee)
+  for (const state of houseStates) {
+    if (state.remaining <= 0n) continue;
+    const providerKey = `${state.house.territory_id}:${state.rule.service_type_code}:${state.house.economic_id}`;
+    const available = remainingCapacity.get(providerKey) ?? 0n;
+    if (available <= 0n) continue;
+    const candidate = available < state.remaining ? available : state.remaining;
+    await tx.query(`INSERT INTO service_allocations (id, house_id, territory_id, service_code, provider_economic_id, payer_economic_id, game_day, capacity_units, allocated_units, price_units, economic_transaction_id, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (house_id, service_code, game_day, provider_economic_id) DO NOTHING`, [`service:${day}:${state.house.house_id}:${state.rule.service_type_code}:${state.house.economic_id}`, state.house.house_id, state.house.territory_id, state.rule.service_type_code, state.house.economic_id, state.house.economic_id, day, available.toString(), candidate.toString(), '0', null, `service:${day}:${state.house.house_id}:${state.rule.service_type_code}:${state.house.economic_id}`]);
+    remainingCapacity.set(providerKey, available - candidate);
+    state.allocated += candidate;
+    state.remaining -= candidate;
+    allocations += 1;
+  }
+
+  // Pass 2: Market & Public provision (Private providers first, Corporation public infrastructure next)
+  for (const state of houseStates) {
+    if (state.remaining > 0n) {
+      const rawProviders = providerMap.get(`${state.house.territory_id}:${state.rule.service_type_code}`) ?? [];
+      const externalProviders = rawProviders
+        .filter((p) => p.economic_id !== state.house.economic_id)
+        .sort((a, b) => {
+          const aPrivate = a.owner_type === 'HOUSE' ? 0 : 1;
+          const bPrivate = b.owner_type === 'HOUSE' ? 0 : 1;
+          if (aPrivate !== bPrivate) return aPrivate - bPrivate;
+          return a.economic_id.localeCompare(b.economic_id);
+        });
+
+      for (const provider of externalProviders) {
+        if (state.remaining <= 0n) break;
         const providerKey = `${provider.territory_id}:${provider.service_code}:${provider.economic_id}`;
         const available = remainingCapacity.get(providerKey) ?? 0n;
         if (available <= 0n) continue;
-        const candidate = available < remaining ? available : remaining;
-        const price = prices.get(rule.service_type_code) ?? 0n;
-        const transactionId = await payService(tx, day, house, provider, rule.service_type_code, candidate, price);
-        if (price > 0n && provider.economic_id !== house.economic_id && !transactionId) await createServiceObligation(tx, day, house, provider, rule.service_type_code, candidate * price);
+        const candidate = available < state.remaining ? available : state.remaining;
+        const price = prices.get(state.rule.service_type_code) ?? 0n;
+        const transactionId = await payService(tx, day, state.house, provider, state.rule.service_type_code, candidate, price);
+        if (price > 0n && !transactionId) await createServiceObligation(tx, day, state.house, provider, state.rule.service_type_code, candidate * price);
         const allocation = candidate;
-        await tx.query(`INSERT INTO service_allocations (id, house_id, territory_id, service_code, provider_economic_id, payer_economic_id, game_day, capacity_units, allocated_units, price_units, economic_transaction_id, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (house_id, service_code, game_day, provider_economic_id) DO NOTHING`, [`service:${day}:${house.house_id}:${rule.service_type_code}:${provider.economic_id}`, house.house_id, house.territory_id, rule.service_type_code, provider.economic_id, house.economic_id, day, available.toString(), allocation.toString(), (allocation * price).toString(), transactionId, `service:${day}:${house.house_id}:${rule.service_type_code}:${provider.economic_id}`]);
+        await tx.query(`INSERT INTO service_allocations (id, house_id, territory_id, service_code, provider_economic_id, payer_economic_id, game_day, capacity_units, allocated_units, price_units, economic_transaction_id, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (house_id, service_code, game_day, provider_economic_id) DO NOTHING`, [`service:${day}:${state.house.house_id}:${state.rule.service_type_code}:${provider.economic_id}`, state.house.house_id, state.house.territory_id, state.rule.service_type_code, provider.economic_id, state.house.economic_id, day, available.toString(), allocation.toString(), (allocation * price).toString(), transactionId, `service:${day}:${state.house.house_id}:${state.rule.service_type_code}:${provider.economic_id}`]);
         remainingCapacity.set(providerKey, available - allocation);
-        allocated += allocation; remaining -= allocation; allocations += 1;
+        state.allocated += allocation;
+        state.remaining -= allocation;
+        allocations += 1;
       }
-      const shortfall = demand - allocated;
-      if (shortfall > 0n) shortfalls += 1;
-      await tx.query(`INSERT INTO house_need_assessments (house_id, game_day, need_code, demand_units, available_units, allocated_units, shortfall_units, risk_level, rules_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (house_id, game_day, need_code) DO UPDATE SET demand_units = EXCLUDED.demand_units, available_units = EXCLUDED.available_units, allocated_units = EXCLUDED.allocated_units, shortfall_units = EXCLUDED.shortfall_units, risk_level = EXCLUDED.risk_level, rules_version = EXCLUDED.rules_version, updated_at = CURRENT_TIMESTAMP`, [house.house_id, day, rule.need_code, demand.toString(), availableCapacity.toString(), allocated.toString(), shortfall.toString(), risk(allocated, demand, rule.critical_threshold_bps), rule.rules_version]);
     }
+
+    const shortfall = state.demand - state.allocated;
+    if (shortfall > 0n) shortfalls += 1;
+    await tx.query(`INSERT INTO house_need_assessments (house_id, game_day, need_code, demand_units, available_units, allocated_units, shortfall_units, risk_level, rules_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (house_id, game_day, need_code) DO UPDATE SET demand_units = EXCLUDED.demand_units, available_units = EXCLUDED.available_units, allocated_units = EXCLUDED.allocated_units, shortfall_units = EXCLUDED.shortfall_units, risk_level = EXCLUDED.risk_level, rules_version = EXCLUDED.rules_version, updated_at = CURRENT_TIMESTAMP`, [state.house.house_id, day, state.rule.need_code, state.demand.toString(), state.availableCapacity.toString(), state.allocated.toString(), shortfall.toString(), risk(state.allocated, state.demand, state.rule.critical_threshold_bps), state.rule.rules_version]);
   }
   return { houses: houses.length, allocations, shortfalls };
 }
