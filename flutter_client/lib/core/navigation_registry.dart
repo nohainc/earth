@@ -210,7 +210,7 @@ class NavigationRegistry {
       defaultLabel: 'Territories',
       defaultPageTitle: 'TERRITORIES',
       icon: Icons.map_outlined,
-      isPrimary: false,
+      isPrimary: true,
     ),
     NavigationItem(
       id: 'communities',

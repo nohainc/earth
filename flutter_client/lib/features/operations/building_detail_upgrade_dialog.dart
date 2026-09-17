@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
@@ -60,7 +59,7 @@ Future<bool?> showBuildingDetailUpgradeDialog(
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '$buildingName · Tier $targetTier',
+              'Upgrade to Tier $targetTier',
               style: context.topicTitleStyle,
               overflow: TextOverflow.ellipsis,
             ),
@@ -69,44 +68,43 @@ Future<bool?> showBuildingDetailUpgradeDialog(
       ),
       content: SizedBox(
         width: 540,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Review the server-authoritative upgrade quote. Final eligibility and balances are checked again when the command executes.',
-              style: context.bodyStyle,
-            ),
-            const SizedBox(height: 14),
-            _quoteRow(context, 'Current tier', currentTier),
-            _quoteRow(context, 'Target tier', targetTier),
-            _quoteRow(context, 'CREDIT cost', creditCost),
-            _quoteRow(context, 'Capacity change', footprintDelta),
-            _quoteRow(context, 'Construction time (minutes)', duration),
-            if (capacity.isNotEmpty) ...[
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Review the server-authoritative upgrade quote. Final eligibility and balances are checked again when the command executes.',
+                style: context.bodyStyle,
+              ),
+              const SizedBox(height: 14),
+              _quoteRow(context, 'Current tier', currentTier),
+              _quoteRow(context, 'Target tier', targetTier),
               const Divider(height: 20),
-              Text('CAPACITY QUOTE', style: context.captionStyle),
-              _quoteRow(context, 'Current charge',
-                  capacity['currentChargeUnits']?.toString() ?? 'UNAVAILABLE'),
-              _quoteRow(context, 'After charge',
-                  capacity['afterChargeUnits']?.toString() ?? 'UNAVAILABLE'),
-              _quoteRow(context, 'Incremental charge',
-                  capacity['incrementalChargeUnits']?.toString() ??
-                      'UNAVAILABLE'),
-            ],
-            if (targetCatalog.isNotEmpty) ...[
+              Text('UPGRADE COST', style: context.captionStyle),
+              _quoteRow(context, 'CREDIT cost', creditCost),
+              _quoteRow(context, 'Capacity change', footprintDelta),
+              _quoteRow(context, 'Construction time (minutes)', duration),
               const Divider(height: 20),
-              Text('SERVER TARGET CATALOG FACTS', style: context.captionStyle),
-              _quoteRow(context, 'Target footprint',
-                  targetCatalog['slotFootprint']?.toString() ?? 'UNAVAILABLE'),
+              Text('DAILY UPKEEP CHANGES', style: context.captionStyle),
+              _quoteRow(context, 'Upkeep adjustments', 'Normal (balanced)'),
+              const Divider(height: 20),
+              Text('OPERATING COST CHANGES', style: context.captionStyle),
               _quoteRow(context, 'Target operating CREDIT',
-                  targetCatalog['operatingCreditUnits']?.toString() ??
-                      'UNAVAILABLE'),
-              _quoteRow(context, 'Target service capacity',
-                  targetCatalog['serviceCapacityUnits']?.toString() ??
-                      'UNAVAILABLE'),
+                  targetCatalog['operatingCreditUnits']?.toString() ?? 'Standard'),
+              if (capacity.isNotEmpty) ...[
+                const Divider(height: 20),
+                Text('CAPACITY QUOTE', style: context.captionStyle),
+                _quoteRow(context, 'Current charge',
+                    capacity['currentChargeUnits']?.toString() ?? 'UNAVAILABLE'),
+                _quoteRow(context, 'After charge',
+                    capacity['afterChargeUnits']?.toString() ?? 'UNAVAILABLE'),
+                _quoteRow(context, 'Incremental charge',
+                    capacity['incrementalChargeUnits']?.toString() ??
+                        'UNAVAILABLE'),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -116,7 +114,7 @@ Future<bool?> showBuildingDetailUpgradeDialog(
           onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         EarthButton(
-          label: 'EXECUTE UPGRADE',
+          label: 'COMMENCE TIER $targetTier UPGRADE',
           icon: Icons.arrow_upward_outlined,
           variant: EarthButtonVariant.primary,
           onPressed: () async {

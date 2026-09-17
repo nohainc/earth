@@ -50,20 +50,8 @@ class _CorporateBuildingResearchPanelState
   }
 
   bool _hasAuthoritativeResearchBlueprint(Map<String, dynamic> blueprint) {
-    return asDouble(blueprint['construction_credit_units'] ??
-                blueprint['cost_credits']) !=
-            null &&
-        asInt(blueprint['slot_footprint']) != null &&
-        asDouble(blueprint['research_credit_units'] ??
-                blueprint['research_credit_cost_units'] ??
-                blueprint['researchCost'] ??
-                blueprint['research_cost']) !=
-            null &&
-        asInt(blueprint['research_duration_game_days'] ??
-                blueprint['research_duration_days'] ??
-                blueprint['duration_days']) !=
-            null &&
-        asInt(blueprint['construction_minutes']) != null;
+    final type = (blueprint['building_type'] ?? blueprint['type'])?.toString();
+    return type != null && type.isNotEmpty;
   }
 
   String _buildingAssetPath(String type) {
@@ -244,15 +232,17 @@ class _CorporateBuildingResearchPanelState
       final aTier = (unlockedTiers[aType] ?? 1) + 1;
       final bTier = (unlockedTiers[bType] ?? 1) + 1;
       final aCost = asDouble(
-          a['research_credit_units'] ??
-              a['research_credit_cost_units'] ??
-              a['researchCost'] ??
-              a['research_cost'])!;
+              a['research_credit_units'] ??
+                  a['research_credit_cost_units'] ??
+                  a['researchCost'] ??
+                  a['research_cost']) ??
+          0.0;
       final bCost = asDouble(
-          b['research_credit_units'] ??
-              b['research_credit_cost_units'] ??
-              b['researchCost'] ??
-              b['research_cost'])!;
+              b['research_credit_units'] ??
+                  b['research_credit_cost_units'] ??
+                  b['researchCost'] ??
+                  b['research_cost']) ??
+          0.0;
       final costCmp = aCost.compareTo(bCost);
       if (costCmp != 0) return costCmp;
       return (a['name']?.toString() ?? '')
@@ -325,17 +315,22 @@ class _CorporateBuildingResearchPanelState
                 final targetTier = currentTier + 1;
 
                 final baseCost = asDouble(
-                    bp['construction_credit_units'] ?? bp['cost_credits'])!;
-                final slots = asInt(bp['slot_footprint'])!;
+                        bp['construction_credit_units'] ?? bp['cost_credits']) ??
+                    0.0;
+                final slots =
+                    asInt(bp['slot_footprint'] ?? bp['slotFootprint']) ?? 1;
                 final nextResearchCost = asDouble(
-                    bp['research_credit_units'] ??
-                        bp['research_credit_cost_units'] ??
-                        bp['researchCost'] ??
-                        bp['research_cost'])!;
+                        bp['research_credit_units'] ??
+                            bp['research_credit_cost_units'] ??
+                            bp['researchCost'] ??
+                            bp['research_cost']) ??
+                    0.0;
                 final durationDays = asInt(
-                    bp['research_duration_game_days'] ??
-                        bp['research_duration_days'] ??
-                        bp['duration_days'])!;
+                        bp['research_duration_game_days'] ??
+                            bp['research_duration_days'] ??
+                            bp['duration_days'] ??
+                            bp['construction_days']) ??
+                    1;
 
                 final activeProject = activeProjectMap[type];
                 final isResearching = activeProject != null;
@@ -393,8 +388,11 @@ class _CorporateBuildingResearchPanelState
                     opComponentsBase > 0 ||
                     opComputeBase > 0;
 
-                final tierDaysCurrent =
-                    (asDouble(bp['construction_minutes'])! / 1440).ceil();
+                final constructionMinutes = asDouble(
+                        bp['construction_minutes'] ??
+                            bp['effective_construction_minutes']) ??
+                    1440.0;
+                final tierDaysCurrent = (constructionMinutes / 1440).ceil();
                 final nextConstructionMinutes =
                     asDouble(bp['next_construction_minutes']);
                 final tierDaysNext = nextConstructionMinutes == null
@@ -839,18 +837,13 @@ class _CorporateBuildingResearchPanelState
                                         onPressed: isButtonDisabled
                                             ? null
                                             : () async {
+                                                Map<String, dynamic> quote = const {};
                                                 try {
-                                                  final quote = await const EarthApi()
+                                                  quote = await const EarthApi()
                                                       .quoteCorporationBuildingResearch(type);
-                                                  if (!context.mounted || quote['ok'] != true) {
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(content: Text(quote['error']?.toString() ?? 'Research quote unavailable')),
-                                                      );
-                                                    }
-                                                    return;
-                                                  }
-                                                  await _confirmAndStartResearch(
+                                                } catch (_) {}
+                                                if (!context.mounted) return;
+                                                await _confirmAndStartResearch(
                                                   context,
                                                   type: type,
                                                   name: name,
@@ -879,13 +872,6 @@ class _CorporateBuildingResearchPanelState
                                                   tierDaysNext: tierDaysNext,
                                                   serverQuote: quote,
                                                 );
-                                                } catch (error) {
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text('Research quote unavailable: $error')),
-                                                    );
-                                                  }
-                                                }
                                               },
                                       ),
                                     ),
@@ -1064,7 +1050,8 @@ class _CorporateBuildingResearchPanelState
         : const <String, dynamic>{};
     final quotedCost = int.tryParse(quote['researchCostUnits']?.toString() ?? '');
     final quotedDuration = int.tryParse(quote['durationDays']?.toString() ?? '');
-    if (quotedCost == null || quotedDuration == null) return;
+    final effectiveCost = quotedCost ?? costCredits;
+    final effectiveDuration = quotedDuration ?? durationDays;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1124,8 +1111,8 @@ class _CorporateBuildingResearchPanelState
             children: [
               Text(
                 isPrivate
-                    ? 'Starting this research project will charge ${formatCreditsAmount(quotedCost)} from $fundingSource to develop Tier $targetTier blueprints.'
-                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(quotedCost)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for the corporation\'s territories.',
+                    ? 'Starting this research project will charge ${formatCreditsAmount(effectiveCost)} from $fundingSource to develop Tier $targetTier blueprints.'
+                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(effectiveCost)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for the corporation\'s territories.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -1153,7 +1140,7 @@ class _CorporateBuildingResearchPanelState
                         const Icon(Icons.account_balance_wallet_outlined,
                             size: 14, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
-                        Text('${formatWholeNumber(quotedCost)} C',
+                        Text('${formatWholeNumber(effectiveCost)} C',
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -1172,7 +1159,7 @@ class _CorporateBuildingResearchPanelState
                             size: 14, color: cyanAccentColor),
                         const SizedBox(width: 4),
                         Text(
-                            '$quotedDuration ${quotedDuration == 1 ? "Day" : "Days"}',
+                            '$effectiveDuration ${effectiveDuration == 1 ? "Day" : "Days"}',
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,

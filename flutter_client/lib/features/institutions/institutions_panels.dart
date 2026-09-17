@@ -258,8 +258,18 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       });
     } catch (_) {
       if (mounted && generation == _searchGeneration) {
+        final fallback = (widget.state.rankings['corporations'] as List? ?? const [])
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList();
         setState(() {
-          _error = 'Live Corporation directory unavailable.';
+          if (fallback.isNotEmpty) {
+            _corporations = fallback;
+            _selected = fallback.first;
+            _error = null;
+          } else {
+            _error = 'Live Corporation directory unavailable.';
+          }
           _loading = false;
         });
       }

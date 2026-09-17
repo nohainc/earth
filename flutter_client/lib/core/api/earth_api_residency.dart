@@ -6,4 +6,15 @@ extension EarthApiResidency on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
+  Future<EarthState> moveHouseResidence({required String territoryId}) async {
+    final response = await _request(
+      '/api/house/residency/move',
+      method: 'POST',
+      body: {
+        'territoryId': territoryId,
+        'correlationId': newClientCorrelationId('MOVE-RESIDENCE'),
+      },
+    );
+    return EarthState(response is Map<String, dynamic> ? response : <String, dynamic>{});
+  }
 }

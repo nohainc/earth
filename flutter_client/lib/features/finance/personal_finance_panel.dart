@@ -34,8 +34,27 @@ class PersonalFinancePanel extends StatelessWidget {
         .toList();
     final projection = _map(
         personalFinanceData['summary'] ?? personalFinanceData['projection']);
-    final projectedIncome = _creditUnits(projection['incomeUnits']);
-    final projectedTax = _creditUnits(projection['taxUnits']);
+    final fallbackBuildingIncome = state.buildings
+        .whereType<Map>()
+        .where((b) =>
+            b['owner_id'] == state.human['id']?.toString() &&
+            b['status'] != 'closed')
+        .fold<double>(0.0, (sum, b) {
+          final outType = b['resource_output_type']?.toString().toLowerCase();
+          final outAmount = asDouble(b['resource_output_amount']) ?? 0.0;
+          final opCredits = asDouble(b['daily_operating_credits']) ?? 0.0;
+          return sum + ((outType == 'credits' ? outAmount : 0.0) - opCredits);
+        });
+    final dailyProfileCredits =
+        asDouble(_map(personalFinanceData['dailyProfile'])['credits']);
+    final projectedIncome = _creditUnits(projection['incomeUnits']) ??
+        (fallbackBuildingIncome > 0
+            ? fallbackBuildingIncome
+            : dailyProfileCredits);
+    final projectedTax = _creditUnits(projection['taxUnits']) ??
+        (projectedIncome != null && personalFinanceData.containsKey('taxes')
+            ? (projectedIncome * 0.1)
+            : null);
     final grossCredits = projectedIncome;
     final incomeTax = projectedTax;
     final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
@@ -132,6 +151,8 @@ class PersonalFinancePanel extends StatelessWidget {
         _CreditIncomeSummaryCard(
           grossCredits: grossCredits,
           taxAmount: incomeTax,
+          personalFinanceData: personalFinanceData,
+          fallbackBuildingIncome: fallbackBuildingIncome,
         ),
         const SizedBox(height: 24),
         _BankDepositsCard(
@@ -1655,163 +1676,60 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
 class _CreditIncomeSummaryCard extends StatelessWidget {
   final double? grossCredits;
   final double? taxAmount;
+  final Map<String, dynamic> personalFinanceData;
+  final double fallbackBuildingIncome;
 
   const _CreditIncomeSummaryCard({
     required this.grossCredits,
     required this.taxAmount,
+    this.personalFinanceData = const {},
+    this.fallbackBuildingIncome = 0.0,
   });
 
   @override
-  Widget build(BuildContext context) => CreditIncomeSummaryCard(
-        grossItems: grossCredits == null
-            ? const []
-            : [CreditIncomeLineItem('Recorded ledger income', grossCredits!)],
-        deductionItems: taxAmount == null
-            ? const []
-            : [CreditIncomeLineItem('Recorded taxes', taxAmount!)],
-      );
+  Widget build(BuildContext context) {
+    final assetIncome = PersonalFinancePanel._map(personalFinanceData['assetIncome']);
+    final buildingCredits = asDouble(assetIncome['businessProfit']) ??
+        asDouble(assetIncome['buildingCredits']) ??
+        (fallbackBuildingIncome > 0 ? fallbackBuildingIncome : 0.0);
+    final investmentDividend = asDouble(assetIncome['civicDividends']) ??
+        asDouble(assetIncome['investmentDividend']) ??
+        0.0;
+    final bankInterest = asDouble(assetIncome['bankInterest']) ??
+        asDouble(assetIncome['depositInterest']) ??
+        0.0;
 
-  /* Widget build(BuildContext context) {
-    Widget buildGrossColumn() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'GROSS CREDIT INCOME',
-                style: context.widgetTitleStyle.copyWith(
-                  letterSpacing: .8,
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.account_balance_wallet_outlined,
-                    size: 16,
-                    color: EarthResourceColors.credits,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${grossCredits > 0 ? '+' : grossCredits < 0 ? '-' : ''}${PersonalFinancePanel._number(grossCredits)} C',
-                    style: TextStyle(
-                      color: grossCredits < 0
-                          ? Colors.redAccent
-                          : grossCredits > 0
-                              ? Colors.tealAccent
-                              : context.mutedColor,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: Colors.white10),
-          const SizedBox(height: 12),
-          PersonalFinancePanel._creditRow(
-            'Private buildings',
-            buildingCredits,
-            positive: true,
-          ),
-          PersonalFinancePanel._creditRow(
-            'Investment dividend',
-            investmentDividend,
-            positive: true,
-            displayAsWhole: true,
-          ),
-        ],
-      );
+    final taxes = PersonalFinancePanel._map(personalFinanceData['taxes']);
+    final taxRules = (taxes['rules'] as List? ?? const [])
+        .whereType<Map>()
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
+    final basicLevy = PersonalFinancePanel._map(personalFinanceData['basicLevy']);
+    final taxRate = asDouble(taxRules.isNotEmpty ? taxRules.first['rate'] : basicLevy['rate']);
+
+    final grossItems = <CreditIncomeLineItem>[];
+    if (personalFinanceData.containsKey('assetIncome') || buildingCredits > 0 || investmentDividend > 0) {
+      grossItems.add(CreditIncomeLineItem('Private buildings', buildingCredits));
+      if (investmentDividend > 0) {
+        grossItems.add(CreditIncomeLineItem('Investment dividend', investmentDividend));
+      }
+      grossItems.add(CreditIncomeLineItem('Bank deposit interest', bankInterest));
+    } else if (grossCredits != null) {
+      grossItems.add(CreditIncomeLineItem('Recorded ledger income', grossCredits!));
     }
 
-    Widget buildNetColumn() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'NET CREDIT INCOME',
-                style: context.widgetTitleStyle.copyWith(
-                  letterSpacing: .8,
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.account_balance_wallet_outlined,
-                    size: 16,
-                    color: EarthResourceColors.credits,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${netCredits > 0 ? '+' : netCredits < 0 ? '-' : ''}${PersonalFinancePanel._number(netCredits)} C',
-                    style: TextStyle(
-                      color: netCredits < 0
-                          ? Colors.redAccent
-                          : netCredits > 0
-                              ? Colors.tealAccent
-                              : context.mutedColor,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: Colors.white10),
-          const SizedBox(height: 12),
-          PersonalFinancePanel._taxRow(taxRate, taxAmount),
-        ],
-      );
+    final deductionItems = <CreditIncomeLineItem>[];
+    if (taxRate != null) {
+      final pct = (taxRate * 100).toStringAsFixed((taxRate * 100) == (taxRate * 100).roundToDouble() ? 0 : 1);
+      final effTax = taxAmount ?? ((grossCredits ?? 0) * taxRate);
+      deductionItems.add(CreditIncomeLineItem('Income tax $pct%', effTax));
+    } else if (taxAmount != null) {
+      deductionItems.add(CreditIncomeLineItem('Recorded taxes', taxAmount!));
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.surfaceColor.withValues(alpha: .75),
-        borderRadius: BorderRadius.circular(context.radiusCard),
-        border: Border.all(color: context.subtleBorderColor),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 620) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                buildGrossColumn(),
-                const SizedBox(height: 20),
-                Divider(height: 1, color: context.subtleBorderColor),
-                const SizedBox(height: 20),
-                buildNetColumn(),
-              ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: buildGrossColumn()),
-              const SizedBox(width: 24),
-              Container(
-                width: 1,
-                height: 110,
-                color: context.subtleBorderColor,
-              ),
-              const SizedBox(width: 24),
-              Expanded(child: buildNetColumn()),
-            ],
-          );
-        },
-      ),
+    return CreditIncomeSummaryCard(
+      grossItems: grossItems,
+      deductionItems: deductionItems,
     );
-  } */
+  }
 }

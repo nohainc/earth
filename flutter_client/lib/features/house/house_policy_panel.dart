@@ -110,11 +110,12 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
       });
       _applyActivePolicies();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _error = e.toString();
         });
+      }
     }
   }
 
@@ -125,7 +126,9 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
         final effectiveDay = asInt(policy['effective_from_game_day']) ?? 0;
         if (policy['policy_type'] == type &&
             policy['status'] == 'ACTIVE' &&
-            effectiveDay <= currentDay) return policy;
+            effectiveDay <= currentDay) {
+          return policy;
+        }
       }
       return null;
     }
@@ -133,8 +136,9 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
     final operating = active('OPERATING');
     final reserve = active('INVENTORY_RESERVE');
     final standing = active('MARKET_STANDING');
-    if (operating != null)
+    if (operating != null) {
       _operatingMode = operating['operating_mode']?.toString() ?? 'BALANCED';
+    }
     final reserveMap = _map(reserve?['reserve_floor_units']);
     final inputPriceMap = _map(standing?['max_input_price_units']);
     final salePriceMap = _map(standing?['min_sale_price_units']);
@@ -242,12 +246,14 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
             response['error']?.toString() ?? 'Automation save failed');
       }
       await _load();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('House policies saved for the next game day.')));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = e.toString().replaceFirst('Bad state: ', ''));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

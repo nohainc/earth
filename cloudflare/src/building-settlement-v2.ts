@@ -195,14 +195,59 @@ async function settlePrivateHouse(tx: PostgresRepository, day: number, houseEcon
 
 async function settlePublicBuilding(tx: PostgresRepository, day: number, building: Building): Promise<void> {
   const cost = (nonNegativeUnits(building.operating_credit_units) * ageBurden(building, day)) / 10000n;
-  if (cost <= 0n) return;
-  const treasury = await account(tx, building.owner_economic_id, ASSET_IDS.CREDIT, 'TREASURY');
-  const beneficiary = await account(tx, PUBLIC_INFRASTRUCTURE_OWNER, ASSET_IDS.CREDIT, 'SYSTEM_ACCOUNT');
-  if (!beneficiary) throw new Error('Missing public infrastructure settlement account');
-  await post(tx, day, `building:${building.id}:${day}:public-credit`, 'CORPORATION_PUBLIC_SPENDING', 'CORPORATION', building.id, [
-    { accountId: treasury.id, assetId: ASSET_IDS.CREDIT, delta: -cost, reason: 'public_infrastructure_operating_expense' },
-    { accountId: beneficiary.id, assetId: ASSET_IDS.CREDIT, delta: cost, reason: 'public_infrastructure_operating_expense' },
-  ]);
+  if (cost > 0n) {
+    const treasury = await account(tx, building.owner_economic_id, ASSET_IDS.CREDIT, 'TREASURY');
+    const beneficiary = await account(tx, PUBLIC_INFRASTRUCTURE_OWNER, ASSET_IDS.CREDIT, 'SYSTEM_ACCOUNT');
+    if (!beneficiary) throw new Error('Missing public infrastructure settlement account');
+    await post(tx, day, `building:${building.id}:${day}:public-credit`, 'CORPORATION_PUBLIC_SPENDING', 'CORPORATION', building.id, [
+      { accountId: treasury.id, assetId: ASSET_IDS.CREDIT, delta: -cost, reason: 'public_infrastructure_operating_expense' },
+      { accountId: beneficiary.id, assetId: ASSET_IDS.CREDIT, delta: cost, reason: 'public_infrastructure_operating_expense' },
+    ]);
+  }
+  const inputs = catalogUnits(building.operating_input_units);
+  const outputs = catalogUnits(building.operating_output_units);
+  if (Object.keys(inputs).length > 0 || Object.keys(outputs).length > 0) {
+    const inputEntries: Array<{ accountId: string; assetId: number; delta: bigint; reason: string }> = [];
+    const outputEntries: Array<{ accountId: string; assetId: number; delta: bigint; reason: string }> = [];
+    for (const [code, required] of Object.entries(inputs)) {
+      if (required <= 0n) continue;
+      const assetId = ASSET_IDS[code];
+      if (!assetId || assetId === ASSET_IDS.CREDIT) continue;
+      const inv = await tx.query<Account>(
+        `SELECT id::TEXT, asset_id, account_type, balance_units::TEXT
+           FROM economic_accounts
+          WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE'
+          FOR UPDATE`, [building.owner_economic_id, assetId],
+      );
+      if (inv.rows[0]) {
+        const available = BigInt(inv.rows[0].balance_units);
+        const consumed = available < required ? available : required;
+        if (consumed > 0n) {
+          const sink = await account(tx, RESOURCE_CONSUMPTION_OWNER, assetId, 'SYSTEM_ACCOUNT');
+          inputEntries.push({ accountId: inv.rows[0].id, assetId, delta: -consumed, reason: 'public_infrastructure_operating_input' });
+          inputEntries.push({ accountId: sink.id, assetId, delta: consumed, reason: 'public_infrastructure_operating_input' });
+        }
+      }
+    }
+    for (const [code, output] of Object.entries(outputs)) {
+      if (output <= 0n) continue;
+      const assetId = ASSET_IDS[code];
+      if (!assetId || assetId === ASSET_IDS.CREDIT) continue;
+      const inv = await tx.query<Account>(
+        `SELECT id::TEXT, asset_id, account_type, balance_units::TEXT
+           FROM economic_accounts
+          WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE'
+          FOR UPDATE`, [building.owner_economic_id, assetId],
+      );
+      if (inv.rows[0]) {
+        const source = await account(tx, RESOURCE_PRODUCTION_OWNER, assetId, 'SYSTEM_ACCOUNT');
+        outputEntries.push({ accountId: source.id, assetId, delta: -output, reason: 'public_infrastructure_operating_output' });
+        outputEntries.push({ accountId: inv.rows[0].id, assetId, delta: output, reason: 'public_infrastructure_operating_output' });
+      }
+    }
+    if (inputEntries.length) await post(tx, day, `building:${building.id}:${day}:public-consume`, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', building.owner_economic_id, inputEntries);
+    if (outputEntries.length) await post(tx, day, `building:${building.id}:${day}:public-produce`, 'RESOURCE_PRODUCTION', 'SYSTEM_PRODUCTION', building.owner_economic_id, outputEntries);
+  }
 }
 
 export type BuildingSettlementResult = { privateBuildings: number; publicBuildings: number; territoriesRefreshed: number };

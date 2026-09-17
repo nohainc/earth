@@ -107,24 +107,6 @@ class _FormationComposerDialogState extends State<_FormationComposerDialog> {
             if (selectedName.length < 3) return;
             setState(() => _busy = true);
             try {
-              final quote = await const EarthApi().quoteV5CorporationFounding(selectedName);
-              if (!context.mounted) return;
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (confirmContext) => AlertDialog(
-                  title: const Text('Confirm Corporation founding'),
-                  content: Text(
-                    'Founding fee: ${quote['foundingFeeUnits'] ?? '0'} C\n'
-                    'Initial treasury reserve: ${quote['initialTreasuryReserveUnits'] ?? '0'} C\n'
-                    'Residential capacity: 1 unit\n\n'
-                    'The server will execute this as one idempotent founding command.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(confirmContext, false), child: const Text('CANCEL')),
-                    EarthButton(label: 'FOUND', onPressed: () => Navigator.pop(confirmContext, true)),
-                  ],
-                ),
-              ) ?? false;
-              if (!confirmed || !context.mounted) return;
               Navigator.pop(context);
               await widget.action(() async {
                 await const EarthApi().foundV5Corporation(

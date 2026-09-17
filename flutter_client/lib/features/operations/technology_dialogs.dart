@@ -118,44 +118,13 @@ Future<void> showResearchComposerDialog(
                       onPressed: () => Navigator.pop(dialogContext),
                       child: const Text('Cancel')),
                   FilledButton(
-                      onPressed: quoteLoading
-                          ? null
-                          : () async {
-                              if (serverQuote['ok'] != true) {
-                                setState(() => quoteLoading = true);
-                                try {
-                                  final quote = await const EarthApi()
-                                      .quoteResearch(name);
-                                  if (dialogContext.mounted) {
-                                    setState(() {
-                                      serverQuote = quote;
-                                      quoteLoading = false;
-                                    });
-                                  }
-                                } catch (_) {
-                                  if (dialogContext.mounted) {
-                                    setState(() => quoteLoading = false);
-                                  }
-                                }
-                                return;
-                              }
-                        final amount = double.tryParse(budget.text.trim());
-                        final quotedCost = double.tryParse(serverQuote['quote']
-                                    is Map
-                                ? (serverQuote['quote'] as Map)['researchCostUnits']
-                                    ?.toString() ?? ''
-                                : '') ??
-                            0;
-                        if (amount == null || amount < quotedCost) {
-                          return;
-                        }
+                      onPressed: () async {
+                        final amount = double.tryParse(budget.text.trim()) ?? minimumBudget(name);
                         await action(() => const EarthApi()
                             .startResearch(name, amount, focus: focus));
                         if (dialogContext.mounted) Navigator.pop(dialogContext);
                       },
-                      child: Text(serverQuote['ok'] == true
-                          ? 'Start Research'
-                          : 'Get Server Quote')),
+                      child: const Text('Start')),
                 ],
               );
             },

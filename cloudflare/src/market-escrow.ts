@@ -3,19 +3,30 @@ import type { PostgresRepository } from './repository.ts';
 export type EscrowEntry = { accountId: string; delta: bigint; assetId: number; reason: string };
 export type MarketReservation = { id: string; order_id: string; escrow_account_id: string; asset_id: number; reserved_units: string; remaining_units: string; status: string };
 
-async function houseEconomicId(tx: PostgresRepository, ownerId: string): Promise<string> {
+export async function marketOwnerEconomicId(tx: PostgresRepository, ownerId: string): Promise<string> {
   const result = await tx.query<{ economic_id: string }>(
-    `SELECT o.economic_id::TEXT AS economic_id FROM owner_registry o
-      WHERE o.id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1) AND o.owner_type = 'HOUSE'`,
+    `SELECT o.economic_id::TEXT AS economic_id
+       FROM owner_registry o
+      WHERE (o.id = $1 OR o.economic_id = $1 OR o.id = (SELECT house_id FROM humans WHERE id = $1))
+        AND o.owner_type IN ('HOUSE', 'CORPORATION')
+      LIMIT 1`,
     [ownerId],
   );
-  if (!result.rows[0]) throw new Error('Market access is restricted to House owners');
+  if (!result.rows[0]) throw new Error('Market access requires an active House or Corporation owner');
   return result.rows[0].economic_id;
 }
 
-export async function marketAccount(tx: PostgresRepository, ownerId: string, assetId: number, accountType?: 'WALLET' | 'INVENTORY' | 'MARKET_ESCROW'): Promise<string | null> {
-  const economicId = await houseEconomicId(tx, ownerId);
-  const expectedType = accountType ?? (assetId === 1 ? 'WALLET' : 'INVENTORY');
+export async function marketAccount(tx: PostgresRepository, ownerId: string, assetId: number, accountType?: 'WALLET' | 'TREASURY' | 'INVENTORY' | 'MARKET_ESCROW'): Promise<string | null> {
+  const economicId = await marketOwnerEconomicId(tx, ownerId);
+  return marketEconomicAccount(tx, economicId, assetId, accountType);
+}
+
+export async function marketEconomicAccount(tx: PostgresRepository, economicId: string, assetId: number, accountType?: string): Promise<string | null> {
+  const owner = (await tx.query<{ owner_type: string }>(
+    'SELECT owner_type FROM owner_registry WHERE economic_id = $1', [economicId],
+  )).rows[0];
+  const defaultCreditAccount = owner?.owner_type === 'CORPORATION' ? 'TREASURY' : 'WALLET';
+  const expectedType = accountType ?? (assetId === 1 ? defaultCreditAccount : 'INVENTORY');
   const result = await tx.query<{ account_id: string }>(
     `SELECT a.id::TEXT AS account_id FROM economic_accounts a
       WHERE a.owner_economic_id = $1 AND a.asset_id = $2 AND a.account_type = $3 AND a.status = 'ACTIVE' LIMIT 1`,
@@ -24,18 +35,8 @@ export async function marketAccount(tx: PostgresRepository, ownerId: string, ass
   return result.rows[0]?.account_id ?? null;
 }
 
-export async function marketEconomicAccount(tx: PostgresRepository, economicId: string, assetId: number, accountType?: 'WALLET' | 'INVENTORY' | 'MARKET_ESCROW'): Promise<string | null> {
-  const expectedType = accountType ?? (assetId === 1 ? 'WALLET' : 'INVENTORY');
-  const result = await tx.query<{ account_id: string }>(
-    `SELECT a.id::TEXT AS account_id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-      WHERE a.owner_economic_id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = $2 AND a.account_type = $3 AND a.status = 'ACTIVE' LIMIT 1`,
-    [economicId, assetId, expectedType],
-  );
-  return result.rows[0]?.account_id ?? null;
-}
-
 export async function ensureMarketEscrow(tx: PostgresRepository, ownerId: string, assetId: number): Promise<string> {
-  const economicId = await houseEconomicId(tx, ownerId);
+  const economicId = await marketOwnerEconomicId(tx, ownerId);
   const existing = await marketAccount(tx, ownerId, assetId, 'MARKET_ESCROW');
   if (existing) return existing;
   const created = await tx.query<{ account_id: string }>(
@@ -45,7 +46,7 @@ export async function ensureMarketEscrow(tx: PostgresRepository, ownerId: string
     [economicId, assetId],
   );
   const accountId = created.rows[0]?.account_id ?? await marketAccount(tx, ownerId, assetId, 'MARKET_ESCROW');
-  if (!accountId) throw new Error('Unable to create House market escrow account');
+  if (!accountId) throw new Error('Unable to create market escrow account');
   return accountId;
 }
 
@@ -98,23 +99,21 @@ export async function reserveForOrder(tx: PostgresRepository, input: { ownerId: 
   return escrowAccountId;
 }
 
-export async function updateReservationRemaining(tx: PostgresRepository, orderId: string, assetId: number, movedUnits: bigint, finalStatus?: 'CONSUMED' | 'RELEASED'): Promise<void> {
-  if (movedUnits < 0n) throw new Error('Reservation movement must be non-negative');
-  const result = await tx.query(
-    `UPDATE market_order_reservations SET remaining_units = remaining_units - $1,
-       status = COALESCE($2, CASE WHEN remaining_units - $1 = 0 THEN 'CONSUMED' ELSE status END), updated_at = CURRENT_TIMESTAMP
-     WHERE order_id = $3 AND asset_id = $4 AND status = 'ACTIVE' AND remaining_units >= $1`,
-    [movedUnits.toString(), finalStatus ?? null, orderId, assetId],
+export async function releaseReservation(tx: PostgresRepository, reservation: MarketReservation, gameDay: number, sourceAccountId: string, unfillableUnits: bigint): Promise<void> {
+  if (unfillableUnits <= 0n) return;
+  await postEscrowTransaction(tx, gameDay, `market-order:${reservation.order_id}:release:${gameDay}`, reservation.order_id, [
+    { accountId: reservation.escrow_account_id, delta: -unfillableUnits, assetId: reservation.asset_id, reason: 'market_order_release' },
+    { accountId: sourceAccountId, delta: unfillableUnits, assetId: reservation.asset_id, reason: 'market_order_release' },
+  ]);
+  await tx.query(
+    `UPDATE market_order_reservations SET remaining_units = (remaining_units - $1), status = CASE WHEN remaining_units - $1 = 0 THEN 'RELEASED' ELSE status END WHERE id = $2`,
+    [unfillableUnits.toString(), reservation.id],
   );
-  if (result.rowCount !== 1) throw new Error(`Market reservation is missing or insufficient for order ${orderId}`);
 }
 
-export async function releaseReservation(tx: PostgresRepository, input: { escrowAccountId: string; destinationAccountId: string; assetId: number; amountUnits: bigint; orderId: string; gameDay: number; reason: string }): Promise<boolean> {
-  if (input.amountUnits <= 0n) return false;
-  const posted = await postEscrowTransaction(tx, input.gameDay, `market-order:${input.orderId}:release`, input.orderId, [
-    { accountId: input.escrowAccountId, delta: -input.amountUnits, assetId: input.assetId, reason: input.reason },
-    { accountId: input.destinationAccountId, delta: input.amountUnits, assetId: input.assetId, reason: input.reason },
-  ]);
-  if (posted) await updateReservationRemaining(tx, input.orderId, input.assetId, input.amountUnits, 'RELEASED');
-  return posted;
+export async function updateReservationRemaining(tx: PostgresRepository, reservationId: string, remainingUnits: bigint): Promise<void> {
+  await tx.query(
+    `UPDATE market_order_reservations SET remaining_units = $1, status = CASE WHEN $1 = 0 THEN 'CONSUMED' ELSE status END WHERE id = $2`,
+    [remainingUnits.toString(), reservationId],
+  );
 }

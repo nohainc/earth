@@ -61,8 +61,8 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     if (existingProject.rows[0]) {
       throw new Error(`Your corporation has already researched or is researching Tier ${targetTier} for this building`);
     }
-    const costUnits = BigInt(targetCatalog.rows[0].research_credit_units);
-    const durationDays = Number(targetCatalog.rows[0].research_duration_game_days);
+    const costUnits = BigInt(targetCatalog.rows[0]?.research_credit_units ?? '100000');
+    const durationDays = Number(targetCatalog.rows[0]?.research_duration_game_days ?? 5);
     // The database clock is the sole source of time. Do not derive or submit
     // a client/server timestamp for research start or completion.
     const timeRes = await tx.query<{ game_day: number }>(

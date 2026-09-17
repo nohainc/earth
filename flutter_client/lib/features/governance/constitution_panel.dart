@@ -587,13 +587,11 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
       for (final effect in effects) ...[
         const Divider(),
         Text('PROGRESSIVE EFFECT · ${effect['ruleCode'] ?? 'RULE'}', style: Theme.of(context).textTheme.labelSmall),
-        const SizedBox(height: 4),
-        ...((effect['effects'] is List ? effect['effects'] as List : const [])
-            .whereType<Map>()
-            .map((row) => Text(
-                  'QTY ${row['current']?['quantity'] ?? '—'}: ${row['current']?['totalCharge'] ?? '—'} → ${row['proposed']?['totalCharge'] ?? '—'} (Δ ${row['delta'] ?? '—'})',
-                  style: Theme.of(context).textTheme.bodySmall,
-                )),
+        for (final row in (effect['effects'] is List ? effect['effects'] as List : const []).whereType<Map>())
+          Text(
+            'QTY ${row['current']?['quantity'] ?? '—'}: ${row['current']?['totalCharge'] ?? '—'} → ${row['proposed']?['totalCharge'] ?? '—'} (Δ ${row['delta'] ?? '—'})',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
       ],
     ];
     return await showDialog<bool>(

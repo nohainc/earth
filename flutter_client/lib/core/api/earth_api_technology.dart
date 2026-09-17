@@ -43,14 +43,21 @@ extension EarthApiTechnology on EarthApi {
 
   Future<Map<String, dynamic>> quoteCorporationBuildingResearch(
       String buildingType) async {
-    final response = await _request('/api/research/buildings/quote',
-        method: 'POST', body: {'buildingType': buildingType});
-    return response is Map<String, dynamic>
-        ? response
-        : <String, dynamic>{
-            'ok': false,
-            'error': 'Building research quote unavailable',
-          };
+    try {
+      final response = await _request('/api/research/buildings/quote',
+          method: 'POST', body: {'buildingType': buildingType});
+      return response is Map<String, dynamic>
+          ? response
+          : <String, dynamic>{
+              'ok': false,
+              'error': 'Building research quote unavailable',
+            };
+    } catch (e) {
+      return <String, dynamic>{
+        'ok': false,
+        'error': 'Building research quote unavailable: $e',
+      };
+    }
   }
 
 }

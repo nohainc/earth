@@ -21,7 +21,7 @@ function budgetCategory(category: string): string {
 export async function getCorporationFiscalState(repository: PostgresRepository, corporationId: string): Promise<Record<string, unknown>> {
   const [corporation, accounts, budgets, constitution, v5Capacity] = await Promise.all([
     // V5 fiscal reads must not expose the retired tax-charter authority. Tax
-    // policy is read from the resolved Constitution snapshot below; returning
+    // policy from tax_rule_versions is read from the resolved Constitution snapshot below; returning
     // the legacy columns would invite clients to choose the wrong source.
     repository.query('SELECT c.id, i.name, c.status, c.admission_policy FROM corporations c JOIN institutions i ON i.id = c.id WHERE c.id = $1', [corporationId]),
     repository.query(`SELECT a.id::TEXT AS account_id, a.account_type, a.balance_units::TEXT AS balance_units
