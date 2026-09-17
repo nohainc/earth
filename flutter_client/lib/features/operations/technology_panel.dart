@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
@@ -34,78 +33,21 @@ class _CorporateBuildingResearchPanelState
   int _selectedScope = 0; // 0 = ALL, 1 = PRIVATE, 2 = CIVIC & UTILITIES
   final _searchController = TextEditingController();
   String _searchQuery = '';
-  Timer? _researchProgressTimer;
-  int _localElapsedSeconds = 0;
-  int? _serverClockTotalMinutes;
-
-  @override
-  void initState() {
-    super.initState();
-    _startResearchProgressTimer();
-  }
-
-  @override
-  void didUpdateWidget(covariant CorporateBuildingResearchPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final serverTotalMinutes =
-        asIntOr(widget.state.clock['totalGameMinutes'], 0);
-    if (_serverClockTotalMinutes != null &&
-        serverTotalMinutes != _serverClockTotalMinutes) {
-      _localElapsedSeconds = 0;
-    }
-    _serverClockTotalMinutes = serverTotalMinutes;
-    _startResearchProgressTimer();
-  }
 
   @override
   void dispose() {
-    _researchProgressTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _startResearchProgressTimer() {
-    final projects = widget.state.corporationBuildingResearch['projects'];
-    final hasActiveResearch = projects is List &&
-        projects.any((project) =>
-            project is Map && project['status']?.toString() == 'active');
-    if (!hasActiveResearch) {
-      _researchProgressTimer?.cancel();
-      _researchProgressTimer = null;
-      return;
-    }
-    if (_researchProgressTimer?.isActive ?? false) return;
-    _researchProgressTimer =
-        Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() => _localElapsedSeconds++);
-    });
-  }
-
-  double _calculateResearchProgress(Map<String, dynamic> project) {
-    if (project['status']?.toString() == 'completed') return 100.0;
-    final currentDay = asDoubleOr(widget.state.clock['day'], 1);
-    final currentMinuteOfDay = asDoubleOr(widget.state.clock['minute'], 0);
-    final baseAuthoritativeMinutes = asDoubleOr(
-      widget.state.clock['totalGameMinutes'],
-      ((currentDay - 1) * 1440.0) + currentMinuteOfDay,
-    );
-    final startDay = asDoubleOr(project['started_game_day'], currentDay);
-    final startMinuteOfDay = asDoubleOr(project['started_game_minute'], 0);
-    final startMinute = ((startDay - 1) * 1440.0) + startMinuteOfDay;
-    final durationMinutes =
-        math.max(1.0, asDoubleOr(project['duration_minutes'], 1440.0));
-    final elapsed = math.max(
-        0.0, baseAuthoritativeMinutes + _localElapsedSeconds - startMinute);
-    // The stored value is authoritative at the last scheduler update. The
-    // projection only fills the gap until the next database refresh, so it
-    // must never move the displayed progress backwards.
-    final persisted = asDoubleOr(project['progress'], 0.0);
-    final projected = (elapsed / durationMinutes) * 100.0;
-    return math.max(persisted, projected).clamp(0.0, 100.0);
+  /// Research progress is a persisted settlement/read-model fact. The client
+  /// deliberately does not infer it from wall-clock time or a fallback
+  /// duration between refreshes.
+  double? _authoritativeResearchProgress(Map<String, dynamic> project) {
+    final raw = project['progress'];
+    if (raw == null) return null;
+    final parsed = double.tryParse(raw.toString());
+    return parsed?.clamp(0.0, 100.0);
   }
 
   String _buildingAssetPath(String type) {
@@ -378,8 +320,8 @@ class _CorporateBuildingResearchPanelState
                 final activeProject = activeProjectMap[type];
                 final isResearching = activeProject != null;
                 final projectProgress = isResearching
-                    ? _calculateResearchProgress(activeProject)
-                    : 0.0;
+                    ? _authoritativeResearchProgress(activeProject)
+                    : null;
                 final category =
                     (bp['category']?.toString() ?? 'commercial').toUpperCase();
                 final desc =
@@ -748,7 +690,9 @@ class _CorporateBuildingResearchPanelState
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(3),
                                   child: LinearProgressIndicator(
-                                    value: projectProgress / 100,
+                                    value: projectProgress == null
+                                        ? null
+                                        : projectProgress / 100,
                                     minHeight: 6,
                                     backgroundColor:
                                         context.inkColor.withValues(alpha: .1),
@@ -783,7 +727,7 @@ class _CorporateBuildingResearchPanelState
                                       ),
                                     ),
                                     Text(
-                                      ': ${projectProgress.toStringAsFixed(0)}%',
+                                      ': ${projectProgress == null ? '—' : '${projectProgress.toStringAsFixed(0)}%'}',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w800,

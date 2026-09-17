@@ -613,6 +613,13 @@ test('V5 building research uses authored catalog economics', async () => {
   assert.doesNotMatch(service, /function researchCost|function researchDurationDays|Math\.pow/);
 });
 
+test('V5 building research progress is read-only on the client', async () => {
+  const panel = await readFile(new URL('../flutter_client/lib/features/operations/technology_panel.dart', import.meta.url), 'utf8');
+  assert.doesNotMatch(panel, /_localElapsedSeconds|_calculateResearchProgress|duration_minutes.*1440/);
+  assert.match(panel, /_authoritativeResearchProgress/);
+  assert.match(panel, /projectProgress == null/);
+});
+
 test('V5 governance UI exposes only Earth and Corporation scopes', async () => {
   const panel = await readFile(new URL('../flutter_client/lib/features/governance/governance_panels.dart', import.meta.url), 'utf8');
   assert.match(panel, /TabController\(length: 2/);
