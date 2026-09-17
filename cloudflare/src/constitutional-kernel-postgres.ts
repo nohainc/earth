@@ -10,6 +10,18 @@ type RuleRow = {
   version: number;
 };
 
+/** Keep Constitution responses JSON-safe when typed CREDIT values are BigInt. */
+function toJsonSafe<T>(value: T): T {
+  if (typeof value === 'bigint') return value.toString() as T;
+  if (Array.isArray(value)) return value.map((item) => toJsonSafe(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toJsonSafe(item)]),
+    ) as T;
+  }
+  return value;
+}
+
 async function rulesFor(
   repository: PostgresRepository,
   authorityType: 'EARTH' | 'CORPORATION',
@@ -87,5 +99,12 @@ export async function getConstitutionReadModel(
      WHERE (authority_type = 'EARTH' AND authority_id = 'EARTH')
         OR (authority_type = 'CORPORATION' AND authority_id = $1)
      ORDER BY rule_code, effective_from_game_day DESC, version DESC`, [input.corporationId ?? ''])).rows;
-  return { gameDay: input.gameDay, corporationId: input.corporationId ?? null, rules: resolved.rules, versionIds: resolved.versionIds, history, generatedFrom: 'postgres-constitutional-kernel-v5' };
+  return {
+    gameDay: input.gameDay,
+    corporationId: input.corporationId ?? null,
+    rules: toJsonSafe(resolved.rules),
+    versionIds: resolved.versionIds,
+    history: toJsonSafe(history),
+    generatedFrom: 'postgres-constitutional-kernel-v5',
+  };
 }

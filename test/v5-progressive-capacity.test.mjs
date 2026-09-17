@@ -205,6 +205,8 @@ test('V5 Constitution read model exposes resolved values, provenance, and histor
   assert.match(kernel, /getConstitutionReadModel/);
   assert.match(kernel, /versionIds/);
   assert.match(kernel, /effective_to_game_day/);
+  assert.match(kernel, /Keep Constitution responses JSON-safe/);
+  assert.match(kernel, /rules: toJsonSafe\(resolved\.rules\)/);
   assert.match(route, /governance\/v5\/constitution/);
   assert.match(client, /getV5Constitution/);
 });
