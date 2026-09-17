@@ -4,7 +4,7 @@ type CorporationTaxRow = {
   id: string;
   economic_id: string;
   corporate_tax_bps: number;
-  tax_charter_version: number;
+  tax_rule_version: string;
 };
 
 // @mutation-boundary caller-owned-transaction: invoked by the daily settlement transaction.
@@ -17,14 +17,15 @@ export async function settleCorporationIncomeTax(
   if (assessedDay < 1) return { ok: true, day, assessedDay, assessed: 0, paid: 0, arrears: 0 };
 
   const corporations = (await tx.query<CorporationTaxRow>(`
-    SELECT c.id, oe.economic_id, COALESCE((snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER, (c.tax_charter->>'corporateTaxBps')::INTEGER, 0) AS corporate_tax_bps,
-           c.tax_charter_version
+    SELECT c.id, oe.economic_id,
+           COALESCE((snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER, (c.tax_charter->>'corporateTaxBps')::INTEGER, 0) AS corporate_tax_bps,
+           COALESCE(snap.version_ids->>'CORPORATION.TAX.CORPORATE_RATE', 'legacy-corporation-tax-v' || c.tax_charter_version::TEXT) AS tax_rule_version
       FROM corporations c
       JOIN owner_registry oe ON oe.id = c.id AND oe.owner_type = 'CORPORATION'
       LEFT JOIN resolved_constitution_snapshots_v5 snap ON snap.authority_type = 'CORPORATION' AND snap.authority_id = c.id AND snap.game_day = $1
      WHERE c.status = 'ACTIVE'
        AND COALESCE(c.tax_charter_updated_game_day, 0) <= $1
-       AND COALESCE((c.tax_charter->>'corporateTaxBps')::INTEGER, 0) > 0
+       AND COALESCE((snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER, (c.tax_charter->>'corporateTaxBps')::INTEGER, 0) > 0
      ORDER BY c.id
   `, [assessedDay])).rows;
   let assessed = 0;
@@ -43,7 +44,7 @@ export async function settleCorporationIncomeTax(
     const amount = taxableProfit * BigInt(corporation.corporate_tax_bps) / 10_000n;
     if (amount <= 0n) continue;
 
-    const correlationId = `corporation-tax:${corporation.id}:${assessedDay}:v${corporation.tax_charter_version}`;
+    const correlationId = `corporation-tax:${corporation.id}:${assessedDay}:${corporation.tax_rule_version}`;
     const existing = (await tx.query<{ status: string }>(
       'SELECT status FROM financial_obligations WHERE correlation_id = $1', [correlationId],
     )).rows[0];
@@ -54,7 +55,7 @@ export async function settleCorporationIncomeTax(
       continue;
     }
 
-    const obligationId = `CORP-TAX-${corporation.id}-${assessedDay}-V${corporation.tax_charter_version}`;
+    const obligationId = `CORP-TAX-${corporation.id}-${assessedDay}-${corporation.tax_rule_version}`;
     const earthAccount = (await tx.query<{ id: string }>(`
       SELECT a.id::TEXT AS id
         FROM economic_accounts a
@@ -77,18 +78,18 @@ export async function settleCorporationIncomeTax(
         (id, debtor_economic_id, creditor_economic_id, obligation_type, source_id,
          principal_due_units, due_game_day, priority_class, rule_version, status,
          created_game_day, nexus_type, authority_type, authority_id, base_reference, correlation_id)
-      VALUES ($1,$2,'ECON-EARTH-001','TAX',$3,$4,$5,10,'corporation-tax-v4','DUE',$6,
+      VALUES ($1,$2,'ECON-EARTH-001','TAX',$3,$4,$5,10,$8,'DUE',$6,
               'EARTH','EARTH','EARTH','positive_realized_daily_taxable_profit',$7)
-    `, [obligationId, corporation.economic_id, corporation.id, amount.toString(), day, day, correlationId]);
+    `, [obligationId, corporation.economic_id, corporation.id, amount.toString(), day, day, correlationId, corporation.tax_rule_version]);
     await tx.query(`
       INSERT INTO tax_obligations
         (id, taxpayer_economic_id, beneficiary_economic_id, tax_type, tax_base_units,
          amount_units, rule_version, game_day, status, due_game_day, nexus_type,
          authority_type, authority_id, base_reference, correlation_id)
-      VALUES ($1,$2,'ECON-EARTH-001','corporate_income',$3,$4,'corporation-tax-v4',$5,'DUE',$6,
+      VALUES ($1,$2,'ECON-EARTH-001','corporate_income',$3,$4,$8,$5,'DUE',$6,
               'EARTH','EARTH','EARTH','positive_realized_daily_taxable_profit',$7)
       ON CONFLICT (correlation_id) DO NOTHING
-    `, [obligationId, corporation.economic_id, taxableProfit.toString(), amount.toString(), assessedDay, day, correlationId]);
+    `, [obligationId, corporation.economic_id, taxableProfit.toString(), amount.toString(), assessedDay, day, correlationId, corporation.tax_rule_version]);
 
     const balance = BigInt(corporationAccount.balance_units);
     if (balance < amount) {

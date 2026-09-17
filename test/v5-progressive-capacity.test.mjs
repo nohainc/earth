@@ -209,6 +209,13 @@ test('daily tax settlement consumes the assessed-day Constitution market rate', 
   assert.match(settlement, /constitutionalRate\(rule\)/);
 });
 
+test('Corporation tax settlement selects canonical rates and rule provenance', async () => {
+  const settlement = await readFile(new URL('../cloudflare/src/corporation-tax-settlement-postgres.ts', import.meta.url), 'utf8');
+  assert.match(settlement, /COALESCE\(\(snap\.rules_json->>'CORPORATION\.TAX\.CORPORATE_RATE'/);
+  assert.match(settlement, /snap\.version_ids->>'CORPORATION\.TAX\.CORPORATE_RATE'/);
+  assert.match(settlement, /corporation\.tax_rule_version/);
+});
+
 test('V5 Constitution read model exposes resolved values, provenance, and history', async () => {
   const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
   const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
