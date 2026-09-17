@@ -43,29 +43,20 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       setState(() {
         _briefing = response['ok'] == true
             ? DailySummaryReport.fromJson(Map<String, dynamic>.from(response))
-            : DailySummaryReport.empty(gameDay: _currentGameDay);
+            : null;
         _briefingLoading = false;
       });
     } catch (_) {
       if (mounted) {
         setState(() {
-          // Keep the “what changed” surface useful during a transient API
-          // failure. The fallback is explicitly empty; it never invents
-          // financial or settlement facts, but still anchors the player to
-          // the current game day and explains why no delta is shown.
-          _briefing = DailySummaryReport.empty(gameDay: _currentGameDay);
+          // An empty report would look like a real zero-valued settlement.
+          // Keep the read model absent so the UI can state that it is
+          // unavailable and allow the full briefing to retry.
+          _briefing = null;
           _briefingLoading = false;
         });
       }
     }
-  }
-
-  int get _currentGameDay {
-    final raw = widget.state.clock['day'] ??
-        widget.state.world['game_day'] ??
-        widget.state.world['day'] ??
-        0;
-    return raw is num ? raw.toInt() : int.tryParse(raw.toString()) ?? 0;
   }
 
   @override

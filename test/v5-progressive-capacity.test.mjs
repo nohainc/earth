@@ -755,6 +755,13 @@ test('V5 operations UI has no dead legacy real-estate dialog path', async () => 
   );
 });
 
+test('V5 Daily Briefing does not replace unavailable data with zero settlement values', async () => {
+  const summary = await readFile(new URL('../flutter_client/lib/features/command_center/executive_command_summary.dart', import.meta.url), 'utf8');
+  assert.match(summary, /_briefing = null/);
+  assert.match(summary, /empty report would look like a real zero-valued settlement/);
+  assert.doesNotMatch(summary, /_briefing = DailySummaryReport\.empty/);
+});
+
 test('V5 corporation lifecycle supports name reuse, leadership delegation, and graceful dissolution', async () => {
   const founding = await readFile(new URL('../cloudflare/src/v5-founding-postgres.ts', import.meta.url), 'utf8');
   assert.match(founding, /lower\(name\) = lower\(\$1\) AND status = \\'ACTIVE\\'/);
