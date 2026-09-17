@@ -27,6 +27,7 @@ export const CONSTITUTIONAL_RULE_DEFINITIONS: readonly ConstitutionalRuleDefinit
   { code: 'CORPORATION.HOUSE_CAPACITY.BASE_RATE', articleCode: 'TERRITORY_CAPACITY', valueType: 'CREDIT_UNITS', authorityModel: 'EARTH_DEFAULT_CORPORATION_OVERRIDE', policyGroup: 'HOUSE_CAPACITY_POLICY' },
   { code: 'CORPORATION.ADMISSION_POLICY', articleCode: 'CORPORATION_GOVERNANCE', valueType: 'ENUM', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'ADMISSION_POLICY', allowedValues: ['OPEN', 'APPROVAL', 'INVITE_ONLY'] },
   { code: 'EARTH.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_HOUSE_INCOME_TAX' },
+  { code: 'EARTH.MARKET.TRANSACTION_TAX_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'EARTH_LOCKED', policyGroup: 'EARTH_MARKET_TAX' },
   { code: 'CORPORATION.HOUSE_INCOME_TAX', articleCode: 'TAXATION', valueType: 'PROGRESSIVE_SCHEDULE_REF', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION_HOUSE_INCOME_TAX' },
   { code: 'CORPORATION.TAX.INCOME_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION' },
   { code: 'CORPORATION.TAX.SALES_RATE', articleCode: 'TAXATION', valueType: 'RATE_BPS', authorityModel: 'CORPORATION_LOCAL', policyGroup: 'CORPORATION:TAXATION' },
