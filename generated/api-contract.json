@@ -1021,7 +1021,7 @@
       "owner": "InstitutionRoutes",
       "auth": "INSTITUTION_ROLE",
       "service": "setCorporationAdmissionPolicy",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -1053,7 +1053,7 @@
       "owner": "InstitutionRoutes",
       "auth": "INSTITUTION_ROLE",
       "service": "setCorporationTaxCharter",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -1261,7 +1261,7 @@
       "owner": "InstitutionRoutes",
       "auth": "INSTITUTION_ROLE",
       "service": "amendOrganizationCharter",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -1381,7 +1381,7 @@
       "owner": "GovernanceRoutes",
       "auth": "INSTITUTION_ROLE",
       "service": "setOrganizationVotingSettings",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",

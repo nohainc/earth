@@ -89,7 +89,10 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     if (input.subjectType === 'EARTH' && ['CORPORATION_HOUSE_RATE', 'CORPORATION_ADMISSION_POLICY'].includes(input.actionType) || input.subjectType === 'CORPORATION' && input.actionType === 'EARTH_CAPACITY_POLICY') throw new Error('Policy subject and action scope do not match');
     await canPropose(tx, input.humanId, input.subjectType, input.subjectId);
     const day = await currentDay(tx);
-    const action = actionFromPayload(input.actionType, input.payload);
+    const proposalInputPayload = input.actionType === 'CONSTITUTION_AMENDMENT' && Number(input.payload.effectiveFromGameDay ?? 0) <= day
+      ? { ...input.payload, effectiveFromGameDay: day + 1 }
+      : input.payload;
+    const action = actionFromPayload(input.actionType, proposalInputPayload);
     validateV5GovernanceAction(action, day);
     if (input.actionType === 'CORPORATION_HOUSE_RATE' || input.actionType === 'CORPORATION_ADMISSION_POLICY') {
       if (!input.subjectId || action.corporationId !== input.subjectId) throw new Error('Corporation action must target its proposal Corporation');
@@ -120,7 +123,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     const electorateSize = Number(electorate.rows[0]?.count ?? 0);
     const governanceRuleSnapshot = { ...DEFAULT_V5_GOVERNANCE_RULE };
     const baseVersionSnapshot: Record<string, unknown> = { capturedAtGameDay: day };
-    let proposalPayload = input.payload;
+    let proposalPayload = proposalInputPayload;
     if (input.actionType === 'CONSTITUTION_AMENDMENT') {
       const authorityType = input.subjectType;
       const authorityId = input.subjectType === 'EARTH' ? 'EARTH' : String(input.subjectId);

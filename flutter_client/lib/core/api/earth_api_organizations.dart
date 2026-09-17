@@ -71,14 +71,7 @@ extension EarthApiOrganizations on EarthApi {
   Future<Map<String, dynamic>> amendOrganizationCharter(
       {required String organizationId,
       required Map<String, dynamic> charter}) async {
-    final response = await _request(
-        '/api/organizations/$organizationId/charter/amend',
-        method: 'POST',
-        body: {
-          'charter': charter,
-          'correlationId': newClientCorrelationId('AMEND-CHARTER'),
-        });
-    return Map<String, dynamic>.from(response as Map);
+    throw StateError('Direct Charter amendment is retired; use a V5 Constitution amendment proposal.');
   }
 
   Future<Map<String, dynamic>> getOrganizationVotingMethod(
@@ -93,16 +86,7 @@ extension EarthApiOrganizations on EarthApi {
       required String votingMethod,
       int voiceCycleDays = 7,
       int voicePerCycle = 100}) async {
-    final response = await _request(
-        '/api/governance/v4/organizations/$organizationId/method',
-        method: 'POST',
-        body: {
-          'votingMethod': votingMethod,
-          'voiceCycleDays': voiceCycleDays,
-          'voicePerCycle': voicePerCycle,
-          'correlationId': newClientCorrelationId('SET-VOTING-METHOD'),
-        });
-    return Map<String, dynamic>.from(response as Map);
+    throw StateError('Direct voting-setting amendment is retired; use a V5 Constitution amendment proposal.');
   }
 
   Future<Map<String, dynamic>> listEarthPrograms() async {

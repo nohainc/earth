@@ -8,6 +8,25 @@ extension EarthApiGovernance on EarthApi {
         : <String, dynamic>{'ok': false, 'error': 'V5 proposals unavailable'};
   }
 
+  Future<Map<String, dynamic>> proposeV5ConstitutionAmendment({
+    required String subjectType,
+    String? subjectId,
+    required String title,
+    required String body,
+    required List<Map<String, dynamic>> changes,
+  }) async {
+    final response = await _request('/api/governance/v5/proposals', method: 'POST', body: {
+      'subjectType': subjectType,
+      'subjectId': subjectId,
+      'actionType': 'CONSTITUTION_AMENDMENT',
+      'payload': {'effectiveFromGameDay': 1, 'changes': changes},
+      'title': title,
+      'body': body,
+      'correlationId': newClientCorrelationId('V5-CONSTITUTION-AMENDMENT'),
+    });
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<Map<String, dynamic>> voteV5Proposal(
       String proposalId, String choice) async {
     final response = await _request(

@@ -106,8 +106,12 @@ extension EarthApiInstitutions on EarthApi {
     required String corporationId,
     required String policy,
   }) async {
-    await _request('/api/corporations/$corporationId/admission-policy',
-        method: 'POST', body: {'policy': policy});
+    await proposeV5ConstitutionAmendment(
+      subjectType: 'CORPORATION', subjectId: corporationId,
+      title: 'Change Corporation admission policy',
+      body: 'Propose a constitutional change to the Corporation admission policy.',
+      changes: [{'ruleCode': 'CORPORATION.ADMISSION_POLICY', 'value': policy.toUpperCase()}],
+    );
     return world();
   }
 
@@ -248,16 +252,17 @@ extension EarthApiInstitutions on EarthApi {
     int corporateTaxBps = 0,
     int propertyTaxBps = 0,
   }) async {
-    await _request('/api/corporations/$corporationId/tax-charter',
-        method: 'POST',
-        body: {
-          'incomeTaxBps': incomeTaxBps,
-          'salesTaxBps': salesTaxBps,
-          'corporateTaxBps': corporateTaxBps,
-          'propertyTaxBps': propertyTaxBps,
-          'correlationId':
-              newClientCorrelationId('corp-tax-charter-$corporationId'),
-        });
+    await proposeV5ConstitutionAmendment(
+      subjectType: 'CORPORATION', subjectId: corporationId,
+      title: 'Change Corporation tax policy',
+      body: 'Propose a constitutional change to the Corporation tax policy.',
+      changes: [
+        {'ruleCode': 'CORPORATION.TAX.INCOME_RATE', 'value': incomeTaxBps},
+        {'ruleCode': 'CORPORATION.TAX.SALES_RATE', 'value': salesTaxBps},
+        {'ruleCode': 'CORPORATION.TAX.CORPORATE_RATE', 'value': corporateTaxBps},
+        {'ruleCode': 'CORPORATION.TAX.PROPERTY_RATE', 'value': propertyTaxBps},
+      ],
+    );
     return world();
   }
 

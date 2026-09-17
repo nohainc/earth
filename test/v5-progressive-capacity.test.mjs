@@ -161,6 +161,7 @@ test('V5 constitutional amendments are typed, policy-group scoped change sets', 
   assert.match(service, /groups\.size !== 1/);
   assert.match(service, /status = 'RETIRED'/);
   assert.match(service, /CORPORATION\.ADMISSION_POLICY/);
+  assert.match(service, /proposalInputPayload/);
   assert.match(migration, /CREATE TABLE constitutional_change_sets_v5/);
 });
 
@@ -187,10 +188,13 @@ test('legacy player-facing constitutional mutation routes are retired', async ()
   const organizations = await readFile(new URL('../cloudflare/src/organizations-routes.ts', import.meta.url), 'utf8');
   const governance = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
   const institutions = await readFile(new URL('../cloudflare/src/institutions-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
   assert.match(organizations, /Direct Charter mutation is retired/);
   assert.match(governance, /Direct voting-setting mutation is retired/);
   assert.match(institutions, /Direct Corporation tax mutation is retired/);
   assert.match(institutions, /Direct admission-policy mutation is retired/);
+  assert.match(registry, /charter\/amend[^\n]+status: 'RETIRED'/);
+  assert.match(registry, /tax-charter[^\n]+status: 'RETIRED'/);
 });
 
 test('V5 resolution cases preserve Houses and release only selected building capacity', async () => {

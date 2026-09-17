@@ -17,10 +17,11 @@ export async function settleCorporationIncomeTax(
   if (assessedDay < 1) return { ok: true, day, assessedDay, assessed: 0, paid: 0, arrears: 0 };
 
   const corporations = (await tx.query<CorporationTaxRow>(`
-    SELECT c.id, oe.economic_id, COALESCE((c.tax_charter->>'corporateTaxBps')::INTEGER, 0) AS corporate_tax_bps,
+    SELECT c.id, oe.economic_id, COALESCE((snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER, (c.tax_charter->>'corporateTaxBps')::INTEGER, 0) AS corporate_tax_bps,
            c.tax_charter_version
       FROM corporations c
       JOIN owner_registry oe ON oe.id = c.id AND oe.owner_type = 'CORPORATION'
+      LEFT JOIN resolved_constitution_snapshots_v5 snap ON snap.authority_type = 'CORPORATION' AND snap.authority_id = c.id AND snap.game_day = $1
      WHERE c.status = 'ACTIVE'
        AND COALESCE(c.tax_charter_updated_game_day, 0) <= $1
        AND COALESCE((c.tax_charter->>'corporateTaxBps')::INTEGER, 0) > 0
