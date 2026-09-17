@@ -8,6 +8,17 @@ import { validateProposalActionSnapshot } from './proposal-actions.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
+/** PostgreSQL BIGINT values must cross the API boundary as decimal strings. */
+function toJsonSafe<T>(value: T): T {
+  if (typeof value === 'bigint') return value.toString() as T;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map((item) => toJsonSafe(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toJsonSafe(item)])) as T;
+  }
+  return value;
+}
+
 function currentDay(tx: PostgresRepository): Promise<number> {
   return tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'").then((result) => Number(result.rows[0]?.game_day ?? 1));
 }
@@ -117,13 +128,13 @@ export async function listV5GovernanceProposals(repository: PostgresRepository, 
               WHERE house_id = (SELECT house_id FROM humans WHERE id = $1)
                 AND status = 'ACTIVE')))
      ORDER BY p.status ASC, p.voting_end_game_day ASC, p.id DESC`, [humanId]);
-  return { ok: true, proposals: result.rows, generatedFrom: 'postgres-canonical-facts-v5' };
+  return { ok: true, proposals: toJsonSafe(result.rows), generatedFrom: 'postgres-canonical-facts-v5' };
 }
 
 export async function createV5GovernanceProposal(repository: PostgresRepository, input: { humanId: string; subjectType: 'EARTH' | 'CORPORATION'; subjectId: string | null; actionType: ProposalAction['actionType']; payload: Record<string, unknown>; title: string; body?: string; correlationId: string }) {
   return repository.transaction(async (tx) => {
     const prior = (await tx.query('SELECT * FROM v5_governance_proposals WHERE correlation_id = $1', [input.correlationId])).rows[0];
-    if (prior) return { ok: true, alreadyProcessed: true, proposal: prior, correlationId: input.correlationId };
+    if (prior) return { ok: true, alreadyProcessed: true, proposal: toJsonSafe(prior), correlationId: input.correlationId };
     // Specialized V5 actions were the bootstrap bridge for capacity and
     // admission. New gameplay proposals must use one typed Constitution
     // change-set lifecycle; the legacy activation branches below remain only
@@ -198,7 +209,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$7 + $13,$8,$9,$10,$11,$12,$7,$14,$15::JSONB,$16::JSONB,$17)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, governanceRuleSnapshot.votingPeriodDays, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
     if (input.actionType === 'CONSTITUTION_AMENDMENT') await tx.query(`INSERT INTO constitutional_change_sets_v5 (proposal_id, authority_type, authority_id, policy_group, changes, base_version_snapshot) VALUES ($1,$2,$3,$4,$5::JSONB,$6::JSONB)`, [proposalId, input.subjectType, input.subjectType === 'EARTH' ? 'EARTH' : input.subjectId, policyGroup, JSON.stringify((proposalPayload as Record<string, unknown>).changes), JSON.stringify(baseVersionSnapshot)]);
     await createGameEvent(tx, { id: `V5-GOV-CREATED-${proposalId}`, category: 'GOVERNANCE', eventType: 'V5_POLICY_PROPOSAL_CREATED', gameDay: day, actorHumanId: input.humanId, subjectType: input.subjectType, subjectId: input.subjectId ?? 'EARTH', title: input.title.trim(), details: { proposalId, actionType: input.actionType, effectiveFromGameDay: effective, body: input.body?.trim() ?? '' }, correlationId: input.correlationId });
-    return { ok: true, proposal: (await tx.query('SELECT * FROM v5_governance_proposals WHERE id = $1', [proposalId])).rows[0], correlationId: input.correlationId };
+    return { ok: true, proposal: toJsonSafe((await tx.query('SELECT * FROM v5_governance_proposals WHERE id = $1', [proposalId])).rows[0]), correlationId: input.correlationId };
   });
 }
 
@@ -221,7 +232,7 @@ export async function resolveV5GovernanceProposal(repository: PostgresRepository
   return repository.transaction(async (tx) => {
     const proposal = (await tx.query<any>('SELECT * FROM v5_governance_proposals WHERE id = $1 FOR UPDATE', [proposalId])).rows[0];
     if (!proposal) throw new Error('V5 governance proposal not found');
-    if (proposal.status !== 'VOTING') return { ok: true, alreadyProcessed: true, proposal };
+    if (proposal.status !== 'VOTING') return { ok: true, alreadyProcessed: true, proposal: toJsonSafe(proposal) };
     const day = await currentDay(tx);
     if (day <= Number(proposal.voting_end_game_day)) throw new Error('V5 governance voting period is still open');
     const support = Number(proposal.support_votes); const oppose = Number(proposal.oppose_votes); const abstain = Number(proposal.abstain_votes);
