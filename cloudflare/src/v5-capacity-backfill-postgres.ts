@@ -1,24 +1,27 @@
 import type { PostgresRepository } from './repository.ts';
+import { getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 
 // @mutation-boundary deterministic-settlement
 // runId + sourceGameDay provide the resumable idempotency boundary.
 
 type BackfillPolicy = {
   standardCapacity: bigint;
-  version: number;
+  houseScheduleId: string;
+  rulesVersion: string;
 };
 
 async function policyForDay(repository: PostgresRepository, gameDay: number): Promise<BackfillPolicy> {
-  const row = (await repository.query<{ standard_territory_capacity_units: string; version: number }>(
-    `SELECT standard_territory_capacity_units::TEXT, version
-       FROM v5_capacity_policy_versions
-      WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
-        AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
-      ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`,
-    [gameDay],
-  )).rows[0];
-  if (!row) throw new Error('No active V5 capacity policy exists for the backfill day');
-  return { standardCapacity: BigInt(row.standard_territory_capacity_units), version: Number(row.version) };
+  const constitution = await getResolvedConstitutionForDay(repository, { gameDay });
+  const standard = constitution.rules['EARTH.CAPACITY.STANDARD'];
+  const schedule = constitution.rules['EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'];
+  if (standard === undefined || schedule === undefined) {
+    throw new Error('Canonical Earth capacity Constitution is unavailable for the backfill day');
+  }
+  return {
+    standardCapacity: BigInt(String(standard)),
+    houseScheduleId: String(schedule),
+    rulesVersion: constitution.snapshotId ?? constitution.versionIds['EARTH.CAPACITY.STANDARD'] ?? 'constitution-v5',
+  };
 }
 
 function requiredUnits(occupied: bigint, standardCapacity: bigint): bigint {
@@ -88,6 +91,12 @@ export async function backfillV5CapacityBatch(
       const publicUnits = BigInt(publicBuildings?.units ?? 0);
       const residentialUnits = BigInt(houses.length);
       const occupied = residentialUnits + privateUnits + publicUnits;
+      const corporationConstitution = await getResolvedConstitutionForDay(tx, {
+        corporationId: corporation.id,
+        gameDay: input.sourceGameDay,
+      });
+      const base = corporationConstitution.rules['CORPORATION.HOUSE_CAPACITY.BASE_RATE'];
+      if (base === undefined) throw new Error(`Canonical Corporation capacity Constitution is unavailable for ${corporation.id}`);
       await tx.query(
         `INSERT INTO corporation_capacity_state_v5
           (corporation_id, game_day, residential_units_used, private_building_units_used,
@@ -103,30 +112,21 @@ export async function backfillV5CapacityBatch(
            required_territory_units = EXCLUDED.required_territory_units,
            rules_version = EXCLUDED.rules_version,
            updated_at = CURRENT_TIMESTAMP`,
-        [corporation.id, input.sourceGameDay, residentialUnits.toString(), privateUnits.toString(), publicUnits.toString(), occupied.toString(), policy.standardCapacity.toString(), requiredUnits(occupied, policy.standardCapacity).toString(), `v5-capacity-policy:${policy.version}`],
+        [corporation.id, input.sourceGameDay, residentialUnits.toString(), privateUnits.toString(), publicUnits.toString(), occupied.toString(), policy.standardCapacity.toString(), requiredUnits(occupied, policy.standardCapacity).toString(), policy.rulesVersion],
       );
       for (const house of houses) {
         const buildingUnits = BigInt(house.building_units);
-        const base = (await tx.query<{ rate: string }>(
-          `SELECT house_base_capacity_rate_units::TEXT AS rate
-             FROM corporation_capacity_policy_versions
-            WHERE corporation_id = $1 AND status = 'ACTIVE'
-              AND effective_from_game_day <= $2
-              AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)
-            ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`,
-          [corporation.id, input.sourceGameDay],
-        )).rows[0]?.rate ?? '0';
         await tx.query(
           `INSERT INTO house_capacity_statements_v5
             (house_id, corporation_id, game_day, residential_units, building_units, total_units,
              base_rate_units, progressive_schedule_id, assessed_rent_units, paid_rent_units,
              arrears_units, delinquency_status, rules_version)
-           VALUES ($1,$2,$3,1,$4,$5,$6,NULL,0,0,0,'CURRENT',$7)
+           VALUES ($1,$2,$3,1,$4,$5,$6,$7,0,0,0,'CURRENT',$8)
            ON CONFLICT (house_id, game_day) DO UPDATE SET
              corporation_id = EXCLUDED.corporation_id, building_units = EXCLUDED.building_units,
              total_units = EXCLUDED.total_units, base_rate_units = EXCLUDED.base_rate_units,
              rules_version = EXCLUDED.rules_version`,
-          [house.house_id, corporation.id, input.sourceGameDay, buildingUnits.toString(), (1n + buildingUnits).toString(), base, `v5-capacity-policy:${policy.version}`],
+          [house.house_id, corporation.id, input.sourceGameDay, buildingUnits.toString(), (1n + buildingUnits).toString(), String(base), policy.houseScheduleId, policy.rulesVersion],
         );
       }
       housesProcessed += houses.length;
