@@ -56,7 +56,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM v5_tax_reconciliation_runs
      WHERE assessed_game_day = $1 AND status = 'COMPLETED'
-       AND mismatches = 0 AND missing_canonical = 0`, [Math.max(1, gameDay - 1)]),
+       AND mismatches = 0 AND missing_canonical = 0 AND missing_legacy = 0`, [Math.max(1, gameDay - 1)]),
   ]);
   const activeCorporations = Number((await repository.query<ReadinessRow>(
     "SELECT COUNT(*)::TEXT AS count FROM corporations WHERE status = 'ACTIVE'",

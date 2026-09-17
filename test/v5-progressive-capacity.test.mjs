@@ -403,6 +403,16 @@ test('V5 tax statements consume assessed-day Constitution snapshots with provena
   assert.match(statement, /constitutionalTaxProvenance/);
 });
 
+test('V5 tax reconciliation records missing rules in both directions', async () => {
+  const reconciliation = await readFile(new URL('../cloudflare/src/v5-tax-reconciliation-postgres.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../db/migrations/111_v5_tax_reconciliation_bidirectional.sql', import.meta.url), 'utf8');
+  assert.match(reconciliation, /missingLegacy/);
+  assert.match(reconciliation, /canonical:\$\{code\}/);
+  assert.match(reconciliation, /legacyRateBps === null/);
+  assert.match(migration, /ALTER COLUMN legacy_rate_bps DROP NOT NULL/);
+  assert.match(migration, /MISSING_LEGACY/);
+});
+
 test('V5 constitutional version ranges are protected against overlap in PostgreSQL', async () => {
   const migration = await readFile(new URL('../db/migrations/109_constitution_version_overlap_guard.sql', import.meta.url), 'utf8');
   assert.match(migration, /earth_guard_constitutional_version_overlap/);

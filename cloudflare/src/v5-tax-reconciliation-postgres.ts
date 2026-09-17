@@ -30,7 +30,7 @@ function rate(value: unknown): number | null {
 // @mutation-boundary deterministic-settlement
 export async function reconcileV5TaxRulesInTransaction(tx: PostgresRepository, day: number): Promise<Record<string, unknown>> {
   const assessedDay = day - 1;
-  if (assessedDay < 1) return { ok: true, day, assessedDay, rulesCompared: 0, matches: 0, mismatches: 0, missingCanonical: 0 };
+  if (assessedDay < 1) return { ok: true, day, assessedDay, rulesCompared: 0, matches: 0, mismatches: 0, missingCanonical: 0, missingLegacy: 0 };
   const runId = `V5-TAX-RECON-D${assessedDay}`;
   const [legacy, earthSnapshot, corporations] = await Promise.all([
     tx.query<EarthLegacyTaxRule>(`SELECT id, tax_rule_id, rate_bps
@@ -53,13 +53,14 @@ export async function reconcileV5TaxRulesInTransaction(tx: PostgresRepository, d
   await tx.query(`INSERT INTO v5_tax_reconciliation_runs (id, assessed_game_day, status, completed_at)
     VALUES ($1, $2, 'COMPLETED', CURRENT_TIMESTAMP)
     ON CONFLICT (assessed_game_day) DO UPDATE SET status = 'COMPLETED', error_message = NULL, completed_at = CURRENT_TIMESTAMP`, [runId, assessedDay]);
-  let rulesCompared = 0; let matches = 0; let mismatches = 0; let missingCanonical = 0;
-  const record = async (input: { authorityType: 'EARTH' | 'CORPORATION'; authorityId: string; legacyRuleId: string; canonicalRuleCode: string; legacyRateBps: number; canonicalRateBps: number | null; legacyVersionId?: string | null; canonicalVersionId?: string | null }) => {
-    const result = input.canonicalRateBps === null ? 'MISSING_CANONICAL' : input.canonicalRateBps === input.legacyRateBps ? 'MATCH' : 'MISMATCH';
+  let rulesCompared = 0; let matches = 0; let mismatches = 0; let missingCanonical = 0; let missingLegacy = 0;
+  const record = async (input: { authorityType: 'EARTH' | 'CORPORATION'; authorityId: string; legacyRuleId: string; canonicalRuleCode: string; legacyRateBps: number | null; canonicalRateBps: number | null; legacyVersionId?: string | null; canonicalVersionId?: string | null }) => {
+    const result = input.canonicalRateBps === null ? 'MISSING_CANONICAL' : input.legacyRateBps === null ? 'MISSING_LEGACY' : input.canonicalRateBps === input.legacyRateBps ? 'MATCH' : 'MISMATCH';
     rulesCompared += 1;
     if (result === 'MATCH') matches += 1;
     if (result === 'MISMATCH') mismatches += 1;
     if (result === 'MISSING_CANONICAL') missingCanonical += 1;
+    if (result === 'MISSING_LEGACY') missingLegacy += 1;
     await tx.query(`INSERT INTO v5_tax_reconciliation_items
       (id, run_id, assessed_game_day, authority_type, authority_id, legacy_rule_id,
        canonical_rule_code, legacy_rate_bps, canonical_rate_bps, legacy_version_id,
@@ -71,10 +72,18 @@ export async function reconcileV5TaxRulesInTransaction(tx: PostgresRepository, d
         result = EXCLUDED.result`, [`${runId}:${input.authorityType}:${input.authorityId}:${input.legacyRuleId}`, runId, assessedDay, input.authorityType, input.authorityId, input.legacyRuleId, input.canonicalRuleCode, input.legacyRateBps, input.canonicalRateBps, input.legacyVersionId ?? null, input.canonicalVersionId ?? null, result]);
   };
   const earth = earthSnapshot.rows[0];
+  const earthLegacyCodes = new Set<string>();
   for (const rule of legacy.rows) {
     const code = earthRuleCodes[rule.tax_rule_id];
     if (!code) continue;
+    earthLegacyCodes.add(code);
     await record({ authorityType: 'EARTH', authorityId: 'EARTH', legacyRuleId: rule.id, canonicalRuleCode: code, legacyRateBps: Number(rule.rate_bps), canonicalRateBps: rate(earth?.rules_json?.[code]), legacyVersionId: rule.id, canonicalVersionId: String(earth?.version_ids?.[code] ?? '') || null });
+  }
+  for (const code of new Set(Object.values(earthRuleCodes))) {
+    const canonicalRateBps = rate(earth?.rules_json?.[code]);
+    if (canonicalRateBps !== null && !earthLegacyCodes.has(code)) {
+      await record({ authorityType: 'EARTH', authorityId: 'EARTH', legacyRuleId: `canonical:${code}`, canonicalRuleCode: code, legacyRateBps: null, canonicalRateBps, canonicalVersionId: String(earth?.version_ids?.[code] ?? '') || null });
+    }
   }
   const corporationTaxFields: Array<[string, string]> = [
     ['incomeTaxBps', 'CORPORATION.TAX.INCOME_RATE'],
@@ -85,15 +94,16 @@ export async function reconcileV5TaxRulesInTransaction(tx: PostgresRepository, d
   for (const corporation of corporations.rows) {
     for (const [legacyField, code] of corporationTaxFields) {
       const legacyRateBps = rate(corporation.tax_charter?.[legacyField]);
-      if (legacyRateBps === null) continue;
-      await record({ authorityType: 'CORPORATION', authorityId: corporation.corporation_id, legacyRuleId: `tax_charter:${corporation.corporation_id}:${legacyField}`, canonicalRuleCode: code, legacyRateBps, canonicalRateBps: rate(corporation.rules_json?.[code]), legacyVersionId: `tax_charter-v${corporation.corporation_id}`, canonicalVersionId: String(corporation.version_ids?.[code] ?? '') || null });
+      const canonicalRateBps = rate(corporation.rules_json?.[code]);
+      if (legacyRateBps === null && canonicalRateBps === null) continue;
+      await record({ authorityType: 'CORPORATION', authorityId: corporation.corporation_id, legacyRuleId: `tax_charter:${corporation.corporation_id}:${legacyField}`, canonicalRuleCode: code, legacyRateBps, canonicalRateBps, legacyVersionId: legacyRateBps === null ? null : `tax_charter-v${corporation.corporation_id}`, canonicalVersionId: String(corporation.version_ids?.[code] ?? '') || null });
     }
   }
   await tx.query(`UPDATE v5_tax_reconciliation_runs
-     SET rules_compared = $2, matches = $3, mismatches = $4, missing_canonical = $5,
+     SET rules_compared = $2, matches = $3, mismatches = $4, missing_canonical = $5, missing_legacy = $6,
          status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP
-   WHERE id = $1`, [runId, rulesCompared, matches, mismatches, missingCanonical]);
-  return { ok: true, day, assessedDay, rulesCompared, matches, mismatches, missingCanonical, runId };
+   WHERE id = $1`, [runId, rulesCompared, matches, mismatches, missingCanonical, missingLegacy]);
+  return { ok: true, day, assessedDay, rulesCompared, matches, mismatches, missingCanonical, missingLegacy, runId };
 }
 
 /** Read-only operator report for one assessed game day. */
