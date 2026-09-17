@@ -261,7 +261,7 @@ export async function handleFinanceRoutes(
   }
   if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [account, state, buildings, context, latestMaintenance, arrears, taxRules, taxObligations, bankDeposits, transactions, v5Capacity, v5Obligations] = await Promise.all([
+      const [account, state, buildings, context, latestMaintenance, arrears, taxRules, taxObligations, bankDeposits, transactions, v5Capacity, v5Obligations, canonicalTaxStatement] = await Promise.all([
         repository.query(`SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance_units,
                                  'CREDIT' AS currency,
                                  a.account_type
@@ -295,6 +295,7 @@ export async function handleFinanceRoutes(
                                  o.status, o.schedule_id, o.financial_obligation_id
                             FROM v5_capacity_obligations o
                            WHERE o.house_id = $1 ORDER BY o.game_day DESC, o.created_at DESC LIMIT 100`, [viewer.house_id]).catch(() => ({ rows: [] })),
+        getTaxStatement(repository, viewer.id).catch(() => null),
       ]);
       const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
       const resident = context.rows[0];
@@ -311,7 +312,13 @@ export async function handleFinanceRoutes(
           credits: stateRow.protected_credits == null ? null : Number(stateRow.protected_credits),
         },
         lifeMaintenance: { lastSettlement: latestMaintenance.rows[0] ?? null, unpaidTotal: Number(arrears.rows[0]?.total ?? 0), corporationId: resident?.corporation_id ?? null },
-        taxes: { rules: taxRules.rows, obligations: taxObligations.rows },
+        taxes: {
+          rules: taxRules.rows,
+          constitutionalRules: canonicalTaxStatement?.constitutionalTaxRules ?? {},
+          constitutionalVersionIds: canonicalTaxStatement?.constitutionalTaxVersionIds ?? {},
+          obligations: taxObligations.rows,
+          generatedFrom: canonicalTaxStatement ? 'postgres-constitutional-tax-v5' : 'legacy-tax-rule-versions-bridge',
+        },
         capacity: { summary: v5Capacity, obligations: v5Obligations.rows },
         liquidity: {
           walletUnits: walletUnits.toString(),

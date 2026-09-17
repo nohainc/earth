@@ -232,6 +232,9 @@ test('House and Corporation fiscal read models expose canonical tax rules and pr
   assert.match(corporation, /taxRulesSource/);
   assert.match(corporation, /constitution-snapshot-v5/);
   assert.match(corporation, /constitutionalTaxVersionIds/);
+  const financeRoutes = await readFile(new URL('../cloudflare/src/finance-routes.ts', import.meta.url), 'utf8');
+  assert.match(financeRoutes, /canonicalTaxStatement/);
+  assert.match(financeRoutes, /postgres-constitutional-tax-v5/);
 });
 
 test('Corporation tax settlement selects canonical rates and rule provenance', async () => {
