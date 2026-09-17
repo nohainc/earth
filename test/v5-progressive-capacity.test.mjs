@@ -244,6 +244,10 @@ test('V5 exposes an Earth-wide capacity read model alongside House and Corporati
   assert.match(capacity, /getV5EarthCapacity/);
   assert.match(capacity, /independentOccupiedUnits/);
   assert.match(capacity, /requiredTerritoryUnits/);
+  assert.match(capacity, /houseCapacityRevenuePaidUnits/);
+  assert.match(capacity, /earthCapacityExpensePaidUnits/);
+  assert.match(capacity, /landMarginUnits/);
+  assert.match(capacity, /v5_capacity_delinquency_state/);
   assert.match(routes, /\/api\/v5\/capacity/);
   assert.match(registry, /getV5EarthCapacity/);
 });

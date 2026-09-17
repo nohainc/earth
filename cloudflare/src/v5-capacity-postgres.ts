@@ -65,9 +65,58 @@ export async function getV5CorporationCapacity(repository: PostgresRepository, c
       total_occupied_capacity_units::TEXT AS total
     FROM v5_corporation_settlement_profiles WHERE corporation_id = $1`, [corporationId])).rows[0];
   if (!profile) throw new Error('Corporation settlement profile not found');
+  const [houseRent, earthRent, delinquency] = await Promise.all([
+    repository.query<{ assessed: string; paid: string; arrears: string; game_day: string }>(`SELECT COALESCE(SUM(assessed_units), 0)::TEXT AS assessed,
+              COALESCE(SUM(paid_units), 0)::TEXT AS paid,
+              COALESCE(SUM(assessed_units - paid_units), 0)::TEXT AS arrears,
+              COALESCE(MAX(game_day), 0)::TEXT AS game_day
+         FROM v5_capacity_obligations
+        WHERE capacity_level = 'HOUSE' AND corporation_id = $1`, [corporationId]),
+    repository.query<{ assessed: string; paid: string; arrears: string; game_day: string }>(`SELECT COALESCE(SUM(assessed_units), 0)::TEXT AS assessed,
+              COALESCE(SUM(paid_units), 0)::TEXT AS paid,
+              COALESCE(SUM(assessed_units - paid_units), 0)::TEXT AS arrears,
+              COALESCE(MAX(game_day), 0)::TEXT AS game_day
+         FROM v5_capacity_obligations
+        WHERE capacity_level = 'CORPORATION' AND corporation_id = $1`, [corporationId]),
+    repository.query<{ status: string; arrears_since_game_day: string | null; consecutive_missed_days: string; last_assessed_game_day: string | null }>(`SELECT status, arrears_since_game_day::TEXT, consecutive_missed_days::TEXT, last_assessed_game_day::TEXT
+         FROM v5_capacity_delinquency_state
+        WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [corporationId]),
+  ]);
+  const houseRentRow = houseRent.rows[0] ?? { assessed: '0', paid: '0', arrears: '0', game_day: '0' };
+  const earthRentRow = earthRent.rows[0] ?? { assessed: '0', paid: '0', arrears: '0', game_day: '0' };
+  const housePaid = BigInt(houseRentRow.paid);
+  const earthPaid = BigInt(earthRentRow.paid);
   const total = BigInt(profile.total);
   const required = total === 0n ? 0n : (total + standardTerritoryCapacity - 1n) / standardTerritoryCapacity;
-  return { corporationId, memberCount: BigInt(profile.member_count), residentialUnits: BigInt(profile.residential), privateBuildingUnits: BigInt(profile.productive), publicBuildingUnits: BigInt(profile.public_units), totalOccupiedUnits: total, standardTerritoryCapacity, requiredTerritoryUnits: required, utilizationNumerator: total, utilizationDenominator: standardTerritoryCapacity * required, generatedFrom: 'postgres-v5-structural-settlement-profile' };
+  return {
+    corporationId,
+    memberCount: BigInt(profile.member_count),
+    residentialUnits: BigInt(profile.residential),
+    privateBuildingUnits: BigInt(profile.productive),
+    publicBuildingUnits: BigInt(profile.public_units),
+    totalOccupiedUnits: total,
+    standardTerritoryCapacity,
+    requiredTerritoryUnits: required,
+    utilizationNumerator: total,
+    utilizationDenominator: standardTerritoryCapacity * required,
+    fiscal: {
+      houseCapacityRevenueAssessedUnits: houseRentRow.assessed,
+      houseCapacityRevenuePaidUnits: houseRentRow.paid,
+      houseCapacityArrearsUnits: houseRentRow.arrears,
+      earthCapacityExpenseAssessedUnits: earthRentRow.assessed,
+      earthCapacityExpensePaidUnits: earthRentRow.paid,
+      earthCapacityArrearsUnits: earthRentRow.arrears,
+      landMarginUnits: (housePaid - earthPaid).toString(),
+      assessedGameDay: Math.max(Number(houseRentRow.game_day), Number(earthRentRow.game_day)),
+    },
+    delinquency: delinquency.rows[0] ?? {
+      status: 'CURRENT',
+      arrears_since_game_day: null,
+      consecutive_missed_days: '0',
+      last_assessed_game_day: null,
+    },
+    generatedFrom: 'postgres-v5-structural-settlement-profile',
+  };
 }
 
 /** Returns the Earth-wide pooled-capacity read model, including independent Houses. */
@@ -82,7 +131,7 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
          JOIN houses h ON h.id = p.house_id AND h.status = 'ACTIVE'`,
     ),
     repository.query<{ corporation_count: string; occupied_units: string; required_units: string }>(
-      `SELECT COUNT(*)::TEXT AS corporation_count,
+  `SELECT COUNT(*)::TEXT AS corporation_count,
               COALESCE(SUM(total_occupied_capacity_units), 0)::TEXT AS occupied_units,
               COALESCE(SUM(required_territory_units), 0)::TEXT AS required_units
          FROM corporation_capacity_state_v5 s
