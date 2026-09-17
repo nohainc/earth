@@ -481,6 +481,17 @@ test('legacy player-facing constitutional mutation routes are retired', async ()
   assert.match(governance, /Legacy tax governance is retired/);
 });
 
+test('legacy governance rules read path is Constitution-backed', async () => {
+  const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  const start = route.indexOf("url.pathname === '/api/governance/rules' && request.method === 'GET'");
+  const end = route.indexOf("url.pathname === '/api/governance/v4/proposals'", start);
+  assert.notEqual(start, -1);
+  assert.match(route.slice(start, end), /getConstitutionReadModel/);
+  assert.doesNotMatch(route.slice(start, end), /FROM governance_rules/);
+  assert.match(registry, /method: 'GET', path: '\/api\/governance\/rules'.*service: 'getConstitutionReadModel'/);
+});
+
 test('V5 Corporation fiscal read model does not expose legacy tax-rule authority', async () => {
   const fiscal = await readFile(new URL('../cloudflare/src/corporation-fiscal-postgres.ts', import.meta.url), 'utf8');
   assert.match(fiscal, /canonicalTaxSnapshotAvailable/);

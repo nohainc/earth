@@ -102,11 +102,12 @@ export async function handleGovernanceRoutes(
   }
 
   if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => repository.query(
-      "SELECT id, institution_id, name, category, value_json, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days, version, status, effective_from_game_day, effective_to_game_day FROM governance_rules WHERE status = 'active' ORDER BY institution_id, category, version DESC",
-    ));
+    const result = await withRepository(env, async (repository) => {
+      const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
+      return getConstitutionReadModel(repository, { gameDay: Number(world?.game_day ?? 1) });
+    });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-    return Response.json({ rules: result.rows, persistence: 'planetscale-postgres' });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
   if (url.pathname === '/api/governance/v4/proposals' && request.method === 'POST') {

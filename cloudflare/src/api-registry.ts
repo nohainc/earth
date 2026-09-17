@@ -216,6 +216,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'POST', path: '/api/governance/v4/proposals/{id}/vote', owner: 'GovernanceRoutes', auth: 'HUMAN_SELF', service: 'castGovernanceVoteV4', status: 'ACTIVE' },
   { method: 'POST', path: '/api/governance/v4/proposals/{id}/resolve', owner: 'GovernanceRoutes', auth: 'HUMAN_SELF', service: 'resolveGovernanceProposalV4', status: 'ACTIVE' },
   { method: 'POST', path: '/api/governance/rules', owner: 'GovernanceRoutes', auth: 'INSTITUTION_ROLE', service: 'amendRules', status: 'RETIRED' },
+  { method: 'GET', path: '/api/governance/rules', owner: 'GovernanceRoutes', auth: 'AUTHENTICATED', service: 'getConstitutionReadModel', status: 'ACTIVE' },
   { method: 'GET', path: '/api/governance/{view}', owner: 'GovernanceRoutes', auth: 'AUTHENTICATED', service: 'governanceReadModel', status: 'ACTIVE' },
   { method: 'GET', path: '/api/research/{view}', owner: 'ResearchRoutes', auth: 'HOUSE_SELF', service: 'researchReadModel', status: 'ACTIVE' },
   { method: 'POST', path: '/api/research/{action}', owner: 'ResearchRoutes', auth: 'HOUSE_SELF', service: 'researchService', status: 'ACTIVE' },
