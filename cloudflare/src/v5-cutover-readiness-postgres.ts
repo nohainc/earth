@@ -11,7 +11,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
   const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"))
     .rows[0];
   const gameDay = Number(world?.game_day ?? 0);
-  const [migration, earthPolicy, corporationCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions] = await Promise.all([
+  const [migration, earthPolicy, corporationCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation] = await Promise.all([
     repository.query<ReadinessRow>('SELECT COALESCE(MAX(version), 0)::TEXT AS count FROM earth_schema_migrations'),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM v5_capacity_policy_versions
@@ -43,6 +43,10 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
                     WHERE s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1)`, [Math.max(1, gameDay - 1)]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM constitutional_rule_definitions_v5 WHERE active = TRUE`),
+    repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
+      FROM v5_tax_reconciliation_runs
+     WHERE assessed_game_day = $1 AND status = 'COMPLETED'
+       AND mismatches = 0 AND missing_canonical = 0`, [Math.max(1, gameDay - 1)]),
   ]);
   const activeCorporations = Number((await repository.query<ReadinessRow>(
     "SELECT COUNT(*)::TEXT AS count FROM corporations WHERE status = 'ACTIVE'",
@@ -56,6 +60,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
     earthConstitutionSnapshotAvailable: Number(earthSnapshot.rows[0]?.count ?? 0) === 1,
     allActiveCorporationsHaveConstitutionSnapshot: Number(corporationSnapshots.rows[0]?.count ?? 0) === activeCorporations,
     constitutionalDefinitionsPresent: Number(definitions.rows[0]?.count ?? 0) > 0,
+    taxReconciliationClean: Number(taxReconciliation.rows[0]?.count ?? 0) === 1,
     noRecentFailedSettlementRuns: Number(failedRuns.rows[0]?.count ?? 0) === 0,
     shadowOnlyUntilExplicitEnablement: true,
   };
@@ -76,6 +81,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
       earthConstitutionSnapshots: Number(earthSnapshot.rows[0]?.count ?? 0),
       corporationConstitutionSnapshots: Number(corporationSnapshots.rows[0]?.count ?? 0),
       constitutionalDefinitions: Number(definitions.rows[0]?.count ?? 0),
+      cleanTaxReconciliationRuns: Number(taxReconciliation.rows[0]?.count ?? 0),
     },
     generatedFrom: 'postgres-canonical-facts-v5',
     mutationEnabled: false,

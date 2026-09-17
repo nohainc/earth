@@ -33,6 +33,7 @@ export type DailySettlementPhaseHandlers = {
   commonsDividendSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
   corporationIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
   publicTaxAssessment: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  taxReconciliation: (context: DailySettlementPhaseContext) => Promise<unknown>;
   globalBank: (context: DailySettlementPhaseContext) => Promise<unknown>;
   bankHealth: (context: DailySettlementPhaseContext) => Promise<unknown>;
   mandatoryBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -92,6 +93,7 @@ export function createDailySettlementPhaseRegistry(
     deferred('basic_levy', 76, 'all', handlers.basicLevy),
     required('corporation_income_tax', 90, 'all', handlers.corporationIncomeTax),
     required('public_tax_assessment', 91, 'owner-shards', handlers.publicTaxAssessment),
+    required('tax_reconciliation', 92, 'all', handlers.taxReconciliation),
     required('global_bank', 100, 'all', handlers.globalBank),
     required('bank_health', 110, 'all', handlers.bankHealth),
     deferred('mandatory_budget_payments', 115, 'all', handlers.mandatoryBudgetPayments),

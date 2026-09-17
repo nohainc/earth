@@ -396,10 +396,17 @@ test('V5 cutover readiness is fail-closed and read-only', async () => {
   assert.match(service, /allActiveCorporationsHavePolicy/);
   assert.match(service, /allActiveCorporationsHaveConstitutionSnapshot/);
   assert.match(service, /constitutionalDefinitionsPresent/);
+  assert.match(service, /taxReconciliationClean/);
   assert.match(service, /mutationEnabled: false/);
   assert.match(service, /Object\.values\(checks\)\.every\(Boolean\)/);
   assert.doesNotMatch(service, /INSERT INTO|UPDATE |DELETE FROM/);
   assert.match(routes, /internal\/v5\/cutover-readiness/);
+  const reconciliation = await readFile(new URL('../cloudflare/src/v5-tax-reconciliation-postgres.ts', import.meta.url), 'utf8');
+  assert.match(reconciliation, /v5_tax_reconciliation_items/);
+  assert.match(reconciliation, /reconciliation-only/);
+  const migration = await readFile(new URL('../db/migrations/103_v5_tax_reconciliation.sql', import.meta.url), 'utf8');
+  assert.match(migration, /v5_tax_reconciliation_runs/);
+  assert.match(migration, /MISSING_CANONICAL/);
 });
 
 test('V5 pooled construction accepts no Territory placement target', async () => {

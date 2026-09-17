@@ -35,6 +35,7 @@ import { reconcileV5TerritoryContainersInTransaction } from './v5-territory-cont
 import { activateDueV5GovernancePoliciesInTransaction } from './v5-governance-postgres.ts';
 import { rebuildV5SettlementProfilesInShard, settleV5CorporationSettlementProfiles } from './v5-settlement-profiles-postgres.ts';
 import { materializeResolvedConstitutionSnapshot } from './constitutional-kernel-postgres.ts';
+import { reconcileV5TaxRulesInTransaction } from './v5-tax-reconciliation-postgres.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -63,6 +64,7 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   buildingSettlement: async ({ tx, day, shard, shardCount }) => settleBuildingUpkeepAndRevenueV2(tx, day, { shard, shardCount }),
   corporationIncomeTax: async ({ tx, day }) => settleCorporationIncomeTax(tx, day),
   publicTaxAssessment: async ({ tx, day, shard, shardCount }) => settlePublicTaxesInTransaction(tx, day, shard, shardCount),
+  taxReconciliation: async ({ tx, day }) => reconcileV5TaxRulesInTransaction(tx, day),
   globalBank: async ({ tx, day }) => ({ settled: await settleGlobalBank(tx, day) }),
   bankHealth: async ({ tx, day }) => settleBankLoanRisk(tx, day),
   mandatoryBudgetPayments: noOpPhase,
