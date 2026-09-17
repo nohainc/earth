@@ -217,6 +217,11 @@ export async function changeCorporationMembership(
   repository: PostgresRepository,
   input: { humanId: string; corporationId: string; action: 'join' | 'leave' },
 ): Promise<Record<string, unknown>> {
+  // Legacy Corporation membership is not an active V5 command surface. V5
+  // affiliation transitions must go through the admission-aware service so
+  // capacity profiles and constitutional obligations are refreshed together.
+  throw new Error('Legacy Corporation membership mutation is retired; use the V5 membership command.');
+  /* istanbul ignore next -- retained below only for historical migration callers. */
   return repository.transaction(async (tx) => {
     const human = await activeHumanHouse(tx, input.humanId);
     const corporation = await tx.query<{ id: string; name: string; admission_policy: string }>(
@@ -263,6 +268,10 @@ export async function changeCorporationMembership(
 }
 
 export async function setCorporationAdmissionPolicy(repository: PostgresRepository, input: { humanId: string; corporationId: string; policy: 'open' | 'approval' }): Promise<Record<string, unknown>> {
+  // Admission policy is a Corporation-local Constitution rule. Direct writes
+  // would bypass proposal, electorate, activation, and rule provenance.
+  throw new Error('Direct admission-policy mutation is retired; submit a V5 Constitution amendment proposal.');
+  /* istanbul ignore next -- retained below only for historical migration callers. */
   return repository.transaction(async (tx) => {
     const human = await activeHumanHouse(tx, input.humanId);
     const membership = await tx.query("SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [human.house_id, input.corporationId]);

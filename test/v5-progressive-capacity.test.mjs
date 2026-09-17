@@ -577,6 +577,12 @@ test('retired Corporation tax-charter service fails closed', async () => {
   assert.match(service, /Direct Corporation tax mutation is retired/);
 });
 
+test('retired Corporation membership and admission services fail closed', async () => {
+  const service = await readFile(new URL('../cloudflare/src/institutions-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /Legacy Corporation membership mutation is retired/);
+  assert.match(service, /Direct admission-policy mutation is retired/);
+});
+
 test('V5 House tax read models use canonical constitutional rules', async () => {
   const statement = await readFile(new URL('../cloudflare/src/tax-statement-postgres.ts', import.meta.url), 'utf8');
   const finance = await readFile(new URL('../cloudflare/src/finance-routes.ts', import.meta.url), 'utf8');
