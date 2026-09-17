@@ -11,7 +11,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
   const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"))
     .rows[0];
   const gameDay = Number(world?.game_day ?? 0);
-  const [migration, earthPolicy, corporationCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation] = await Promise.all([
+  const [migration, earthPolicy, corporationCoverage, admissionCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation] = await Promise.all([
     repository.query<ReadinessRow>('SELECT COALESCE(MAX(version), 0)::TEXT AS count FROM earth_schema_migrations'),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM v5_capacity_policy_versions
@@ -24,6 +24,16 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
                     WHERE p.corporation_id = c.id AND p.status = 'ACTIVE'
                       AND p.effective_from_game_day <= $1
                       AND (p.effective_to_game_day IS NULL OR p.effective_to_game_day >= $1))`, [gameDay]),
+    repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
+      FROM corporations c
+     WHERE c.status = 'ACTIVE'
+       AND EXISTS (SELECT 1 FROM constitutional_rule_versions_v5 v
+                    WHERE v.rule_code = 'CORPORATION.ADMISSION_POLICY'
+                      AND v.authority_type = 'CORPORATION'
+                      AND v.authority_id = c.id
+                      AND v.status IN ('ACTIVE', 'RETIRED')
+                      AND v.effective_from_game_day <= $1
+                      AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= $1))`, [gameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM v5_capacity_backfill_runs WHERE status = 'COMPLETED'`),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
@@ -55,6 +65,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
     schemaVersionMatches: Number(migration.rows[0]?.count ?? 0) === EARTH_SCHEMA_VERSION,
     activeEarthPolicy: Number(earthPolicy.rows[0]?.count ?? 0) === 1,
     allActiveCorporationsHavePolicy: Number(corporationCoverage.rows[0]?.count ?? 0) === activeCorporations,
+    allActiveCorporationsHaveCanonicalAdmissionRules: Number(admissionCoverage.rows[0]?.count ?? 0) === activeCorporations,
     capacityBackfillCompleted: Number(backfill.rows[0]?.count ?? 0) > 0,
     allActiveCorporationsHaveCapacityState: Number(missingCapacity.rows[0]?.count ?? 0) === 0,
     earthConstitutionSnapshotAvailable: Number(earthSnapshot.rows[0]?.count ?? 0) === 1,
@@ -75,6 +86,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
       expectedSchemaVersion: EARTH_SCHEMA_VERSION,
       activeCorporations,
       activeCorporationPolicies: Number(corporationCoverage.rows[0]?.count ?? 0),
+      activeCorporationAdmissionRules: Number(admissionCoverage.rows[0]?.count ?? 0),
       completedBackfills: Number(backfill.rows[0]?.count ?? 0),
       missingCorporationCapacityStates: Number(missingCapacity.rows[0]?.count ?? 0),
       recentFailedSettlementRuns: Number(failedRuns.rows[0]?.count ?? 0),
