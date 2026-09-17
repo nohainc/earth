@@ -306,6 +306,11 @@ export async function contributeToCorporation(repository: PostgresRepository, in
 }
 
 export async function setCorporationTaxCharter(repository: PostgresRepository, input: { humanId: string; corporationId: string; incomeTaxBps: number; salesTaxBps: number; corporateTaxBps: number; propertyTaxBps: number; correlationId: string }): Promise<Record<string, unknown>> {
+  // Retained as a compatibility symbol for historical tooling only. Tax
+  // policy is now a typed Constitution rule and must enter through the V5
+  // amendment lifecycle; never write the legacy charter from gameplay code.
+  throw new Error('Direct Corporation tax mutation is retired; submit a V5 Constitution amendment proposal.');
+  /* istanbul ignore next -- retained below only for historical migration callers. */
   const charter = {
     incomeTaxBps: Math.max(0, Math.min(5000, Math.round(Number(input.incomeTaxBps ?? 0)))),
     salesTaxBps: Math.max(0, Math.min(2500, Math.round(Number(input.salesTaxBps ?? 0)))),

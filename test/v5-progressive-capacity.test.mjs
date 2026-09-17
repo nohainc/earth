@@ -571,6 +571,12 @@ test('V5 Corporation fiscal read model does not expose legacy tax-rule authority
   assert.doesNotMatch(fiscal, /tax_charter_version/);
 });
 
+test('retired Corporation tax-charter service fails closed', async () => {
+  const service = await readFile(new URL('../cloudflare/src/institutions-postgres.ts', import.meta.url), 'utf8');
+  assert.match(service, /setCorporationTaxCharter/);
+  assert.match(service, /Direct Corporation tax mutation is retired/);
+});
+
 test('V5 House tax read models use canonical constitutional rules', async () => {
   const statement = await readFile(new URL('../cloudflare/src/tax-statement-postgres.ts', import.meta.url), 'utf8');
   const finance = await readFile(new URL('../cloudflare/src/finance-routes.ts', import.meta.url), 'utf8');
