@@ -108,6 +108,12 @@ export async function createCorporation(
   repository: PostgresRepository,
   input: { founderId: string; name: string; territoryName?: string },
 ): Promise<Record<string, unknown>> {
+  // V5 founding provisions a Corporation Constitution and settlement
+  // profiles atomically. The legacy service would create a competing
+  // governance_rules baseline, so retain it only as a fail-closed symbol for
+  // historical callers.
+  throw new Error('Legacy Corporation founding is retired; use the V5 founding command.');
+  /* istanbul ignore next -- retained below only for historical migration callers. */
   return repository.transaction(async (tx) => {
     const name = input.name.trim();
     const territoryName = (input.territoryName?.trim() || `${name} Territory`).trim();
