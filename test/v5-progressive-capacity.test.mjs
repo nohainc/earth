@@ -904,7 +904,7 @@ test('V5 capacity statement replay preserves the persisted obligation status', a
 test('V5 capacity statement schema accepts canonical House delinquency states', async () => {
   const migration = await readFile(new URL('../db/migrations/112_v5_capacity_statement_delinquency_status.sql', import.meta.url), 'utf8');
   const manifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.migrationVersion, 116);
+  assert.equal(manifest.migrationVersion, 117);
   for (const status of ['CURRENT', 'ARREARS', 'GRACE', 'EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED']) {
     assert.match(migration, new RegExp(`'${status}'`));
   }

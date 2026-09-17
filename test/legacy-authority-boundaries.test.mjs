@@ -12,7 +12,7 @@ test('obsolete continuous and V1 settlement implementations are absent', () => {
     'cloudflare/src/building-settlement-engine.ts',
   ]) assert.equal(fs.existsSync(path), false, `${path} must remain deleted`);
   assert.match(read('cloudflare/src/market-scheduler.ts'), /settleMarketBatch/);
-  assert.match(read('cloudflare/src/scheduler.ts'), /processDueMarketBatches/);
+  assert.match(read('cloudflare/src/scheduler-postgres.ts'), /runResumableSettlementDay/);
 });
 
 test('legacy accounting remains explicitly transitional rather than silently authoritative', () => {

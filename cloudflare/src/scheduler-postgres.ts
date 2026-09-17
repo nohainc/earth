@@ -36,6 +36,7 @@ import { activateDueV5GovernancePoliciesInTransaction } from './v5-governance-po
 import { rebuildV5SettlementProfilesInShard, settleV5CorporationSettlementProfiles } from './v5-settlement-profiles-postgres.ts';
 import { materializeResolvedConstitutionSnapshot } from './constitutional-kernel-postgres.ts';
 import { reconcileV5TaxRulesInTransaction } from './v5-tax-reconciliation-postgres.ts';
+import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './economy-shadow.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -102,6 +103,7 @@ export async function runResumableSettlementDay(repository: PostgresRepository, 
   const correlationId = `settlement:${gameDay}`;
   const existing = await repository.query<{ status: string }>('SELECT status FROM daily_settlement_runs WHERE game_day = $1', [gameDay]);
   if (existing.rows[0]?.status === 'completed') return { status: 'already_processed', gameDay, phasesCompleted: settlementPhases.filter((phase) => phase.status === 'required').length, workUnitsCompleted: 0, workUnitsPending: 0 };
+  await captureEconomyShadowOpening(repository, gameDay);
   await repository.transaction(async (tx) => {
     await tx.query(`INSERT INTO daily_settlement_runs (game_day, status, current_phase, started_at) VALUES ($1, 'running', $2, CURRENT_TIMESTAMP) ON CONFLICT (game_day) DO UPDATE SET status = CASE WHEN daily_settlement_runs.status = 'failed' THEN 'running' ELSE daily_settlement_runs.status END, updated_at = CURRENT_TIMESTAMP`, [gameDay, settlementPhases[0]?.id ?? 'settlement']);
     await ensureSettlementWork(tx, gameDay, settlementPhases, OWNER_SHARD_COUNT);
@@ -134,6 +136,7 @@ export async function runResumableSettlementDay(repository: PostgresRepository, 
   if (progress.failed > 0) return { status: 'failed', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: progress.pending };
   if (progress.pending > 0) return { status: 'busy', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: progress.pending };
   await repository.query('SELECT earth_complete_settlement_day($1)', [gameDay]);
+  await reconcileEconomyShadowDay(repository, gameDay);
   return { status: 'completed', gameDay, phasesCompleted: requiredPhases.length, workUnitsCompleted: completed, workUnitsPending: 0 };
 }
 

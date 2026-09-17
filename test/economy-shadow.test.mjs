@@ -19,9 +19,9 @@ test('Economy V2 shadow reconciliation records legacy and V2 balances without mu
 
 test('shadow reconciliation surrounds resumable settlement', () => {
   const scheduler = fs.readFileSync(path.resolve('cloudflare/src/scheduler-postgres.ts'), 'utf8');
-  const capture = scheduler.indexOf('await captureEconomyShadowOpening');
-  const settle = scheduler.indexOf('await runResumableSettlementDay(repository, pendingResumableSettlementDay');
-  const reconcile = scheduler.indexOf('await reconcileEconomyShadowDay');
+  const capture = scheduler.indexOf('await captureEconomyShadowOpening(repository, gameDay)');
+  const settle = scheduler.indexOf('await phase.execute({ tx, day: gameDay');
+  const reconcile = scheduler.indexOf('await reconcileEconomyShadowDay(repository, gameDay)');
 
   assert.ok(capture >= 0 && settle >= 0 && reconcile >= 0);
   assert.ok(capture < settle, 'opening must be captured before settlement');
