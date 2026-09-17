@@ -4,6 +4,7 @@ import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { getAuthoritativeGameTime } from './game-clock.ts';
+import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
 import { proposalActionHandler, validateProposalActionSnapshot } from './proposal-actions.ts';
 import { attemptProposalFunding } from './proposal-funding.ts';
 import { createGameEvent } from './game-events-postgres.ts';
@@ -692,6 +693,23 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     // write the retired governance_rules authority during replay or execution.
     if (action.actionType === 'amend_rule') {
       throw new Error('Generic rule amendments are retired; submit a typed V5 Constitution amendment');
+    }
+
+    if (category === 'technology' || category === 'research') {
+      const buildingType = String(value.buildingType ?? value.building_type ?? '').trim();
+      if (!buildingType) {
+        await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped', funding_block_reason = 'Missing building type in research proposal' WHERE id = $1", [current.id]);
+        await finishAction('completed', { executionStatus: 'skipped' });
+        return { ok: true, executionStatus: 'skipped', reason: 'Missing building type in research proposal', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+      }
+      const result = await startCorporationBuildingResearchInTransaction(tx, {
+        humanId: current.created_by_human_id ?? input.humanId,
+        buildingType,
+        correlationId: `proposal-research:${current.id}`,
+      });
+      await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, started_at = CURRENT_TIMESTAMP, started_game_day = $2, started_action_id = $3, execution_status = 'started', funding_block_reason = NULL WHERE id = $1", [current.id, day, result.project?.id ?? null]);
+      await finishAction('completed', { executionStatus: 'started', researchProjectId: result.project?.id ?? null });
+      return { ok: true, executionStatus: 'started', researchProject: result.project, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
 
     if (!['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(category)) throw new Error('Target rule is outside engine bounds');
