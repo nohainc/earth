@@ -7,15 +7,17 @@ implemented production behavior.
 ## V5 Accepted Target Specifications
 
 > [!IMPORTANT]
-> V5 is the accepted target gameplay architecture but is **not yet the current
-> runtime**. The current V4/runtime documents remain the authority for what the
-> deployed code does until the V5 cutover gates are completed and this file is
-> updated again.
+> V5 is the accepted target gameplay architecture and is **not yet fully the
+> current runtime**. The repository has an active Constitution & Governance
+> Kernel slice, including migrated capacity and tax consumers; those slices are
+> tracked by `v5/V5_CONSTITUTION_GOVERNANCE_KERNEL.md`. Current-runtime documents
+> remain authoritative for all behavior that has not been explicitly migrated
+> until the V5 cutover gates are completed and this file is updated again.
 
 | Document | Status | Scope & Purpose |
 |---|---|---|
 | `ADR-003-v5-corporation-territory-capacity-model.md` | ACCEPTED TARGET | V5 Corporation/Territory/capacity boundary and migration decision |
-| `v5/README.md` | TARGET INDEX | Required read order and V5 cutover definition |
+| `v5/README.md` | TARGET INDEX / PARTIAL IMPLEMENTATION | Required read order, implemented-slice pointer, and V5 cutover definition |
 | `v5/V5_MASTER_GAMEPLAY_SPEC.md` | TARGET-CANONICAL | V5 hierarchy, responsibilities, gameplay loops, invariants |
 | `v5/V5_PROGRESSIVE_CAPACITY_AND_FISCAL_SPEC.md` | TARGET-CANONICAL | Universal marginal brackets, land/capacity billing and fiscal semantics |
 | `v5/V5_DOMAIN_AND_DATA_MIGRATION.md` | TARGET-CANONICAL | Current-to-V5 data/schema/API/read-model migration |

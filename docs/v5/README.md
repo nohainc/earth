@@ -1,6 +1,6 @@
 # EARTH Gameplay V5 — Documentation Index
 
-Status: **ACCEPTED TARGET DESIGN / NOT YET CURRENT RUNTIME**  
+Status: **TARGET DESIGN WITH IMPLEMENTED KERNEL SLICE / NOT YET FULLY CURRENT RUNTIME**
 Audience: product, engineering, AI development agents, reviewers  
 Repository: `nohainc/earth`  
 Target version: Gameplay V5
@@ -12,9 +12,12 @@ It defines the target gameplay model, the economic/capacity rules, the migration
 sequence, and the AI-execution discipline required to move the existing V4 runtime
 toward V5 safely.
 
-V5 is a **target architecture until the implementation/cutover gates in this pack
-are completed**. AI agents must not describe V5 behavior as implemented merely
-because it is specified here.
+V5 remains a **target architecture until the implementation/cutover gates in this
+pack are completed**. The repository does contain an active Constitution &
+Governance Kernel slice and migrated V5 capacity/tax consumers; those implemented
+surfaces are documented explicitly in `V5_CONSTITUTION_GOVERNANCE_KERNEL.md`.
+AI agents must not describe the full V5 gameplay model as current merely because
+some V5 slices are implemented.
 
 ## Read order for every V5 task
 
@@ -48,9 +51,11 @@ For UI work also read:
 | `V5_AI_EXECUTION_PLAYBOOK.md` | EXECUTION | AI-ready work packages, constraints, tests, handoff requirements |
 | `V5_UI_MIGRATION_MATRIX.md` | TARGET-UX | Page-by-page product changes required after authoritative backend slices |
 
-The existing V4 documents remain the authority for **what the current runtime is**
-until a V5 phase explicitly replaces that behavior and the corresponding
-repository status document is updated.
+The existing V4 documents remain the authority for **runtime behavior that has not
+been explicitly migrated**. For migrated Constitution, capacity, and tax slices,
+the implementation evidence and `V5_CONSTITUTION_GOVERNANCE_KERNEL.md` are the
+more precise status references. This index remains the authority for whether the
+overall V5 cutover has completed.
 
 ## Core V5 decision in one paragraph
 
@@ -102,5 +107,6 @@ V5 becomes the current gameplay authority only when all of the following are tru
 10. Full automated, migration, replay, invariant, smoke, and monitored game-day gates pass.
 11. `docs/DOCUMENT_STATUS.md` and `docs/CURRENT_STATE.md` are updated to mark V5 as current.
 
-Until that cutover, V5 documents describe the target and the V4/runtime documents
-describe production behavior.
+Until that cutover, V5 documents describe the target while the kernel status
+document identifies the implemented V5 slices; V4/current-runtime documents
+continue to describe production behavior for all unmigrated areas.
