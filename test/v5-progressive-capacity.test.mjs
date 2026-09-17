@@ -737,6 +737,15 @@ test('V5 upgrade review is quote-only and does not derive tier economics in Flut
   assert.doesNotMatch(dialog, /getVal|dailyOperatingCredits|dailyOutputCredits|baseCreditCost|upgradeCreditCost.*asIntOr/);
 });
 
+test('V5 construction review quotes and executes the pooled path for independent Houses', async () => {
+  const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
+  const confirm = buildings.slice(buildings.indexOf('Future<void> _confirmConstruction'));
+  assert.match(confirm, /quoteV5Building\(buildingType\)/);
+  assert.match(confirm, /purchaseV5Building\(/);
+  assert.doesNotMatch(confirm, /purchaseBuilding\(/);
+  assert.match(confirm, /REPORTED AFTER GAME-DAY SETTLEMENT/);
+});
+
 test('V5 corporation lifecycle supports name reuse, leadership delegation, and graceful dissolution', async () => {
   const founding = await readFile(new URL('../cloudflare/src/v5-founding-postgres.ts', import.meta.url), 'utf8');
   assert.match(founding, /lower\(name\) = lower\(\$1\) AND status = \\'ACTIVE\\'/);

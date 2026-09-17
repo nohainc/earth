@@ -2151,44 +2151,39 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     var quotedRemainingCapacity = remainingCapacity;
     var quotedConstructionDays = constructionDays;
     var quotedCapacityQuote = <String, dynamic>{};
-    if (_hasActiveCorporation) {
-      final quote = await const EarthApi().quoteV5Building(buildingType);
-      if (!context.mounted) return;
-      if (quote['ok'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(quote['error']?.toString() ??
-                'V5 construction quote unavailable.')));
-        return;
-      }
-      final blockers = quote['blockers'] is List
-          ? (quote['blockers'] as List).whereType<Object>().join('; ')
-          : '';
-      if (quote['eligible'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(blockers.isEmpty
-                ? 'Construction is not currently eligible.'
-                : blockers)));
-        return;
-      }
-      quotedCreditCost = asIntOr(quote['creditCostUnits'], creditCost);
-      quotedCapacityCost = asIntOr(quote['footprintUnits'], capacityCost);
-      if (quote['capacity'] is Map) {
-        quotedCapacityQuote = Map<String, dynamic>.from(quote['capacity'] as Map);
-      }
-      quotedConstructionDays = math.max(
-          1,
-          (asIntOr(quote['effectiveConstructionMinutes'], constructionDays * 1440) /
-                  1440)
-              .ceil());
-      final requirements = quote['resourceRequirements'] is List
-          ? (quote['resourceRequirements'] as List).whereType<Map>()
-          : const <Map>[];
-      quotedMaterialCost = requirements
-          .where((item) =>
-              (item['code']?.toString() ?? '').toLowerCase() == 'materials')
-          .fold<int>(0, (sum, item) => sum + asIntOr(item['requiredUnits'], 0));
-      quotedRemainingCapacity = math.max(0, remainingCapacity);
+    final quote = await const EarthApi().quoteV5Building(buildingType);
+    if (!context.mounted) return;
+    if (quote['ok'] != true) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(quote['error']?.toString() ??
+              'V5 construction quote unavailable.')));
+      return;
     }
+    final blockers = quote['blockers'] is List
+        ? (quote['blockers'] as List).whereType<Object>().join('; ')
+        : '';
+    if (quote['eligible'] != true) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(blockers.isEmpty
+              ? 'Construction is not currently eligible.'
+              : blockers)));
+      return;
+    }
+    quotedCreditCost = asInt(quote['creditCostUnits']) ?? 0;
+    quotedCapacityCost = asInt(quote['footprintUnits']) ?? 0;
+    if (quote['capacity'] is Map) {
+      quotedCapacityQuote = Map<String, dynamic>.from(quote['capacity'] as Map);
+    }
+    quotedConstructionDays = math.max(
+        1,
+        ((asInt(quote['effectiveConstructionMinutes']) ?? 0) / 1440).ceil());
+    final requirements = quote['resourceRequirements'] is List
+        ? (quote['resourceRequirements'] as List).whereType<Map>()
+        : const <Map>[];
+    quotedMaterialCost = requirements
+        .where((item) => (item['code']?.toString() ?? '').toUpperCase() == 'MATERIAL')
+        .fold<int>(0, (sum, item) => sum + (asInt(item['requiredUnits']) ?? 0));
+    quotedRemainingCapacity = math.max(0, remainingCapacity);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -2345,7 +2340,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               const SizedBox(height: 12),
 
               Text(
-                'EXPECTED FINANCIAL YIELD',
+                'SETTLEMENT RESULT',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
@@ -2364,7 +2359,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text('Net Daily Yield:',
+                    Text('Net production:',
                         style:
                             TextStyle(fontSize: 12, color: context.mutedColor)),
                     const Spacer(),
@@ -2374,27 +2369,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         runSpacing: 4,
                         alignment: WrapAlignment.end,
                         crossAxisAlignment: WrapCrossAlignment.center,
-                        children: netYields
-                            .map((y) => Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(y.$1, size: 13, color: y.$2),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      y.$3,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: y.$4
-                                            ? (y.$1 == Icons.trending_up
-                                                ? context.successColor
-                                                : context.inkColor)
-                                            : context.dangerColor,
-                                      ),
-                                    ),
-                                  ],
-                                ))
-                            .toList(),
+                        children: [
+                          Text('REPORTED AFTER GAME-DAY SETTLEMENT',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.mutedColor)),
+                        ],
                       ),
                     ),
                   ],
@@ -2420,23 +2401,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final corporationId = widget.state.membership?['corporation_id']
-              ?.toString() ??
-          widget.state.human['corporation_id']?.toString();
-      final hasActiveCorporation = corporationId != null &&
-          corporationId.isNotEmpty &&
-          corporationId != 'null' &&
-          corporationId != 'Independent';
-      await widget.action(() => hasActiveCorporation
-          ? const EarthApi().purchaseV5Building(
-              buildingType: buildingType,
-              name: buildingName,
-            )
-          : const EarthApi().purchaseBuilding(
-              buildingType: buildingType,
-              name: buildingName,
-              territoryId: cityId,
-            ));
+      await widget.action(() => const EarthApi().purchaseV5Building(
+            buildingType: buildingType,
+            name: buildingName,
+          ));
       if (mounted) {
         ScaffoldMessenger.of(this.context).showSnackBar(
           SnackBar(content: Text('$buildingName construction started.')),
