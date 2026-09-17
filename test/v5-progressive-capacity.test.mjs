@@ -926,6 +926,16 @@ test('V5 House UI and routes do not offer Territory-specific residence changes',
   assert.doesNotMatch(renderedPanel, /ACQUIRE USE RIGHT|RELOCATE RESIDENCE|RELEASE USE RIGHT/);
 });
 
+test('V5 retires Territory use-right mutation endpoints while preserving history reads', async () => {
+  const routes = await readFile(new URL('../cloudflare/src/real-estate-routes.ts', import.meta.url), 'utf8');
+  const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
+  assert.match(routes, /Territory use-right acquisition is retired in V5/);
+  assert.match(routes, /Territory use-right release is retired in V5/);
+  assert.match(registry, /path: '\/api\/real-estate\/rights'.*status: 'RETIRED'/);
+  assert.match(registry, /path: '\/api\/real-estate\/rights\/\{id\}\/release'.*status: 'RETIRED'/);
+  assert.match(registry, /path: '\/api\/real-estate\/rights'.*service: 'listTerritoryRights'.*status: 'ACTIVE'/);
+});
+
 test('V5 operations UI has no dead legacy real-estate dialog path', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   assert.doesNotMatch(buildings, /real_estate_dialogs\.dart/);
