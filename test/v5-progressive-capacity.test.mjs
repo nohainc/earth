@@ -422,8 +422,8 @@ test('V5 governance read model is scoped to Earth and active Corporation affilia
 
 test('V5 public governance accepts only typed Constitution amendment change sets', async () => {
   const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
-  assert.match(route, /Legacy V5 policy actions are retired/);
-  assert.match(route, /parsed\.value\.actionType !== 'CONSTITUTION_AMENDMENT'/);
+  assert.match(route, /actionType\?: 'CONSTITUTION_AMENDMENT'/);
+  assert.doesNotMatch(route, /actionType\?: 'CONSTITUTION_AMENDMENT' \| 'EARTH_CAPACITY_POLICY'/);
 });
 
 test('V5 Finance exposes server-authoritative liquidity and next settlement', async () => {
