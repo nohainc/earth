@@ -207,6 +207,13 @@ test('V5 override clearing is restricted to Corporation scope', async () => {
   assert.match(service, /Only a Corporation can clear its Earth-default override/);
 });
 
+test('V5 active policy-group exclusivity is enforced by PostgreSQL', async () => {
+  const migration = await readFile(new URL('../db/migrations/104_v5_governance_policy_group_lock.sql', import.meta.url), 'utf8');
+  assert.match(migration, /CREATE UNIQUE INDEX v5_governance_one_active_policy_group_idx/);
+  assert.match(migration, /COALESCE\(subject_id, ''\)/);
+  assert.match(migration, /status IN \('VOTING', 'PASSED', 'SCHEDULED'\)/);
+});
+
 test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');
