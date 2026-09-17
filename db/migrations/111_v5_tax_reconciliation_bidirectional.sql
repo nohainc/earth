@@ -5,6 +5,10 @@
 ALTER TABLE v5_tax_reconciliation_items
   ALTER COLUMN legacy_rate_bps DROP NOT NULL;
 
+ALTER TABLE v5_tax_reconciliation_runs
+  ADD COLUMN IF NOT EXISTS missing_legacy INTEGER NOT NULL DEFAULT 0
+  CHECK (missing_legacy >= 0);
+
 ALTER TABLE v5_tax_reconciliation_items
   DROP CONSTRAINT IF EXISTS v5_tax_reconciliation_items_result_check;
 

@@ -410,6 +410,7 @@ test('V5 tax reconciliation records missing rules in both directions', async () 
   assert.match(reconciliation, /canonical:\$\{code\}/);
   assert.match(reconciliation, /legacyRateBps === null/);
   assert.match(migration, /ALTER COLUMN legacy_rate_bps DROP NOT NULL/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS missing_legacy/);
   assert.match(migration, /MISSING_LEGACY/);
 });
 
