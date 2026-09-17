@@ -655,6 +655,13 @@ test('V5 client finance projections consume server policy multipliers', async ()
   assert.doesNotMatch(`${finance}\n${institutions}`, /high_output|eco_reserve|frugal/);
 });
 
+test('V5 tax amendment UI does not fabricate economic consequences', async () => {
+  const dialogs = await readFile(new URL('../flutter_client/lib/features/institutions/institutions_dialogs.dart', import.meta.url), 'utf8');
+  assert.doesNotMatch(dialogs, /DecisionConsequence\.municipalTaxAdjustment/);
+  assert.doesNotMatch(dialogs, /oldRatePct: 5\.0/);
+  assert.match(dialogs, /canonical Constitution service validates this amendment/);
+});
+
 test('V5 building client projections consume server policy multipliers', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   assert.match(buildings, /building\['output_multiplier'\]/);

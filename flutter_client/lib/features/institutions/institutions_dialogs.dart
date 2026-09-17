@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:earth_client/earth_http_client.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
-import '../../core/models/decision_consequence.dart';
 import '../../shared/design_system/design_system.dart';
-import '../../shared/widgets/consequence_preview_card.dart';
 import '../../shared/widgets/format_helpers.dart';
 
 Future<void> showFormationComposer(
@@ -1475,17 +1473,17 @@ Future<void> showTaxCharterDialog(
   String institutionId, {
   bool corporation = false,
 }) async {
-  final income = TextEditingController(text: '5.0');
-  final sales = TextEditingController(text: '2.0');
-  final corporate = TextEditingController(text: '10.0');
-  final property = TextEditingController(text: '1.0');
+  // Current values belong to the canonical Constitution read model. Do not
+  // seed or infer policy values in the client composer.
+  final income = TextEditingController();
+  final sales = TextEditingController();
+  final corporate = TextEditingController();
+  final property = TextEditingController();
 
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) {
-        final parsedIncome = double.tryParse(income.text.trim()) ?? 5.0;
-        final parsedCorporate = double.tryParse(corporate.text.trim()) ?? 10.0;
         return AlertDialog(
           backgroundColor: context.panelColor,
           shape: RoundedRectangleBorder(
@@ -1560,12 +1558,9 @@ Future<void> showTaxCharterDialog(
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 14),
-                  ConsequencePreviewCard(
-                    consequence: DecisionConsequence.municipalTaxAdjustment(
-                      cityName: institutionId,
-                      oldRatePct: 5.0,
-                      newRatePct: (parsedIncome + parsedCorporate) / 2.0,
-                    ),
+                  Text(
+                    'The canonical Constitution service validates this amendment and records its effective day. Economic consequences are shown only from server-authoritative policy data after submission.',
+                    style: context.widgetFooterStyle,
                   ),
                 ],
               ),
