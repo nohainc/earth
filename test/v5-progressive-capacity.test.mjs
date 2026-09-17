@@ -148,6 +148,7 @@ test('V4 ballot authorization uses an exact persisted electorate snapshot', asyn
   const source = await readFile(new URL('../cloudflare/src/governance-v4-postgres.ts', import.meta.url), 'utf8');
   assert.match(migration, /governance_electorate_snapshots_v4/);
   assert.match(source, /INSERT INTO governance_electorate_snapshots_v4/);
+  assert.match(source, /FROM house_affiliations/);
   assert.match(source, /FROM governance_electorate_snapshots_v4 WHERE proposal_id = \$1 AND house_id = \$2/);
   assert.match(source, /House was not in the frozen V4 electorate/);
 });

@@ -100,7 +100,15 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
     const submitted = await currentDay(tx);
     const votingStart = submitted + 1;
     const electorate = input.subjectType === 'ORGANIZATION'
-      ? await tx.query<{ count: string }>("SELECT COUNT(DISTINCT house_id)::TEXT AS count FROM organization_memberships WHERE organization_id = $1 AND status = 'ACTIVE' AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)", [input.subjectId, votingStart])
+      ? await tx.query<{ count: string }>(`SELECT COUNT(*)::TEXT AS count FROM (
+          SELECT house_id FROM organization_memberships
+           WHERE organization_id = $1 AND status = 'ACTIVE'
+             AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)
+          UNION
+          SELECT house_id FROM house_affiliations
+           WHERE corporation_id = $1 AND status = 'ACTIVE'
+             AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)
+        ) AS frozen_electorate`, [input.subjectId, votingStart])
       : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'");
     const rule = {
       quorumBps: 5000,
@@ -115,10 +123,15 @@ export async function createGovernanceProposalV4(repository: PostgresRepository,
     await tx.query(`INSERT INTO governance_proposals_v4 (id, subject_type, subject_id, title, body, action_type, action_snapshot, rule_snapshot, submitted_game_day, voting_start_game_day, voting_end_game_day, execution_game_day, correlation_id, created_by_human_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8::JSONB,$9,$9,$10,$11,$12,$13)`, [proposalId, input.subjectType, input.subjectId, input.title.trim(), input.body?.trim() ?? '', input.actionType, JSON.stringify(input.actionSnapshot), JSON.stringify(rule), submitted, submitted + 1, submitted + 1 + Number(rule.votingPeriodDays) + Number(rule.implementationDelayDays), input.correlationId, input.humanId]);
     if (input.subjectType === 'ORGANIZATION') {
       await tx.query(`INSERT INTO governance_electorate_snapshots_v4 (proposal_id, house_id, snapshot_game_day)
-        SELECT $1, house_id, $2
-          FROM organization_memberships
-         WHERE organization_id = $3 AND status = 'ACTIVE'
-           AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)
+        SELECT $1, house_id, $2 FROM (
+          SELECT house_id FROM organization_memberships
+           WHERE organization_id = $3 AND status = 'ACTIVE'
+             AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)
+          UNION
+          SELECT house_id FROM house_affiliations
+           WHERE corporation_id = $3 AND status = 'ACTIVE'
+             AND joined_game_day <= $2 AND (left_game_day IS NULL OR left_game_day >= $2)
+        ) AS eligible_houses
         ON CONFLICT (proposal_id, house_id) DO NOTHING`, [proposalId, submitted + 1, input.subjectId]);
     } else {
       await tx.query(`INSERT INTO governance_electorate_snapshots_v4 (proposal_id, house_id, snapshot_game_day)
