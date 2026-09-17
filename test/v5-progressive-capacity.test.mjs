@@ -239,6 +239,8 @@ test('V5 Corporation admission consumes the canonical Constitution rule', async 
 
 test('V5 exposes an Earth-wide capacity read model alongside House and Corporation views', async () => {
   const capacity = await readFile(new URL('../cloudflare/src/v5-capacity-postgres.ts', import.meta.url), 'utf8');
+  const readiness = await readFile(new URL('../cloudflare/src/v5-cutover-readiness-postgres.ts', import.meta.url), 'utf8');
+  const taxSettlement = await readFile(new URL('../cloudflare/src/tax-settlement-postgres.ts', import.meta.url), 'utf8');
   const routes = await readFile(new URL('../cloudflare/src/read-model-routes.ts', import.meta.url), 'utf8');
   const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
   assert.match(capacity, /getV5EarthCapacity/);
@@ -251,6 +253,9 @@ test('V5 exposes an Earth-wide capacity read model alongside House and Corporati
   assert.match(capacity, /capacityRevenuePaidUnits/);
   assert.match(capacity, /treasuryUnits/);
   assert.match(capacity, /programCommitments/);
+  assert.match(readiness, /resolved_constitution_snapshots_v5/);
+  assert.doesNotMatch(readiness, /FROM v5_capacity_policy_versions/);
+  assert.match(taxSettlement, /Canonical Earth tax snapshot is missing/);
   assert.match(routes, /\/api\/v5\/capacity/);
   assert.match(registry, /getV5EarthCapacity/);
 });

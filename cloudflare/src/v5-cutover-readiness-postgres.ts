@@ -14,16 +14,18 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
   const [migration, earthPolicy, corporationCoverage, admissionCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation] = await Promise.all([
     repository.query<ReadinessRow>('SELECT COALESCE(MAX(version), 0)::TEXT AS count FROM earth_schema_migrations'),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
-      FROM v5_capacity_policy_versions
-     WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
-       AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)`, [gameDay]),
+      FROM resolved_constitution_snapshots_v5
+     WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1
+       AND rules_json ? 'EARTH.CAPACITY.STANDARD'
+       AND rules_json ? 'EARTH.CAPACITY.BASE_RATE'
+       AND rules_json ? 'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE'
+       AND rules_json ? 'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE'`, [gameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM corporations c
      WHERE c.status = 'ACTIVE'
-       AND EXISTS (SELECT 1 FROM corporation_capacity_policy_versions p
-                    WHERE p.corporation_id = c.id AND p.status = 'ACTIVE'
-                      AND p.effective_from_game_day <= $1
-                      AND (p.effective_to_game_day IS NULL OR p.effective_to_game_day >= $1))`, [gameDay]),
+       AND EXISTS (SELECT 1 FROM resolved_constitution_snapshots_v5 s
+                    WHERE s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1
+                      AND s.rules_json ? 'CORPORATION.HOUSE_CAPACITY.BASE_RATE')`, [gameDay]),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM corporations c
      WHERE c.status = 'ACTIVE'

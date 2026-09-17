@@ -63,11 +63,20 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
   ]);
   const constitution = constitutionResult.rows[0];
   const constitutionRules = constitution?.rules_json ?? {};
-  const constitutionalRate = (rule: TaxRule): { rate: bigint; versionId: string | null } | null => {
+  const constitutionalCode = (rule: TaxRule): string | null => {
     if (rule.authority_type !== 'EARTH') return null;
-    const ruleCode = rule.tax_rule_id === 'TAX-MARKET-TRANSACTION' || rule.tax_rule_id === 'TAX-OUC-MARKET'
+    return rule.tax_rule_id === 'TAX-MARKET-TRANSACTION' || rule.tax_rule_id === 'TAX-OUC-MARKET'
       ? 'EARTH.MARKET.TRANSACTION_TAX_RATE'
       : rule.tax_rule_id === 'TAX-BASIC-LEVY' ? 'EARTH.TAX.BASIC_LEVY_RATE' : null;
+  };
+  for (const rule of ruleResult.rows) {
+    const code = constitutionalCode(rule);
+    if (code && constitutionRules[code] === undefined) {
+      throw new Error(`Canonical Earth tax snapshot is missing ${code} for assessed game day ${assessedDay}`);
+    }
+  }
+  const constitutionalRate = (rule: TaxRule): { rate: bigint; versionId: string | null } | null => {
+    const ruleCode = constitutionalCode(rule);
     if (!ruleCode) return null;
     const value = constitutionRules[ruleCode];
     return value === undefined ? null : { rate: BigInt(String(value)), versionId: constitution?.version_ids?.[ruleCode] ?? null };
