@@ -243,6 +243,14 @@ test('V5 Constitution snapshots are immutable once materialized', async () => {
   assert.doesNotMatch(kernel, /ON CONFLICT \(authority_type, authority_id, game_day\) DO UPDATE/);
 });
 
+test('V5 persisted policy groups match the canonical runtime registry', async () => {
+  const migration = await readFile(new URL('../db/migrations/107_normalize_constitution_policy_groups.sql', import.meta.url), 'utf8');
+  assert.match(migration, /SET policy_group = CASE/);
+  assert.match(migration, /THEN 'CAPACITY_POLICY'/);
+  assert.match(migration, /THEN 'EARTH_HOUSE_INCOME_TAX'/);
+  assert.match(migration, /THEN 'CORPORATION_HOUSE_INCOME_TAX'/);
+});
+
 test('V5 daily settlement materializes one resolved Constitution per active authority', async () => {
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   const phases = await readFile(new URL('../cloudflare/src/daily-settlement-phases.ts', import.meta.url), 'utf8');
