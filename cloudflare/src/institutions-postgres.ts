@@ -226,8 +226,10 @@ export async function changeCorporationMembership(
     const current = await currentAffiliation(tx, human.house_id);
     const gameDay = await day(tx);
     const refreshTerritoryIds = new Set<string>();
+    const affectedCorporationIds = new Set<string>();
     if (input.action === 'leave') {
       if (!current || current.corporation_id !== input.corporationId) throw new Error('House is not a member of this Corporation');
+      affectedCorporationIds.add(current.corporation_id);
       if (current.primary_territory_id) refreshTerritoryIds.add(current.primary_territory_id);
       await tx.query("UPDATE house_affiliations SET status = 'LEFT', left_game_day = $1 WHERE id = $2", [gameDay, current.id]);
       await createAffiliationEvent(tx, { id: crypto.randomUUID(), humanId: input.humanId, institutionType: 'CORPORATION', institutionId: input.corporationId, action: 'left', gameDay, reason: 'voluntary_departure' });
@@ -238,6 +240,7 @@ export async function changeCorporationMembership(
       const territory = await tx.query<{ id: string }>("SELECT id FROM territories WHERE corporation_id = $1 AND is_primary = TRUE AND status = 'ACTIVE' FOR UPDATE", [input.corporationId]);
       if (!territory.rows[0]) throw new Error('Corporation primary Territory is unavailable');
       if (current) {
+        affectedCorporationIds.add(current.corporation_id);
         if (current.primary_territory_id) refreshTerritoryIds.add(current.primary_territory_id);
         await tx.query("UPDATE house_affiliations SET status = 'LEFT', left_game_day = $1 WHERE id = $2", [gameDay, current.id]);
         await createAffiliationEvent(tx, { id: crypto.randomUUID(), humanId: input.humanId, institutionType: 'CORPORATION', institutionId: current.corporation_id, action: 'left', gameDay, reason: 'corporation_transfer' });
@@ -246,6 +249,7 @@ export async function changeCorporationMembership(
         `INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status)
          VALUES ($1, $2, $3, $4, 'ACTIVE')`, [human.house_id, input.corporationId, territory.rows[0].id, gameDay],
       );
+      affectedCorporationIds.add(input.corporationId);
       refreshTerritoryIds.add(territory.rows[0].id);
       await createAffiliationEvent(tx, { id: crypto.randomUUID(), humanId: input.humanId, institutionType: 'CORPORATION', institutionId: input.corporationId, action: 'joined', gameDay, reason: 'voluntary_membership' });
       await createNotification(tx, { id: `CORP-JOINED-${human.house_id}-${input.corporationId}-${gameDay}`, humanId: input.humanId, notificationType: 'institution', title: 'Corporation joined', body: `Your House joined ${corporation.rows[0].name}.`, entityType: 'corporation', entityId: input.corporationId, gameDay, correlationId: `CORP-JOINED:${human.house_id}:${input.corporationId}:${gameDay}` });
@@ -253,6 +257,7 @@ export async function changeCorporationMembership(
     for (const territoryId of refreshTerritoryIds) {
       await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [territoryId, gameDay]);
     }
+    await refreshV5SettlementProfilesForHouse(tx, human.house_id, gameDay, [...affectedCorporationIds]);
     return { ok: true, affiliation: (await tx.query("SELECT * FROM house_affiliations WHERE house_id = $1 AND status = 'ACTIVE'", [human.house_id])).rows[0] ?? null };
   });
 }
