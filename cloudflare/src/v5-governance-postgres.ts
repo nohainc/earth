@@ -69,11 +69,12 @@ async function governancePolicy(tx: PostgresRepository, subjectType: 'EARTH' | '
     if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(`Invalid Constitution governance rule: ${code}`);
     return parsed;
   };
+  const prefix = subjectType === 'EARTH' ? 'EARTH.GOVERNANCE' : 'CORPORATION.GOVERNANCE';
   return {
-    quorumBps: value('CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS'),
-    approvalBps: value('CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS'),
-    votingPeriodDays: value('CORPORATION.GOVERNANCE.VOTING_PERIOD_DAYS'),
-    implementationDelayDays: value('CORPORATION.GOVERNANCE.IMPLEMENTATION_DELAY_DAYS'),
+    quorumBps: value(`${prefix}.POLICY_QUORUM_BPS`),
+    approvalBps: value(`${prefix}.POLICY_APPROVAL_BPS`),
+    votingPeriodDays: value(`${prefix}.VOTING_PERIOD_DAYS`),
+    implementationDelayDays: value(`${prefix}.IMPLEMENTATION_DELAY_DAYS`),
   };
 }
 

@@ -123,6 +123,18 @@ test('V5 governance validates future policies and previews proposed brackets', (
   assert.ok(preview[2].delta > 0n);
 });
 
+test('Earth and Corporation governance use distinct constitutional rule namespaces', async () => {
+  const constitution = await readFile(new URL('../cloudflare/src/v5-constitution.ts', import.meta.url), 'utf8');
+  const governance = await readFile(new URL('../cloudflare/src/v5-governance-postgres.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../db/migrations/115_earth_governance_policy_rules.sql', import.meta.url), 'utf8');
+  for (const suffix of ['POLICY_QUORUM_BPS', 'POLICY_APPROVAL_BPS', 'VOTING_PERIOD_DAYS', 'IMPLEMENTATION_DELAY_DAYS']) {
+    assert.match(constitution, new RegExp(`EARTH\\.GOVERNANCE\\.${suffix}`));
+    assert.match(constitution, new RegExp(`CORPORATION\\.GOVERNANCE\\.${suffix}`));
+    assert.match(migration, new RegExp(`EARTH\\.GOVERNANCE\\.${suffix}`));
+  }
+  assert.match(governance, /const prefix = subjectType === 'EARTH' \? 'EARTH\.GOVERNANCE' : 'CORPORATION\.GOVERNANCE'/);
+});
+
 test('Constitution amendment preview applies typed changes and restores Earth defaults when clearing overrides', () => {
   const preview = previewConstitutionAmendment({
     currentRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 4000n },
@@ -854,7 +866,7 @@ test('V5 capacity statement replay preserves the persisted obligation status', a
 test('V5 capacity statement schema accepts canonical House delinquency states', async () => {
   const migration = await readFile(new URL('../db/migrations/112_v5_capacity_statement_delinquency_status.sql', import.meta.url), 'utf8');
   const manifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.migrationVersion, 114);
+  assert.equal(manifest.migrationVersion, 115);
   for (const status of ['CURRENT', 'ARREARS', 'GRACE', 'EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED']) {
     assert.match(migration, new RegExp(`'${status}'`));
   }
