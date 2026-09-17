@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { getConstitutionalRuleDefinition, validateConstitutionalRuleValue } from './v5-constitution.ts';
 
 export type ProposalActionContext = {
   repository: PostgresRepository;
@@ -68,6 +69,31 @@ const discussionHandler: ProposalActionHandler = {
   validateExecution: async () => undefined,
 };
 
+const constitutionAmendmentHandler: ProposalActionHandler = {
+  actionType: 'CONSTITUTION_AMENDMENT',
+  version: 1,
+  validateCreation: (action) => {
+    if (!Array.isArray(action.changes) || action.changes.length === 0) {
+      throw new Error('Constitution amendment requires at least one rule change');
+    }
+    const seen = new Set<string>();
+    for (const item of action.changes) {
+      if (!item || typeof item !== 'object') throw new Error('Constitution amendment changes must be objects');
+      const change = item as Record<string, unknown>;
+      const ruleCode = String(change.ruleCode ?? '').trim();
+      if (!ruleCode || seen.has(ruleCode)) throw new Error('Constitution amendment contains duplicate or missing rule codes');
+      seen.add(ruleCode);
+      const definition = getConstitutionalRuleDefinition(ruleCode);
+      if (change.clearOverride === true) {
+        if (definition.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
+        continue;
+      }
+      validateConstitutionalRuleValue(ruleCode, change.value);
+    }
+  },
+  validateExecution: async () => undefined,
+};
+
 const constructCivicBuildingHandler: ProposalActionHandler = {
   actionType: 'construct_civic_building',
   version: 1,
@@ -99,6 +125,7 @@ const amendRuleHandler: ProposalActionHandler = {
 
 const handlers = new Map<string, ProposalActionHandler>([
   [discussionHandler.actionType, discussionHandler],
+  [constitutionAmendmentHandler.actionType, constitutionAmendmentHandler],
   [constructCivicBuildingHandler.actionType, constructCivicBuildingHandler],
   [startResearchHandler.actionType, startResearchHandler],
   [amendRuleHandler.actionType, amendRuleHandler],

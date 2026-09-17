@@ -18,3 +18,18 @@ test('unknown or missing proposal actions fail closed', () => {
   assert.throws(() => proposalActionHandler('generic'), /Unregistered proposal action handler/);
   assert.throws(() => proposalActionHandler(undefined), /action type is required/);
 });
+
+test('Constitution amendments use the shared typed action registry', () => {
+  const handler = validateProposalActionSnapshot({
+    actionType: 'CONSTITUTION_AMENDMENT',
+    changes: [{ ruleCode: 'EARTH.TAX.BASIC_LEVY_RATE', value: 500 }],
+  });
+  assert.equal(handler.actionType, 'CONSTITUTION_AMENDMENT');
+  assert.throws(
+    () => validateProposalActionSnapshot({
+      actionType: 'CONSTITUTION_AMENDMENT',
+      changes: [{ ruleCode: 'EARTH.CAPACITY.BASE_RATE', clearOverride: true }],
+    }),
+    /overrides can be cleared/,
+  );
+});

@@ -4,6 +4,7 @@ import { validateV5GovernanceAction, type V5GovernanceAction } from './v5-govern
 import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
+import { validateProposalActionSnapshot } from './proposal-actions.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -116,6 +117,9 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       : input.payload;
     const action = actionFromPayload(input.actionType, proposalInputPayload);
     validateV5GovernanceAction(action, day);
+    if (input.actionType === 'CONSTITUTION_AMENDMENT') {
+      validateProposalActionSnapshot(action as unknown as Record<string, unknown>);
+    }
     if (input.actionType === 'CORPORATION_HOUSE_RATE' || input.actionType === 'CORPORATION_ADMISSION_POLICY') {
       if (!input.subjectId || action.corporationId !== input.subjectId) throw new Error('Corporation action must target its proposal Corporation');
     }
