@@ -510,6 +510,8 @@ test('world governance read model uses the canonical Constitution authority', as
   assert.match(world, /getConstitutionReadModel/);
   assert.match(world, /rules: constitution\.rules/);
   assert.match(world, /legacyRules: governanceRules\.rows/);
+  assert.match(world, /taxRules: canonicalTaxRules/);
+  assert.match(world, /legacyTaxRules: taxRules\.rows/);
   assert.match(readModel, /listGovernanceRules[\s\S]*getConstitutionReadModel/);
   assert.doesNotMatch(readModel.slice(readModel.indexOf('export async function listGovernanceRules')), /FROM governance_rules/);
 });

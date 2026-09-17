@@ -203,6 +203,30 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     gameDay,
     corporationId: corporation.rows[0]?.id,
   });
+  const constitutionRules = (constitution.rules ?? {}) as Record<string, unknown>;
+  const constitutionDefinitions = Array.isArray(constitution.definitions)
+    ? constitution.definitions as Array<Record<string, unknown>>
+    : [];
+  const constitutionVersionIds = (constitution.versionIds ?? {}) as Record<string, unknown>;
+  const constitutionProvenance = (constitution.provenance ?? {}) as Record<string, unknown>;
+  const canonicalTaxRules = constitutionDefinitions
+    .filter((definition) => String(definition.rule_code ?? '').includes('.TAX') || String(definition.rule_code ?? '').includes('HOUSE_INCOME_TAX'))
+    .filter((definition) => constitutionRules[String(definition.rule_code)] !== undefined)
+    .map((definition) => {
+      const ruleCode = String(definition.rule_code);
+      const source = String(constitutionProvenance[ruleCode] ?? 'EARTH');
+      return {
+        id: constitutionVersionIds[ruleCode] ?? null,
+        rule_code: ruleCode,
+        category: ruleCode,
+        value_type: definition.value_type ?? null,
+        value: constitutionRules[ruleCode],
+        rule_version: constitutionVersionIds[ruleCode] ?? null,
+        authority_type: source,
+        authority_id: source === 'CORPORATION' ? corporation.rows[0]?.id ?? null : 'EARTH',
+        generatedFrom: 'constitutional_rule_versions_v5',
+      };
+    });
   const house = viewer.rows[0] ?? null;
   const resources = Object.fromEntries(accounts.rows
     .filter((row: any) => row.code !== 'CREDIT')
@@ -326,7 +350,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     corporateResearch: technology.projects,
     market,
     finance: { balance: wallet?.balance_units ?? '0', obligations: obligations.rows },
-    taxRules: taxRules.rows,
+    taxRules: canonicalTaxRules,
+    legacyTaxRules: taxRules.rows,
     personalFinance: { balance: wallet?.balance_units ?? '0', obligations: obligations.rows },
     membership: corporation.rows[0] ? {
       territory_id: territory?.territory_id ?? null,
