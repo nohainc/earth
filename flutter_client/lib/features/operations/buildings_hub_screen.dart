@@ -2097,86 +2097,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           ? null
                           : () async {
                               EarthAudioEngine.instance.playClick();
-                              final pNetYields =
-                                  <(IconData, Color, String, bool)>[];
-                              pNetYields.add((
-                                netDailyProfit != null && netDailyProfit >= 0
-                                    ? Icons.trending_up
-                                    : Icons.trending_down,
-                                netDailyProfit != null && netDailyProfit >= 0
-                                    ? context.successColor
-                                    : context.dangerColor,
-                                netDailyProfit == null
-                                    ? 'SERVER QUOTE REQUIRED'
-                                    : '${netDailyProfit >= 0 ? '+' : ''}${formatWholeNumber(netDailyProfit)} C',
-                                netDailyProfit != null && netDailyProfit >= 0,
-                              ));
-
-                              void addPlannerNet(String key, String label,
-                                  IconData icon, Color color) {
-                                final outVal =
-                                    asDoubleOr(currentSpec['output_$key'], 0);
-                                final inVal =
-                                    asDoubleOr(currentSpec['input_$key'], 0);
-                                final net = outVal - inVal;
-                                if (net != 0) {
-                                  pNetYields.add((
-                                    icon,
-                                    color,
-                                    '${net > 0 ? '+' : ''}${net.toStringAsFixed(1)} $label',
-                                    net > 0,
-                                  ));
-                                }
-                              }
-
-                              addPlannerNet(
-                                  'energy',
-                                  'Energy',
-                                  Icons.bolt_rounded,
-                                  EarthResourceColors.energy);
-                              addPlannerNet('food', 'Food', Icons.eco_outlined,
-                                  EarthResourceColors.food);
-                              addPlannerNet(
-                                  'materials',
-                                  'Mat',
-                                  Icons.terrain_outlined,
-                                  EarthResourceColors.materials);
-                              addPlannerNet(
-                                  'components',
-                                  'Comp',
-                                  Icons.precision_manufacturing_outlined,
-                                  EarthResourceColors.components);
-                              addPlannerNet(
-                                  'compute',
-                                  'Compute',
-                                  Icons.memory_rounded,
-                                  EarthResourceColors.compute);
-
-                              final resType = (currentSpec[
-                                          'resource_output_type'] ??
-                                      currentSpec['dailyOutputResourceType'])
-                                  ?.toString();
-                              final resAmount = asDoubleOr(
-                                currentSpec['output_energy'] ??
-                                    currentSpec['output_food'] ??
-                                    currentSpec['output_materials'] ??
-                                    currentSpec['output_components'] ??
-                                    currentSpec['output_compute'] ??
-                                    currentSpec['dailyOutputResourceAmount'],
-                                0,
-                              );
-                              if (resType != null &&
-                                  resType != 'credits' &&
-                                  resAmount > 0 &&
-                                  pNetYields.length == 1) {
-                                pNetYields.add((
-                                  EarthResourceMeta.forCommodity(resType).icon,
-                                  EarthResourceMeta.forCommodity(resType).color,
-                                  '+${resAmount.toStringAsFixed(1)} ${resType.toUpperCase()}',
-                                  true,
-                                ));
-                              }
-
                               final pDays = math.max(
                                 1,
                                 asIntOr(
@@ -2196,7 +2116,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 remainingCapacity:
                                     availablePrivateSlots - footprint,
                                 constructionDays: pDays,
-                                netYields: pNetYields,
+                                // Construction confirmation must not project
+                                // game-day settlement from catalog fields.
+                                netYields: const [],
                               );
                             },
                     ),

@@ -666,6 +666,8 @@ test('V5 building UI does not fabricate settlement projections', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   assert.match(buildings, /SERVER SETTLEMENT REQUIRED/);
   assert.match(buildings, /settlement_net_/);
+  assert.doesNotMatch(buildings, /addPlannerNet/);
+  assert.doesNotMatch(buildings, /netYields: pNetYields/);
   assert.doesNotMatch(buildings, /building\['output_multiplier'\]/);
   assert.doesNotMatch(buildings, /building\['cost_multiplier'\]/);
   assert.doesNotMatch(buildings, /Legacy fallback if output_|Legacy fallback if input_/);
