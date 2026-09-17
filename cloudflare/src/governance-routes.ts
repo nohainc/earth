@@ -113,6 +113,9 @@ export async function handleGovernanceRoutes(
   if (url.pathname === '/api/governance/v4/proposals' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ subjectType?: 'EARTH' | 'ORGANIZATION'; subjectId?: string | null; title?: string; body?: string; actionType?: string; actionSnapshot?: Record<string, unknown>; ruleSnapshot?: Record<string, unknown>; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
+    if (['TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(String(parsed.value.actionType ?? '').toUpperCase())) {
+      return Response.json({ ok: false, error: 'Legacy tax governance is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
+    }
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId || !parsed.value.title || !parsed.value.actionType || !parsed.value.actionSnapshot) return Response.json({ ok: false, error: 'Subject, title, action, snapshot, and idempotency key are required' }, { status: 400 });
     try {
@@ -234,6 +237,10 @@ export async function handleGovernanceRoutes(
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
     if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
     const targetCategory = body.target?.category?.trim() || null;
+    const targetTaxAction = String(body.target?.value && typeof body.target.value === 'object' ? (body.target.value as Record<string, unknown>).actionType ?? '' : '').toUpperCase();
+    if (targetCategory === 'tax' || ['TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(targetTaxAction)) {
+      return Response.json({ ok: false, error: 'Legacy tax governance is retired; submit a V5 Constitution amendment proposal.' }, { status: 410 });
+    }
     if (targetCategory && !['market', 'finance', 'services', 'technology', 'territory'].includes(targetCategory)) {
       return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
     }

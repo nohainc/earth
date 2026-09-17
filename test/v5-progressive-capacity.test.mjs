@@ -274,6 +274,7 @@ test('legacy player-facing constitutional mutation routes are retired', async ()
   assert.match(institutions, /Direct admission-policy mutation is retired/);
   assert.match(registry, /charter\/amend[^\n]+status: 'RETIRED'/);
   assert.match(registry, /tax-charter[^\n]+status: 'RETIRED'/);
+  assert.match(governance, /Legacy tax governance is retired/);
 });
 
 test('V5 resolution cases preserve Houses and release only selected building capacity', async () => {
