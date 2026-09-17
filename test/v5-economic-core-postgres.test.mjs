@@ -12,6 +12,9 @@ import { getCorporationFiscalState } from '../cloudflare/src/corporation-fiscal-
 import { getInstitutionFinancialProjection } from '../cloudflare/src/financial-projections.ts';
 import { submitMarketOrder, settleMarketBatch, cancelMarketOrder } from '../cloudflare/src/market-postgres.ts';
 import { settleBuildingUpkeepAndRevenueV2 } from '../cloudflare/src/building-settlement-v2.ts';
+import { settleHouseNeedsAndServices } from '../cloudflare/src/service-settlement-postgres.ts';
+import { settleLifeMaintenanceInTransaction, estimateLifeMaintenance } from '../cloudflare/src/life-maintenance-postgres.ts';
+import { refreshHouseDailyStatementsInTransaction, getHouseDailySummary } from '../cloudflare/src/house-daily-summary-postgres.ts';
 
 const execFileAsync = promisify(execFile);
 const connectionString = process.env.DATABASE_URL || 'postgres://earth:earth_dev_only@localhost:5432/earth';
@@ -47,12 +50,12 @@ async function connectTo(url) {
   return client;
 }
 
-test('PostgreSQL V5 Economic Core: Schema version is 120 and migration history is valid', async () => {
+test('PostgreSQL V5 Economic Core: Schema version is 121 and migration history is valid', async () => {
   const client = await connectTo(connectionString);
   try {
     const res = await client.query('SELECT MAX(version) AS max_version, COUNT(*)::int AS count FROM earth_schema_migrations');
-    assert.equal(Number(res.rows[0].max_version), 120, 'Max migration version must be 120');
-    assert.equal(Number(res.rows[0].count), 120, 'Total applied migrations count must be 120');
+    assert.equal(Number(res.rows[0].max_version), 121, 'Max migration version must be 121');
+    assert.equal(Number(res.rows[0].count), 121, 'Total applied migrations count must be 121');
 
     const v118 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 118');
     assert.equal(v118.rows[0]?.name, '118_v5_economic_core_schema.sql');
@@ -62,6 +65,9 @@ test('PostgreSQL V5 Economic Core: Schema version is 120 and migration history i
 
     const v120 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 120');
     assert.equal(v120.rows[0]?.name, '120_v5_corporation_resource_accounts.sql');
+
+    const v121 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 121');
+    assert.equal(v121.rows[0]?.name, '121_v5_retire_housing_energy_services.sql');
   } finally {
     await client.end();
   }
@@ -956,4 +962,362 @@ test('PostgreSQL V5 Economic Core Phase 2: Architecture integrity report passes 
     await client.end();
   }
 });
+
+test('PostgreSQL V5 Economic Core Phase 3: HOUSING and ENERGY services are RETIRED, while HEALTH and CONNECTIVITY remain ACTIVE', async () => {
+  const client = await connectTo(connectionString);
+  try {
+    const serviceTypes = (await client.query(`SELECT code, status FROM service_types ORDER BY code`)).rows;
+    const serviceMap = Object.fromEntries(serviceTypes.map((r) => [r.code, r.status]));
+    assert.equal(serviceMap['HOUSING'], 'RETIRED');
+    assert.equal(serviceMap['ENERGY'], 'RETIRED');
+    assert.equal(serviceMap['CONNECTIVITY'], 'ACTIVE');
+    assert.equal(serviceMap['HEALTH'], 'ACTIVE');
+
+    const needRules = (await client.query(`SELECT need_code, status FROM need_rules ORDER BY need_code`)).rows;
+    const needMap = Object.fromEntries(needRules.map((r) => [r.need_code, r.status]));
+    assert.equal(needMap['HOUSING'], 'RETIRED');
+    assert.equal(needMap['ENERGY'], 'RETIRED');
+    assert.equal(needMap['CONNECTIVITY'], 'ACTIVE');
+    assert.equal(needMap['HEALTH'], 'ACTIVE');
+
+    const estimate = estimateLifeMaintenance();
+    assert.equal(estimate.resources.FOOD, 1);
+    assert.equal(estimate.resources.ENERGY, 1);
+  } finally {
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 3: Service settlement exclusively allocates active services (HEALTH, CONNECTIVITY) and skips retired services', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+
+  const emailHouse = `house-serv-${Date.now()}@example.invalid`;
+  const emailCorpOwner = `corp-serv-owner-${Date.now()}@example.invalid`;
+  let houseHumanId, houseId, houseEconId;
+  let corpOwnerHumanId, corpOwnerHouseId, corpOwnerHouseEconId;
+  let testCorpId, testCorpEconId;
+  const testTerritoryId = `TERR-SERV-${Date.now()}`;
+  const testClinicId = `BLD-CLINIC-${Date.now()}`;
+  const gameDay = 15;
+
+  try {
+    // 1. Setup Corp Owner and Corporation
+    const regCorpOwner = await registerIdentity(repository, { email: emailCorpOwner, personName: 'CorpOwner', houseSurname: `COHouse${Date.now()}`, password: 'correct-horse-battery-staple' });
+    corpOwnerHumanId = regCorpOwner.human.id;
+    corpOwnerHouseId = `HOUSE-${corpOwnerHumanId.slice(2)}`;
+    corpOwnerHouseEconId = `ECON-${corpOwnerHouseId}`;
+
+    await repository.transaction(async (tx) => {
+      const wallet = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET'`, [corpOwnerHouseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = balance_units + 50000000 WHERE id = $1`, [wallet.id]);
+    });
+
+    const corpRes = await foundV5Corporation(repository, {
+      humanId: corpOwnerHumanId,
+      name: `Service Corp ${Date.now()}`,
+      admissionPolicy: 'OPEN',
+      correlationId: `test-serv-corp-${Date.now()}`,
+    });
+    testCorpId = corpRes.corporationId;
+    testCorpEconId = `ECON-${testCorpId}`;
+
+    // 2. Setup Territory and Public Health Service Provider (PUBLIC-MEDICAL-T1)
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Service Territory', 'ACTIVE', true)`, [testTerritoryId, testCorpId]);
+      await tx.query(`
+        INSERT INTO buildings (
+          id, catalog_id, owner_economic_id, territory_id, status, construction_state,
+          installed_generation, catalog_definition_version, technology_definition_version,
+          operating_mode, started_game_day, last_major_rebuild_game_day
+        ) VALUES (
+          $1, 'PUBLIC-MEDICAL-T1', $2, $3, 'ACTIVE', 'ACTIVE',
+          1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1
+        )
+      `, [testClinicId, testCorpEconId, testTerritoryId]);
+    });
+
+    // 3. Setup Resident House in territory
+    const regHouse = await registerIdentity(repository, { email: emailHouse, personName: 'Resident', houseSurname: `ResHouse${Date.now()}`, password: 'correct-horse-battery-staple' });
+    houseHumanId = regHouse.human.id;
+    houseId = `HOUSE-${houseHumanId.slice(2)}`;
+    houseEconId = `ECON-${houseId}`;
+
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO house_residencies (id, house_id, territory_id, residency_class, status, effective_from_game_day, correlation_id) VALUES ($1, $2, $3, 'PRIMARY', 'ACTIVE', 1, $1)`, [`res-${houseId}`, houseId, testTerritoryId]);
+      const wallet = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = balance_units + 1000 WHERE id = $1`, [wallet.id]);
+
+      // 4. Run Service Settlement
+      const result = await settleHouseNeedsAndServices(tx, gameDay, 0, 1);
+      assert.ok(result.houses >= 1);
+
+      // 5. Verify assessments: must contain HEALTH, must NOT contain HOUSING or ENERGY
+      const assessments = (await tx.query(`SELECT need_code, demand_units, allocated_units, shortfall_units, risk_level FROM house_need_assessments WHERE house_id = $1 AND game_day = $2`, [houseId, gameDay])).rows;
+      const needCodes = assessments.map((a) => a.need_code);
+      assert.ok(needCodes.includes('HEALTH'), 'HEALTH need must be assessed');
+      assert.ok(!needCodes.includes('HOUSING'), 'HOUSING service must NOT be assessed');
+      assert.ok(!needCodes.includes('ENERGY'), 'Abstract ENERGY service must NOT be assessed');
+
+      // 6. Verify allocations: must allocate HEALTH service
+      const allocations = (await tx.query(`SELECT service_code, allocated_units FROM service_allocations WHERE house_id = $1 AND game_day = $2`, [houseId, gameDay])).rows;
+      for (const alloc of allocations) {
+        assert.notEqual(alloc.service_code, 'HOUSING');
+        assert.notEqual(alloc.service_code, 'ENERGY');
+      }
+    });
+  } finally {
+    if (houseId) {
+      await client.query('DELETE FROM service_allocations WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM house_need_assessments WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM house_residencies WHERE house_id = $1', [houseId]);
+    }
+    await client.query('DELETE FROM buildings WHERE id = $1', [testClinicId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [testTerritoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [testTerritoryId]);
+
+    await client.query(`DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE 'test-serv-corp-%')`);
+    await client.query(`DELETE FROM economic_transactions WHERE correlation_id LIKE 'test-serv-corp-%'`);
+
+    if (testCorpId) {
+      await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [testCorpId]);
+      await client.query('UPDATE v5_house_settlement_profiles SET corporation_id = NULL WHERE corporation_id = $1', [testCorpId]);
+      await client.query('DELETE FROM v5_corporation_founding_commands WHERE corporation_id = $1', [testCorpId]);
+      await client.query('DELETE FROM comm_channels WHERE scope_id = $1', [testCorpId]);
+      await client.query('DELETE FROM institution_governance_roles WHERE institution_id = $1', [testCorpId]);
+      await client.query('DELETE FROM house_affiliations WHERE corporation_id = $1', [testCorpId]);
+      await client.query('DELETE FROM constitutional_rule_versions_v5 WHERE authority_id = $1', [testCorpId]);
+      await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [testCorpEconId]);
+      await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [testCorpEconId]);
+      await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [testCorpEconId]);
+      await client.query('DELETE FROM corporations WHERE id = $1', [testCorpId]);
+      await client.query('DELETE FROM institutions WHERE id = $1', [testCorpId]);
+    }
+
+    for (const [hId, eId, email] of [[houseHumanId, houseEconId, emailHouse], [corpOwnerHumanId, corpOwnerHouseEconId, emailCorpOwner]]) {
+      if (!hId) continue;
+      const hHouseId = `HOUSE-${hId.slice(2)}`;
+      await client.query('DELETE FROM auth_sessions WHERE account_id = $1', [`account-${hId.toLowerCase()}`]);
+      await client.query('DELETE FROM game_events WHERE actor_human_id = $1', [hId]);
+      await client.query('DELETE FROM notifications WHERE human_id = $1', [hId]);
+      await client.query('DELETE FROM personal_life_maintenance WHERE human_id = $1', [hId]);
+      await client.query('DELETE FROM house_daily_statements WHERE house_id = $1', [hHouseId]);
+      await client.query('DELETE FROM house_need_assessments WHERE house_id = $1', [hHouseId]);
+      await client.query('DELETE FROM service_allocations WHERE house_id = $1', [hHouseId]);
+      await client.query('DELETE FROM event_outbox WHERE aggregate_id = $1', [hId]);
+      await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [eId]);
+      await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [hId, `starter:${hHouseId}:%`]);
+      await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [hId, `starter:${hHouseId}:%`]);
+      await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [eId]);
+      await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [eId]);
+      await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [hHouseId]);
+      await client.query('DELETE FROM humans WHERE id = $1', [hId]);
+      await client.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [email]);
+      await client.query('DELETE FROM house_entry_support WHERE house_id = $1', [hHouseId]);
+      await client.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [hHouseId]);
+      await client.query('DELETE FROM house_residencies WHERE house_id = $1', [hHouseId]);
+      await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [hHouseId]);
+      await client.query('DELETE FROM houses WHERE id = $1', [hHouseId]);
+      await client.query('DELETE FROM auth_accounts WHERE email = $1', [email]);
+    }
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 3: Life maintenance consumes actual FOOD and ENERGY resources directly from House inventory', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+
+  const emailMaint = `maint-house-${Date.now()}@example.invalid`;
+  let humanId, houseId, houseEconId;
+  const gameDay = 20;
+
+  try {
+    const reg = await registerIdentity(repository, { email: emailMaint, personName: 'MaintPerson', houseSurname: `MHouse${Date.now()}`, password: 'correct-horse-battery-staple' });
+    humanId = reg.human.id;
+    houseId = `HOUSE-${humanId.slice(2)}`;
+    houseEconId = `ECON-${houseId}`;
+
+    await repository.transaction(async (tx) => {
+      // 1. Seed House inventory with 5 FOOD (asset 6) and 5 ENERGY (asset 4)
+      const foodInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 6 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 5 WHERE id = $1`, [foodInv.id]);
+
+      const energyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 5 WHERE id = $1`, [energyInv.id]);
+
+      // 2. Settle life maintenance
+      const settledCount = await settleLifeMaintenanceInTransaction(tx, gameDay);
+      assert.ok(settledCount >= 1);
+
+      // 3. Verify inventory balances: 5 - 1 = 4 for both FOOD and ENERGY
+      const remFood = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [foodInv.id])).rows[0];
+      assert.equal(remFood.balance_units, '4', 'FOOD inventory decremented by 1');
+
+      const remEnergy = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [energyInv.id])).rows[0];
+      assert.equal(remEnergy.balance_units, '4', 'ENERGY inventory decremented by 1');
+
+      // 4. Verify personal_life_maintenance journal record
+      const journal = (await tx.query(`SELECT * FROM personal_life_maintenance WHERE human_id = $1 AND game_day = $2`, [humanId, gameDay])).rows[0];
+      assert.ok(journal);
+      assert.equal(journal.food_required_units, '1');
+      assert.equal(journal.food_consumed_units, '1');
+      assert.equal(journal.food_shortfall_units, '0');
+      assert.equal(journal.energy_required_units, '1');
+      assert.equal(journal.energy_consumed_units, '1');
+      assert.equal(journal.energy_shortfall_units, '0');
+      assert.equal(journal.status, 'FED');
+
+      // 5. Refresh and verify House daily statement
+      await refreshHouseDailyStatementsInTransaction(tx, gameDay);
+      const statement = (await tx.query(`SELECT consumption FROM house_daily_statements WHERE house_id = $1 AND game_day = $2`, [houseId, gameDay])).rows[0];
+      assert.ok(statement);
+      const consumption = statement.consumption;
+      assert.equal(consumption['FOOD'], '1', 'Statement consumption records 1 FOOD');
+      assert.equal(consumption['ENERGY'], '1', 'Statement consumption records 1 direct ENERGY');
+    });
+  } finally {
+    if (humanId) {
+      await client.query('DELETE FROM personal_life_maintenance WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM house_daily_statements WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM auth_sessions WHERE account_id = $1', [`account-${humanId.toLowerCase()}`]);
+      await client.query('DELETE FROM game_events WHERE actor_human_id = $1', [humanId]);
+      await client.query('DELETE FROM notifications WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM event_outbox WHERE aggregate_id = $1', [humanId]);
+      await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [humanId, `starter:${houseId}:%`]);
+      await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [humanId, `starter:${houseId}:%`]);
+      await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [houseEconId]);
+      await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [houseEconId]);
+      await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [houseEconId]);
+      await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+      await client.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [emailMaint]);
+      await client.query('DELETE FROM house_entry_support WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM auth_accounts WHERE email = $1', [emailMaint]);
+    }
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 3: Life maintenance with zero inventory handles shortages safely without negative balances', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+
+  const emailStarve = `starve-house-${Date.now()}@example.invalid`;
+  let humanId, houseId, houseEconId;
+  const gameDay = 25;
+
+  try {
+    const reg = await registerIdentity(repository, { email: emailStarve, personName: 'StarvePerson', houseSurname: `SHouse${Date.now()}`, password: 'correct-horse-battery-staple' });
+    humanId = reg.human.id;
+    houseId = `HOUSE-${humanId.slice(2)}`;
+    houseEconId = `ECON-${houseId}`;
+
+    await repository.transaction(async (tx) => {
+      // Zero out all inventory accounts (e.g. starter package food)
+      await tx.query(`UPDATE economic_accounts SET balance_units = 0 WHERE owner_economic_id = $1 AND account_type = 'INVENTORY'`, [houseEconId]);
+
+      // 1. Settle life maintenance
+      const settledCount = await settleLifeMaintenanceInTransaction(tx, gameDay);
+      assert.ok(settledCount >= 1);
+
+      // 2. Verify personal_life_maintenance journal record
+      const journal = (await tx.query(`SELECT * FROM personal_life_maintenance WHERE human_id = $1 AND game_day = $2`, [humanId, gameDay])).rows[0];
+      assert.ok(journal);
+      assert.equal(journal.food_required_units, '1');
+      assert.equal(journal.food_consumed_units, '0');
+      assert.equal(journal.food_shortfall_units, '1');
+      assert.equal(journal.energy_required_units, '1');
+      assert.equal(journal.energy_consumed_units, '0');
+      assert.equal(journal.energy_shortfall_units, '1');
+      assert.equal(journal.status, 'UNFED');
+
+      // 3. Verify inventory balances remain 0 (never negative)
+      const foodInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 6 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(foodInv.balance_units, '0');
+
+      const energyInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(energyInv.balance_units, '0');
+    });
+  } finally {
+    if (humanId) {
+      await client.query('DELETE FROM personal_life_maintenance WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM house_daily_statements WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM auth_sessions WHERE account_id = $1', [`account-${humanId.toLowerCase()}`]);
+      await client.query('DELETE FROM game_events WHERE actor_human_id = $1', [humanId]);
+      await client.query('DELETE FROM notifications WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM event_outbox WHERE aggregate_id = $1', [humanId]);
+      await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [humanId, `starter:${houseId}:%`]);
+      await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [humanId, `starter:${houseId}:%`]);
+      await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [houseEconId]);
+      await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [houseEconId]);
+      await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [houseEconId]);
+      await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+      await client.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [emailStarve]);
+      await client.query('DELETE FROM house_entry_support WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM auth_accounts WHERE email = $1', [emailStarve]);
+    }
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 3: Historical service assessments and allocations remain readable and valid', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const emailHist = `hist-house-${Date.now()}@example.invalid`;
+  let humanId, houseId, houseEconId;
+  const oldDay = 1;
+
+  try {
+    const reg = await registerIdentity(repository, { email: emailHist, personName: 'HistPerson', houseSurname: `HHouse${Date.now()}`, password: 'correct-horse-battery-staple' });
+    humanId = reg.human.id;
+    houseId = `HOUSE-${humanId.slice(2)}`;
+    houseEconId = `ECON-${houseId}`;
+
+    // Insert historical HOUSING and ENERGY need assessments
+    await client.query(`
+      INSERT INTO house_need_assessments
+        (house_id, game_day, need_code, demand_units, available_units, allocated_units, shortfall_units, risk_level, rules_version)
+      VALUES
+        ($1, $2, 'HOUSING', 1, 1, 1, 0, 'NORMAL', 'needs-v1'),
+        ($1, $2, 'ENERGY', 1, 1, 1, 0, 'NORMAL', 'needs-v1')
+    `, [houseId, oldDay]);
+
+    const historical = (await client.query(`SELECT need_code, allocated_units FROM house_need_assessments WHERE house_id = $1 AND game_day = $2 ORDER BY need_code`, [houseId, oldDay])).rows;
+    assert.equal(historical.length, 2);
+    assert.equal(historical[0].need_code, 'ENERGY');
+    assert.equal(historical[1].need_code, 'HOUSING');
+  } finally {
+    if (humanId) {
+      await client.query('DELETE FROM house_need_assessments WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM auth_sessions WHERE account_id = $1', [`account-${humanId.toLowerCase()}`]);
+      await client.query('DELETE FROM game_events WHERE actor_human_id = $1', [humanId]);
+      await client.query('DELETE FROM notifications WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM personal_life_maintenance WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM event_outbox WHERE aggregate_id = $1', [humanId]);
+      await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [humanId, `starter:${houseId}:%`]);
+      await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [humanId, `starter:${houseId}:%`]);
+      await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [houseEconId]);
+      await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [houseEconId]);
+      await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [houseEconId]);
+      await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+      await client.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [emailHist]);
+      await client.query('DELETE FROM house_entry_support WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM auth_accounts WHERE email = $1', [emailHist]);
+    }
+    await client.end();
+  }
+});
+
 

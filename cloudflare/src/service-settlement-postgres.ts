@@ -6,7 +6,7 @@ type House = { house_id: string; economic_id: string; territory_id: string; resi
 type Provider = { territory_id: string; service_code: string; economic_id: string; owner_type: string; capacity_units: string };
 type WorldCondition = { scope_type: string; scope_id: string | null; effect_type: string; target_key: string; modifier_bps: number };
 
-const SERVICE_CODES = ['HOUSING', 'ENERGY', 'CONNECTIVITY', 'HEALTH'];
+const SERVICE_CODES = ['CONNECTIVITY', 'HEALTH'];
 
 function units(value: unknown): bigint {
   const text = String(value ?? '0');

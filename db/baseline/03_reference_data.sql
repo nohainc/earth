@@ -144,11 +144,11 @@ VALUES
   ('TECH-RESEARCH-METHODS-V1', 'RESEARCH_CAPACITY', 'ALL', 500)
 ON CONFLICT (technology_id, effect_type, target_key) DO NOTHING;
 
-INSERT INTO service_types (code, payer_scope, daily_price_units, allocation_priority, rules_version) VALUES
-  ('HOUSING', 'HOUSE', 0, 10, 'services-v1'), ('ENERGY', 'HOUSE', 1, 20, 'services-v1'),
-  ('CONNECTIVITY', 'HOUSE', 1, 30, 'services-v1'), ('HEALTH', 'HOUSE', 1, 40, 'services-v1')
+INSERT INTO service_types (code, payer_scope, daily_price_units, allocation_priority, rules_version, status) VALUES
+  ('HOUSING', 'HOUSE', 0, 10, 'services-v1', 'RETIRED'), ('ENERGY', 'HOUSE', 1, 20, 'services-v1', 'RETIRED'),
+  ('CONNECTIVITY', 'HOUSE', 1, 30, 'services-v1', 'ACTIVE'), ('HEALTH', 'HOUSE', 1, 40, 'services-v1', 'ACTIVE')
 ON CONFLICT (code) DO NOTHING;
-INSERT INTO need_rules (need_code, service_type_code, demand_units_per_human, critical_threshold_bps, rules_version) VALUES
-  ('HOUSING', 'HOUSING', 1, 7500, 'needs-v1'), ('ENERGY', 'ENERGY', 1, 7500, 'needs-v1'),
-  ('CONNECTIVITY', 'CONNECTIVITY', 1, 7500, 'needs-v1'), ('HEALTH', 'HEALTH', 1, 7500, 'needs-v1')
+INSERT INTO need_rules (need_code, service_type_code, demand_units_per_human, critical_threshold_bps, rules_version, status) VALUES
+  ('HOUSING', 'HOUSING', 1, 7500, 'needs-v1', 'RETIRED'), ('ENERGY', 'ENERGY', 1, 7500, 'needs-v1', 'RETIRED'),
+  ('CONNECTIVITY', 'CONNECTIVITY', 1, 7500, 'needs-v1', 'ACTIVE'), ('HEALTH', 'HEALTH', 1, 7500, 'needs-v1', 'ACTIVE')
 ON CONFLICT (need_code) DO NOTHING;
