@@ -3,11 +3,11 @@
 
 INSERT INTO constitutional_rule_definitions_v5
   (rule_code, article_code, value_type, authority_model, policy_group,
-   amendment_class, allowed_values)
+   calculation_key, amendment_class, allowed_values)
 VALUES
-  ('EARTH.SUCCESSION.COST_UNITS', 'SUCCESSION', 'CREDIT_UNITS', 'EARTH_LOCKED', 'SUCCESSION_POLICY', 'POLICY', '[]'),
-  ('EARTH.SUCCESSION.COST_BPS', 'SUCCESSION', 'RATE_BPS', 'EARTH_LOCKED', 'SUCCESSION_POLICY', 'POLICY', '[]'),
-  ('EARTH.SUCCESSION.TRANSITION_DAYS', 'SUCCESSION', 'GAME_DAYS', 'EARTH_LOCKED', 'SUCCESSION_POLICY', 'POLICY', '[]')
+  ('EARTH.SUCCESSION.COST_UNITS', 'SUCCESSION', 'CREDIT_UNITS', 'EARTH_LOCKED', 'SUCCESSION_POLICY', 'earth.succession.cost_units', 'POLICY', '[]'),
+  ('EARTH.SUCCESSION.COST_BPS', 'SUCCESSION', 'RATE_BPS', 'EARTH_LOCKED', 'SUCCESSION_POLICY', 'earth.succession.cost_bps', 'POLICY', '[]'),
+  ('EARTH.SUCCESSION.TRANSITION_DAYS', 'SUCCESSION', 'GAME_DAYS', 'EARTH_LOCKED', 'SUCCESSION_POLICY', 'earth.succession.transition_days', 'POLICY', '[]')
 ON CONFLICT (rule_code) DO NOTHING;
 
 -- Preserve legacy object-form values when they exist. A missing legacy policy
