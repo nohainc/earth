@@ -730,6 +730,13 @@ test('V5 world snapshot converts PostgreSQL bigint values at the JSON boundary',
   assert.match(world, /return toJsonSafe\(\{/);
 });
 
+test('V5 upgrade review is quote-only and does not derive tier economics in Flutter', async () => {
+  const dialog = await readFile(new URL('../flutter_client/lib/features/operations/building_detail_upgrade_dialog.dart', import.meta.url), 'utf8');
+  assert.match(dialog, /quoteBuildingUpgrade/);
+  assert.match(dialog, /server-authoritative upgrade quote/);
+  assert.doesNotMatch(dialog, /getVal|dailyOperatingCredits|dailyOutputCredits|baseCreditCost|upgradeCreditCost.*asIntOr/);
+});
+
 test('V5 corporation lifecycle supports name reuse, leadership delegation, and graceful dissolution', async () => {
   const founding = await readFile(new URL('../cloudflare/src/v5-founding-postgres.ts', import.meta.url), 'utf8');
   assert.match(founding, /lower\(name\) = lower\(\$1\) AND status = \\'ACTIVE\\'/);
