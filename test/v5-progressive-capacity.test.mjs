@@ -218,6 +218,9 @@ test('daily tax settlement consumes the assessed-day Constitution market rate', 
   assert.match(settlement, /resolved_constitution_snapshots_v5/);
   assert.match(settlement, /EARTH\.MARKET\.TRANSACTION_TAX_RATE/);
   assert.match(settlement, /constitutionalRate\(rule\)/);
+  assert.match(settlement, /CORPORATION\.TAX\.INCOME_RATE/);
+  assert.match(settlement, /corporationMemberships/);
+  assert.match(settlement, /nexus_type: 'MEMBERSHIP'/);
 });
 
 test('House and Corporation fiscal read models expose canonical tax rules and provenance', async () => {
