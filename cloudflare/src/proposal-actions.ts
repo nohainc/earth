@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { assertConstitutionalAmendableRule, validateConstitutionalRuleValue } from './v5-constitution.ts';
 import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
+import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
 
 export type ProposalActionContext = {
   repository: PostgresRepository;
@@ -54,6 +55,7 @@ const financialHandler: ProposalActionHandler = {
       if (Number(financialSnapshotValue(action, 'effectiveDay')) < gameDay + 1) throw new Error(`${actionType} must take effect after the settlement day`);
     }
   },
+  execute: async ({ repository, proposal, action, gameDay }) => executeProposalFinancialAction(repository, proposal, action, gameDay),
 };
 
 const discussionHandler: ProposalActionHandler = {

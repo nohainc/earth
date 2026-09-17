@@ -5,8 +5,7 @@ import { transferCredits } from './financial-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { getAuthoritativeGameTime } from './game-clock.ts';
 import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
-import { isFinancialProposalAction, proposalActionHandler, validateProposalActionSnapshot } from './proposal-actions.ts';
-import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
+import { proposalActionHandler, validateProposalActionSnapshot } from './proposal-actions.ts';
 import { attemptProposalFunding } from './proposal-funding.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
@@ -508,8 +507,8 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     const action = jsonObject(current.action_snapshot);
     const actionHandler = proposalActionHandler(action.actionType);
     await actionHandler.validateExecution({ repository: tx, proposal: current as Record<string, unknown>, action, gameDay: day });
-    if (isFinancialProposalAction(action.actionType)) {
-      const result = await executeProposalFinancialAction(tx, current as Record<string, unknown>, action, day);
+    if (actionHandler.execute) {
+      const result = await actionHandler.execute({ repository: tx, proposal: current as Record<string, unknown>, action, gameDay: day });
       await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'completed' WHERE id = $1", [current.id]);
       await tx.query("UPDATE proposal_actions SET execution_status = 'completed', completed_game_day = $2, result_json = $3 WHERE proposal_id = $1 AND sequence = 1", [current.id, day, JSON.stringify(result)]);
       return { ok: true, executionStatus: 'completed', result, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
