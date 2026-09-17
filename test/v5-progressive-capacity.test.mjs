@@ -192,6 +192,17 @@ test('V5 capacity settlement consumes resolved Constitution values before legacy
   assert.match(settlement, /CORPORATION\.HOUSE_CAPACITY\.BASE_RATE/);
 });
 
+test('V5 Constitution read model exposes resolved values, provenance, and history', async () => {
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  const route = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');
+  const client = await readFile(new URL('../flutter_client/lib/core/api/earth_api_governance.dart', import.meta.url), 'utf8');
+  assert.match(kernel, /getConstitutionReadModel/);
+  assert.match(kernel, /versionIds/);
+  assert.match(kernel, /effective_to_game_day/);
+  assert.match(route, /governance\/v5\/constitution/);
+  assert.match(client, /getV5Constitution/);
+});
+
 test('legacy player-facing constitutional mutation routes are retired', async () => {
   const organizations = await readFile(new URL('../cloudflare/src/organizations-routes.ts', import.meta.url), 'utf8');
   const governance = await readFile(new URL('../cloudflare/src/governance-routes.ts', import.meta.url), 'utf8');

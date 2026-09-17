@@ -904,6 +904,14 @@
       "status": "ACTIVE"
     },
     {
+      "method": "GET",
+      "path": "/api/governance/v5/constitution",
+      "owner": "GovernanceRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getConstitutionReadModel",
+      "status": "ACTIVE"
+    },
+    {
       "method": "POST",
       "path": "/api/governance/v5/proposals/{id}/vote",
       "owner": "GovernanceRoutes",

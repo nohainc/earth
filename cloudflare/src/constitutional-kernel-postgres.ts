@@ -68,3 +68,18 @@ export async function materializeResolvedConstitutionSnapshot(
   );
   return { id, versionIds: resolved.versionIds };
 }
+
+export async function getConstitutionReadModel(
+  repository: PostgresRepository,
+  input: { gameDay: number; corporationId?: string },
+): Promise<Record<string, unknown>> {
+  const resolved = await resolveEffectiveConstitution(repository, input);
+  const history = (await repository.query(`
+    SELECT rule_code, authority_type, authority_id, version, value_json,
+           effective_from_game_day, effective_to_game_day, status, proposal_id
+      FROM constitutional_rule_versions_v5
+     WHERE (authority_type = 'EARTH' AND authority_id = 'EARTH')
+        OR (authority_type = 'CORPORATION' AND authority_id = $1)
+     ORDER BY rule_code, effective_from_game_day DESC, version DESC`, [input.corporationId ?? ''])).rows;
+  return { gameDay: input.gameDay, corporationId: input.corporationId ?? null, rules: resolved.rules, versionIds: resolved.versionIds, history, generatedFrom: 'postgres-constitutional-kernel-v5' };
+}

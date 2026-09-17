@@ -14,6 +14,7 @@ import {
 import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
 import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVotingSettings, resolveGovernanceProposalV4, setOrganizationVotingSettings } from './governance-v4-postgres.ts';
 import { castV5GovernanceVote, createV5GovernanceProposal, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
+import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 
 export async function handleGovernanceRoutes(
   request: Request,
@@ -21,6 +22,19 @@ export async function handleGovernanceRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/governance/v5/constitution' && request.method === 'GET') {
+    const result = await withRepository(env, async (repository) => {
+      const corporationId = url.searchParams.get('corporationId')?.trim() || undefined;
+      if (corporationId) {
+        const allowed = (await repository.query(`SELECT 1 FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.corporation_id = $2 AND h.status = 'ACTIVE' AND ha.status = 'ACTIVE'`, [viewer.id, corporationId])).rows[0];
+        if (!allowed) throw new Error('Corporation membership is required to view its Constitution');
+      }
+      const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
+      return getConstitutionReadModel(repository, { gameDay: Number(world?.game_day ?? 1), corporationId });
+    });
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
   if (url.pathname === '/api/governance/v5/proposals' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => listV5GovernanceProposals(repository, viewer.id));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

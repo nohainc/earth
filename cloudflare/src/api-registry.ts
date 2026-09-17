@@ -141,6 +141,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'GET', path: '/api/v5/corporations/{id}/membership/applications', owner: 'InstitutionRoutes', auth: 'INSTITUTION_ROLE', service: 'listV5MembershipApplications', status: 'ACTIVE' },
   { method: 'POST', path: '/api/governance/v5/proposals', owner: 'GovernanceRoutes', auth: 'HUMAN_SELF', service: 'createV5GovernanceProposal', status: 'ACTIVE' },
   { method: 'GET', path: '/api/governance/v5/proposals', owner: 'GovernanceRoutes', auth: 'HOUSE_SELF', service: 'listV5GovernanceProposals', status: 'ACTIVE' },
+  { method: 'GET', path: '/api/governance/v5/constitution', owner: 'GovernanceRoutes', auth: 'HOUSE_SELF', service: 'getConstitutionReadModel', status: 'ACTIVE' },
   { method: 'POST', path: '/api/governance/v5/proposals/{id}/vote', owner: 'GovernanceRoutes', auth: 'HUMAN_SELF', service: 'castV5GovernanceVote', status: 'ACTIVE' },
   { method: 'POST', path: '/api/governance/v5/proposals/{id}/resolve', owner: 'GovernanceRoutes', auth: 'HUMAN_SELF', service: 'resolveV5GovernanceProposal', status: 'ACTIVE' },
   { method: 'GET', path: '/api/v5/house/capacity-resolution', owner: 'FinanceRoutes', auth: 'HOUSE_SELF', service: 'listV5CapacityResolutionCases', status: 'ACTIVE' },

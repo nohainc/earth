@@ -1,6 +1,11 @@
 part of 'earth_api.dart';
 
 extension EarthApiGovernance on EarthApi {
+  Future<Map<String, dynamic>> getV5Constitution({String? corporationId}) async {
+    final suffix = corporationId == null ? '' : '?corporationId=${Uri.encodeQueryComponent(corporationId)}';
+    final response = await _request('/api/governance/v5/constitution$suffix');
+    return Map<String, dynamic>.from(response as Map);
+  }
   Future<Map<String, dynamic>> listV5Proposals() async {
     final response = await _request('/api/governance/v5/proposals');
     return response is Map<String, dynamic>
