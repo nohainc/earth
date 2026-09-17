@@ -477,6 +477,16 @@ test('V5 Corporation fiscal read model does not expose legacy tax-rule authority
   assert.doesNotMatch(fiscal, /legacy-tax-rule-versions-bridge/);
 });
 
+test('V5 House tax read models use canonical constitutional rules', async () => {
+  const statement = await readFile(new URL('../cloudflare/src/tax-statement-postgres.ts', import.meta.url), 'utf8');
+  const finance = await readFile(new URL('../cloudflare/src/finance-routes.ts', import.meta.url), 'utf8');
+  assert.match(statement, /getResolvedConstitutionForDay/);
+  assert.match(statement, /generatedFrom: 'constitutional_rule_versions_v5'/);
+  assert.doesNotMatch(statement, /FROM tax_rule_versions/);
+  assert.match(finance, /rules: canonicalTaxStatement\?\.activeRules \?\? \[\]/);
+  assert.doesNotMatch(finance, /legacy-tax-rule-versions-bridge/);
+});
+
 test('V5 resolution cases preserve Houses and release only selected building capacity', async () => {
   const migration = await readFile(new URL('../db/migrations/085_v5_capacity_resolution_cases.sql', import.meta.url), 'utf8');
   assert.match(migration, /v5_capacity_resolution_cases/);

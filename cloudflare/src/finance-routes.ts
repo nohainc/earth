@@ -282,7 +282,7 @@ export async function handleFinanceRoutes(
   }
   if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [account, state, buildings, context, latestMaintenance, arrears, taxRules, taxObligations, bankDeposits, transactions, v5Capacity, v5Obligations, canonicalTaxStatement] = await Promise.all([
+      const [account, state, buildings, context, latestMaintenance, arrears, taxObligations, bankDeposits, transactions, v5Capacity, v5Obligations, canonicalTaxStatement] = await Promise.all([
         repository.query(`SELECT a.id::TEXT AS account_id, a.balance_units::TEXT AS balance_units,
                                  'CREDIT' AS currency,
                                  a.account_type
@@ -294,12 +294,6 @@ export async function handleFinanceRoutes(
         repository.query<{ age_years: number; corporation_id: string | null; living_cost_index: string }>("SELECT h.age_years, ha.corporation_id, w.living_cost_index FROM humans h LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE' CROSS JOIN world_state w WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
         repository.query('SELECT game_day, food_required_units, food_consumed_units, food_shortfall_units, shortfall_notes, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
         repository.query<{ total: string }>('SELECT COALESCE(SUM(food_shortfall_units), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
-        repository.query(`SELECT DISTINCT ON (tax_rule_id) id, tax_rule_id, scope, category, rate_bps, version,
-                                 tax_base_definition, beneficiary_economic_id, effective_from_game_day, effective_to_game_day
-                            FROM tax_rule_versions
-                           WHERE effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
-                             AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
-                           ORDER BY tax_rule_id, effective_from_game_day DESC, version DESC`),
         repository.query('SELECT id, tax_type, tax_base_units, rate_bps, amount_units, rule_version, game_day, status, due_game_day FROM tax_obligations t JOIN owner_registry o ON o.economic_id = t.taxpayer_economic_id WHERE o.id = $1 ORDER BY t.game_day DESC, t.id DESC', [viewer.house_id]),
         repository.query(`SELECT d.id, d.principal_units, d.accrued_interest_units, d.rate_bps, d.rate_rule_version,
                                  d.start_total_game_minute, d.maturity_total_game_minute, d.status,
@@ -334,11 +328,11 @@ export async function handleFinanceRoutes(
         },
         lifeMaintenance: { lastSettlement: latestMaintenance.rows[0] ?? null, unpaidTotal: Number(arrears.rows[0]?.total ?? 0), corporationId: resident?.corporation_id ?? null },
         taxes: {
-          rules: taxRules.rows,
+          rules: canonicalTaxStatement?.activeRules ?? [],
           constitutionalRules: canonicalTaxStatement?.constitutionalTaxRules ?? {},
           constitutionalVersionIds: canonicalTaxStatement?.constitutionalTaxVersionIds ?? {},
           obligations: taxObligations.rows,
-          generatedFrom: canonicalTaxStatement ? 'postgres-constitutional-tax-v5' : 'legacy-tax-rule-versions-bridge',
+          generatedFrom: canonicalTaxStatement ? 'postgres-constitutional-tax-v5' : 'unavailable-canonical-tax-statement',
         },
         capacity: { summary: v5Capacity, obligations: v5Obligations.rows },
         liquidity: {
