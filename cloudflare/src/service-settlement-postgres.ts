@@ -83,7 +83,7 @@ export async function settleHouseNeedsAndServices(tx: PostgresRepository, day: n
   const providerMap = new Map<string, Provider[]>();
   const providerRows = await tx.query<Provider>(`SELECT b.territory_id, c.service_type AS service_code, b.owner_economic_id AS economic_id, owner.owner_type, SUM(c.service_capacity_units)::TEXT AS capacity_units
      FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id
-    WHERE b.status = 'ACTIVE' AND c.economic_role = 'SERVICE' AND c.service_type = ANY($1)
+    WHERE b.status = 'ACTIVE' AND c.economic_role IN ('SERVICE', 'INFRASTRUCTURE') AND c.service_type = ANY($1)
     GROUP BY b.territory_id, c.service_type, b.owner_economic_id, owner.owner_type ORDER BY b.territory_id, c.service_type, b.owner_economic_id`, [SERVICE_CODES]);
   for (const provider of providerRows.rows) {
     const key = `${provider.territory_id}:${provider.service_code}`;

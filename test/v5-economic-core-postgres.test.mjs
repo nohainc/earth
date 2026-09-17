@@ -1320,4 +1320,527 @@ test('PostgreSQL V5 Economic Core Phase 3: Historical service assessments and al
   }
 });
 
+test('PostgreSQL V5 Economic Core Phase 4: Base production chains 1-5 execute end-to-end with database catalog flows and asset conservation', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+
+  const email = `phase4-chain-${Date.now()}@example.invalid`;
+  const corpId = `CORP-CHAIN-${Date.now()}`;
+  const corpEconId = `ECON-${corpId}`;
+  const territoryId = `TERR-CHAIN-${Date.now()}`;
+  const residencyId = `RES-CHAIN-${Date.now()}`;
+
+  const solarId = `BLD-SOLAR-${Date.now()}`;
+  const farmId = `BLD-FARM-${Date.now()}`;
+  const matRecId = `BLD-MATREC-${Date.now()}`;
+  const extractId = `BLD-EXTRACT-${Date.now()}`;
+  const fabId = `BLD-FAB-${Date.now()}`;
+  const computeId = `BLD-COMPUTE-${Date.now()}`;
+
+  let humanId, houseId, houseEconId;
+
+  try {
+    const reg = await registerIdentity(repository, { email, personName: 'ChainPerson', houseSurname: `CHouse${Date.now()}`, password: 'correct-horse-battery-staple' });
+    humanId = reg.human.id;
+    houseId = `HOUSE-${humanId.slice(2)}`;
+    houseEconId = `ECON-${houseId}`;
+
+    await repository.transaction(async (tx) => {
+      // 1. Setup Corporation & Territory
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Chain Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      const corpTreasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [corpEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [corpTreasury.id]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Chain Territory', 'ACTIVE', true)`, [territoryId, corpId]);
+
+      // Move House to this territory and affiliate with Corporation (required for private buildings)
+      await tx.query(`INSERT INTO house_residencies (id, house_id, territory_id, residency_class, status, effective_from_game_day, correlation_id) VALUES ($1, $2, $3, 'PRIMARY', 'ACTIVE', 1, $4)`, [residencyId, houseId, territoryId, `res:${houseId}:${territoryId}:${Date.now()}`]);
+      await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1, $2, $3, 1, 'ACTIVE')`, [houseId, corpId, territoryId]);
+
+      // Reset House inventory to 0
+      await tx.query(`UPDATE economic_accounts SET balance_units = 0 WHERE owner_economic_id = $1 AND account_type = 'INVENTORY'`, [houseEconId]);
+      const houseWallet = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 50000 WHERE id = $1`, [houseWallet.id]);
+
+      // Chain 1: SOLAR_MICROGRID-T1 (Private: in: 0, out: 5 ENERGY)
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'SOLAR-MICROGRID-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [solarId, houseEconId, territoryId]);
+
+      // Chain 1: VERTICAL-FARM-T1 (Private: in: 1 ENERGY, 1 COMPUTE, out: 4 FOOD)
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'VERTICAL-FARM-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [farmId, houseEconId, territoryId]);
+
+      // Chain 2: MATERIALS-RECOVERY-T1 (Private: in: 2 ENERGY, 1 COMPUTE, out: 3 MATERIAL)
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'MATERIALS-RECOVERY-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [matRecId, houseEconId, territoryId]);
+
+      // Chain 3: EXTRACTION-REFINING-T1 (Public: in: 12 ENERGY, 1 COMPUTE, out: 30 MATERIAL)
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'EXTRACTION-REFINING-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [extractId, corpEconId, territoryId]);
+
+      // Chain 4: PRECISION-FAB-T1 (Private: in: 2 MATERIAL, 2 ENERGY, out: 4 COMPONENTS)
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'PRECISION-FAB-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [fabId, houseEconId, territoryId]);
+
+      // Chain 5: COMPUTE-CLUSTER-T1 (Private: in: 1 COMPONENTS, 3 ENERGY, out: 5 COMPUTE)
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'COMPUTE-CLUSTER-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [computeId, houseEconId, territoryId]);
+    });
+
+    // Step 1: Day 10 - Settle Solar Microgrid alone (deactivate other buildings temporarily to step cleanly)
+    await repository.transaction(async (tx) => {
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'SUSPENDED' WHERE id IN ($1, $2, $3, $4, $5)`, [farmId, matRecId, extractId, fabId, computeId]);
+      await settleBuildingUpkeepAndRevenueV2(tx, 10);
+
+      // Check House received 5 ENERGY
+      const energyInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(energyInv.balance_units, '5', 'Solar Microgrid produced 5 ENERGY');
+    });
+
+    // Step 2: Day 11 - Settle Chain 1 (Vertical Farm produces FOOD)
+    await repository.transaction(async (tx) => {
+      // Provide 1 seed COMPUTE to House
+      const computeInvAcc = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 1 WHERE id = $1`, [computeInvAcc.id]);
+
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'ACTIVE' WHERE id = $1`, [farmId]);
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'SUSPENDED' WHERE id = $1`, [solarId]);
+
+      await settleBuildingUpkeepAndRevenueV2(tx, 11);
+
+      // Vertical Farm consumed 1 ENERGY (5 -> 4), 1 COMPUTE (1 -> 0), produced 4 FOOD
+      const foodInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 6 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(foodInv.balance_units, '4', 'Vertical Farm produced 4 FOOD');
+
+      const remEnergy = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(remEnergy.balance_units, '4', 'Remaining House ENERGY is 4');
+    });
+
+    // Step 3: Day 12 - Settle Chain 2 (Materials Recovery Workshop produces MATERIAL)
+    await repository.transaction(async (tx) => {
+      // Provide 1 seed COMPUTE to House
+      const computeInvAcc = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 1 WHERE id = $1`, [computeInvAcc.id]);
+
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'SUSPENDED' WHERE id = $1`, [farmId]);
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'ACTIVE' WHERE id = $1`, [matRecId]);
+
+      await settleBuildingUpkeepAndRevenueV2(tx, 12);
+
+      // Materials Recovery consumed 2 ENERGY (4 -> 2), 1 COMPUTE (1 -> 0), produced 3 MATERIAL
+      const matInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(matInv.balance_units, '3', 'Materials Recovery produced 3 MATERIAL');
+
+      const remEnergy = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(remEnergy.balance_units, '2', 'Remaining House ENERGY is 2');
+    });
+
+    // Step 4: Day 13 - Settle Chain 3 (Corporation Extraction & Refining Complex produces MATERIAL)
+    await repository.transaction(async (tx) => {
+      // Seed Corporation with 12 ENERGY and 1 COMPUTE
+      const corpEnergyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      const corpComputeInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 12 WHERE id = $1`, [corpEnergyInv.id]);
+      await tx.query(`UPDATE economic_accounts SET balance_units = 1 WHERE id = $1`, [corpComputeInv.id]);
+
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'SUSPENDED' WHERE id = $1`, [matRecId]);
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'ACTIVE' WHERE id = $1`, [extractId]);
+
+      await settleBuildingUpkeepAndRevenueV2(tx, 13);
+
+      // Extraction Complex consumed 12 ENERGY and 1 COMPUTE, produced 30 MATERIAL
+      const corpMatInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      assert.equal(corpMatInv.balance_units, '30', 'Extraction & Refining Complex produced 30 MATERIAL');
+    });
+
+    // Step 5: Day 14 - Settle Chain 4 (Precision Fabrication Workshop produces COMPONENTS)
+    await repository.transaction(async (tx) => {
+      // House currently has 3 MATERIAL and 2 ENERGY. Precision Fab requires 2 MATERIAL and 2 ENERGY.
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'SUSPENDED' WHERE id = $1`, [extractId]);
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'ACTIVE' WHERE id = $1`, [fabId]);
+
+      await settleBuildingUpkeepAndRevenueV2(tx, 14);
+
+      // Precision Fab consumed 2 MATERIAL (3 -> 1), 2 ENERGY (2 -> 0), produced 4 COMPONENTS
+      const compInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 3 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(compInv.balance_units, '4', 'Precision Fabrication produced 4 COMPONENTS');
+
+      const remMat = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(remMat.balance_units, '1', 'Remaining House MATERIAL is 1');
+    });
+
+    // Step 6: Day 15 - Settle Chain 5 (Compute Cluster produces COMPUTE)
+    await repository.transaction(async (tx) => {
+      // House currently has 4 COMPONENTS. Seed 3 ENERGY. Compute Cluster requires 1 COMPONENTS and 3 ENERGY.
+      const houseEnergyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 3 WHERE id = $1`, [houseEnergyInv.id]);
+
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'SUSPENDED' WHERE id = $1`, [fabId]);
+      await tx.query(`UPDATE buildings SET v5_productive_status = 'ACTIVE' WHERE id = $1`, [computeId]);
+
+      await settleBuildingUpkeepAndRevenueV2(tx, 15);
+
+      // Compute Cluster consumed 1 COMPONENTS (4 -> 3), 3 ENERGY (3 -> 0), produced 5 COMPUTE
+      const compuInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(compuInv.balance_units, '5', 'Compute Cluster produced 5 COMPUTE');
+
+      const remComp = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 3 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      assert.equal(remComp.balance_units, '3', 'Remaining House COMPONENTS is 3');
+    });
+
+    // Step 7: Verify all settlement journals were recorded with status OPERATED and 10000 utilization_bps
+    const journals = (await client.query(`SELECT building_id, utilization_bps, status FROM building_settlement_journals WHERE building_id IN ($1, $2, $3, $4, $5, $6) ORDER BY game_day`, [solarId, farmId, matRecId, extractId, fabId, computeId])).rows;
+    assert.equal(journals.length, 6);
+    for (const j of journals) {
+      assert.equal(j.utilization_bps, 10000, `Building ${j.building_id} must operate at 100%`);
+      assert.equal(j.status, 'OPERATED');
+    }
+  } finally {
+    await client.query('DELETE FROM building_settlement_journals WHERE building_id IN ($1, $2, $3, $4, $5, $6)', [solarId, farmId, matRecId, extractId, fabId, computeId]);
+    await client.query('DELETE FROM buildings WHERE id IN ($1, $2, $3, $4, $5, $6)', [solarId, farmId, matRecId, extractId, fabId, computeId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM house_residencies WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [territoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [corpEconId, houseEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id IN ($1, $2, $3) OR correlation_id LIKE $4 OR correlation_id LIKE $5 OR correlation_id LIKE $6)', [corpEconId, houseEconId, humanId, `building-%:${corpEconId}:%`, `building-%:${houseEconId}:%`, `starter:${houseId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id IN ($1, $2, $3) OR correlation_id LIKE $4 OR correlation_id LIKE $5 OR correlation_id LIKE $6', [corpEconId, houseEconId, humanId, `building-%:${corpEconId}:%`, `building-%:${houseEconId}:%`, `starter:${houseId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [corpEconId, houseEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [corpEconId, houseEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    if (humanId) {
+      await client.query('DELETE FROM auth_sessions WHERE account_id = $1', [`account-${humanId.toLowerCase()}`]);
+      await client.query('DELETE FROM game_events WHERE actor_human_id = $1', [humanId]);
+      await client.query('DELETE FROM notifications WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM personal_life_maintenance WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM event_outbox WHERE aggregate_id = $1', [humanId]);
+      await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+      await client.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [email]);
+      await client.query('DELETE FROM house_entry_support WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM auth_accounts WHERE email = $1', [email]);
+    }
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 4: Condition modifiers (DEMAND_MULTIPLIER & SUPPLY_MULTIPLIER) scale inputs and outputs correctly', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+
+  const corpId = `CORP-COND-${Date.now()}`;
+  const corpEconId = `ECON-${corpId}`;
+  const territoryId = `TERR-COND-${Date.now()}`;
+  const extractId = `BLD-EXTRACT-COND-${Date.now()}`;
+  const conditionDemandId = `COND-DEMAND-${Date.now()}`;
+  const conditionSupplyId = `COND-SUPPLY-${Date.now()}`;
+  const gameDay = 30;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Condition Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      const corpTreasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [corpEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [corpTreasury.id]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Cond Territory', 'ACTIVE', true)`, [territoryId, corpId]);
+
+      // EXTRACTION-REFINING-T1: base in: 12 ENERGY, 1 COMPUTE; base out: 30 MATERIAL
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'EXTRACTION-REFINING-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [extractId, corpEconId, territoryId]);
+
+      // Add DEMAND_MULTIPLIER +2500 bps (1.25x) for ENERGY: 12 * 1.25 = 15
+      await tx.query(`
+        INSERT INTO world_conditions (id, condition_code, title, description, source_type, source_id, scope_type, scope_id, effect_type, target_key, modifier_bps, effective_from_game_day, effective_to_game_day, rules_version)
+        VALUES ($1, 'ENERGY_DEMAND_SURGE', 'Energy Demand Surge', 'Surge in energy requirements', 'SYSTEM_EVENT', 'SYSTEM', 'TERRITORY', $2, 'DEMAND_MULTIPLIER', 'ENERGY', 2500, 1, 50, 'world-conditions-v1')
+      `, [conditionDemandId, territoryId]);
+
+      // Add SUPPLY_MULTIPLIER +2000 bps (1.20x) for MATERIAL: 30 * 1.20 = 36
+      await tx.query(`
+        INSERT INTO world_conditions (id, condition_code, title, description, source_type, source_id, scope_type, scope_id, effect_type, target_key, modifier_bps, effective_from_game_day, effective_to_game_day, rules_version)
+        VALUES ($1, 'RICH_VEIN_DISCOVERY', 'Rich Vein Discovery', 'High mineral yield', 'SYSTEM_EVENT', 'SYSTEM', 'TERRITORY', $2, 'SUPPLY_MULTIPLIER', 'MATERIAL', 2000, 1, 50, 'world-conditions-v1')
+      `, [conditionSupplyId, territoryId]);
+
+      // Provide 15 ENERGY and 1 COMPUTE
+      const energyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      const computeInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 15 WHERE id = $1`, [energyInv.id]);
+      await tx.query(`UPDATE economic_accounts SET balance_units = 1 WHERE id = $1`, [computeInv.id]);
+
+      await settleBuildingUpkeepAndRevenueV2(tx, gameDay);
+
+      // Check Material output = 36 (boosted from 30)
+      const matInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      assert.equal(matInv.balance_units, '36', 'Material output boosted by 20% to 36 units');
+
+      // Check Energy consumed = 15 (boosted from 12)
+      const remEnergy = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [energyInv.id])).rows[0];
+      assert.equal(remEnergy.balance_units, '0', 'Energy demand increased by 25% to 15 units');
+
+      // Check settlement journal
+      const journal = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = $2`, [extractId, gameDay])).rows[0];
+      assert.ok(journal);
+      assert.equal(journal.status, 'OPERATED');
+      assert.equal(journal.utilization_bps, 10000);
+      assert.deepEqual(journal.input_units, { ENERGY: '15', COMPUTE: '1' });
+      assert.deepEqual(journal.output_units, { MATERIAL: '36' });
+    });
+  } finally {
+    await client.query('DELETE FROM world_conditions WHERE id IN ($1, $2)', [conditionDemandId, conditionSupplyId]);
+    await client.query('DELETE FROM building_settlement_journals WHERE building_id = $1', [extractId]);
+    await client.query('DELETE FROM buildings WHERE id = $1', [extractId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [territoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [corpEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [corpEconId, `building-corp:${corpEconId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [corpEconId, `building-corp:${corpEconId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 4: Operating modes (CONSERVATIVE vs BALANCED) scale utilization, resource flows, and operating expenses', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+
+  const corpId = `CORP-OPMODE-${Date.now()}`;
+  const corpEconId = `ECON-${corpId}`;
+  const territoryId = `TERR-OPMODE-${Date.now()}`;
+  const bldConservative = `BLD-CONSERV-${Date.now()}`;
+  const bldBalanced = `BLD-BALANCED-${Date.now()}`;
+  const gameDay = 35;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `OpMode Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      const corpTreasury = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY'`, [corpEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE id = $1`, [corpTreasury.id]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'OpMode Territory', 'ACTIVE', true)`, [territoryId, corpId]);
+
+      // EXTRACTION-REFINING-T1: base in: 12 ENERGY, 1 COMPUTE; out: 30 MATERIAL; credit: 800
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES
+          ($1, 'EXTRACTION-REFINING-T1', $3, $4, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'CONSERVATIVE', 1, 1),
+          ($2, 'EXTRACTION-REFINING-T1', $3, $4, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [bldConservative, bldBalanced, corpEconId, territoryId]);
+
+      // Provide ample inventory so mode determines utilization
+      const energyInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      const computeInv = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100 WHERE id = $1`, [energyInv.id]);
+      await tx.query(`UPDATE economic_accounts SET balance_units = 10 WHERE id = $1`, [computeInv.id]);
+
+      await settleBuildingUpkeepAndRevenueV2(tx, gameDay);
+
+      // 1. Check Conservative Journal: utilization = 7000, input: 8 ENERGY, output: 21 MATERIAL, credit: 560
+      const jCons = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = $2`, [bldConservative, gameDay])).rows[0];
+      assert.ok(jCons);
+      assert.equal(jCons.utilization_bps, 7000, 'Conservative mode caps utilization at 7000 bps');
+      assert.deepEqual(jCons.input_units, { ENERGY: '8' }); // 12 * 70% = 8; 1 * 70% = 0
+      assert.deepEqual(jCons.output_units, { MATERIAL: '21' }); // 30 * 70% = 21
+      assert.equal(jCons.operating_credit_units, '560'); // 800 * 70% = 560
+
+      // 2. Check Balanced Journal: utilization = 10000, input: 12 ENERGY, 1 COMPUTE, output: 30 MATERIAL, credit: 800
+      const jBal = (await tx.query(`SELECT * FROM building_settlement_journals WHERE building_id = $1 AND game_day = $2`, [bldBalanced, gameDay])).rows[0];
+      assert.ok(jBal);
+      assert.equal(jBal.utilization_bps, 10000, 'Balanced mode operates at 10000 bps');
+      assert.deepEqual(jBal.input_units, { ENERGY: '12', COMPUTE: '1' });
+      assert.deepEqual(jBal.output_units, { MATERIAL: '30' });
+      assert.equal(jBal.operating_credit_units, '800');
+
+      // 3. Check combined Material inventory: 21 + 30 = 51
+      const matInv = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [corpEconId])).rows[0];
+      assert.equal(matInv.balance_units, '51', 'Total produced Material is 51');
+
+      // 4. Check combined Treasury expense: 560 + 800 = 1360
+      const remTreasury = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [corpTreasury.id])).rows[0];
+      assert.equal(remTreasury.balance_units, String(100000 - 1360));
+    });
+  } finally {
+    await client.query('DELETE FROM building_settlement_journals WHERE building_id IN ($1, $2)', [bldConservative, bldBalanced]);
+    await client.query('DELETE FROM buildings WHERE id IN ($1, $2)', [bldConservative, bldBalanced]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [territoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [corpEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2)', [corpEconId, `building-corp:${corpEconId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id = $1 OR correlation_id LIKE $2', [corpEconId, `building-corp:${corpEconId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 4: Production never creates CREDIT and ledger postings conserve assets', async () => {
+  const client = await connectTo(connectionString);
+  try {
+    // 1. Verify that no RESOURCE_PRODUCTION or RESOURCE_CONSUMPTION transaction contains CREDIT (asset_id = 1)
+    const invalidCreditInProd = await client.query(`
+      SELECT t.id, t.transaction_kind, e.asset_id, e.delta_units
+      FROM economic_transactions t
+      JOIN economic_entries e ON e.transaction_id = t.id
+      WHERE t.transaction_kind IN ('RESOURCE_PRODUCTION', 'RESOURCE_CONSUMPTION')
+        AND e.asset_id = 1
+    `);
+    assert.equal(invalidCreditInProd.rows.length, 0, 'Production/Consumption transactions must NEVER involve CREDIT');
+
+    // 2. Verify all modern V5 economic transactions are strictly balanced (sum(delta_units) = 0 for every asset)
+    const unbalancedTx = await client.query(`
+      SELECT t.id, t.transaction_kind, e.asset_id, SUM(e.delta_units) AS net_delta
+      FROM economic_transactions t
+      JOIN economic_entries e ON e.transaction_id = t.id
+      WHERE t.correlation_id LIKE 'building-%'
+         OR t.correlation_id LIKE 'service:%'
+         OR t.rules_version IN ('building-settlement-v4', 'services-v1', 'life-maintenance-v2')
+      GROUP BY t.id, t.transaction_kind, e.asset_id
+      HAVING SUM(e.delta_units) <> 0
+    `);
+    assert.equal(unbalancedTx.rows.length, 0, 'All modern economic transactions must be zero-sum conserved');
+  } finally {
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 4: Service providers receive real CREDIT transfers for delivered services', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+
+  const email = `service-pay-${Date.now()}@example.invalid`;
+  const corpId = `CORP-SVC-PAY-${Date.now()}`;
+  const corpEconId = `ECON-${corpId}`;
+  const territoryId = `TERR-SVC-PAY-${Date.now()}`;
+  const clinicId = `BLD-CLINIC-PAY-${Date.now()}`;
+  const residencyId = `RES-SVC-PAY-${Date.now()}`;
+  const gameDay = 40;
+
+  let humanId, houseId, houseEconId;
+
+  try {
+    const reg = await registerIdentity(repository, { email, personName: 'SvcPayer', houseSurname: `SPHouse${Date.now()}`, password: 'correct-horse-battery-staple' });
+    humanId = reg.human.id;
+    houseId = `HOUSE-${humanId.slice(2)}`;
+    houseEconId = `ECON-${houseId}`;
+
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Svc Pay Corp ${Date.now()}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'SvcPay Territory', 'ACTIVE', true)`, [territoryId, corpId]);
+
+      // Move House to this territory
+      await tx.query(`INSERT INTO house_residencies (id, house_id, territory_id, residency_class, status, effective_from_game_day, correlation_id) VALUES ($1, $2, $3, 'PRIMARY', 'ACTIVE', 1, $4)`, [residencyId, houseId, territoryId, `res:${houseId}:${territoryId}:${Date.now()}`]);
+
+      // Seed House WALLET with 10,000 CREDIT
+      const houseWallet = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 10000 WHERE id = $1`, [houseWallet.id]);
+
+      // Setup PUBLIC_MEDICAL-T1 (Public, provides HEALTH capacity 16)
+      await tx.query(`
+        INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day)
+        VALUES ($1, 'PUBLIC-MEDICAL-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)
+      `, [clinicId, corpEconId, territoryId]);
+
+      // Settle needs and services with shardCount = 1
+      const res = await settleHouseNeedsAndServices(tx, gameDay, 0, 1);
+      assert.ok(res.allocations >= 1);
+
+      // Verify Service price is paid: HEALTH price is 1 CREDIT per unit. Demand is 1 human = 1 unit.
+      // House WALLET: 10,000 - 1 = 9,999
+      const remWallet = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE id = $1`, [houseWallet.id])).rows[0];
+      assert.equal(remWallet.balance_units, '9999', 'House paid 1 CREDIT for HEALTH service');
+
+      // Corporation OPERATIONS account: 0 + 1 = 1
+      const corpOps = (await tx.query(`SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'OPERATIONS'`, [corpEconId])).rows[0];
+      assert.equal(corpOps.balance_units, '1', 'Corporation received 1 CREDIT into OPERATIONS account');
+
+      // Check service allocation record
+      const allocation = (await tx.query(`SELECT * FROM service_allocations WHERE house_id = $1 AND game_day = $2 AND service_code = 'HEALTH'`, [houseId, gameDay])).rows[0];
+      assert.ok(allocation);
+      assert.equal(allocation.allocated_units, '1');
+      assert.equal(allocation.price_units, '1');
+      assert.ok(allocation.economic_transaction_id, 'Real economic transaction recorded');
+    });
+  } finally {
+    await client.query('DELETE FROM service_allocations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM house_need_assessments WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM buildings WHERE id = $1', [clinicId]);
+    await client.query('DELETE FROM house_residencies WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [territoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [corpEconId, houseEconId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE source_id IN ($1, $2, $3) OR correlation_id LIKE $4 OR correlation_id LIKE $5)', [corpEconId, houseEconId, humanId, `service:${gameDay}:${houseId}:%`, `starter:${houseId}:%`]);
+    await client.query('DELETE FROM economic_transactions WHERE source_id IN ($1, $2, $3) OR correlation_id LIKE $4 OR correlation_id LIKE $5', [corpEconId, houseEconId, humanId, `service:${gameDay}:${houseId}:%`, `starter:${houseId}:%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [corpEconId, houseEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [corpEconId, houseEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    if (humanId) {
+      await client.query('DELETE FROM auth_sessions WHERE account_id = $1', [`account-${humanId.toLowerCase()}`]);
+      await client.query('DELETE FROM game_events WHERE actor_human_id = $1', [humanId]);
+      await client.query('DELETE FROM notifications WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM personal_life_maintenance WHERE human_id = $1', [humanId]);
+      await client.query('DELETE FROM event_outbox WHERE aggregate_id = $1', [humanId]);
+      await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+      await client.query('UPDATE auth_accounts SET house_id = NULL WHERE email = $1', [email]);
+      await client.query('DELETE FROM house_entry_support WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM house_onboarding_progress WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+      await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+      await client.query('DELETE FROM auth_accounts WHERE email = $1', [email]);
+    }
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 4: Architecture integrity report passes with 0 failures across all production entities', async () => {
+  const client = await connectTo(connectionString);
+  try {
+    const reportRes = await client.query('SELECT * FROM earth_integrity_report()');
+    for (const check of reportRes.rows) {
+      assert.equal(check.invalid_count, '0', `Integrity check ${check.check_name} must have 0 invalid rows`);
+    }
+  } finally {
+    await client.end();
+  }
+});
+
+
 
