@@ -153,6 +153,12 @@ test('V4 ballot authorization uses an exact persisted electorate snapshot', asyn
   assert.match(source, /House was not in the frozen V4 electorate/);
 });
 
+test('V4 ballot totals cannot be inflated by duplicate casts', async () => {
+  const source = await readFile(new URL('../cloudflare/src/governance-v4-postgres.ts', import.meta.url), 'utf8');
+  assert.match(source, /governance_ballots_v4[\s\S]*ON CONFLICT \(proposal_id, house_id\) DO NOTHING/);
+  assert.match(source, /if \(ballot\.rowCount !== 1\) throw new Error\('Ballot already recorded'\)/);
+});
+
 test('proposal execution rejects unregistered action handlers', async () => {
   const actions = await readFile(new URL('../cloudflare/src/proposal-actions.ts', import.meta.url), 'utf8');
   assert.match(actions, /Unregistered proposal action handler/);

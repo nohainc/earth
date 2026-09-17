@@ -150,7 +150,8 @@ export async function castGovernanceVoteV4(repository: PostgresRepository, input
     const day = await currentDay(tx);
     if (day > proposal.voting_end_game_day) throw new Error('Governance voting deadline has passed');
     const houseId = await canVote(tx, input.humanId, input.proposalId);
-    await tx.query(`INSERT INTO governance_ballots_v4 (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (proposal_id, house_id) DO UPDATE SET choice = EXCLUDED.choice, cast_by_human_id = EXCLUDED.cast_by_human_id, cast_game_day = EXCLUDED.cast_game_day, correlation_id = EXCLUDED.correlation_id`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);
+    const ballot = await tx.query(`INSERT INTO governance_ballots_v4 (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (proposal_id, house_id) DO NOTHING`, [input.proposalId, houseId, input.humanId, input.choice, day, input.correlationId]);
+    if (ballot.rowCount !== 1) throw new Error('Ballot already recorded');
     const totals = await tx.query<{ support: string; oppose: string }>(`SELECT COUNT(*) FILTER (WHERE choice = 'SUPPORT')::TEXT AS support, COUNT(*) FILTER (WHERE choice = 'OPPOSE')::TEXT AS oppose FROM governance_ballots_v4 WHERE proposal_id = $1`, [input.proposalId]);
     await tx.query('UPDATE governance_proposals_v4 SET support_votes = $1, oppose_votes = $2 WHERE id = $3', [totals.rows[0]?.support ?? '0', totals.rows[0]?.oppose ?? '0', input.proposalId]);
     return { ok: true, proposalId: input.proposalId, houseId, choice: input.choice, correlationId: input.correlationId };
