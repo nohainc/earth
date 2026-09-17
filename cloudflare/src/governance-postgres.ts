@@ -154,6 +154,17 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     if (ruleRow && input.expectedGovernanceRuleVersionId && ruleRow.id !== input.expectedGovernanceRuleVersionId) {
       throw new Error('Governance rule version changed; refresh and retry');
     }
+    const institutionKind = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1', [input.institutionId])).rows[0]?.kind;
+    const constitutionDay = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const canonical = institutionKind === 'CORPORATION' || institutionKind === 'EARTH'
+      ? await resolveEffectiveConstitution(tx, { corporationId: institutionKind === 'CORPORATION' ? input.institutionId : undefined, gameDay: constitutionDay })
+      : null;
+    const canonicalValue = (code: string): number | null => {
+      const value = canonical?.rules[code];
+      if (value === undefined) return null;
+      const parsed = Number(value);
+      return Number.isSafeInteger(parsed) ? parsed : null;
+    };
     if (!ruleRow) {
       const inst = await tx.query<{ name: string }>("SELECT name FROM institutions WHERE id = $1", [input.institutionId]);
       const instName = inst.rows[0]?.name ?? input.institutionId;
@@ -164,7 +175,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
           voting_period_days, implementation_delay_days, version, status, created_by
         ) VALUES ($1, $2, $3, 'governance', $4, $5, $6, $7, 1, 'active', $8)
         ON CONFLICT (id) DO UPDATE SET status = 'active'`,
-        [baselineId, input.institutionId, `${instName} Governance Baseline`, COMMON_GOVERNANCE_DEFAULTS.quorum, COMMON_GOVERNANCE_DEFAULTS.approvalThreshold, COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays, COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays, input.humanId],
+        [baselineId, input.institutionId, `${instName} Governance Baseline`, (canonicalValue('CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS') ?? COMMON_GOVERNANCE_DEFAULTS.quorum * 10_000) / 10_000, (canonicalValue('CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS') ?? COMMON_GOVERNANCE_DEFAULTS.approvalThreshold * 10_000) / 10_000, canonicalValue('CORPORATION.GOVERNANCE.VOTING_PERIOD_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays, canonicalValue('CORPORATION.GOVERNANCE.IMPLEMENTATION_DELAY_DAYS') ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays, input.humanId],
       );
       const inserted = await tx.query<{ id: string; value_json: unknown; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>(
         "SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE id = $1",
@@ -173,16 +184,6 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       ruleRow = inserted.rows[0];
     }
     if (!ruleRow) throw new Error('An active governance rule version is required');
-    const institutionKind = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1', [input.institutionId])).rows[0]?.kind;
-    const canonical = institutionKind === 'CORPORATION'
-      ? await resolveEffectiveConstitution(tx, { corporationId: input.institutionId, gameDay: Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1) })
-      : null;
-    const canonicalValue = (code: string): number | null => {
-      const value = canonical?.rules[code];
-      if (value === undefined) return null;
-      const parsed = Number(value);
-      return Number.isSafeInteger(parsed) ? parsed : null;
-    };
     const quorum = canonicalValue('CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS') !== null
       ? (canonicalValue('CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS') as number) / 10_000
       : Number(ruleRow.quorum_threshold);
@@ -248,6 +249,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       implementationDelayDays: implementationDelay,
       challengePeriodDays,
       fundingWindowDays: Number(input.targetValue?.fundingWindowDays ?? 7),
+      constitutionalRuleVersionIds: canonical?.versionIds ?? {},
     };
     const catalog = buildingCatalogId
       ? (await tx.query<any>(`SELECT id, building_type, name, tier, ownership_class, slot_footprint,

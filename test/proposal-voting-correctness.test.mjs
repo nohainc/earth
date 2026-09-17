@@ -28,4 +28,10 @@ test('Corporation V4 proposals prefer canonical Constitution governance policy v
   assert.match(source, /institutionKind === 'CORPORATION'/);
   assert.match(source, /CORPORATION\.GOVERNANCE\.POLICY_QUORUM_BPS/);
   assert.match(source, /CORPORATION\.GOVERNANCE\.IMPLEMENTATION_DELAY_DAYS/);
+  assert.match(source, /constitutionalRuleVersionIds: canonical\?\.versionIds/);
+});
+
+test('Earth V4 proposals also resolve canonical Constitution governance policy when available', () => {
+  const source = fs.readFileSync('cloudflare/src/governance-postgres.ts', 'utf8');
+  assert.match(source, /institutionKind === 'CORPORATION' \|\| institutionKind === 'EARTH'/);
 });
