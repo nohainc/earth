@@ -18,6 +18,13 @@ full V5 cutover complete.
   toward quorum, and marks base-version conflicts as `STALE`.
 - Direct player-facing Charter, voting-setting, admission-policy, and tax-
   charter mutations are retired; constitutional changes use proposals.
+- `POST /api/governance/v5/constitution/preview` provides a JSON-safe,
+  side-effect-free impact view for typed amendments. It resolves the current
+  Constitution first and restores the Earth value when a Corporation clears an
+  Earth-default override.
+- The canonical read model exposes active rule definitions and future
+  `scheduledChanges`, so UI and operator tooling can render the same
+  effective-dated values used by settlement.
 
 ## Authority semantics
 
@@ -31,7 +38,9 @@ not require a synthetic Corporation.
 
 The legacy V4 proposal store, legacy charter data, and tax rule tables remain
 readable migration bridges. They must not become new gameplay authorities. The
-remaining cutover work is to dual-record and shadow-compare all migrated tax
-rules, complete the unified action-handler migration, update the Constitution
-UI/history read models, and retire the legacy stores after the production
+readiness gate now verifies Earth and Corporation Constitution snapshots for
+the assessed day and the presence of the typed definition registry. Remaining
+cutover work is to dual-record and shadow-compare all migrated tax rules,
+complete the unified action-handler migration, finish the Constitution UI
+history/progressive renderers, and retire the legacy stores after production
 verification gates pass.
