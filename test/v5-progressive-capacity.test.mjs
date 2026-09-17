@@ -683,6 +683,15 @@ test('V5 building read model exposes latest settlement net resources', async () 
   assert.match(world, /FROM building_settlement_journals/);
 });
 
+test('V5 Territory containers reconcile with exact counts and monotonic sequences', async () => {
+  const containers = await readFile(new URL('../cloudflare/src/v5-territory-containers-postgres.ts', import.meta.url), 'utf8');
+  assert.match(containers, /const required = BigInt\(state\.required_territory_units\)/);
+  assert.match(containers, /SELECT MAX\(v5_sequence_number\)/);
+  assert.match(containers, /while \(BigInt\(containers\.length\) < required\)/);
+  assert.match(containers, /containers\.slice\(Number\(required\)\)/);
+  assert.doesNotMatch(containers, /const required = Number\(/);
+});
+
 test('V5 cutover rehearsal is fail-closed and produces evidence', async () => {
   const script = await readFile(new URL('../scripts/run-v5-cutover-rehearsal.mjs', import.meta.url), 'utf8');
   assert.match(script, /DATABASE_URL is required for a V5 cutover rehearsal/);

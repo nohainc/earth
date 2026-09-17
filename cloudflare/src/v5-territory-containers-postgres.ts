@@ -15,20 +15,27 @@ export async function reconcileV5TerritoryContainersInTransaction(tx: PostgresRe
   let created = 0;
   let retired = 0;
   for (const state of states) {
-    const required = Number(state.required_territory_units);
+    const required = BigInt(state.required_territory_units);
     const containers = (await tx.query<{ id: string; v5_sequence_number: number }>(`SELECT id, v5_sequence_number FROM territories
       WHERE corporation_id = $1 AND status = 'ACTIVE' AND v5_sequence_number IS NOT NULL ORDER BY v5_sequence_number FOR UPDATE`, [state.corporation_id])).rows;
-    for (let sequence = containers.length + 1; sequence <= required; sequence += 1) {
-      const id = `T5-${state.corporation_id}-${sequence}`;
+    const maxSequence = BigInt((await tx.query<{ max_sequence: number | null }>(`SELECT MAX(v5_sequence_number) AS max_sequence
+      FROM territories WHERE corporation_id = $1 AND v5_sequence_number IS NOT NULL`, [state.corporation_id])).rows[0]?.max_sequence ?? 0);
+    let nextSequence = maxSequence + 1n;
+    while (BigInt(containers.length) < required) {
+      if (nextSequence > 2147483647n) throw new Error('V5 Territory container sequence exceeds database limit');
+      const sequenceNumber = Number(nextSequence);
+      const id = `T5-${state.corporation_id}-${sequenceNumber}`;
       await tx.query(`INSERT INTO territories
         (id, corporation_id, name, territory_type, status, is_primary, created_game_day, v5_sequence_number,
          v5_capacity_units, v5_activated_game_day, v5_rules_version)
         VALUES ($1,$2,$3,'V5_STANDARD','ACTIVE',FALSE,$4,$5,$6,$4,$7)
-        ON CONFLICT (id) DO NOTHING`, [id, state.corporation_id, `Standard Capacity ${sequence}`, day, sequence, state.standard_territory_capacity_units, 'v5-capacity-policy']);
+        ON CONFLICT (id) DO NOTHING`, [id, state.corporation_id, `Standard Capacity ${sequenceNumber}`, day, sequenceNumber, state.standard_territory_capacity_units, 'v5-capacity-policy']);
       created += 1;
+      containers.push({ id, v5_sequence_number: sequenceNumber });
+      nextSequence += 1n;
     }
-    if (containers.length > required) {
-      const excess = containers.slice(required);
+    if (BigInt(containers.length) > required) {
+      const excess = containers.slice(Number(required));
       for (const container of excess) {
         await tx.query(`UPDATE territories SET status = 'INACTIVE', v5_retired_game_day = $2 WHERE id = $1 AND status = 'ACTIVE'`, [container.id, day]);
         retired += 1;
