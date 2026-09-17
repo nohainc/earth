@@ -12,7 +12,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
     .rows[0];
   const gameDay = Number(world?.game_day ?? 0);
   const assessedGameDay = Math.max(1, gameDay - 1);
-  const [migration, earthPolicy, corporationCoverage, admissionCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation] = await Promise.all([
+  const [migration, earthPolicy, corporationCoverage, admissionCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation, legacyConstitutionalProposals] = await Promise.all([
     repository.query<ReadinessRow>('SELECT COALESCE(MAX(version), 0)::TEXT AS count FROM earth_schema_migrations'),
     repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
       FROM resolved_constitution_snapshots_v5
@@ -66,6 +66,18 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
       FROM v5_tax_reconciliation_runs
      WHERE assessed_game_day = $1 AND status = 'COMPLETED'
        AND mismatches = 0 AND missing_canonical = 0 AND missing_legacy = 0`, [Math.max(1, gameDay - 1)]),
+    repository.query<ReadinessRow>(`SELECT COUNT(*)::TEXT AS count
+      FROM (
+        SELECT id
+          FROM governance_proposals_v4
+         WHERE action_type IN ('TAX_RULE', 'CHARTER_CHANGE')
+           AND UPPER(status) IN ('VOTING', 'OPEN', 'PASSED', 'SCHEDULED')
+        UNION ALL
+        SELECT id
+          FROM proposals
+         WHERE action_type IN ('TAX_RULE', 'CHARTER_CHANGE')
+           AND UPPER(status) IN ('VOTING', 'OPEN', 'PASSED', 'SCHEDULED')
+      ) AS active_legacy_constitutional_proposals`, []),
   ]);
   const activeCorporations = Number((await repository.query<ReadinessRow>(
     "SELECT COUNT(*)::TEXT AS count FROM corporations WHERE status = 'ACTIVE'",
@@ -83,6 +95,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
     taxReconciliationClean: Number(taxReconciliation.rows[0]?.count ?? 0) === 1,
     assessedEarthTaxRulesAvailable: Number(earthSnapshot.rows[0]?.count ?? 0) === 1,
     noRecentFailedSettlementRuns: Number(failedRuns.rows[0]?.count ?? 0) === 0,
+    noActiveLegacyConstitutionalProposals: Number(legacyConstitutionalProposals.rows[0]?.count ?? 0) === 0,
     shadowOnlyUntilExplicitEnablement: true,
   };
   const eligible = Object.values(checks).every(Boolean);
@@ -104,6 +117,7 @@ export async function getV5CutoverReadiness(repository: PostgresRepository): Pro
       corporationConstitutionSnapshots: Number(corporationSnapshots.rows[0]?.count ?? 0),
       constitutionalDefinitions: Number(definitions.rows[0]?.count ?? 0),
       cleanTaxReconciliationRuns: Number(taxReconciliation.rows[0]?.count ?? 0),
+      activeLegacyConstitutionalProposals: Number(legacyConstitutionalProposals.rows[0]?.count ?? 0),
       assessedGameDay,
       assessedEarthTaxRules: Number(earthSnapshot.rows[0]?.count ?? 0),
     },

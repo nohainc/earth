@@ -721,6 +721,9 @@ test('V5 cutover readiness is fail-closed and read-only', async () => {
   assert.match(service, /allActiveCorporationsHaveConstitutionSnapshot/);
   assert.match(service, /constitutionalDefinitionsPresent/);
   assert.match(service, /taxReconciliationClean/);
+  assert.match(service, /noActiveLegacyConstitutionalProposals/);
+  assert.match(service, /governance_proposals_v4/);
+  assert.match(service, /active_legacy_constitutional_proposals/);
   assert.match(service, /mutationEnabled: false/);
   assert.match(service, /Object\.values\(checks\)\.every\(Boolean\)/);
   assert.doesNotMatch(service, /INSERT INTO|UPDATE |DELETE FROM/);
