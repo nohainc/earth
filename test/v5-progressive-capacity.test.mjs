@@ -167,6 +167,7 @@ test('proposal execution rejects unregistered action handlers', async () => {
 
 test('V5 constitutional rules enforce typed values and authority inheritance', () => {
   assert.ok(CONSTITUTIONAL_RULE_DEFINITIONS.some((rule) => rule.code === 'EARTH.CAPACITY.STANDARD'));
+  assert.ok(CONSTITUTIONAL_RULE_DEFINITIONS.every((rule) => ['FOUNDATIONAL', 'POLICY', 'LOCAL_POLICY', 'OPERATIONAL'].includes(rule.amendmentClass)));
   validateConstitutionalRuleValue('EARTH.CAPACITY.STANDARD', 10n);
   validateConstitutionalRuleValue('CORPORATION.ADMISSION_POLICY', 'OPEN');
   validateConstitutionalRuleValue('EARTH.CAPACITY.PROGRESSIVE_SCHEDULE', brackets);

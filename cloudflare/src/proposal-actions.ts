@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { getConstitutionalRuleDefinition, validateConstitutionalRuleValue } from './v5-constitution.ts';
+import { assertConstitutionalAmendableRule, validateConstitutionalRuleValue } from './v5-constitution.ts';
 
 export type ProposalActionContext = {
   repository: PostgresRepository;
@@ -83,7 +83,7 @@ const constitutionAmendmentHandler: ProposalActionHandler = {
       const ruleCode = String(change.ruleCode ?? '').trim();
       if (!ruleCode || seen.has(ruleCode)) throw new Error('Constitution amendment contains duplicate or missing rule codes');
       seen.add(ruleCode);
-      const definition = getConstitutionalRuleDefinition(ruleCode);
+      const definition = assertConstitutionalAmendableRule(ruleCode);
       if (change.clearOverride === true) {
         if (definition.authorityModel !== 'EARTH_DEFAULT_CORPORATION_OVERRIDE') throw new Error('Only Earth-default Corporation overrides can be cleared');
         continue;

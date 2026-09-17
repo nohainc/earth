@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
-import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { assertConstitutionalAmendableRule, getConstitutionalRuleDefinition } from './v5-constitution.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
 import { validateProposalActionSnapshot } from './proposal-actions.ts';
@@ -127,7 +127,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       const changes = action.changes ?? [];
       const groups = new Set<string>();
       for (const change of changes) {
-        const rule = getConstitutionalRuleDefinition(change.ruleCode);
+        const rule = assertConstitutionalAmendableRule(change.ruleCode);
         groups.add(rule.policyGroup);
         if (input.subjectType === 'EARTH' && rule.authorityModel === 'CORPORATION_LOCAL') throw new Error('Corporation-local rule cannot be amended at Earth scope');
         if (input.subjectType === 'CORPORATION' && rule.authorityModel === 'EARTH_LOCKED') throw new Error('Earth-locked rule cannot be amended at Corporation scope');
