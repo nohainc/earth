@@ -117,6 +117,26 @@ export async function getConstitutionReadModel(
        ORDER BY effective_from_game_day, rule_code, version`, [input.gameDay, input.corporationId ?? '']),
   ]);
   const history = historyResult.rows;
+  const progressiveCodes = new Set(definitionsResult.rows
+    .filter((definition) => definition.value_type === 'PROGRESSIVE_SCHEDULE_REF')
+    .map((definition) => String(definition.rule_code)));
+  const scheduleIds = [...new Set(Object.entries(resolved.rules).flatMap(([code, value]) => {
+    if (progressiveCodes.has(code) && typeof value === 'string' && value.trim()) return [value];
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'scheduleId' in value) return [String((value as Record<string, unknown>).scheduleId)];
+    return [];
+  }))];
+  const scheduleBrackets = scheduleIds.length === 0 ? {} : Object.fromEntries((await repository.query(`
+      SELECT schedule_id, ordinal, lower_bound_units, upper_bound_units,
+             marginal_multiplier_numerator, marginal_multiplier_denominator
+        FROM progressive_policy_brackets
+       WHERE schedule_id = ANY($1::TEXT[])
+       ORDER BY schedule_id, ordinal`, [scheduleIds])).rows.reduce((groups, row) => {
+    const schedule = String(row.schedule_id);
+    const entries = groups.get(schedule) ?? [];
+    entries.push(row);
+    groups.set(schedule, entries);
+    return groups;
+  }, new Map<string, Record<string, unknown>[]>()));
   return {
     gameDay: input.gameDay,
     corporationId: input.corporationId ?? null,
@@ -125,6 +145,7 @@ export async function getConstitutionReadModel(
     definitions: toJsonSafe(definitionsResult.rows),
     history: toJsonSafe(history),
     scheduledChanges: toJsonSafe(scheduledResult.rows),
+    scheduleBrackets: toJsonSafe(scheduleBrackets),
     generatedFrom: 'postgres-constitutional-kernel-v5',
   };
 }

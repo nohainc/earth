@@ -71,8 +71,29 @@ void main() {
             canonicalLoader: () async => {
               'ok': true,
               'gameDay': 185,
-              'rules': {'EARTH.CAPACITY.BASE_RATE': '1000'},
-              'versionIds': {'EARTH.CAPACITY.BASE_RATE': 'CONST-V1'},
+              'rules': {
+                'EARTH.CAPACITY.BASE_RATE': '1000',
+                'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE': 'SCHEDULE-V1',
+              },
+              'versionIds': {
+                'EARTH.CAPACITY.BASE_RATE': 'CONST-V1',
+                'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE': 'CONST-SCHEDULE-V1',
+              },
+              'scheduleBrackets': {
+                'SCHEDULE-V1': [
+                  {
+                    'lower_bound_units': '0',
+                    'upper_bound_units': '10',
+                    'marginal_multiplier_numerator': '1',
+                    'marginal_multiplier_denominator': '1',
+                  },
+                  {
+                    'lower_bound_units': '10',
+                    'marginal_multiplier_numerator': '2',
+                    'marginal_multiplier_denominator': '1',
+                  },
+                ],
+              },
               'history': [
                 {
                   'rule_code': 'EARTH.CAPACITY.BASE_RATE',
@@ -91,5 +112,7 @@ void main() {
     expect(find.text('1000 · CONST-V1'), findsOneWidget);
     expect(find.text('CONSTITUTION RULE HISTORY'), findsOneWidget);
     expect(find.textContaining('DAY 1 · ACTIVE'), findsOneWidget);
+    expect(find.text('PROGRESSIVE BRACKETS'), findsOneWidget);
+    expect(find.text('0–10 · ×1/1'), findsOneWidget);
   });
 }

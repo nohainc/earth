@@ -296,12 +296,33 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                   children: rules.map((entry) {
                     final value = _formatCanonicalValue(entry.value);
                     final version = versionIds[entry.key]?.toString();
-                    return EarthDataRow(
-                      title: entry.key,
-                      subtitle: version == null ? value : '$value · $version',
-                      leading: Icon(Icons.rule_outlined,
-                          size: context.iconSize, color: context.primaryColor),
-                      showDivider: entry.key != rules.last.key,
+                    final scheduleRows = canonical['scheduleBrackets'] is Map
+                        ? (canonical['scheduleBrackets'] as Map)[entry.value.toString()]
+                        : null;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        EarthDataRow(
+                          title: entry.key,
+                          subtitle: version == null ? value : '$value · $version',
+                          leading: Icon(Icons.rule_outlined,
+                              size: context.iconSize, color: context.primaryColor),
+                          showDivider: scheduleRows is! List && entry.key != rules.last.key,
+                        ),
+                        if (scheduleRows is List && scheduleRows.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 44, right: 12, bottom: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('PROGRESSIVE BRACKETS', style: context.captionStyle.copyWith(color: context.mutedColor)),
+                                const SizedBox(height: 4),
+                                for (final bracket in scheduleRows.whereType<Map>())
+                                  Text(_formatBracket(bracket), style: context.captionStyle),
+                              ],
+                            ),
+                          ),
+                      ],
                     );
                   }).toList(),
                 ),
@@ -462,6 +483,14 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           .join(', ');
     }
     return value?.toString() ?? '—';
+  }
+
+  String _formatBracket(Map bracket) {
+    final lower = bracket['lower_bound_units']?.toString() ?? '0';
+    final upper = bracket['upper_bound_units']?.toString();
+    final numerator = bracket['marginal_multiplier_numerator']?.toString() ?? '—';
+    final denominator = bracket['marginal_multiplier_denominator']?.toString() ?? '—';
+    return '$lower–${upper ?? '∞'} · ×$numerator/$denominator';
   }
 
   Widget _buildSearchAndFilters(BuildContext context, List<String> categories) {
