@@ -31,7 +31,10 @@ test('Building scarcity is addressed through Territory, never City governance', 
   assert.match(capacity, /territory_id/);
   assert.match(routes, /territoryId/);
   assert.match(routes, /territoryCapacityMatch/);
-  for (const source of [capacity, routes]) assert.doesNotMatch(source, /cities|city_id|cityId|CITY/);
+  // Match legacy City identifiers as tokens; an unbounded CITY pattern
+  // incorrectly matches the suffix of CAPACITY.
+  const legacyCityReference = /\bcities\b|\bcity_id\b|\bcityId\b|\bCITY\b/;
+  for (const source of [capacity, routes]) assert.doesNotMatch(source, legacyCityReference);
 });
 
 test('Corporation is the sole local fiscal authority', () => {
