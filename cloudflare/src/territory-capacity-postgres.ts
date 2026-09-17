@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { applyConditionStack } from './world-conditions.ts';
 import { quoteV5HouseCapacityChange } from './v5-capacity-postgres.ts';
+import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 
 export type TerritoryCapacity = {
   territory_id: string;
@@ -246,6 +247,7 @@ export async function purchaseBuildingInTerritory(
       `INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day, commissioned_game_day, territory_right_id)
        VALUES ($1, $2, $3, $4, 'UNDER_CONSTRUCTION', $5, NULL, $6)`, [buildingId, ownerEconomicId, input.territoryId, catalog.id, gameDay, territoryRight?.id ?? null],
     );
+    if (!isPublic) await refreshV5SettlementProfilesForHouse(tx, owner.house_id, gameDay);
     const expectedCompletionGameDay = gameDay + Math.max(1, Math.ceil(duration.minutes / 1440));
     await tx.query(
       `INSERT INTO construction_projects
@@ -292,6 +294,10 @@ export async function cancelConstructionProject(repository: PostgresRepository, 
     }
     await tx.query(`UPDATE construction_projects SET status='CANCELLED', cancelled_game_day=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [projectId, day]);
     await tx.query(`UPDATE buildings SET status='INACTIVE' WHERE id=$1`, [project.building_id]);
+    const owner = (await tx.query<{ id: string; owner_type: 'HOUSE' | 'CORPORATION' }>(
+      'SELECT id, owner_type FROM owner_registry WHERE economic_id = $1', [project.owner_economic_id],
+    )).rows[0];
+    if (owner?.owner_type === 'HOUSE') await refreshV5SettlementProfilesForHouse(tx, owner.id, day);
     await createGameEvent(tx, { id: `PROJECT-CANCELLED-${correlationId}`, category: 'BUILDING', eventType: 'CONSTRUCTION_CANCELLED', gameDay: day, actorHumanId: humanId, subjectType: 'CONSTRUCTION_PROJECT', subjectId: projectId, title: 'Construction project cancelled', details: { projectId, refundUnits: refund.toString() }, correlationId });
     return { ok: true, status: 'CANCELLED', projectId, refundUnits: refund.toString(), correlationId };
   });
