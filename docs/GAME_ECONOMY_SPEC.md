@@ -33,7 +33,7 @@ contract covers, at minimum:
 | Bank interest accrual and scheduled payments | per game day |
 | Research capacity and progress | per game day |
 | Technology license fees | per game day |
-| City service capacity | per game day |
+| Corporation public service capacity | per game day |
 | Institutional commitments and automatic payments | per game day |
 
 Fiscal months, quarters, and years are projections over daily results. A
@@ -82,7 +82,7 @@ aggregated daily work uses `earth_post_settlement_batch()`.
 
 ## Economic owners
 
-The canonical private owner is a House. Cities and Corporations own their own
+The canonical private owner is a House. Corporations own their own
 institutional accounts, normally including TREASURY, OPERATIONS, and RESERVE.
 Budgets and projections describe authority or analysis; they do not replace
 accounts.
@@ -132,7 +132,7 @@ respect configured caps.
 ## Human needs and succession
 
 Humans generate aggregate daily demand for food, housing, energy, healthcare,
-and connectivity. Buildings and Cities satisfy that demand through capacity and
+and connectivity. Buildings funded or operated by Corporations satisfy that demand through capacity and
 services; players are not required to perform a separate manual purchase for
 each need.
 
