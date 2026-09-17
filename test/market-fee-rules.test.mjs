@@ -5,10 +5,10 @@ import { marketFeeRate } from '../cloudflare/src/market-rules.ts';
 function repository({ earth = '0.02', city = null, corporation = null } = {}) {
   return {
     async query(sql) {
-      if (sql.includes("tax_rule_id = 'TAX-OUC-MARKET'")) {
-      return { rows: [{ rate_bps: Math.round(Number(earth) * 10000) }] };
+      if (sql.includes("EARTH.MARKET.TRANSACTION_TAX_RATE")) {
+        return { rows: [{ rate_bps: Math.round(Number(earth) * 10000).toString() }] };
       }
-      return { rows: [{ city_rules: city, corporation_rules: corporation }] };
+      return { rows: [{ corporation_sales_rate: corporation?.salesTaxBps?.toString() ?? null }] };
     },
   };
 }
@@ -18,7 +18,7 @@ test('Corporation constitutional sales tax overrides the Earth market fee', asyn
   assert.equal(rate, '0.03');
 });
 
-test('corporation sales tax is used when the city has no override', async () => {
+test('corporation sales tax is used when the House is affiliated', async () => {
   const rate = await marketFeeRate(repository({ corporation: { salesTaxBps: 450 } }), 'H-002');
   assert.equal(rate, '0.045');
 });
