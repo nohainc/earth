@@ -114,6 +114,9 @@ export async function getConstitutionReadModel(
   input: { gameDay: number; corporationId?: string },
 ): Promise<Record<string, unknown>> {
   const resolved = await resolveEffectiveConstitution(repository, input);
+  const earth = input.corporationId
+    ? await resolveEffectiveConstitution(repository, { gameDay: input.gameDay })
+    : undefined;
   const [definitionsResult, historyResult, scheduledResult] = await Promise.all([
     repository.query(`
       SELECT rule_code, article_code, value_type, authority_model, policy_group,
@@ -165,6 +168,8 @@ export async function getConstitutionReadModel(
     rules: toJsonSafe(resolved.rules),
     versionIds: resolved.versionIds,
     provenance: resolved.provenance,
+    earthRules: earth ? toJsonSafe(earth.rules) : null,
+    earthVersionIds: earth?.versionIds ?? null,
     definitions: toJsonSafe(definitionsResult.rows),
     history: toJsonSafe(history),
     scheduledChanges: toJsonSafe(scheduledResult.rows),

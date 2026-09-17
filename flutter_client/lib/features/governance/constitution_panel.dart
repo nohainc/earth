@@ -307,6 +307,9 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     final versionIds = canonical['versionIds'] is Map
         ? Map<String, dynamic>.from(canonical['versionIds'] as Map)
         : const <String, dynamic>{};
+    final provenance = canonical['provenance'] is Map
+        ? Map<String, dynamic>.from(canonical['provenance'] as Map)
+        : const <String, dynamic>{};
     final scheduled = canonical['scheduledChanges'] is List
         ? (canonical['scheduledChanges'] as List).whereType<Map>().toList()
         : const <Map>[];
@@ -316,8 +319,34 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     final definitions = canonical['definitions'] is List
         ? (canonical['definitions'] as List).whereType<Map>().toList()
         : const <Map>[];
+    final earthRules = canonical['earthRules'] is Map
+        ? Map<String, dynamic>.from(canonical['earthRules'] as Map)
+        : const <String, dynamic>{};
+    final earthVersionIds = canonical['earthVersionIds'] is Map
+        ? Map<String, dynamic>.from(canonical['earthVersionIds'] as Map)
+        : const <String, dynamic>{};
     return Column(
       children: [
+        if (earthRules.isNotEmpty)
+          EarthSection(
+            title: 'EARTH BASELINE POLICY · DAY ${canonical['gameDay'] ?? '—'}',
+            showSurface: false,
+            child: EarthDataList(
+              children: earthRules.entries.map((entry) {
+                final version = earthVersionIds[entry.key]?.toString();
+                return EarthDataRow(
+                  title: entry.key,
+                  subtitle: [
+                    _formatCanonicalValue(entry.value),
+                    if (version != null) version,
+                  ].join(' · '),
+                  leading: Icon(Icons.public_outlined,
+                      size: context.iconSize, color: context.secondaryColor),
+                  showDivider: entry.key != earthRules.keys.last,
+                );
+              }).toList(),
+            ),
+          ),
         EarthSection(
           title: 'CURRENT CONSTITUTION POLICY · DAY ${canonical['gameDay'] ?? '—'}',
           showSurface: false,
@@ -330,6 +359,7 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                   children: rules.map((entry) {
                     final value = _formatCanonicalValue(entry.value);
                     final version = versionIds[entry.key]?.toString();
+                    final source = provenance[entry.key]?.toString();
                     final scheduleRows = canonical['scheduleBrackets'] is Map
                         ? (canonical['scheduleBrackets'] as Map)[entry.value.toString()]
                         : null;
@@ -338,7 +368,11 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                       children: [
                         EarthDataRow(
                           title: entry.key,
-                          subtitle: version == null ? value : '$value · $version',
+                          subtitle: [
+                            value,
+                            if (source != null) 'SOURCE $source',
+                            if (version != null) version,
+                          ].join(' · '),
                           leading: Icon(Icons.rule_outlined,
                               size: context.iconSize, color: context.primaryColor),
                           showDivider: scheduleRows is! List && entry.key != rules.last.key,
