@@ -89,18 +89,8 @@ extension EarthApiRealEstate on EarthApi {
   }
 
   Future<Map<String, dynamic>> quoteBuildingUpgrade({required String buildingId}) async {
-    try {
-      final response = await _request('/api/v5/buildings/$buildingId/upgrade-quote');
-      return Map<String, dynamic>.from(response as Map);
-    } catch (_) {
-      return <String, dynamic>{
-        'eligible': true,
-        'targetTier': 2,
-        'creditCostUnits': 5000,
-        'footprintDelta': 0,
-        'constructionMinutes': 1440,
-      };
-    }
+    final response = await _request('/api/v5/buildings/$buildingId/upgrade-quote');
+    return Map<String, dynamic>.from(response as Map);
   }
 
   Future<EarthState> setBuildingOperatingPolicy({

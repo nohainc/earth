@@ -59,5 +59,4 @@ extension EarthApiTechnology on EarthApi {
       };
     }
   }
-
 }

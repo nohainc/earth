@@ -68,22 +68,14 @@ class ClientSimulationEngine extends ChangeNotifier {
     return asDoubleOr(resourceFlow is Map ? resourceFlow['netPerSecond'] : null, 0.0);
   }
 
-  /// Calculates continuous machine condition.
+  /// Returns authoritative machine condition.
   double getMachineCondition(String machineId, double baseCondition, double utilization) {
-    if (utilization <= 0) return baseCondition;
-    // Condition drops ~0.0001 per sec at 100% utilization
-    final wear = (utilization * 0.0001 / 60.0) * elapsedSeconds;
-    final res = baseCondition - wear;
-    return res < 0 ? 0.0 : res;
+    return baseCondition;
   }
 
-  /// Calculates continuous research progress (0..100).
+  /// Returns authoritative research progress.
   double getResearchProgress(double baseProgress, double budget) {
-    if (budget <= 0) return baseProgress;
-    // Daily rate = min(10, budget / 100), per second = dailyRate / 1440
-    final ratePerSec = (budget / 100.0).clamp(1.0, 10.0) / 1440.0;
-    final progress = baseProgress + (ratePerSec * elapsedSeconds);
-    return progress > 100.0 ? 100.0 : progress;
+    return baseProgress.clamp(0.0, 100.0);
   }
 
   @override

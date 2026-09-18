@@ -46,22 +46,12 @@ Future<bool?> showBuildingAcquisitionDialog(
         FilledButton(
           onPressed: () async {
             if (action is Function) {
-              try {
-                await (action as dynamic)('purchase_building', {
-                  'buildingType': selectedType,
-                  'name': nameController.text.trim(),
-                  'territoryId': territoryId,
-                });
-              } catch (_) {
-                try {
-                  await (action as dynamic)(() async {
-                    return const EarthApi().purchaseV5Building(
-                      buildingType: selectedType,
-                      name: nameController.text.trim(),
-                    );
-                  });
-                } catch (_) {}
-              }
+              await (action as dynamic)(() async {
+                return const EarthApi().purchaseV5Building(
+                  buildingType: selectedType,
+                  name: nameController.text.trim(),
+                );
+              });
             }
             if (ctx.mounted) Navigator.of(ctx).pop(true);
           },
@@ -93,19 +83,11 @@ Future<bool?> showBuildingUpgradeDialog(
         FilledButton(
           onPressed: () async {
             if (action is Function) {
-              try {
-                await (action as dynamic)('upgrade_building', {
-                  'buildingId': buildingId,
-                });
-              } catch (_) {
-                try {
-                  await (action as dynamic)(() async {
-                    return const EarthApi().upgradeBuilding(
-                      buildingId: buildingId,
-                    );
-                  });
-                } catch (_) {}
-              }
+              await (action as dynamic)(() async {
+                return const EarthApi().upgradeBuilding(
+                  buildingId: buildingId,
+                );
+              });
             }
             if (ctx.mounted) Navigator.of(ctx).pop(true);
           },

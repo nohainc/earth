@@ -10,6 +10,8 @@ import { assetUnitScale, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { marketFeeRate } from './market-rules.ts';
 import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
+import { getHouseSettlementProfileSnapshot, getCorporationSettlementProfileSnapshot } from './v5-settlement-profiles-postgres.ts';
+import { getAvailableScaleCapabilities } from './v5-scale-postgres.ts';
 
 /** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -39,7 +41,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                              c.construction_credit_units, c.construction_minutes,
                              c.research_credit_units, c.research_duration_game_days,
                              c.operating_credit_units, c.service_type, c.service_capacity_units,
-                             c.slot_footprint, c.definition_version,
+                             c.slot_footprint, c.definition_version, c.technology_domain, c.minimum_scale_capability,
                              COALESCE(jsonb_agg(jsonb_build_object(
                                'assetId', f.asset_id,
                                'constructionUnits', f.construction_units,
@@ -52,13 +54,15 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                 c.economic_role, c.ownership_scope, c.construction_credit_units,
                                 c.construction_minutes, c.research_credit_units, c.research_duration_game_days,
                                 c.operating_credit_units, c.service_type,
-                                c.service_capacity_units, c.slot_footprint, c.definition_version
+                                c.service_capacity_units, c.slot_footprint, c.definition_version,
+                                c.technology_domain, c.minimum_scale_capability
                        ORDER BY c.code, c.tier, c.id`),
     viewerHouseId ? repository.query(`SELECT b.id, b.territory_id, b.catalog_id, b.status, b.started_game_day,
+                                             b.construction_state, b.installed_generation, b.technology_definition_version,
                                              c.code, c.code AS building_type, c.tier, c.economic_role,
                                              c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                                              c.service_type, c.service_capacity_units, c.slot_footprint,
-                                             c.operating_credit_units,
+                                             c.operating_credit_units, c.technology_domain, c.minimum_scale_capability,
                                              COALESCE(latest.utilization_bps, 10000) AS utilization_bps,
                                              latest.game_day AS latest_settlement_game_day,
                                              latest.status AS latest_settlement_status,
@@ -248,7 +252,18 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     return { ...condition, exposure };
   });
   const capacity = territory?.territory_id ? (await repository.query(`SELECT territory_id, active_house_count, house_capacity, population_capacity, private_slot_capacity, public_slot_capacity, private_slots_used, public_slots_used, housing_capacity, health_capacity, energy_capacity, connectivity_capacity, service_capacity FROM territory_capacity_state WHERE territory_id = $1`, [territory.territory_id])).rows[0] : null;
-  const [technology, corporationBuildingResearch, marketInstruments, marketOrders] = await Promise.all([
+  const corpId = corporation.rows[0]?.id;
+  const [
+    technology,
+    corporationBuildingResearch,
+    marketInstruments,
+    marketOrders,
+    houseProfile,
+    corpProfile,
+    corpAccounts,
+    houseOwnerEcon,
+    corpOwnerEcon,
+  ] = await Promise.all([
     viewerId ? listTechnology(repository, viewerId) : Promise.resolve({ catalog: [], projects: [] }),
     viewerId ? listCorporationBuildingResearch(repository, viewerId) : Promise.resolve({ corporationId: null, projects: [], unlocks: [] }),
     repository.query(`SELECT i.id, i.symbol, i.asset_id, i.rules_version, i.genesis_reference_price_units::TEXT,
@@ -271,7 +286,37 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                          AND ($1::TEXT IS NOT NULL AND o.owner_economic_id =
                               (SELECT economic_id FROM owner_registry WHERE id = $1))
                        ORDER BY o.created_at DESC LIMIT 500`, [viewerHouseId]),
+    viewerHouseId ? getHouseSettlementProfileSnapshot(repository, viewerHouseId) : Promise.resolve(null),
+    corpId ? getCorporationSettlementProfileSnapshot(repository, corpId) : Promise.resolve(null),
+    corpId ? repository.query(`SELECT a.account_type, asset.code, a.balance_units::TEXT AS balance_units
+                                FROM economic_accounts a
+                                JOIN owner_registry owner ON owner.economic_id = a.owner_economic_id
+                                JOIN economic_assets asset ON asset.id = a.asset_id
+                               WHERE owner.id = $1 AND a.status = 'ACTIVE'
+                               ORDER BY asset.id, a.account_type`, [corpId]) : Promise.resolve({ rows: [] }),
+    viewerHouseId ? repository.query<{ economic_id: string }>(`SELECT economic_id FROM owner_registry WHERE id = $1`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
+    corpId ? repository.query<{ economic_id: string }>(`SELECT economic_id FROM owner_registry WHERE id = $1`, [corpId]) : Promise.resolve({ rows: [] }),
   ]);
+  const houseEconId = houseOwnerEcon.rows[0]?.economic_id;
+  const corpEconId = corpOwnerEcon.rows[0]?.economic_id;
+  const houseScaleCaps = houseEconId
+    ? Array.from(await getAvailableScaleCapabilities(repository, houseEconId, 'HOUSE', corpEconId))
+    : ['SCALE_NONE'];
+  const corpScaleCaps = corpEconId
+    ? Array.from(await getAvailableScaleCapabilities(repository, corpEconId, 'CORPORATION', null))
+    : ['SCALE_NONE'];
+  const corpTreasury = (corpAccounts.rows.find((row: any) => row.code === 'CREDIT' && (row.account_type === 'TREASURY' || row.account_type === 'WALLET')) as any)?.balance_units ?? '0';
+  const corpResources = Object.fromEntries(corpAccounts.rows
+    .filter((row: any) => row.code !== 'CREDIT' && row.account_type === 'INVENTORY')
+    .map((row: any) => [String(row.code).toLowerCase(), String(row.balance_units)]));
+  if (corpResources.material != null && corpResources.materials == null) corpResources.materials = corpResources.material;
+  const corporationSnapshot = corporation.rows[0] ? {
+    ...corporation.rows[0],
+    treasury: corpTreasury,
+    resources: corpResources,
+    settlementProfile: corpProfile,
+    scaleCapabilities: corpScaleCaps,
+  } : null;
   const marketProducts = Object.fromEntries(marketInstruments.rows.map((row: any) => {
     const product = String(row.symbol).replace(/^SPOT-/, '').toLowerCase();
     const priceUnits = row.last_clearing_price_units ?? row.genesis_reference_price_units;
@@ -337,7 +382,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     institutions: institutions.rows,
     territories: territories.rows,
     organizations: organizations['organizations'] ?? [],
-    corporation: corporation.rows[0] ?? null,
+    corporation: corporationSnapshot,
+    settlementProfile: houseProfile,
+    scaleCapabilities: houseScaleCaps,
     humans: humans.rows,
     economicAssets: assets.rows,
     communities: communities.communities,

@@ -34,27 +34,11 @@ class PersonalFinancePanel extends StatelessWidget {
         .toList();
     final projection = _map(
         personalFinanceData['summary'] ?? personalFinanceData['projection']);
-    final fallbackBuildingIncome = state.buildings
-        .whereType<Map>()
-        .where((b) =>
-            b['owner_id'] == state.human['id']?.toString() &&
-            b['status'] != 'closed')
-        .fold<double>(0.0, (sum, b) {
-          final outType = b['resource_output_type']?.toString().toLowerCase();
-          final outAmount = asDouble(b['resource_output_amount']) ?? 0.0;
-          final opCredits = asDouble(b['daily_operating_credits']) ?? 0.0;
-          return sum + ((outType == 'credits' ? outAmount : 0.0) - opCredits);
-        });
     final dailyProfileCredits =
         asDouble(_map(personalFinanceData['dailyProfile'])['credits']);
     final projectedIncome = _creditUnits(projection['incomeUnits']) ??
-        (fallbackBuildingIncome > 0
-            ? fallbackBuildingIncome
-            : dailyProfileCredits);
-    final projectedTax = _creditUnits(projection['taxUnits']) ??
-        (projectedIncome != null && personalFinanceData.containsKey('taxes')
-            ? (projectedIncome * 0.1)
-            : null);
+        dailyProfileCredits;
+    final projectedTax = _creditUnits(projection['taxUnits']);
     final grossCredits = projectedIncome;
     final incomeTax = projectedTax;
     final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
@@ -152,7 +136,6 @@ class PersonalFinancePanel extends StatelessWidget {
           grossCredits: grossCredits,
           taxAmount: incomeTax,
           personalFinanceData: personalFinanceData,
-          fallbackBuildingIncome: fallbackBuildingIncome,
         ),
         const SizedBox(height: 24),
         _BankDepositsCard(
@@ -1677,13 +1660,11 @@ class _CreditIncomeSummaryCard extends StatelessWidget {
   final double? grossCredits;
   final double? taxAmount;
   final Map<String, dynamic> personalFinanceData;
-  final double fallbackBuildingIncome;
 
   const _CreditIncomeSummaryCard({
     required this.grossCredits,
     required this.taxAmount,
     this.personalFinanceData = const {},
-    this.fallbackBuildingIncome = 0.0,
   });
 
   @override
@@ -1691,7 +1672,7 @@ class _CreditIncomeSummaryCard extends StatelessWidget {
     final assetIncome = PersonalFinancePanel._map(personalFinanceData['assetIncome']);
     final buildingCredits = asDouble(assetIncome['businessProfit']) ??
         asDouble(assetIncome['buildingCredits']) ??
-        (fallbackBuildingIncome > 0 ? fallbackBuildingIncome : 0.0);
+        0.0;
     final investmentDividend = asDouble(assetIncome['civicDividends']) ??
         asDouble(assetIncome['investmentDividend']) ??
         0.0;

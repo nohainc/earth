@@ -82,69 +82,11 @@ class _CorporateBuildingResearchPanelState
     if (val == val.roundToDouble()) {
       return val.toInt().toString();
     }
-    // Format to 2 decimal places, removing unnecessary trailing zeros if desired or keeping clean 2 digits
     final fixed = val.toStringAsFixed(2);
     if (fixed.endsWith('.00')) {
       return fixed.substring(0, fixed.length - 3);
     }
     return fixed;
-  }
-
-  Widget _buildResourceDeltaRow(
-    BuildContext context, {
-    required String resourceKey,
-    required dynamic rawValue,
-    required double multiplier,
-    required bool isOutput,
-  }) {
-    final current = asDoubleOr(rawValue, 0);
-    final meta = EarthResourceMeta.forCommodity(resourceKey);
-    final icon = resourceKey == 'credits'
-        ? Icons.account_balance_wallet_outlined
-        : meta.icon;
-    final color = meta.color;
-
-    String currentStr;
-    String nextStr;
-
-    if (current > 0) {
-      final next = current * multiplier;
-      currentStr = _formatDecimal(current);
-      nextStr = _formatDecimal(next);
-    } else {
-      currentStr = '0';
-      nextStr = '0';
-    }
-
-    final hasValue = current > 0;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1.5),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 13,
-            color:
-                hasValue ? color : context.mutedColor.withValues(alpha: 0.35),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              '$currentStr -> $nextStr',
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: hasValue ? FontWeight.w700 : FontWeight.w500,
-                color: hasValue
-                    ? context.inkColor
-                    : context.mutedColor.withValues(alpha: 0.45),
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override

@@ -2279,12 +2279,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
 
     int computeCityCap(Map<String, dynamic> c) {
       final treasury = asIntOr(c['treasury'], 0);
-      final housing = asIntOr(c['housing_capacity'], 0);
-      final energy = asIntOr(c['energy_capacity'], 0);
-      final connectivity = asIntOr(c['connectivity_capacity'], 0);
-      final health = asIntOr(c['health_capacity'], 0);
-      return asIntOr(c['capitalization'],
-          treasury + (housing + energy + connectivity + health) * 25);
+      return asIntOr(c['capitalization'], treasury);
     }
 
     Map<String, dynamic> resolveCorpMetrics(Map<String, dynamic> corp) {
@@ -2432,20 +2427,14 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
         final connectivity = asIntOr(row['connectivity_capacity'], 0);
         final health = asIntOr(row['health_capacity'], 0);
         final treasury = asIntOr(row['treasury'], 0);
-        final nHousing = ((housing / (residents > 0 ? residents : 1.0)) / maxH)
-            .clamp(0.0, 1.0);
-        final nEnergy = ((energy / (residents > 0 ? residents : 1.0)) / maxE)
-            .clamp(0.0, 1.0);
         final nConnectivity =
             ((connectivity / (residents > 0 ? residents : 1.0)) / maxC)
                 .clamp(0.0, 1.0);
         final nHealth = (health / maxHl).clamp(0.0, 1.0);
         final nTreasury = (treasury / maxCityTr).clamp(0.0, 1.0);
-        return ((nHousing * 25) +
-                (nEnergy * 25) +
-                (nConnectivity * 20) +
-                (nHealth * 20) +
-                (nTreasury * 10))
+        return ((nConnectivity * 40) +
+                (nHealth * 40) +
+                (nTreasury * 20))
             .round()
             .clamp(0, 100);
       } else if (isHouse) {
@@ -2606,12 +2595,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
             } else if (isCity) {
               final residents = asIntOr(row['residents'], 1);
               final treasury = asIntOr(row['treasury'], 0);
-              final housing = asIntOr(row['housing_capacity'], 0);
-              final energy = asIntOr(row['energy_capacity'], 0);
-              final connectivity = asIntOr(row['connectivity_capacity'], 0);
-              final health = asIntOr(row['health_capacity'], 0);
-              final capitalization = asIntOr(row['capitalization'],
-                  treasury + (housing + energy + connectivity + health) * 25);
+              final capitalization = asIntOr(row['capitalization'], treasury);
               final businesses = asIntOr(
                   row['businesses_count'] ??
                       row['active_businesses'] ??

@@ -44,6 +44,21 @@ Future<bool?> showBuildingDetailUpgradeDialog(
   final creditCost = quote['creditCostUnits']?.toString() ?? 'UNAVAILABLE';
   final footprintDelta = quote['footprintDelta']?.toString() ?? 'UNAVAILABLE';
   final duration = quote['constructionMinutes']?.toString() ?? 'UNAVAILABLE';
+  final resourceReqs = (quote['resourceRequirements'] as List?)
+          ?.whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList() ??
+      [];
+  final minScale = quote['minimumScaleCapability']?.toString();
+  final scaleAuth = quote['scaleAuthorization'] is Map
+      ? Map<String, dynamic>.from(quote['scaleAuthorization'] as Map)
+      : null;
+  final beforeRent = quote['beforeRentUnits']?.toString() ??
+      capacity['currentChargeUnits']?.toString();
+  final afterRent = quote['afterRentUnits']?.toString() ??
+      capacity['afterChargeUnits']?.toString();
+  final deltaRent = quote['deltaRentUnits']?.toString() ??
+      capacity['incrementalChargeUnits']?.toString();
 
   return showDialog<bool>(
     context: context,
@@ -81,27 +96,37 @@ Future<bool?> showBuildingDetailUpgradeDialog(
               _quoteRow(context, 'Current tier', currentTier),
               _quoteRow(context, 'Target tier', targetTier),
               const Divider(height: 20),
-              Text('UPGRADE COST', style: context.captionStyle),
+              Text('UPGRADE RESOURCE COSTS', style: context.captionStyle),
               _quoteRow(context, 'CREDIT cost', creditCost),
+              for (final req in resourceReqs)
+                _quoteRow(
+                  context,
+                  '${req['code']} required',
+                  '${req['requiredUnits']} (Available: ${req['availableUnits']})',
+                ),
               _quoteRow(context, 'Capacity change', footprintDelta),
               _quoteRow(context, 'Construction time (minutes)', duration),
-              const Divider(height: 20),
-              Text('DAILY UPKEEP CHANGES', style: context.captionStyle),
-              _quoteRow(context, 'Upkeep adjustments', 'Normal (balanced)'),
-              const Divider(height: 20),
-              Text('OPERATING COST CHANGES', style: context.captionStyle),
-              _quoteRow(context, 'Target operating CREDIT',
-                  targetCatalog['operatingCreditUnits']?.toString() ?? 'Standard'),
-              if (capacity.isNotEmpty) ...[
+              if (minScale != null && minScale != 'SCALE_NONE') ...[
                 const Divider(height: 20),
-                Text('CAPACITY QUOTE', style: context.captionStyle),
-                _quoteRow(context, 'Current charge',
-                    capacity['currentChargeUnits']?.toString() ?? 'UNAVAILABLE'),
-                _quoteRow(context, 'After charge',
-                    capacity['afterChargeUnits']?.toString() ?? 'UNAVAILABLE'),
-                _quoteRow(context, 'Incremental charge',
-                    capacity['incrementalChargeUnits']?.toString() ??
-                        'UNAVAILABLE'),
+                Text('SCALE CAPABILITY', style: context.captionStyle),
+                _quoteRow(context, 'Required capability', minScale),
+                _quoteRow(
+                  context,
+                  'Authorization status',
+                  scaleAuth?['authorized'] == true
+                      ? 'Authorized'
+                      : 'Unauthorized (${scaleAuth?['reason'] ?? 'Locked'})',
+                ),
+              ],
+              if (beforeRent != null || afterRent != null) ...[
+                const Divider(height: 20),
+                Text('CAPACITY RENT IMPACT', style: context.captionStyle),
+                if (beforeRent != null)
+                  _quoteRow(context, 'Current rent', beforeRent),
+                if (afterRent != null)
+                  _quoteRow(context, 'After rent', afterRent),
+                if (deltaRent != null)
+                  _quoteRow(context, 'Rent delta', deltaRent),
               ],
             ],
           ),

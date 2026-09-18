@@ -86,6 +86,16 @@ class EarthState {
     return list;
   }
 
+  Map<String, dynamic> get corporation => _toMap(json['corporation']);
+  Map<String, dynamic> get settlementProfile => _toMap(json['settlementProfile']);
+  List<dynamic> get scaleCapabilities => _toList(json['scaleCapabilities']);
+  Map<String, dynamic> get corporationResources => _toMap(corporation['resources']);
+  double get corporationTreasury => asDouble(corporation['treasury']) ?? 0.0;
+  Map<String, dynamic> get corporationSettlementProfile =>
+      _toMap(corporation['settlementProfile']);
+  List<dynamic> get corporationScaleCapabilities =>
+      _toList(corporation['scaleCapabilities']);
+
   Map<String, dynamic>? get myCommunity {
     final list = myCommunities;
     return list.isNotEmpty ? list.first : null;

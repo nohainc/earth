@@ -612,24 +612,20 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             (b) => b['ownership_class'] == 'civic' && b['status'] != 'closed')
         .toList();
 
-    // Personal estate plot capacity:
-    // 10 slots per tier (Tier 1 = 10, Tier 2 = 20, Tier 3 = 30, Tier 4 = 40)
-    final estateBuilding =
-        privateBuildings.cast<Map<String, dynamic>?>().firstWhere(
-              (b) => b?['building_type'] == 'private-estate-plot',
-              orElse: () => null,
-            );
-    final estateTier = asIntOr(estateBuilding?['tier'], 1);
-    final personalTotalSlots = estateTier * 10;
-    // Calculate personal used slots from private buildings footprint (excluding the estate deed itself)
-    final personalUsedSlots = privateBuildings.fold<int>(
-      0,
-      (sum, b) =>
-          sum +
-          (b['building_type'] == 'private-estate-plot'
-              ? 0
-              : asIntOr(b['slot_footprint'], 1)),
-    );
+    // Personal estate plot capacity from authoritative settlement profile / zoning
+    final personalTotalSlots = asIntOr(
+        widget.state.settlementProfile['total_capacity_units'],
+        asIntOr(zoning['private_slot_capacity'], 10));
+    final personalUsedSlots = asIntOr(
+        widget.state.settlementProfile['productive_capacity_units'],
+        privateBuildings.fold<int>(
+          0,
+          (sum, b) =>
+              sum +
+              (b['building_type'] == 'private-estate-plot'
+                  ? 0
+                  : asIntOr(b['slot_footprint'], 1)),
+        ));
     final personalAvailableSlots =
         math.max(0, personalTotalSlots - personalUsedSlots);
 
@@ -2508,21 +2504,19 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             b['owner_id'] == widget.state.human['id']?.toString() &&
             b['status'] != 'closed')
         .toList();
-    final estateBuilding =
-        privateBuildings.cast<Map<String, dynamic>?>().firstWhere(
-              (b) => b?['building_type'] == 'private-estate-plot',
-              orElse: () => null,
-            );
-    final estateTier = asIntOr(estateBuilding?['tier'], 1);
-    final personalTotalSlots = estateTier * 10;
-    final personalUsedSlots = privateBuildings.fold<int>(
-      0,
-      (sum, b) =>
-          sum +
-          (b['building_type'] == 'private-estate-plot'
-              ? 0
-              : asIntOr(b['slot_footprint'], 1)),
-    );
+    final personalTotalSlots = asIntOr(
+        widget.state.settlementProfile['total_capacity_units'],
+        asIntOr(widget.state.districtZoning['private_slot_capacity'], 10));
+    final personalUsedSlots = asIntOr(
+        widget.state.settlementProfile['productive_capacity_units'],
+        privateBuildings.fold<int>(
+          0,
+          (sum, b) =>
+              sum +
+              (b['building_type'] == 'private-estate-plot'
+                  ? 0
+                  : asIntOr(b['slot_footprint'], 1)),
+        ));
     final personalAvailableSlots =
         math.max(0, personalTotalSlots - personalUsedSlots);
 
@@ -3560,7 +3554,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             fontWeight: FontWeight.w600),
                       ),
                     Text(
-                      '${itemNumber == null ? '' : '#$itemNumber  ·  '}${asIntOr(b['slot_footprint'], 1)} space${asIntOr(b['slot_footprint'], 1) == 1 ? '' : 's'}  ·  Tier ${asIntOr(b['tier'], 1)}',
+                      '${itemNumber == null ? '' : '#$itemNumber  ·  '}${asIntOr(b['slot_footprint'], 1)} space${asIntOr(b['slot_footprint'], 1) == 1 ? '' : 's'}  ·  Tier ${asIntOr(b['tier'], 1)}${b['installed_generation'] != null ? '  ·  Gen ${b['installed_generation']}' : ''}${b['technology_domain'] != null ? '  ·  ${b['technology_domain']}' : ''}',
                       style: context.widgetFooterStyle
                           .copyWith(color: context.mutedColor, fontSize: 12),
                     ),
