@@ -11,7 +11,21 @@ if (command === 'heartbeat') {
   const origin = process.env.EARTH_LOCAL_API_ORIGIN ?? 'http://127.0.0.1:8788';
   const response = await fetch(`${origin}/__scheduled`);
   if (!response.ok) throw new Error(`Scheduled Worker returned HTTP ${response.status}`);
-  console.log('Worker scheduled heartbeat completed.');
+  const healthResponse = await fetch(`${origin}/health`);
+  if (!healthResponse.ok) throw new Error(`Health check returned HTTP ${healthResponse.status}`);
+  const health = await healthResponse.json();
+  const clock = health.worldClock ?? {};
+  const settlement = health.settlement ?? {};
+  const details = health.dailySettlement ?? {};
+  console.log(`Clock: Day ${clock.gameDay ?? '—'} ${String(clock.gameMinute ?? '—').padStart(4, '0')}`);
+  console.log(`Settled through: Day ${settlement.settledThroughGameDay ?? '—'}`);
+  console.log(`Backlog: ${settlement.backlogDays ?? '—'} days`);
+  console.log(`Status: ${settlement.status ?? 'UNKNOWN'}`);
+  if (details.failedGameDay != null || details.failedPhase != null || details.failedError != null) {
+    console.log(`Failed day: ${details.failedGameDay ?? '—'}`);
+    console.log(`Failed phase: ${details.failedPhase ?? '—'}`);
+    console.log(`Error: ${details.failedError ?? '—'}`);
+  }
   process.exit(0);
 }
 

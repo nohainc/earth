@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Fast PR smoke suite. The full Flutter suite is the authoritative CI and
+# release gate; keep this list intentionally small and representative.
+
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT_DIR}/flutter_client"
 

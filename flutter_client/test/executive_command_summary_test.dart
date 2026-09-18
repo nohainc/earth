@@ -1,16 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:earth_client/core/api/earth_api.dart';
+import 'package:earth_client/core/api/earth_api_transport.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/core/models/decision_queue_item.dart';
 import 'package:earth_client/features/command_center/dashboard.dart';
 import 'package:earth_client/features/command_center/executive_command_summary.dart';
+
+class _DailySummaryTransport extends EarthApiTransport {
+  @override
+  Future<dynamic> request(String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    return const <String, dynamic>{'ok': true, 'gameDay': 42};
+  }
+}
 
 void main() {
   final sampleState = const EarthState({
     'status': {'phase': 'Operational'},
     'world': {'name': 'Earth Prime', 'day': 42, 'population': 12000000},
     'institutions': {
-      'city': {'name': 'New Geneva', 'tier': 'Metropolis', 'population': 500000},
+      'city': {
+        'name': 'New Geneva',
+        'tier': 'Metropolis',
+        'population': 500000
+      },
     },
     'membership': {'city_id': 'c1'},
     'player': {
@@ -27,7 +41,9 @@ void main() {
     'time': {'day': 42},
     'market': {
       'prices': {'energy': 10.5, 'materials': 4.2},
-      'products': {'energy': {'price': 10.5, 'supply': 500, 'demand': 600}},
+      'products': {
+        'energy': {'price': 10.5, 'supply': 500, 'demand': 600}
+      },
       'book': [],
       'trades': [],
       'orders': [],
@@ -40,16 +56,27 @@ void main() {
       'solvent': true,
     },
     'machines': [
-      {'id': 'm1', 'name': 'Bio Extractor Alpha', 'condition': 45.0, 'status': 'operational'},
+      {
+        'id': 'm1',
+        'name': 'Bio Extractor Alpha',
+        'condition': 45.0,
+        'status': 'operational'
+      },
     ],
     'contracts': [
-      {'id': 'c1', 'title': 'Energy Flow Agreement', 'status': 'accepted', 'days_remaining': 1},
+      {
+        'id': 'c1',
+        'title': 'Energy Flow Agreement',
+        'status': 'accepted',
+        'days_remaining': 1
+      },
     ],
     'opportunities': [
       {
         'id': 'opp-1',
         'title': 'High Energy Arbitrage Margin',
-        'detail': 'Energy clearing price spread is +18% above regional baseline.',
+        'detail':
+            'Energy clearing price spread is +18% above regional baseline.',
         'signal': 'market',
         'priority': 'high',
       },
@@ -57,7 +84,9 @@ void main() {
   });
 
   group('ExecutiveCommandSummary', () {
-    testWidgets('renders all three primary executive questions and their telemetry', (tester) async {
+    testWidgets(
+        'renders all three primary executive questions and their telemetry',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -71,6 +100,7 @@ void main() {
             body: SingleChildScrollView(
               child: ExecutiveCommandSummary(
                 state: sampleState,
+                api: EarthApi(transport: _DailySummaryTransport()),
                 onNavigate: (sec) => navigatedTo = sec,
                 onExecuteDecision: (item) => executedDecision = item,
               ),
@@ -109,7 +139,9 @@ void main() {
       expect(executedDecision, isNotNull);
     });
 
-    testWidgets('Dashboard integrates ExecutiveCommandSummary seamlessly in command section', (tester) async {
+    testWidgets(
+        'Dashboard integrates ExecutiveCommandSummary seamlessly in command section',
+        (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);

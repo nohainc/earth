@@ -419,6 +419,17 @@ const worker = {
       return world;
     }, { workload: 'scheduler' });
     if (!result) throw new Error('PostgreSQL repository is unavailable for scheduler heartbeat');
+    console.log(JSON.stringify({
+      event: 'scheduler_tick',
+      gameDay: result.day,
+      gameMinute: result.minute,
+      settledThrough: result.settlementWatermark,
+      backlogDays: result.settlementBacklog,
+      settledDays: result.settledDays,
+      settlementStatus: result.settlementStatus,
+      marketProcessedThroughBatch: result.marketProcessedThroughBatch,
+      marketEligibleBatch: result.marketEligibleBatch,
+    }));
     let outboxDelivered = 0;
     try {
       outboxDelivered = await withRepository(env, (repository) => deliverOutbox(repository, (outboxEvent) =>

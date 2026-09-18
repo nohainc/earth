@@ -18,7 +18,7 @@ void main() {
       'governance': {
         'rules': [
           {
-            'institution_id': 'OUC-001',
+            'institution_id': 'EARTH',
             'quorum_threshold': 0.3,
             'approval_threshold': 0.5,
             'voting_period_days': 3,
@@ -30,7 +30,7 @@ void main() {
           {
             'id': 'PROP-101',
             'title': 'Infrastructure levy adjustment',
-            'institution_id': 'OUC-001',
+            'institution_id': 'EARTH',
             'status': 'open',
             'outcome': 'pending',
             'votes': {'support': 12, 'oppose': 3, 'uncast': 5},
@@ -43,17 +43,14 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: DefaultTabController(
-          length: 3,
-          child: Scaffold(
-            body: SingleChildScrollView(
-              child: TabbedProposalPanel(
-                state: state,
-                busy: false,
-                action: (callback) async {
-                  castChoice = 'voted';
-                },
-              ),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TabbedProposalPanel(
+              state: state,
+              busy: false,
+              action: (callback) async {
+                castChoice = 'voted';
+              },
             ),
           ),
         ),
@@ -61,10 +58,9 @@ void main() {
     );
 
     // The new tabbed UI shows tab labels with counts
-    expect(find.text('WORLD (1)'), findsOneWidget);
+    expect(find.text('EARTH (1)'), findsOneWidget);
     expect(find.text('CORPORATION (0)'), findsOneWidget);
-    expect(find.text('TERRITORY (0)'), findsOneWidget);
-    await tester.tap(find.text('WORLD (1)'));
+    await tester.tap(find.text('EARTH (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Infrastructure levy adjustment'), findsOneWidget);
     expect(find.textContaining('30% quorum · 50% approval'), findsOneWidget);
@@ -107,7 +103,7 @@ void main() {
           {
             'id': 'PROP-102',
             'title': 'Energy Tariff Standardization',
-            'institution_id': 'OUC-001',
+            'institution_id': 'EARTH',
             'status': 'closed',
             'outcome': 'passed',
             'quorum': 0.25,
@@ -122,23 +118,20 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: DefaultTabController(
-          length: 3,
-          child: Scaffold(
-            body: SingleChildScrollView(
-              child: TabbedProposalPanel(
-                state: state,
-                busy: false,
-                action: (callback) async {},
-              ),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TabbedProposalPanel(
+              state: state,
+              busy: false,
+              action: (callback) async {},
             ),
           ),
         ),
       ),
     );
 
-    expect(find.text('WORLD (1)'), findsOneWidget);
-    await tester.tap(find.text('WORLD (1)'));
+    expect(find.text('EARTH (1)'), findsOneWidget);
+    await tester.tap(find.text('EARTH (1)'));
     await tester.pumpAndSettle();
     expect(find.text('APPROVED'), findsOneWidget);
     expect(
@@ -155,13 +148,13 @@ void main() {
       'clock': {'day': 12, 'minute': 60},
       'human': {'id': 'H-1'},
       'institutions': {
-        'city': {'id': 'CITY-1'}
+        'city': {'id': 'EARTH'}
       },
       'governance': {
         'proposals': [
           {
             'id': 'CITY-VOTE-1',
-            'institution_id': 'CITY-1',
+            'institution_id': 'EARTH',
             'title': 'City grid upgrade',
             'status': 'open',
             'outcome': 'pending',
@@ -186,8 +179,10 @@ void main() {
       ),
     ));
 
-    expect(find.textContaining('Voting ends in 3 days · Year 1 · Day 16'),
-        findsOneWidget);
+    await tester.tap(find.text('EARTH (1)'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Voting ends in 3 days'), findsOneWidget);
+    expect(find.textContaining('Year 1 · Day 16'), findsOneWidget);
     expect(find.text('VOTED SUPPORT'), findsOneWidget);
     expect(find.text('support'), findsNothing);
     expect(find.text('oppose'), findsNothing);
@@ -242,15 +237,12 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: DefaultTabController(
-          length: 3,
-          child: Scaffold(
-            body: SingleChildScrollView(
-              child: TabbedProposalPanel(
-                state: state,
-                busy: false,
-                action: (callback) async {},
-              ),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TabbedProposalPanel(
+              state: state,
+              busy: false,
+              action: (callback) async {},
             ),
           ),
         ),
@@ -259,7 +251,7 @@ void main() {
 
     expect(find.text('PROPOSALS'), findsOneWidget);
     expect(find.text('No proposals in this category.'), findsOneWidget);
-    expect(find.text('WORLD (0)'), findsOneWidget);
+    expect(find.text('EARTH (0)'), findsOneWidget);
     expect(find.text('Support 0  ·  Oppose 0  ·  Uncast 0'), findsNothing);
   });
 
@@ -269,13 +261,13 @@ void main() {
     const state = EarthState({
       'clock': {'day': 12},
       'institutions': {
-        'city': {'id': 'CITY-1'}
+        'city': {'id': 'EARTH'}
       },
       'governance': {
         'proposals': [
           {
             'id': 'CITY-BUILD-1',
-            'institution_id': 'CITY-1',
+            'institution_id': 'CORP-1',
             'title': 'Build a civic solar plant',
             'body': 'Approve the next municipal energy project.',
             'status': 'closed',
@@ -287,7 +279,7 @@ void main() {
           },
           {
             'id': 'UC-OPEN-1',
-            'institution_id': 'OUC-001',
+            'institution_id': 'EARTH',
             'title': 'Universal charter update',
             'status': 'open',
             'outcome': 'pending',
@@ -298,33 +290,30 @@ void main() {
     });
 
     await tester.pumpWidget(MaterialApp(
-      home: DefaultTabController(
-        length: 3,
-        child: Scaffold(
-          body: SingleChildScrollView(
-            child: TabbedProposalPanel(
-              state: state,
-              busy: false,
-              action: (callback) async {},
-            ),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: TabbedProposalPanel(
+            state: state,
+            busy: false,
+            action: (callback) async {},
           ),
         ),
       ),
     ));
 
-    // World tab shows 1 proposal, Territory tab shows 1
-    expect(find.text('WORLD (1)'), findsOneWidget);
-    expect(find.text('TERRITORY (1)'), findsOneWidget);
+    // Earth and corporation proposals use the two current governance scopes.
+    expect(find.text('EARTH (1)'), findsOneWidget);
+    expect(find.text('CORPORATION (1)'), findsOneWidget);
 
     // Default tab (Territory) shows the build proposal.
     expect(find.text('Build a civic solar plant'), findsOneWidget);
 
-    // World remains available as the final tab.
-    await tester.tap(find.text('WORLD (1)'));
+    // Earth remains available as the final tab.
+    await tester.tap(find.text('EARTH (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Universal charter update'), findsOneWidget);
 
-    await tester.tap(find.text('TERRITORY (1)'));
+    await tester.tap(find.text('CORPORATION (1)'));
     await tester.pumpAndSettle();
 
     // Expand the building proposal to see rich details
@@ -340,7 +329,7 @@ void main() {
       'human': {'id': 'H-1'},
       'clock': {'day': 1, 'minute': 0},
       'memberships': {
-        'city': {'id': 'CITY-1'},
+        'city': {'id': 'EARTH'},
         'corporation': {'id': 'CORP-1'},
       },
       'buildingCatalog': [
@@ -361,7 +350,7 @@ void main() {
         'proposals': [
           {
             'id': 'PROP-BLD-1',
-            'institution_id': 'CITY-1',
+            'institution_id': 'EARTH',
             'title': 'Commission Fusion Facility',
             'body': 'Urgent strategic energy infrastructure initiative.',
             'status': 'open',
@@ -376,20 +365,19 @@ void main() {
     });
 
     await tester.pumpWidget(MaterialApp(
-      home: DefaultTabController(
-        length: 3,
-        child: Scaffold(
-          body: SingleChildScrollView(
-            child: TabbedProposalPanel(
-              state: state,
-              busy: false,
-              action: (callback) async {},
-            ),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: TabbedProposalPanel(
+            state: state,
+            busy: false,
+            action: (callback) async {},
           ),
         ),
       ),
     ));
 
+    await tester.tap(find.text('EARTH (1)'));
+    await tester.pumpAndSettle();
     expect(find.text('Commission Fusion Facility'), findsOneWidget);
 
     // Expand details

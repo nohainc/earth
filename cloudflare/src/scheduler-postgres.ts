@@ -45,6 +45,27 @@ import { marketBatchThroughClosedDay, processDueMarketBatches } from './market-s
 
 export type SettlementResult = { status: 'completed' | 'already_processed' | 'busy' | 'failed'; gameDay: number; phasesCompleted: number; workUnitsCompleted?: number; workUnitsPending?: number };
 
+type TerminalSettlementFailure = {
+  phase_id: string;
+  error_message: string | null;
+};
+
+async function readTerminalSettlementFailure(
+  repository: PostgresRepository,
+  gameDay: number,
+): Promise<TerminalSettlementFailure | null> {
+  const result = await repository.query<TerminalSettlementFailure>(
+    `SELECT phase_id, error_message
+       FROM daily_settlement_phase_runs
+      WHERE game_day = $1
+        AND status = 'failed'
+      ORDER BY phase_order, shard
+      LIMIT 1`,
+    [gameDay],
+  );
+  return result.rows[0] ?? null;
+}
+
 const noOpPhase = async (_context: DailySettlementPhaseContext): Promise<unknown> => ({ ok: true });
 const OWNER_SHARD_COUNT = 16;
 const settlementPhases = createDailySettlementPhaseRegistry({
@@ -104,6 +125,19 @@ export async function runResumableSettlementDay(repository: PostgresRepository, 
   const correlationId = `settlement:${gameDay}`;
   const existing = await repository.query<{ status: string }>('SELECT status FROM daily_settlement_runs WHERE game_day = $1', [gameDay]);
   if (existing.rows[0]?.status === 'completed') return { status: 'already_processed', gameDay, phasesCompleted: settlementPhases.filter((phase) => phase.status === 'required').length, workUnitsCompleted: 0, workUnitsPending: 0 };
+  const terminalFailure = await readTerminalSettlementFailure(repository, gameDay);
+  if (terminalFailure) {
+    await repository.query(
+      `UPDATE daily_settlement_runs
+          SET status = 'failed',
+              current_phase = $2,
+              error_message = $3,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE game_day = $1`,
+      [gameDay, terminalFailure.phase_id, terminalFailure.error_message ?? 'Settlement phase failed'],
+    );
+    return { status: 'failed', gameDay, phasesCompleted: 0, workUnitsCompleted: 0, workUnitsPending: 0 };
+  }
   await captureEconomyShadowOpening(repository, gameDay);
   await repository.transaction(async (tx) => {
     await tx.query(`INSERT INTO daily_settlement_runs (game_day, status, current_phase, started_at) VALUES ($1, 'running', $2, CURRENT_TIMESTAMP) ON CONFLICT (game_day) DO UPDATE SET status = CASE WHEN daily_settlement_runs.status = 'failed' THEN 'running' ELSE daily_settlement_runs.status END, updated_at = CURRENT_TIMESTAMP`, [gameDay, settlementPhases[0]?.id ?? 'settlement']);
@@ -134,7 +168,19 @@ export async function runResumableSettlementDay(repository: PostgresRepository, 
     }
   }
   const progress = await settlementWorkProgress(repository, gameDay);
-  if (progress.failed > 0) return { status: 'failed', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: progress.pending };
+  if (progress.failed > 0) {
+    const failure = await readTerminalSettlementFailure(repository, gameDay);
+    await repository.query(
+      `UPDATE daily_settlement_runs
+          SET status = 'failed',
+              current_phase = $2,
+              error_message = $3,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE game_day = $1`,
+      [gameDay, failure?.phase_id ?? null, failure?.error_message ?? 'Settlement phase failed'],
+    );
+    return { status: 'failed', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: progress.pending };
+  }
   if (progress.pending > 0) return { status: 'busy', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: progress.pending };
   try {
     await reconcileEconomyShadowDay(repository, gameDay);

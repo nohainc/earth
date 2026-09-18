@@ -9,6 +9,7 @@ import '../../core/api/earth_api.dart';
 
 class ExecutiveCommandSummary extends StatefulWidget {
   final EarthState state;
+  final EarthApi api;
   final ValueChanged<String>? onNavigate;
   final ValueChanged<DecisionQueueItem>? onExecuteDecision;
   final VoidCallback? onOpenFullBriefing;
@@ -16,13 +17,15 @@ class ExecutiveCommandSummary extends StatefulWidget {
   const ExecutiveCommandSummary({
     super.key,
     required this.state,
+    this.api = const EarthApi(),
     this.onNavigate,
     this.onExecuteDecision,
     this.onOpenFullBriefing,
   });
 
   @override
-  State<ExecutiveCommandSummary> createState() => _ExecutiveCommandSummaryState();
+  State<ExecutiveCommandSummary> createState() =>
+      _ExecutiveCommandSummaryState();
 }
 
 class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
@@ -38,7 +41,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
 
   Future<void> _loadBriefing() async {
     try {
-      final response = await const EarthApi().getDailySummary();
+      final response = await widget.api.getDailySummary();
       if (!mounted) return;
       setState(() {
         _briefing = response['ok'] == true
@@ -98,7 +101,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           infoBulletPoints: const [
             'Prioritized Decision Queue & Opportunities: Actionable operational alerts, critical risk warnings, pending contract obligations, and live market arbitrage opportunities.',
           ],
-          child: _buildWhatDecisionNextCard(context, decisionItems, opportunities),
+          child:
+              _buildWhatDecisionNextCard(context, decisionItems, opportunities),
         ),
       ],
     );
@@ -126,8 +130,10 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         : widget.state.human['workforce'] is List
             ? (widget.state.human['workforce'] as List)
             : const [];
-    final activeStaff = workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
-    final capacity = asInt(business['workforceCapacity'] ?? business['staffCapacity']);
+    final activeStaff =
+        workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
+    final capacity =
+        asInt(business['workforceCapacity'] ?? business['staffCapacity']);
     final territory = widget.state.residency['territory'] ??
         widget.state.institutions['territory'];
     final territoryMap = territory is Map
@@ -141,7 +147,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       metrics: [
         EarthMetricTile(
           label: 'LIQUID CAPITAL',
-          value: credits == null ? 'UNAVAILABLE' : '${formatWholeNumber(credits)} C',
+          value: credits == null
+              ? 'UNAVAILABLE'
+              : '${formatWholeNumber(credits)} C',
           subtitle: 'Spendable now',
           icon: Icons.account_balance_wallet_outlined,
           accentColor: context.primaryColor,
@@ -155,9 +163,13 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           value: profit == null
               ? 'UNAVAILABLE'
               : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} CR',
-          subtitle: margin == null ? 'Profit unavailable' : '${margin.toStringAsFixed(1)}% margin',
+          subtitle: margin == null
+              ? 'Profit unavailable'
+              : '${margin.toStringAsFixed(1)}% margin',
           icon: Icons.storefront_outlined,
-          accentColor: profit == null || profit >= 0 ? context.successColor : context.warningColor,
+          accentColor: profit == null || profit >= 0
+              ? context.successColor
+              : context.warningColor,
           onTap: () {
             EarthAudioEngine.instance.playClick();
             widget.onNavigate?.call('buildings');
@@ -165,8 +177,11 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         ),
         EarthMetricTile(
           label: 'WORKFORCE',
-          value: activeStaff == 0 && capacity == null ? 'UNAVAILABLE' : '$activeStaff STAFF',
-          subtitle: capacity == null ? 'Capacity unavailable' : '$capacity capacity',
+          value: activeStaff == 0 && capacity == null
+              ? 'UNAVAILABLE'
+              : '$activeStaff STAFF',
+          subtitle:
+              capacity == null ? 'Capacity unavailable' : '$capacity capacity',
           icon: Icons.groups_outlined,
           accentColor: context.primaryColor,
           onTap: () {
@@ -176,7 +191,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         ),
         EarthMetricTile(
           label: 'BUILDINGS',
-          value: buildings.isEmpty ? 'NO BUILDINGS' : '${buildings.length} BUILDINGS',
+          value: buildings.isEmpty
+              ? 'NO BUILDINGS'
+              : '${buildings.length} BUILDINGS',
           subtitle: 'Productive assets',
           icon: Icons.domain_outlined,
           accentColor: context.successColor,
@@ -187,12 +204,15 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         ),
         EarthMetricTile(
           label: 'TERRITORY EFFECT',
-          value: territoryMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
+          value:
+              territoryMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
           subtitle: territoryPressure == null
               ? 'Pressure unavailable'
               : 'Pressure ${territoryPressure.toStringAsFixed(0)}%',
           icon: Icons.location_city_outlined,
-          accentColor: territoryPressure != null && territoryPressure > 70 ? context.warningColor : context.successColor,
+          accentColor: territoryPressure != null && territoryPressure > 70
+              ? context.warningColor
+              : context.successColor,
           onTap: () {
             EarthAudioEngine.instance.playClick();
             widget.onNavigate?.call('territory-commons');
@@ -205,8 +225,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // ==========================================================================
   // 2. WHAT CHANGED SINCE MY LAST VISIT
   // ==========================================================================
-  Widget _buildWhatChangedCard(BuildContext context, DailySummaryReport? briefing,
-      bool loading) {
+  Widget _buildWhatChangedCard(
+      BuildContext context, DailySummaryReport? briefing, bool loading) {
     if (loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -219,7 +239,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     return _buildWhatChangedContent(context, briefing);
   }
 
-  Widget _buildWhatChangedContent(BuildContext context, DailySummaryReport briefing) {
+  Widget _buildWhatChangedContent(
+      BuildContext context, DailySummaryReport briefing) {
     final netDelta = briefing.netWealthDelta;
     final isPositiveDelta = netDelta.delta >= 0;
     final sign = isPositiveDelta ? '+' : '';
@@ -244,9 +265,11 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 decoration: BoxDecoration(
                   color: context.warningColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(context.radiusControl),
-                  border: Border.all(color: context.warningColor.withValues(alpha: .3)),
+                  border: Border.all(
+                      color: context.warningColor.withValues(alpha: .3)),
                 ),
-                child: Icon(Icons.newspaper_outlined, size: context.iconSize + 4, color: context.warningColor),
+                child: Icon(Icons.newspaper_outlined,
+                    size: context.iconSize + 4, color: context.warningColor),
               ),
               SizedBox(width: context.spacingInline),
               Expanded(
@@ -276,7 +299,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     Text(
                       'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR ($sign${netDelta.deltaPct.toStringAsFixed(1)}%) · Cashflow Net: +${formatWholeNumber(briefing.financial.netProfit)} CR/day',
                       style: context.widgetValueStyle.copyWith(
-                        color: isPositiveDelta ? context.successColor : context.errorColor,
+                        color: isPositiveDelta
+                            ? context.successColor
+                            : context.errorColor,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -350,7 +375,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     );
   }
 
-  Widget _microStat(BuildContext context, String label, String value, String sub, Color color) {
+  Widget _microStat(BuildContext context, String label, String value,
+      String sub, Color color) {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -367,13 +393,16 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             style: context.widgetTitleStyle.copyWith(color: color),
           ),
           const SizedBox(height: 1),
-          Text(sub, style: context.widgetFooterStyle, overflow: TextOverflow.ellipsis),
+          Text(sub,
+              style: context.widgetFooterStyle,
+              overflow: TextOverflow.ellipsis),
         ],
       ),
     );
   }
 
-  Widget _headlineChip(BuildContext context, IconData icon, String text, Color color) {
+  Widget _headlineChip(
+      BuildContext context, IconData icon, String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -386,7 +415,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(text, style: context.widgetFooterStyle.copyWith(color: color, fontWeight: FontWeight.bold)),
+          Text(text,
+              style: context.widgetFooterStyle
+                  .copyWith(color: color, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -410,13 +441,17 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _filterChip(context, 'ALL', 'ALL (${decisionItems.length + opportunities.length})'),
+              _filterChip(context, 'ALL',
+                  'ALL (${decisionItems.length + opportunities.length})'),
               const SizedBox(width: 6),
-              _filterChip(context, 'CRITICAL', 'CRITICAL', color: context.warningColor),
+              _filterChip(context, 'CRITICAL', 'CRITICAL',
+                  color: context.warningColor),
               const SizedBox(width: 6),
-              _filterChip(context, 'CORPORATION', 'ENTERPRISE', color: context.primaryColor),
+              _filterChip(context, 'CORPORATION', 'ENTERPRISE',
+                  color: context.primaryColor),
               const SizedBox(width: 6),
-              _filterChip(context, 'CIVIC', 'CIVIC & HOUSE', color: context.secondaryColor),
+              _filterChip(context, 'CIVIC', 'CIVIC & HOUSE',
+                  color: context.secondaryColor),
             ],
           ),
         ),
@@ -425,7 +460,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         // Render Decision Items
         if (filteredDecisions.isEmpty)
           const EarthEmptyState(
-            message: 'No pending critical obligations. Your enterprise and civic standing are fully optimized.',
+            message:
+                'No pending critical obligations. Your enterprise and civic standing are fully optimized.',
             icon: Icons.check_circle_outline,
           )
         else
@@ -444,11 +480,13 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           SizedBox(height: context.spacingControl),
           Row(
             children: [
-              Icon(Icons.trending_up, size: context.iconSize, color: context.primaryColor),
+              Icon(Icons.trending_up,
+                  size: context.iconSize, color: context.primaryColor),
               SizedBox(width: context.spacingInline),
               Text(
                 'LIVE STRATEGIC OPPORTUNITIES',
-                style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.primaryColor),
               ),
             ],
           ),
@@ -467,7 +505,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       case 'CRITICAL':
         return items
             .where((i) =>
-                i.riskLevel.toLowerCase() == 'critical' || i.riskLevel.toLowerCase() == 'high')
+                i.riskLevel.toLowerCase() == 'critical' ||
+                i.riskLevel.toLowerCase() == 'high')
             .toList();
       case 'CORPORATION':
         return items
@@ -492,7 +531,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     }
   }
 
-  Widget _filterChip(BuildContext context, String filterKey, String label, {Color? color}) {
+  Widget _filterChip(BuildContext context, String filterKey, String label,
+      {Color? color}) {
     final isSelected = _selectedActionFilter == filterKey;
     final activeColor = color ?? context.primaryColor;
 
@@ -505,7 +545,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? activeColor.withValues(alpha: 0.18) : context.surfaceColor,
+          color: isSelected
+              ? activeColor.withValues(alpha: 0.18)
+              : context.surfaceColor,
           borderRadius: BorderRadius.circular(context.radiusControl),
           border: Border.all(
             color: isSelected ? activeColor : context.subtleBorderColor,
@@ -535,17 +577,21 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
 
     return EarthDataRow(
       title: item.title,
-      subtitle: '${item.whyItMatters}\nDeadline: ${item.deadline} · Impact: ${item.expectedImpact}',
+      subtitle:
+          '${item.whyItMatters}\nDeadline: ${item.deadline} · Impact: ${item.expectedImpact}',
       leading: Icon(categoryIcon, size: context.iconSize, color: categoryColor),
       badges: [
         EarthBadge(
           label: item.riskLevel.toUpperCase(),
-          variant: isCritical ? EarthBadgeVariant.warning : EarthBadgeVariant.neutral,
+          variant: isCritical
+              ? EarthBadgeVariant.warning
+              : EarthBadgeVariant.neutral,
         ),
       ],
       trailing: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: isCritical ? context.errorColor : context.primaryColor,
+          backgroundColor:
+              isCritical ? context.errorColor : context.primaryColor,
           foregroundColor: isCritical ? Colors.white : context.canvasColor,
           elevation: 0,
           padding: EdgeInsets.symmetric(horizontal: context.spacingControl),
@@ -572,7 +618,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     );
   }
 
-  Color _getDecisionCategoryColor(BuildContext context, DecisionQueueItem item) {
+  Color _getDecisionCategoryColor(
+      BuildContext context, DecisionQueueItem item) {
     switch (item.category.toLowerCase()) {
       case 'business':
       case 'buildings':
@@ -605,7 +652,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     }
   }
 
-  Widget _buildOpportunityStrip(BuildContext context, Map<String, dynamic> opp) {
+  Widget _buildOpportunityStrip(
+      BuildContext context, Map<String, dynamic> opp) {
     final title = opp['title']?.toString() ?? 'Strategic Opportunity';
     final detail = opp['detail']?.toString() ?? '';
     final signal = opp['signal']?.toString() ?? 'market';
@@ -621,7 +669,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding: EdgeInsets.symmetric(horizontal: context.tokens.number('pageTopics.cardPadding', 10), vertical: 6),
+      padding: EdgeInsets.symmetric(
+          horizontal: context.tokens.number('pageTopics.cardPadding', 10),
+          vertical: 6),
       decoration: BoxDecoration(
         color: context.surfaceColor.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(context.radiusControl),
@@ -629,7 +679,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       ),
       child: Row(
         children: [
-          Icon(Icons.flash_on, size: context.iconSize, color: context.primaryColor),
+          Icon(Icons.flash_on,
+              size: context.iconSize, color: context.primaryColor),
           SizedBox(width: context.spacingInline),
           Expanded(
             child: Column(
@@ -637,7 +688,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               children: [
                 Text(
                   title,
-                  style: context.widgetTitleStyle.copyWith(color: context.inkColor),
+                  style: context.widgetTitleStyle
+                      .copyWith(color: context.inkColor),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(

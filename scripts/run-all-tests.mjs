@@ -80,10 +80,9 @@ async function main() {
   // Step 1: Flutter Static Analysis
   await runStep('1. Flutter Static Analysis', 'flutter', ['analyze'], flutterDir);
 
-  // Step 2: Maintained V4 Flutter gameplay suite. The repository also keeps
-  // historical pre-V4 tests, but those target retired UI contracts and are
-  // intentionally not a release gate.
-  await runStep('2. Maintained V4 Flutter Gameplay Suite', 'bash', ['../scripts/run-maintained-flutter-tests.sh'], flutterDir);
+  // Step 2: The full Flutter suite is authoritative for CI and release
+  // health. A smaller smoke suite remains available as test:flutter:smoke.
+  await runStep('2. Full Flutter Test Suite', 'flutter', ['test'], flutterDir);
 
   // Step 3: Flutter Web Build Verification
   await runStep('3. Flutter Web Release Build', 'flutter', ['build', 'web', '--release'], flutterDir);

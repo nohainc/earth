@@ -85,6 +85,10 @@ void main() {
         find.widgetWithText(TextField, 'Income tax (%)'), '4.5');
     await tester.enterText(
         find.widgetWithText(TextField, 'Sales tax (%)'), '2.5');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Corporate tax (%)'), '1.5');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Property tax (%)'), '0.75');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('SUBMIT PROPOSAL'));

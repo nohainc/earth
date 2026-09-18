@@ -219,8 +219,7 @@ void main() {
           (tester) async {
         final spy = ActionSpy();
         if (i <= 5) {
-          await pumpLauncher(
-              tester,
+          await pumpLauncher(tester,
               (context, _) => showFormationComposer(context, spy.invoke));
           expect(find.text('Form a Corporation'), findsOneWidget);
           final field = find.byType(TextField).first;
@@ -240,8 +239,8 @@ void main() {
             expect(spy.calls, 1);
           }
         } else if (i <= 10) {
-          await pumpLauncher(
-              tester, (context, _) => showFormationComposer(context, spy.invoke));
+          await pumpLauncher(tester,
+              (context, _) => showFormationComposer(context, spy.invoke));
           final field = find.byType(TextField).first;
           if (i == 6) {
             await tester.tap(find.text('Cancel'));
@@ -253,14 +252,15 @@ void main() {
             expect(spy.calls, 1);
           }
         } else {
-          await pumpLauncher(
-              tester, (context, _) => showFormationComposer(context, spy.invoke));
+          await pumpLauncher(tester,
+              (context, _) => showFormationComposer(context, spy.invoke));
           expect(find.text('Form a Corporation'), findsOneWidget);
           if (i == 11) {
             await tester.tap(find.text('Cancel'));
             expect(spy.calls, 0);
           } else {
-            await tester.enterText(find.byType(TextField).first, 'Corporation $i');
+            await tester.enterText(
+                find.byType(TextField).first, 'Corporation $i');
             await tester.tap(find.text('Submit'));
             await tester.pumpAndSettle();
             expect(spy.calls, 1);
@@ -324,8 +324,8 @@ void main() {
     }
   });
 
-  group('Rendered building and finance results after actions', () {
-    for (var i = 1; i <= 30; i++) {
+  group('Rendered building and institution results after actions', () {
+    for (var i = 1; i <= 25; i++) {
       testWidgets(
           'result verification $i shows updated institution or finance information',
           (tester) async {
@@ -340,7 +340,8 @@ void main() {
           if (i.isEven) {
             await tester.tap(find.textContaining('Bistro').first);
             await tester.pumpAndSettle();
-            expect(find.textContaining(RegExp(r'space', caseSensitive: false)), findsWidgets);
+            expect(find.textContaining(RegExp(r'space', caseSensitive: false)),
+                findsWidgets);
           }
         } else if (i <= 20) {
           await pumpWithAction(
@@ -358,31 +359,75 @@ void main() {
               spy);
           expect(find.text('CORPORATE BUDGET'), findsWidgets);
           expect(find.textContaining('9000'), findsWidgets);
-        } else {
-          final finance = {
-            'lifeMaintenance': {
-              'lastSettlement': {'credits': -12, 'energy': -1}
-            },
-            'dailyProfile': {'status': 'clean', 'credits': 120, 'energy': -2},
-            'taxes': {
-              'rules': [
-                {'category': 'basic_income', 'rate': 0.1}
-              ]
-            },
-            'protectedMinimum': {'credits': 100},
-          };
-          await pumpWithAction(
-              tester,
-              PersonalFinancePanel(
-                  state: baseState,
-                  busy: false,
-                  action: spy.invoke,
-                  personalFinanceData: finance),
-              spy);
-          expect(find.text('HOUSE FINANCE'), findsOneWidget);
-          expect(find.textContaining('470'), findsWidgets);
-          expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
         }
+      });
+    }
+
+    final financeCases = <Map<String, dynamic>>[
+      {
+        'name': 'available balance',
+        'availableToSpendUnits': 120,
+        'expectedAvailable': '120',
+      },
+      {
+        'name': 'larger discretionary balance',
+        'availableToSpendUnits': 850,
+        'expectedAvailable': '850',
+      },
+      {
+        'name': 'fully reserved balance',
+        'availableToSpendUnits': 0,
+        'expectedAvailable': '0',
+      },
+      {
+        'name': 'protected reserve',
+        'availableToSpendUnits': 340,
+        'expectedAvailable': '340',
+      },
+      {
+        'name': 'scheduled settlement liquidity',
+        'availableToSpendUnits': 1250,
+        'expectedAvailable': '1250',
+      },
+    ];
+
+    for (final financeCase in financeCases) {
+      testWidgets(
+          'finance case ${financeCase['name']} renders authoritative liquidity',
+          (tester) async {
+        final spy = ActionSpy();
+        final finance = {
+          'lifeMaintenance': {
+            'lastSettlement': {'credits': -12, 'energy': -1}
+          },
+          'dailyProfile': {'status': 'clean', 'credits': 120, 'energy': -2},
+          'taxes': {
+            'rules': [
+              {'category': 'basic_income', 'rate': 0.1}
+            ]
+          },
+          'protectedMinimum': {'credits': 100},
+          'liquidity': {
+            'availableToSpendUnits': financeCase['availableToSpendUnits'],
+            'nextSettlementGameDay': 43,
+          },
+        };
+
+        await pumpWithAction(
+            tester,
+            PersonalFinancePanel(
+                state: baseState,
+                busy: false,
+                action: spy.invoke,
+                personalFinanceData: finance),
+            spy);
+
+        expect(find.text('HOUSE FINANCE'), findsOneWidget);
+        expect(find.text('AVAILABLE TO SPEND'), findsOneWidget);
+        expect(find.text(financeCase['expectedAvailable'] as String),
+            findsWidgets);
+        expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
+        expect(find.text('Scheduled game day 43'), findsOneWidget);
       });
     }
   });

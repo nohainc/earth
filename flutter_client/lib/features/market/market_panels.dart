@@ -10,11 +10,13 @@ import '../../shared/widgets/format_helpers.dart';
 class SuppliesTodayPanel extends StatelessWidget {
   final EarthState state;
   final Future<void> Function(Future<EarthState> Function()) action;
+  final EarthApi api;
 
   const SuppliesTodayPanel({
     super.key,
     required this.state,
     required this.action,
+    this.api = const EarthApi(),
   });
 
   static const _products = [
@@ -139,6 +141,7 @@ class SuppliesTodayPanel extends StatelessWidget {
                           initialProduct: product,
                           initialPrice: price,
                           initialSide: net < 0 && lowStock ? 'buy' : 'sell',
+                          api: api,
                         ),
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
@@ -258,6 +261,7 @@ class MarketWorkspace extends StatefulWidget {
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
   final Map<String, dynamic> priceHistory;
+  final EarthApi api;
 
   const MarketWorkspace({
     super.key,
@@ -265,6 +269,7 @@ class MarketWorkspace extends StatefulWidget {
     required this.busy,
     required this.action,
     this.priceHistory = const {},
+    this.api = const EarthApi(),
   });
 
   @override
@@ -354,12 +359,14 @@ class _MarketWorkspaceState extends State<MarketWorkspace> {
         ),
         const SizedBox(height: 20),
         if (_selectedTab == 0)
-          SuppliesTodayPanel(state: widget.state, action: widget.action)
+          SuppliesTodayPanel(
+              state: widget.state, action: widget.action, api: widget.api)
         else if (_selectedTab == 1)
           MarketSignalsPanel(
             state: widget.state,
             busy: widget.busy,
             priceHistory: widget.priceHistory,
+            api: widget.api,
             action: widget.action,
           )
         else
@@ -391,6 +398,7 @@ class _MarketWorkspaceState extends State<MarketWorkspace> {
                   state: widget.state,
                   busy: widget.busy,
                   action: widget.action,
+                  api: widget.api,
                 ),
                 const SizedBox(height: 24),
                 MarketOrderBookPanel(state: widget.state),
@@ -567,6 +575,7 @@ Future<void> showPlaceOrderDialog(
   required String initialProduct,
   required double initialPrice,
   String initialSide = 'buy',
+  EarthApi api = const EarthApi(),
 }) async {
   String selectedProduct = initialProduct;
   String side = initialSide;
@@ -576,7 +585,8 @@ Future<void> showPlaceOrderDialog(
   final priceController = TextEditingController(
       text: initialPrice > 0 ? initialPrice.toStringAsFixed(2) : '');
 
-  Future<void> refreshQuote(void Function(void Function()) setDialogState) async {
+  Future<void> refreshQuote(
+      void Function(void Function()) setDialogState) async {
     final quantity = double.tryParse(qtyController.text.trim()) ?? 0;
     final price = double.tryParse(priceController.text.trim()) ?? 0;
     if (quantity <= 0 || price <= 0) {
@@ -585,7 +595,7 @@ Future<void> showPlaceOrderDialog(
     }
     setDialogState(() => quoteLoading = true);
     try {
-      final quote = await const EarthApi().quoteOrder(
+      final quote = await api.quoteOrder(
         product: selectedProduct,
         quantity: quantity,
         limitPrice: price,
@@ -721,9 +731,10 @@ Future<void> showPlaceOrderDialog(
                           const Text('Base value:',
                               style:
                                   TextStyle(fontSize: 11, color: mutedColor)),
-                          Text(baseTotal == null
-                              ? 'Awaiting server quote'
-                              : '${baseTotal.toStringAsFixed(2)} C',
+                          Text(
+                              baseTotal == null
+                                  ? 'Awaiting server quote'
+                                  : '${baseTotal.toStringAsFixed(2)} C',
                               style: const TextStyle(
                                   fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
@@ -789,7 +800,7 @@ Future<void> showPlaceOrderDialog(
                   ? null
                   : () async {
                       Navigator.pop(dialogContext);
-                      await action(() => const EarthApi().submitOrder(
+                      await action(() => api.submitOrder(
                             selectedProduct,
                             price,
                             side: side,
@@ -814,6 +825,7 @@ class MarketSignalsPanel extends StatefulWidget {
   final Future<void> Function(Future<EarthState> Function()) action;
   final Key? panelKey;
   final Map<String, dynamic> priceHistory;
+  final EarthApi api;
 
   const MarketSignalsPanel({
     super.key,
@@ -822,6 +834,7 @@ class MarketSignalsPanel extends StatefulWidget {
     required this.busy,
     required this.action,
     this.priceHistory = const {},
+    this.api = const EarthApi(),
   });
 
   @override
@@ -944,15 +957,14 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     required String product,
     required String side,
   }) async {
-    final quote = await const EarthApi().quoteOrder(
+    final quote = await widget.api.quoteOrder(
       product: product,
       quantity: quantity.toDouble(),
       limitPrice: limitPrice,
       side: side,
     );
     if (!mounted || !context.mounted || quote['ok'] != true) return;
-    double cents(String? value) =>
-        (double.tryParse(value ?? '0') ?? 0) / 100;
+    double cents(String? value) => (double.tryParse(value ?? '0') ?? 0) / 100;
     final fee = cents(quote['feeUnits']?.toString());
     final total = cents(quote['totalEscrowUnits']?.toString());
     final confirmed = await showDialog<bool>(
@@ -997,7 +1009,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     );
     if (confirmed != true || !mounted) return;
 
-    await widget.action(() => const EarthApi().submitOrder(
+    await widget.action(() => widget.api.submitOrder(
           product,
           limitPrice,
           side: side,
@@ -1058,9 +1070,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
 
     final isBuy = _orderSide == 'buy';
     final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
-    final canSubmit = !widget.busy &&
-        qty > 0 &&
-        limitPrice > 0;
+    final canSubmit = !widget.busy && qty > 0 && limitPrice > 0;
 
     final currentDay = asIntOr(widget.state.clock['day'], 1);
     final currentMinute = asIntOr(widget.state.clock['minute'], 0);
@@ -1371,8 +1381,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   flex: 1,
-                                  child: _orderValue('FEE',
-                                      isBuy ? 'SERVER QUOTE' : '—'),
+                                  child: _orderValue(
+                                      'FEE', isBuy ? 'SERVER QUOTE' : '—'),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -1810,12 +1820,14 @@ class MyMarketOrdersPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
+  final EarthApi api;
 
   const MyMarketOrdersPanel({
     super.key,
     required this.state,
     required this.busy,
     required this.action,
+    this.api = const EarthApi(),
   });
 
   @override
@@ -2072,7 +2084,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                             );
                             if (shouldCancel != true || !mounted) return;
                             await widget
-                                .action(() => const EarthApi().cancelOrder(id));
+                                .action(() => widget.api.cancelOrder(id));
                             if (mounted) {
                               ScaffoldMessenger.of(this.context).showSnackBar(
                                 const SnackBar(

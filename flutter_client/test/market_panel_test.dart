@@ -1,7 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:earth_client/core/api/earth_api.dart';
+import 'package:earth_client/core/api/earth_api_transport.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/market/market_panels.dart';
+
+class _MarketQuoteTransport extends EarthApiTransport {
+  @override
+  Future<dynamic> request(String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    return const {
+      'ok': true,
+      'baseValueUnits': '12500',
+      'feeUnits': '250',
+      'totalEscrowUnits': '12750',
+      'feeBps': 200,
+    };
+  }
+}
 
 void main() {
   testWidgets('MarketSignalsPanel renders product prices and action buttons',
@@ -45,6 +61,7 @@ void main() {
             child: MarketSignalsPanel(
               state: state,
               busy: false,
+              api: EarthApi(transport: _MarketQuoteTransport()),
               priceHistory: const {
                 'energy': {
                   'history': [

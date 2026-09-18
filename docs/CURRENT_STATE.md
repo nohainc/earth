@@ -85,5 +85,6 @@ dependencies.
 - 80% line coverage required before merge (documented; not yet CI-enforced)
 - `npm run db:verify:canonical` checks the fresh-install schema against the manifest and migration head
 - Run: `npm run qa:<feature>` or `npm test`
-- Flutter: `npm run test:flutter:v4` (59 maintained V4 tests pass)
+- Flutter smoke: `npm run test:flutter:smoke`
+- Flutter authoritative suite: `cd flutter_client && flutter test`
 - DB invariants: `npm run db:verify:invariants` (requires `DATABASE_URL`)

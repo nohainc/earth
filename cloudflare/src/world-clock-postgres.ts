@@ -134,7 +134,27 @@ export async function getSettlementCursor(
       failedPhase = failureRun.rows[0].current_phase ?? null;
       failedError = failureRun.rows[0].error_message ?? null;
     } else {
-      status = 'CATCHING_UP';
+      const phaseFailure = await repository.query<{
+        phase_id: string;
+        error_message: string | null;
+      }>(
+        `SELECT phase_id, error_message
+           FROM daily_settlement_phase_runs
+          WHERE game_day = $1
+            AND status = 'failed'
+          ORDER BY phase_order, shard
+          LIMIT 1`,
+        [nextDay],
+      ).catch(() => ({ rows: [] }));
+
+      if (phaseFailure.rows[0]) {
+        status = 'FAILED';
+        failedGameDay = nextDay;
+        failedPhase = phaseFailure.rows[0].phase_id;
+        failedError = phaseFailure.rows[0].error_message ?? null;
+      } else {
+        status = 'CATCHING_UP';
+      }
     }
   }
 

@@ -1,9 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:earth_client/core/api/earth_api.dart';
+import 'package:earth_client/core/api/earth_api_transport.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/operations/real_estate_dialogs.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 import 'package:earth_client/features/operations/building_detail_upgrade_dialog.dart';
+
+class _BuildingQuoteTransport extends EarthApiTransport {
+  @override
+  Future<dynamic> request(String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    return const {
+      'eligible': true,
+      'targetTier': 2,
+      'creditCostUnits': '750000',
+      'footprintDelta': '1',
+      'constructionMinutes': 120,
+      'resourceRequirements': [],
+    };
+  }
+}
 
 void main() {
   const state = EarthState({
@@ -215,6 +232,7 @@ void main() {
                 (cb) async => cb(),
                 state.buildings.first as Map<String, dynamic>,
                 state.buildingCatalog,
+                api: EarthApi(transport: _BuildingQuoteTransport()),
               ),
               child: const Text('OPEN TREE'),
             ),
@@ -227,9 +245,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Upgrade to Tier 2'), findsWidgets);
-    expect(find.textContaining('UPGRADE COST'), findsOneWidget);
-    expect(find.textContaining('DAILY UPKEEP CHANGES'), findsOneWidget);
-    expect(find.textContaining('OPERATING COST CHANGES'), findsOneWidget);
+    expect(find.text('UPGRADE RESOURCE COSTS'), findsOneWidget);
+    expect(find.text('Capacity change'), findsOneWidget);
+    expect(find.text('Construction time (minutes)'), findsOneWidget);
     expect(find.text('COMMENCE TIER 2 UPGRADE'), findsOneWidget);
   });
 

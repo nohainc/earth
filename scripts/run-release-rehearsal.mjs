@@ -46,7 +46,7 @@ async function main() {
   await step('Flutter static analysis', 'flutter', ['analyze'], { cwd: flutterDir });
   await step('Flutter web release build', 'flutter', ['build', 'web', '--release'], { cwd: flutterDir });
   if (!existsSync(join(flutterDir, 'build', 'web', 'app.html'))) throw new Error('Flutter release build did not produce app.html');
-  await step('Maintained V4 Flutter gameplay tests', 'npm', ['run', 'test:flutter:v4']);
+  await step('Full Flutter test suite', 'flutter', ['test'], { cwd: flutterDir });
   await step('Maintained V4 page contracts', 'npm', ['run', 'test:pages']);
   await step('Backend certification suite', 'npm', ['run', 'test:certification']);
   await step('Local deployment endpoints and asset canary', 'node', ['--test', 'test/deployment-verification.test.mjs', 'test/production-assets.test.mjs']);

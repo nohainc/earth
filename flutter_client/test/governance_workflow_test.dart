@@ -21,6 +21,7 @@ void main() {
           {
             'id': 'PROP-042',
             'title': 'Expand Municipal Solar Grid',
+            'institution_id': 'CORP-1',
             'status': 'passed',
             'outcome': 'passed',
             'execution_status': 'executable',
@@ -51,8 +52,8 @@ void main() {
       ),
     );
 
-    expect(find.text('WORLD (1)'), findsOneWidget);
-    await tester.tap(find.text('WORLD (1)'));
+    expect(find.text('CORPORATION (1)'), findsOneWidget);
+    await tester.tap(find.text('CORPORATION (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Expand Municipal Solar Grid'), findsOneWidget);
     expect(find.text('APPROVED'), findsOneWidget);

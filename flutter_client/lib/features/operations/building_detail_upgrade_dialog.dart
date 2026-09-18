@@ -13,21 +13,21 @@ Future<bool?> showBuildingDetailUpgradeDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
   Map<String, dynamic> building,
-  List<dynamic> catalog,
-) async {
+  List<dynamic> catalog, {
+  EarthApi api = const EarthApi(),
+}) async {
   final buildingId = building['id']?.toString() ?? '';
   final buildingName = building['name']?.toString() ?? 'Facility';
   final currentTier = building['tier']?.toString() ?? 'UNAVAILABLE';
-  final quote = await const EarthApi().quoteBuildingUpgrade(
-    buildingId: buildingId,
-  );
+  final quote = await api.quoteBuildingUpgrade(buildingId: buildingId);
   if (quote['eligible'] != true) {
     if (context.mounted) {
       final blockers = (quote['blockers'] as List?)?.join(', ');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(blockers?.isNotEmpty == true
-            ? blockers!
-            : 'Upgrade quote unavailable')),
+        SnackBar(
+            content: Text(blockers?.isNotEmpty == true
+                ? blockers!
+                : 'Upgrade quote unavailable')),
       );
     }
     return false;
@@ -145,8 +145,7 @@ Future<bool?> showBuildingDetailUpgradeDialog(
           onPressed: () async {
             EarthAudioEngine.instance.playClick();
             Navigator.of(dialogContext).pop(true);
-            await action(
-                () => const EarthApi().upgradeBuilding(buildingId: buildingId));
+            await action(() => api.upgradeBuilding(buildingId: buildingId));
           },
         ),
       ],
