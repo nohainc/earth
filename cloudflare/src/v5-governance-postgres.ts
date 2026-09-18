@@ -6,6 +6,7 @@ import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.t
 import { evaluateOneHouseVote } from './governance-decision.ts';
 import { validateProposalActionSnapshot } from './proposal-actions.ts';
 import { toJsonSafe } from './json-safe.ts';
+import { advanceEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -38,6 +39,10 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
       const row = item as Record<string, unknown>;
       return { ruleCode: String(row.ruleCode ?? ''), value: row.value, clearOverride: row.clearOverride === true, baseVersionId: row.baseVersionId == null ? undefined : String(row.baseVersionId) };
     }) : undefined,
+    domainId: payload.domainId == null ? undefined : String(payload.domainId),
+    generationNumber: payload.generationNumber == null ? undefined : Number(payload.generationNumber),
+    researchCreditCostUnits: payload.researchCreditCostUnits == null ? undefined : bigintPayload(payload.researchCreditCostUnits, 'Research CREDIT cost'),
+    researchResourceCosts: payload.researchResourceCosts && typeof payload.researchResourceCosts === 'object' ? Object.fromEntries(Object.entries(payload.researchResourceCosts as Record<string, unknown>).map(([key, value]) => [key, String(value)])) : undefined,
   };
   return action;
 }
@@ -364,6 +369,8 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
     await tx.query("UPDATE v5_capacity_policy_versions SET status = 'RETIRED', effective_to_game_day = $1 WHERE status = 'ACTIVE'", [effective - 1]);
     const version = Number((await tx.query<{ version: number }>('SELECT COALESCE(MAX(version),0) + 1 AS version FROM v5_capacity_policy_versions')).rows[0]?.version ?? 1);
     await tx.query(`INSERT INTO v5_capacity_policy_versions (id, version, standard_territory_capacity_units, earth_base_capacity_rate_units, earth_corporation_schedule_id, earth_house_schedule_id, effective_from_game_day, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'ACTIVE')`, [`V5-EARTH-POLICY-${row.proposal_id}`, version, action.standardTerritoryCapacityUnits!.toString(), action.earthBaseRateUnits!.toString(), prior.earth_corporation_schedule_id, prior.earth_house_schedule_id, effective]);
+  } else if (row.action_type === 'EARTH_TECHNOLOGY_FRONTIER') {
+    await advanceEarthTechnologyFrontier(tx, { domainId: action.domainId!, generationNumber: action.generationNumber!, effectiveFromGameDay: effective, researchCreditCostUnits: action.researchCreditCostUnits, researchResourceCosts: action.researchResourceCosts, proposalId: row.proposal_id, humanId: payload.createdByHumanId == null ? undefined : String(payload.createdByHumanId), correlationId: `frontier:${row.proposal_id}` }, day);
   } else {
     const scheduleId = `V5-GOV-SCHEDULE-${row.proposal_id}`;
     await retireActive(tx, 'progressive_policy_schedules', 'code', String(action.scheduleCode), effective);

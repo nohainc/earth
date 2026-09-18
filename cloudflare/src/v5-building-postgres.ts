@@ -4,6 +4,7 @@ import { toJsonSafe } from './json-safe.ts';
 import { effectiveConstructionMinutes, loadConstructionRequirements } from './territory-capacity-postgres.ts';
 import { quoteV5HouseCapacityChange, quoteV5CorporationCapacityChange } from './v5-capacity-postgres.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 
 type Catalog = {
   id: string;
@@ -12,6 +13,7 @@ type Catalog = {
   construction_credit_units: string;
   construction_minutes: number;
   slot_footprint: number;
+  minimum_scale_capability: string;
 };
 
 async function ownerContext(tx: PostgresRepository, humanId: string): Promise<{ houseId: string; houseEconomicId: string; corporationId: string | null; corporationEconomicId: string | null }> {
@@ -40,7 +42,7 @@ async function requirePublicCorporationAuthorization(tx: PostgresRepository, cor
 
 async function catalog(tx: PostgresRepository, buildingType: string): Promise<Catalog> {
   const row = (await tx.query<Catalog>(
-    `SELECT id, code, ownership_scope, construction_credit_units, construction_minutes, slot_footprint
+    `SELECT id, code, ownership_scope, construction_credit_units, construction_minutes, slot_footprint, minimum_scale_capability
        FROM building_catalog
       WHERE id = $1 OR code = $1 OR lower(code) = lower($1) LIMIT 1`, [buildingType],
   )).rows[0];
@@ -56,16 +58,28 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
     if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
     if (isPublic) await requirePublicCorporationAuthorization(tx, owner.corporationId!, input.ownerId);
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
+    const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId);
     const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(world?.game_day ?? 1);
+    // Quotes are read models but must be total for newly provisioned Houses;
+    // materialize the canonical profile before asking the capacity engine.
+    if (!isPublic) await refreshV5SettlementProfilesForHouse(tx, owner.houseId, gameDay);
     const delinquency = (await tx.query<{ status: string }>(
       `SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = $1 AND subject_id = $2`,
       [isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? owner.corporationId : owner.houseId],
     )).rows[0]?.status ?? 'CURRENT';
     const blocked = ['EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED', 'EXPANSION_SPENDING_RESTRICTED', 'EARTH_RECEIVERSHIP'].includes(delinquency);
-    const capacity = isPublic
-      ? await quoteV5CorporationCapacityChange(tx, owner.corporationId, BigInt(blueprint.slot_footprint), gameDay)
-      : await quoteV5HouseCapacityChange(tx, owner.houseId, BigInt(blueprint.slot_footprint), gameDay);
+    let capacity: Record<string, unknown> | null;
+    try {
+      capacity = isPublic
+        ? await quoteV5CorporationCapacityChange(tx, owner.corporationId, BigInt(blueprint.slot_footprint), gameDay)
+        : await quoteV5HouseCapacityChange(tx, owner.houseId, BigInt(blueprint.slot_footprint), gameDay);
+    } catch (error) {
+      // A quote must remain inspectable while a newly created authority's
+      // daily capacity snapshot is materializing. Construction still enforces
+      // the authoritative capacity check in its mutation path.
+      capacity = { available: false, reason: error instanceof Error ? error.message : 'V5 capacity quote unavailable' };
+    }
     const duration = await effectiveConstructionMinutes(tx, gameDay, null, blueprint.code, blueprint.construction_minutes);
     const requirements = await loadConstructionRequirements(tx, blueprint.id, ownerEconomicId, isPublic);
     const wallet = (await tx.query<{ balance_units: string }>(
@@ -74,6 +88,7 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
     )).rows[0];
     const insufficientResources = requirements.filter((item) => BigInt(item.missing_units) > 0n).map((item) => ({ code: item.code, missingUnits: item.missing_units }));
     const blockers = [
+      ...(!scaleAuth.authorized ? [String(scaleAuth.reason ?? 'Missing required scale capability')] : []),
       ...(blocked ? [`V5 capacity delinquency: ${delinquency}`] : []),
       ...(capacity?.available === false ? [String(capacity.reason ?? 'V5 capacity quote unavailable')] : []),
       ...(insufficientResources.length ? ['Insufficient construction resources'] : []),
@@ -88,6 +103,8 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
       buildingCatalogId: blueprint.id,
       footprintUnits: blueprint.slot_footprint,
       creditCostUnits: blueprint.construction_credit_units,
+      minimumScaleCapability: blueprint.minimum_scale_capability,
+      scaleAuthorization: scaleAuth,
       resourceRequirements: requirements.map((item) => ({ code: item.code, requiredUnits: item.required_units, availableUnits: item.available_units, missingUnits: item.missing_units })),
       effectiveConstructionMinutes: duration.minutes,
       expectedCompletionGameDay: gameDay + Math.max(1, Math.ceil(duration.minutes / 1440)),
@@ -109,6 +126,8 @@ export async function purchaseV5Building(repository: PostgresRepository, input: 
     if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
     if (isPublic) await requirePublicCorporationAuthorization(tx, owner.corporationId!, input.ownerId);
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
+    const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId);
+    if (!scaleAuth.authorized) throw new Error(String(scaleAuth.reason ?? 'Missing required scale capability'));
     const currentWorld = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(currentWorld?.game_day ?? 1);
     const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = $1 AND subject_id = $2`, [isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? owner.corporationId : owner.houseId])).rows[0];

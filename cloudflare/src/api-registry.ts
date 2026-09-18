@@ -242,6 +242,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'GET', path: '/api/earth/programs', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'listGlobalPrograms', status: 'ACTIVE' },
   { method: 'POST', path: '/api/earth/programs', owner: 'ReadModelRoutes', auth: 'HUMAN_SELF', service: 'createGlobalProgram', status: 'ACTIVE' },
   { method: 'GET', path: '/api/earth/technology/generations', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'getTechnologyGenerations', status: 'ACTIVE' },
+  { method: 'GET', path: '/api/earth/technology/frontier', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'getEarthTechnologyFrontier', status: 'ACTIVE' },
   { method: 'GET', path: '/api/public-projects', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'listPublicProjects', status: 'ACTIVE' },
   { method: 'POST', path: '/api/public-projects', owner: 'ReadModelRoutes', auth: 'HUMAN_SELF', service: 'createPublicProject', status: 'ACTIVE' },
   { method: 'GET', path: '/api/public-projects/{id}', owner: 'ReadModelRoutes', auth: 'AUTHENTICATED', service: 'getPublicProject', status: 'ACTIVE' },

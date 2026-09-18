@@ -18,6 +18,7 @@ import { listNotifications as listNotificationsPostgres, markAllNotificationsRea
 import { getDecisionQueue } from './decision-queue-postgres.ts';
 import { contributeToGlobalProgram, createGlobalProgram, fundGlobalProgram, listGlobalProgramContributions, listGlobalPrograms, settleGlobalProgramFunding } from './global-programs-postgres.ts';
 import { getTechnologyGenerations } from './technology-generations-postgres.ts';
+import { getEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
 import { contributeToPublicProject, createPublicProject, fundMatchingPool, getPublicProject, listPublicProjects } from './public-projects-postgres.ts';
 import { settlePublicProject } from './public-projects-postgres.ts';
 import { listWorldConditions } from './world-conditions-postgres.ts';
@@ -198,6 +199,14 @@ export async function handleReadModelRoutes(
   }
   if (url.pathname === '/api/earth/technology/generations' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => getTechnologyGenerations(repository));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
+  if (url.pathname === '/api/earth/technology/frontier' && request.method === 'GET') {
+    const rawDay = url.searchParams.get('day');
+    const day = rawDay == null ? undefined : Number(rawDay);
+    if (day != null && (!Number.isInteger(day) || day < 1)) return Response.json({ ok: false, error: 'day must be a positive integer' }, { status: 400 });
+    const result = await withRepository(env, (repository) => getEarthTechnologyFrontier(repository, day));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
   }

@@ -6,7 +6,8 @@ export type V5GovernanceActionType =
   | 'EARTH_CAPACITY_POLICY'
   | 'CORPORATION_HOUSE_RATE'
   | 'PROGRESSIVE_SCHEDULE'
-  | 'CORPORATION_ADMISSION_POLICY';
+  | 'CORPORATION_ADMISSION_POLICY'
+  | 'EARTH_TECHNOLOGY_FRONTIER';
 
 export type V5GovernanceAction = {
   actionType: V5GovernanceActionType;
@@ -22,6 +23,10 @@ export type V5GovernanceAction = {
   scheduleBasisType?: 'EARTH_CORPORATION_CAPACITY' | 'CORPORATION_HOUSE_CAPACITY' | 'HOUSE_INCOME_TAX';
   brackets?: ProgressiveBracket[];
   changes?: Array<{ ruleCode: string; value?: unknown; clearOverride?: boolean; baseVersionId?: string }>;
+  domainId?: string;
+  generationNumber?: number;
+  researchCreditCostUnits?: bigint;
+  researchResourceCosts?: Record<string, string>;
 };
 
 export type ProgressivePolicyPreview = {
@@ -81,6 +86,13 @@ export function validateV5GovernanceAction(action: V5GovernanceAction, currentGa
   if (action.actionType === 'CORPORATION_ADMISSION_POLICY') {
     if (!action.corporationId?.trim()) throw new Error('Corporation is required');
     if (!action.admissionPolicy || !['OPEN', 'APPROVAL', 'INVITE_ONLY'].includes(action.admissionPolicy)) throw new Error('Admission policy must be OPEN, APPROVAL, or INVITE_ONLY');
+    return;
+  }
+  if (action.actionType === 'EARTH_TECHNOLOGY_FRONTIER') {
+    if (!action.domainId?.trim()) throw new Error('Technology domain is required');
+    if (!Number.isInteger(action.generationNumber) || Number(action.generationNumber) < 1) throw new Error('Technology generation must be positive');
+    positiveInteger(action.researchCreditCostUnits ?? 0n, 'Research CREDIT cost');
+    if (action.researchResourceCosts && Object.values(action.researchResourceCosts).some((value) => { try { return BigInt(value) < 0n; } catch (_error) { return true; } })) throw new Error('Research resource costs must be non-negative integers');
     return;
   }
   if (!action.scheduleCode?.trim() || !action.authorityInstitutionId?.trim() || !action.scheduleBasisType || !action.brackets?.length) throw new Error('Progressive schedule code, authority, basis, and brackets are required');

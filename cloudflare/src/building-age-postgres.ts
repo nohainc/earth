@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { assessBuildingAge } from './building-age.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { assertEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
 
 async function startCorporationCapitalProject(
   repository: PostgresRepository,
@@ -35,6 +36,9 @@ async function startCorporationCapitalProject(
       if (!input.targetGenerationId) throw new Error('A target technology generation is required for retrofit');
       const target = (await tx.query<{ effective_from_game_day: number }>(`SELECT d.effective_from_game_day FROM technology_generations g JOIN technology_discoveries d ON d.generation_id = g.id WHERE g.id = $1`, [input.targetGenerationId])).rows[0];
       if (!target || Number(target.effective_from_game_day) > day) throw new Error('Technology generation is not discovered and effective');
+      const targetGeneration = (await tx.query<{ domain_id: string; generation_number: number }>('SELECT domain_id, generation_number FROM technology_generations WHERE id = $1', [input.targetGenerationId])).rows[0];
+      if (!targetGeneration) throw new Error('Technology generation does not exist');
+      await assertEarthTechnologyFrontier(tx, targetGeneration.domain_id, Number(targetGeneration.generation_number), day);
     }
     const multiplier = input.projectKind === 'OVERHAUL' ? 7500n : 4000n;
     const cost = BigInt(building.construction_credit_units) * multiplier / 10000n;
@@ -134,6 +138,7 @@ export async function startBuildingCapitalProject(
           WHERE g.id = $1`, [input.targetGenerationId],
       )).rows[0];
       if (!targetGeneration || Number(targetGeneration.effective_from_game_day) > day) throw new Error('Technology generation is not discovered and effective');
+      await assertEarthTechnologyFrontier(tx, targetGeneration.domain_id, Number((await tx.query<{ generation_number: number }>('SELECT generation_number FROM technology_generations WHERE id = $1', [input.targetGenerationId])).rows[0]?.generation_number ?? 0), day);
     }
 
     const multiplier = input.projectKind === 'OVERHAUL' ? 7500n : 4000n;

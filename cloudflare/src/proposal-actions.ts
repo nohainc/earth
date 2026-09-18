@@ -118,6 +118,15 @@ const startResearchHandler: ProposalActionHandler = {
   validateExecution: async () => undefined,
 };
 
+const earthTechnologyFrontierHandler: ProposalActionHandler = {
+  actionType: 'EARTH_TECHNOLOGY_FRONTIER',
+  version: 1,
+  validateCreation: (action) => requiredFields(action, ['domainId', 'generationNumber', 'effectiveFromGameDay'], 'Earth technology frontier action'),
+  validateExecution: async ({ proposal }) => {
+    if (proposal.subject_type !== 'EARTH' || proposal.subject_id !== null) throw new Error('Earth technology frontier requires an Earth proposal');
+  },
+};
+
 function requiredFields(action: Record<string, unknown>, fields: string[], label: string): void {
   if (fields.some((field) => action[field] === undefined || action[field] === null || action[field] === '')) {
     throw new Error(`${label} requires ${fields.join(', ')}`);
@@ -200,6 +209,7 @@ const handlers = new Map<string, ProposalActionHandler>([
   [constitutionAmendmentHandler.actionType, constitutionAmendmentHandler],
   [constructCivicBuildingHandler.actionType, constructCivicBuildingHandler],
   [startResearchHandler.actionType, startResearchHandler],
+  [earthTechnologyFrontierHandler.actionType, earthTechnologyFrontierHandler],
   [amendRuleHandler.actionType, amendRuleHandler],
   ...legacyOperationalHandlers.map((handler) => [handler.actionType, handler] as const),
   ...Array.from(FINANCIAL_ACTIONS, (actionType) => [actionType, financialHandler] as const),
