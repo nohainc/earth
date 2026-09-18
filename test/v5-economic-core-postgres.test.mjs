@@ -90,12 +90,12 @@ async function connectTo(url) {
   return client;
 }
 
-test('PostgreSQL V5 Economic Core: Schema version is 128 and migration history is valid', async () => {
+test('PostgreSQL V5 Economic Core: Schema version is 129 and migration history is valid', async () => {
   const client = await connectTo(connectionString);
   try {
     const res = await client.query('SELECT MAX(version) AS max_version, COUNT(*)::int AS count FROM earth_schema_migrations');
-    assert.equal(Number(res.rows[0].max_version), 128, 'Max migration version must be 128');
-    assert.equal(Number(res.rows[0].count), 128, 'Total applied migrations count must be 128');
+    assert.equal(Number(res.rows[0].max_version), 129, 'Max migration version must be 129');
+    assert.equal(Number(res.rows[0].count), 129, 'Total applied migrations count must be 129');
 
     const v118 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 118');
     assert.equal(v118.rows[0]?.name, '118_v5_economic_core_schema.sql');
@@ -4362,8 +4362,68 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
     await repository.query('DELETE FROM houses WHERE id = $1', [houseId]);
     await repository.query('DELETE FROM corporations WHERE id = $1', [corpId]);
     await repository.query('DELETE FROM institutions WHERE id = $1', [corpId]);
-    await repository.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
-    await repository.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('Phase 15 — Database guards prevent retired building types and service allocations', async () => {
+  const client = await postgresClient(connectionString);
+  const repository = new PostgresRepository(client);
+
+  try {
+    // 1. Verify building creation with retired catalog item is blocked by DB trigger
+    let buildingBlocked = false;
+    try {
+      await repository.query(
+        `INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day, commissioned_game_day)
+         VALUES ('BLD-TEST-RETIRED-GUARD', 'ECON-SYSTEM', NULL, 'housing_t1', 'ACTIVE', 1, 1)`
+      );
+    } catch (err) {
+      buildingBlocked = true;
+      assert.match(err.message, /Legacy or retired building catalog item/);
+    }
+    assert.equal(buildingBlocked, true, 'Trigger trg_guard_v5_building_creation must block retired catalog item');
+
+    // 2. Verify service allocation with retired service type is blocked by DB trigger
+    let serviceBlocked = false;
+    try {
+      await repository.query(
+        `INSERT INTO service_allocations (id, house_id, territory_id, service_code, provider_economic_id, payer_economic_id, game_day, capacity_units, allocated_units, price_units)
+         VALUES ('SVC-TEST-RETIRED-GUARD', 'HOUSE-TEST', NULL, 'HOUSING', 'ECON-SYSTEM', 'ECON-SYSTEM', 1, 100, 100, 10)`
+      );
+    } catch (err) {
+      serviceBlocked = true;
+      assert.match(err.message, /Service type.*is retired/);
+    }
+    assert.equal(serviceBlocked, true, 'Trigger trg_guard_v5_retired_service_allocation must block HOUSING');
+
+    // 3. Verify need rules with retired need code is blocked if ACTIVE
+    let needBlocked = false;
+    try {
+      await repository.query(
+        `INSERT INTO need_rules (need_code, service_type_code, demand_units_per_human, critical_threshold_bps, rules_version, status)
+         VALUES ('HOUSING', 'HOUSING', 1, 7500, 'needs-v1', 'ACTIVE')`
+      );
+    } catch (err) {
+      needBlocked = true;
+      assert.match(err.message, /Need rule.*is retired/);
+    }
+    assert.equal(needBlocked, true, 'Trigger trg_guard_v5_retired_need_rules must block active HOUSING need rule');
+
+    // 4. Verify full integrity report has 0 invalid records across all checks
+    const integrity = await repository.query(`SELECT * FROM earth_integrity_report()`);
+    assert.ok(integrity.rows.length >= 13, 'Integrity report must check at least 13 checks');
+    for (const check of integrity.rows) {
+      assert.equal(
+        Number(check.invalid_count),
+        0,
+        `Integrity check '${check.check_name}' failed with invalid count ${check.invalid_count}`,
+      );
+    }
+  } finally {
+    await repository.query(`DELETE FROM buildings WHERE id = 'BLD-TEST-RETIRED-GUARD'`);
+    await repository.query(`DELETE FROM service_allocations WHERE id = 'SVC-TEST-RETIRED-GUARD'`);
+    await repository.query(`DELETE FROM need_rules WHERE need_code = 'HOUSING' AND rules_version = 'needs-v1' AND status = 'ACTIVE'`);
     await client.end();
   }
 });

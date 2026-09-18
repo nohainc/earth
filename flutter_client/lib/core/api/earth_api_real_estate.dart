@@ -24,23 +24,6 @@ extension EarthApiRealEstate on EarthApi {
     });
     return Map<String, dynamic>.from(response as Map);
   }
-  Future<EarthState> purchaseBuilding({
-    required String buildingType,
-    required String name,
-    required String territoryId,
-  }) async {
-    final res = await _request(
-      '/api/real-estate/purchase',
-      method: 'POST',
-      body: {
-        'buildingType': buildingType,
-        'name': name,
-        'territoryId': territoryId,
-        'correlationId': newClientCorrelationId('PURCHASE-BLD'),
-      },
-    );
-    return EarthState(res as Map<String, dynamic>);
-  }
 
   /// Starts a V5 pooled-capacity construction project.
   ///

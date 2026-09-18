@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 128;
+export const EARTH_SCHEMA_VERSION = 129;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -827,52 +827,6 @@ export const REQUIRED_SCHEMA_TABLES = {
     "action_correlation_id",
     "decision",
     "created_at"
-  ],
-  "resource_behavior_metadata": [
-    "asset_id",
-    "behavior",
-    "storage_limit_units",
-    "delivery_period_game_days",
-    "decay_bps_per_day",
-    "settlement_mode",
-    "definition_version",
-    "persistence_class"
-  ],
-  "owner_storage_capacities": [
-    "id",
-    "owner_economic_id",
-    "asset_id",
-    "storage_type",
-    "storage_capacity_units",
-    "decay_reduction_bps",
-    "source_type",
-    "source_id",
-    "status",
-    "effective_from_game_day",
-    "effective_to_game_day",
-    "created_at",
-    "updated_at"
-  ],
-  "v5_structural_deltas": [
-    "id",
-    "action_type",
-    "entity_type",
-    "entity_id",
-    "house_id",
-    "corporation_id",
-    "building_id",
-    "delta_footprint_units",
-    "delta_building_count",
-    "delta_residential_units",
-    "delta_productive_units",
-    "delta_public_units",
-    "before_profile_snapshot",
-    "after_profile_snapshot",
-    "provenance_source",
-    "actor_human_id",
-    "correlation_id",
-    "game_day",
-    "created_at"
   ]
 } as const;
 export const REQUIRED_UNIQUE_CONSTRAINTS = [
@@ -882,9 +836,6 @@ export const REQUIRED_UNIQUE_CONSTRAINTS = [
   ]
 ] as const;
 export const REQUIRED_INDEXES = [
-  "v5_structural_deltas_entity_idx",
-  "v5_structural_deltas_correlation_idx",
-  "owner_storage_capacities_active_idx",
   "territories_one_active_primary_idx",
   "house_affiliations_one_active_idx",
   "territory_capacity_state_game_day_idx",

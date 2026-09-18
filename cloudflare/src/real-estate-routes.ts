@@ -160,30 +160,10 @@ export async function handleRealEstateRoutes(
   }
   if (url.pathname === '/api/real-estate/rights' && request.method === 'POST') {
     return Response.json({ ok: false, error: 'Territory use-right acquisition is retired in V5; use pooled capacity construction.' }, { status: 410 });
-    /* istanbul ignore next -- retained below for historical/admin callers. */
-    const parsed = await parseJsonBody<{ territoryId?: string; slotClass?: 'PRIVATE' | 'PUBLIC'; slotQuantity?: string; termDays?: number; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.territoryId || !parsed.value.slotQuantity || parsed.value.termDays === undefined) return Response.json({ ok: false, error: 'Territory, quantity, term, and idempotency key are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => acquireTerritoryRight(repository, { humanId: viewer.id, territoryId: parsed.value.territoryId!, slotClass: parsed.value.slotClass ?? 'PRIVATE', slotQuantity: BigInt(parsed.value.slotQuantity!), termDays: parsed.value.termDays!, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Territory right acquisition failed' }, { status: 409 }); }
   }
   const releaseRightMatch = url.pathname.match(/^\/api\/real-estate\/rights\/([^/]+)\/release$/);
   if (releaseRightMatch && request.method === 'POST') {
     return Response.json({ ok: false, error: 'Territory use-right release is retired in V5; capacity is derived from active assets.' }, { status: 410 });
-    /* istanbul ignore next -- retained below for historical/admin callers. */
-    const parsed = await parseJsonBody<{ correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId) return Response.json({ ok: false, error: 'Idempotency key is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => releaseTerritoryRight(repository, { humanId: viewer.id, rightId: releaseRightMatch[1], correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Territory right release failed' }, { status: 409 }); }
   }
   if (url.pathname === '/api/real-estate/projects' && request.method === 'GET') {
     try {

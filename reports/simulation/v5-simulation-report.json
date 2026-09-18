@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-18T12:05:31.973Z",
+  "timestamp": "2026-09-18T12:48:49.314Z",
   "version": "V5-Economic-Core-Simulation-v1",
   "scaleBenchmarks": [
     {
@@ -99,7 +99,7 @@
         "meanAutarkyWealth": 101288.23513206888,
         "specializationAdvantageRatio": 1.0459889571470973
       },
-      "durationMs": 12
+      "durationMs": 11
     },
     {
       "scenario": "baseline",
@@ -198,7 +198,7 @@
         "meanAutarkyWealth": 105443.80496697206,
         "specializationAdvantageRatio": 1.0190019600564397
       },
-      "durationMs": 51
+      "durationMs": 49
     },
     {
       "scenario": "baseline",
@@ -297,7 +297,7 @@
         "meanAutarkyWealth": 102366.47232558031,
         "specializationAdvantageRatio": 1.0078467964971085
       },
-      "durationMs": 158
+      "durationMs": 172
     }
   ],
   "scenarios": [
@@ -497,7 +497,7 @@
         "meanAutarkyWealth": 101359.36467738949,
         "specializationAdvantageRatio": 1
       },
-      "durationMs": 3
+      "durationMs": 2
     },
     {
       "scenario": "corporation-material-monopoly",
@@ -596,7 +596,7 @@
         "meanAutarkyWealth": 78249.01495527217,
         "specializationAdvantageRatio": 1.3778773323054472
       },
-      "durationMs": 9
+      "durationMs": 7
     },
     {
       "scenario": "energy-shortage",
@@ -695,7 +695,7 @@
         "meanAutarkyWealth": 102464.3487127596,
         "specializationAdvantageRatio": 1.0105445365663128
       },
-      "durationMs": 5
+      "durationMs": 4
     },
     {
       "scenario": "compute-shortage",
@@ -794,7 +794,7 @@
         "meanAutarkyWealth": 101288.23513206888,
         "specializationAdvantageRatio": 1.0359623404138822
       },
-      "durationMs": 9
+      "durationMs": 10
     },
     {
       "scenario": "excess-material",
@@ -893,7 +893,7 @@
         "meanAutarkyWealth": 100828.63056308922,
         "specializationAdvantageRatio": 1.0795424320397058
       },
-      "durationMs": 7
+      "durationMs": 8
     },
     {
       "scenario": "excess-components",
@@ -992,7 +992,7 @@
         "meanAutarkyWealth": 101288.23513206888,
         "specializationAdvantageRatio": 1.0626091868583245
       },
-      "durationMs": 8
+      "durationMs": 6
     },
     {
       "scenario": "low-rent",
@@ -1091,7 +1091,7 @@
         "meanAutarkyWealth": 101288.23513206888,
         "specializationAdvantageRatio": 1.0459889571470973
       },
-      "durationMs": 8
+      "durationMs": 4
     },
     {
       "scenario": "progressive-rent",
@@ -1289,7 +1289,7 @@
         "meanAutarkyWealth": 101288.23513206888,
         "specializationAdvantageRatio": 1.0459889571470973
       },
-      "durationMs": 4
+      "durationMs": 9
     },
     {
       "scenario": "one-mega-corporation",
@@ -1487,7 +1487,7 @@
         "meanAutarkyWealth": 96754.16798056141,
         "specializationAdvantageRatio": 1.0768539460273272
       },
-      "durationMs": 2
+      "durationMs": 1
     },
     {
       "scenario": "bankrupt-producers",
@@ -1586,7 +1586,7 @@
         "meanAutarkyWealth": 55361.606479064205,
         "specializationAdvantageRatio": 1.7386679321638359
       },
-      "durationMs": 4
+      "durationMs": 3
     },
     {
       "scenario": "construction-boom",
@@ -1685,7 +1685,7 @@
         "meanAutarkyWealth": 75176.78299463599,
         "specializationAdvantageRatio": 1.3822422322154768
       },
-      "durationMs": 5
+      "durationMs": 3
     },
     {
       "scenario": "stalled-construction",
@@ -1784,7 +1784,7 @@
         "meanAutarkyWealth": 108597.15050040185,
         "specializationAdvantageRatio": 0.9924620127058655
       },
-      "durationMs": 4
+      "durationMs": 2
     },
     {
       "scenario": "independent-heavy",
@@ -1982,7 +1982,7 @@
         "meanAutarkyWealth": 101288.23513206888,
         "specializationAdvantageRatio": 1.0459889571470973
       },
-      "durationMs": 4
+      "durationMs": 3
     }
   ]
 }

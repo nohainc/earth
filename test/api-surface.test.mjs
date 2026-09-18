@@ -19,7 +19,6 @@ test('retired API aliases and client methods stay removed', () => {
 test('canonical replacement routes remain present', () => {
   assert.doesNotMatch(indexSource, /\/api\/day\/advance/);
   assert.match(indexSource, /\/api\/life\/successor/);
-  assert.match(houseRoutes, /\/api\/house/);
-  assert.match(estateApi, /purchaseBuilding/);
-  assert.match(estateApi, /\/api\/real-estate\/purchase/);
+  assert.match(estateApi, /purchaseV5Building/);
+  assert.match(estateApi, /\/api\/v5\/buildings/);
 });

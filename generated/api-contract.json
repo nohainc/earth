@@ -1713,6 +1713,14 @@
     },
     {
       "method": "GET",
+      "path": "/api/earth/technology/frontier",
+      "owner": "ReadModelRoutes",
+      "auth": "AUTHENTICATED",
+      "service": "getEarthTechnologyFrontier",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
       "path": "/api/public-projects",
       "owner": "ReadModelRoutes",
       "auth": "AUTHENTICATED",

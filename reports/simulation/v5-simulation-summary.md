@@ -1,12 +1,12 @@
 # V5 Economic Core Simulation Report
-Generated: 2026-09-18T12:05:31.973Z
+Generated: 2026-09-18T12:48:49.314Z
 
 ## 1. Scale Benchmarks
 | Houses | Days | Duration (ms) | Survival Rate | Market Volume (Credits) | Earth Revenue | Gini |
 |---|---|---|---|---|---|---|
-| 100 | 90 | 12ms | 100.0% | 562,218 | 1,647,100 | 0.050 |
-| 1000 | 90 | 51ms | 100.0% | 5,631,338 | 23,483,500 | 0.043 |
-| 10000 | 30 | 158ms | 100.0% | 21,918,971 | 78,712,810 | 0.019 |
+| 100 | 90 | 11ms | 100.0% | 562,218 | 1,647,100 | 0.050 |
+| 1000 | 90 | 49ms | 100.0% | 5,631,338 | 23,483,500 | 0.043 |
+| 10000 | 30 | 172ms | 100.0% | 21,918,971 | 78,712,810 | 0.019 |
 
 ## 2. Canonical Scenario Matrix (100 Houses, 90 Days)
 | Scenario | Survival Rate | Trades | Earth Revenue | Specialization Advantage | Gini | Closing Material | Closing Energy | Closing Food |
