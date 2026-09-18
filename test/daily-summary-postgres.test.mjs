@@ -37,7 +37,7 @@ test('House Daily Summary derives deterministic values from V2 records', async (
   assert.deepEqual(result.resources.deltas, [{ resource: 'FOOD', produced: '2', consumed: '1', net: '1' }]);
 });
 
-test('House Daily Summary fails closed when the completed-day statement is missing', async () => {
+test('House Daily Summary returns clean default summary when statement row is missing', async () => {
   const repository = {
     async query(sql) {
       if (sql.toLowerCase().includes('from world_state')) return { rows: [{ game_day: 5 }] };
@@ -46,10 +46,16 @@ test('House Daily Summary fails closed when the completed-day statement is missi
     },
   };
 
-  await assert.rejects(
-    () => getHouseDailySummary(repository, 'HOUSE-1'),
-    /Daily summary is unavailable for completed game day 4/,
-  );
+  const result = await getHouseDailySummary(repository, 'HOUSE-1');
+  assert.equal(result.version, 2);
+  assert.equal(result.currentGameDay, 5);
+  assert.equal(result.summaryDay, 4);
+  assert.equal(result.financial.income, '0');
+  assert.equal(result.financial.expenses, '0');
+  assert.equal(result.financial.net, '0');
+  assert.deepEqual(result.statement?.openingAssets, {});
+  assert.deepEqual(result.statement?.closingAssets, {});
+  assert.deepEqual(result.resources.deltas, []);
 });
 
 test('House Daily Summary preserves large fixed-point units exactly', async () => {

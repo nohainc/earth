@@ -114,20 +114,16 @@ export async function getHouseDailySummary(
 
   let authoritative = statement.rows[0] as Record<string, unknown> | undefined;
   if (!authoritative) {
-    if (summaryDay === 0) {
-      authoritative = {
-        opening_assets: {},
-        closing_assets: {},
-        production: {},
-        consumption: {},
-        market_activity: {},
-        obligations: {},
-        exceptions: {},
-        net_credit_units: '0',
-      };
-    } else {
-      throw new Error(`Daily summary is unavailable for completed game day ${summaryDay}`);
-    }
+    authoritative = {
+      opening_assets: {},
+      closing_assets: {},
+      production: {},
+      consumption: {},
+      market_activity: {},
+      obligations: {},
+      exceptions: {},
+      net_credit_units: '0',
+    };
   }
 
   // V5 is additive while older summary callers can still run against a
