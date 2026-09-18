@@ -8,6 +8,7 @@ const migration119 = fs.readFileSync('db/migrations/119_v5_building_catalog_v5_a
 const marketEscrow = fs.readFileSync('cloudflare/src/market-escrow.ts', 'utf8');
 const buildingSettlement = fs.readFileSync('cloudflare/src/building-settlement-v2.ts', 'utf8');
 const v5Building = fs.readFileSync('cloudflare/src/v5-building-postgres.ts', 'utf8');
+const territoryCapacity = fs.readFileSync('cloudflare/src/territory-capacity-postgres.ts', 'utf8');
 const starterPackage = fs.readFileSync('cloudflare/src/starter-package.ts', 'utf8');
 
 test('ECON-01 & ECON-02: canonical resources, storage classes, and services', () => {
@@ -72,7 +73,8 @@ test('ECON-06: Construction consumes CREDIT and resources atomically', () => {
   assert.match(v5Building, /construction_credit_units/);
   assert.match(v5Building, /ECON-CONSTRUCTION-SETTLEMENT/);
   assert.match(v5Building, /ECON-RESOURCE-CONSUMPTION/);
-  assert.match(v5Building, /v5_construction_resource_input/);
+  assert.match(territoryCapacity, /'RESOURCE_CONSUMPTION'/);
+  assert.match(territoryCapacity, /private_construction_resource_input/);
 });
 
 test('ECON-08 & ECON-10: Base production chains and public/private services in settlement', () => {

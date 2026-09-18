@@ -4367,16 +4367,31 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
 });
 
 test('Phase 15 — Database guards prevent retired building types and service allocations', async () => {
-  const client = await postgresClient(connectionString);
+  const client = await connectTo(connectionString);
   const repository = new PostgresRepository(client);
 
   try {
+    await repository.query(`INSERT INTO institutions (id, kind, name) VALUES ('INST-TEST-RETIRED-GUARD', 'CORPORATION', 'Retired Guard Test Corporation') ON CONFLICT (id) DO NOTHING`);
+    await repository.query(`INSERT INTO corporations (id) VALUES ('INST-TEST-RETIRED-GUARD') ON CONFLICT (id) DO NOTHING`);
+    await repository.query(`INSERT INTO territories (id, corporation_id, name, is_primary) VALUES ('TERR-TEST-RETIRED-GUARD', 'INST-TEST-RETIRED-GUARD', 'Retired Guard Test Territory', TRUE) ON CONFLICT (id) DO NOTHING`);
+    await repository.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status)
+      VALUES ((SELECT id FROM houses ORDER BY id LIMIT 1), 'INST-TEST-RETIRED-GUARD', 'TERR-TEST-RETIRED-GUARD', 1, 'ACTIVE')`);
+
+    const guardRefs = (await repository.query(`
+      SELECT
+        (SELECT id FROM houses ORDER BY id LIMIT 1) AS house_id,
+        'TERR-TEST-RETIRED-GUARD' AS territory_id,
+        (SELECT economic_id FROM owner_registry WHERE owner_type = 'HOUSE' ORDER BY economic_id LIMIT 1) AS economic_id
+    `)).rows[0];
+    assert.ok(guardRefs?.house_id && guardRefs?.territory_id && guardRefs?.economic_id, 'Database guard fixtures must exist');
+
     // 1. Verify building creation with retired catalog item is blocked by DB trigger
     let buildingBlocked = false;
     try {
       await repository.query(
         `INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day, commissioned_game_day)
-         VALUES ('BLD-TEST-RETIRED-GUARD', 'ECON-SYSTEM', NULL, 'housing_t1', 'ACTIVE', 1, 1)`
+         VALUES ('BLD-TEST-RETIRED-GUARD', $1, $2, 'HOUSING-T1', 'ACTIVE', 1, 1)`,
+        [guardRefs.economic_id, guardRefs.territory_id],
       );
     } catch (err) {
       buildingBlocked = true;
@@ -4389,7 +4404,8 @@ test('Phase 15 — Database guards prevent retired building types and service al
     try {
       await repository.query(
         `INSERT INTO service_allocations (id, house_id, territory_id, service_code, provider_economic_id, payer_economic_id, game_day, capacity_units, allocated_units, price_units)
-         VALUES ('SVC-TEST-RETIRED-GUARD', 'HOUSE-TEST', NULL, 'HOUSING', 'ECON-SYSTEM', 'ECON-SYSTEM', 1, 100, 100, 10)`
+         VALUES ('SVC-TEST-RETIRED-GUARD', $1, $2, 'HOUSING', $3, $3, 1, 100, 100, 10)`,
+        [guardRefs.house_id, guardRefs.territory_id, guardRefs.economic_id],
       );
     } catch (err) {
       serviceBlocked = true;
@@ -4400,10 +4416,7 @@ test('Phase 15 — Database guards prevent retired building types and service al
     // 3. Verify need rules with retired need code is blocked if ACTIVE
     let needBlocked = false;
     try {
-      await repository.query(
-        `INSERT INTO need_rules (need_code, service_type_code, demand_units_per_human, critical_threshold_bps, rules_version, status)
-         VALUES ('HOUSING', 'HOUSING', 1, 7500, 'needs-v1', 'ACTIVE')`
-      );
+      await repository.query(`UPDATE need_rules SET status = 'ACTIVE' WHERE need_code = 'HOUSING'`);
     } catch (err) {
       needBlocked = true;
       assert.match(err.message, /Need rule.*is retired/);
@@ -4423,10 +4436,10 @@ test('Phase 15 — Database guards prevent retired building types and service al
   } finally {
     await repository.query(`DELETE FROM buildings WHERE id = 'BLD-TEST-RETIRED-GUARD'`);
     await repository.query(`DELETE FROM service_allocations WHERE id = 'SVC-TEST-RETIRED-GUARD'`);
-    await repository.query(`DELETE FROM need_rules WHERE need_code = 'HOUSING' AND rules_version = 'needs-v1' AND status = 'ACTIVE'`);
+    await repository.query(`DELETE FROM house_affiliations WHERE corporation_id = 'INST-TEST-RETIRED-GUARD'`);
+    await repository.query(`DELETE FROM territories WHERE id = 'TERR-TEST-RETIRED-GUARD'`);
+    await repository.query(`DELETE FROM corporations WHERE id = 'INST-TEST-RETIRED-GUARD'`);
+    await repository.query(`DELETE FROM institutions WHERE id = 'INST-TEST-RETIRED-GUARD'`);
     await client.end();
   }
 });
-
-
-

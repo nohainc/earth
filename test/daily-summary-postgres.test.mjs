@@ -72,3 +72,31 @@ test('House Daily Summary preserves large fixed-point units exactly', async () =
   assert.equal(result.financial.net, '9007199254740991');
   assert.deepEqual(result.resources.deltas, [{ resource: 'COMPUTE', produced: '9007199254740993', consumed: '2', net: '9007199254740991' }]);
 });
+
+test('House Daily Summary returns clean genesis summary for Day 0 before first settlement', async () => {
+  const repository = {
+    async query(sql) {
+      const normalized = sql.toLowerCase();
+      if (normalized.includes('from world_state')) return { rows: [{ game_day: 1 }] };
+      if (normalized.includes('from house_daily_statements')) return { rows: [] };
+      if (normalized.includes('as income')) return { rows: [{ income: '0', expenses: '0' }] };
+      if (normalized.includes('as taxes')) return { rows: [{ taxes: '0' }] };
+      if (normalized.includes('from market_fills')) return { rows: [] };
+      if (normalized.includes('from game_events')) return { rows: [] };
+      if (normalized.includes('from notifications')) return { rows: [] };
+      if (normalized.includes('from house_capacity_statements_v5')) return { rows: [] };
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+  };
+
+  const result = await getHouseDailySummary(repository, 'HOUSE-1');
+  assert.equal(result.version, 2);
+  assert.equal(result.currentGameDay, 1);
+  assert.equal(result.summaryDay, 0);
+  assert.equal(result.financial.income, '0');
+  assert.equal(result.financial.expenses, '0');
+  assert.equal(result.financial.net, '0');
+  assert.deepEqual(result.statement?.openingAssets, {});
+  assert.deepEqual(result.statement?.closingAssets, {});
+  assert.deepEqual(result.resources.deltas, []);
+});
