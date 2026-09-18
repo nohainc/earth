@@ -56,8 +56,8 @@ test('architecture guard: scheduler is decoupled from game clock advancement', (
 
 test('architecture guard: world API exposes canonical clock and settlement schemas', () => {
   const worldSrc = fs.readFileSync(path.resolve('cloudflare/src/world-postgres.ts'), 'utf8');
-  assert.match(worldSrc, /readAuthoritativeGameTime/);
-  assert.match(worldSrc, /getSettlementCursor/);
+  assert.match(worldSrc, /const clock = await readAuthoritativeGameTime/);
+  assert.match(worldSrc, /getSettlementCursor\(repository,\s*clock\.gameDay\)/);
   assert.match(worldSrc, /settledThroughGameDay/);
   assert.match(worldSrc, /lastClosedGameDay/);
   assert.match(worldSrc, /backlogDays/);

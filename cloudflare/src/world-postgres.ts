@@ -25,9 +25,9 @@ function toJsonSafe<T>(value: T): T {
 }
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId?: string, viewerHouseId?: string): Promise<Record<string, unknown>> {
-  const [clock, cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
-    readAuthoritativeGameTime(repository),
-    getSettlementCursor(repository),
+  const clock = await readAuthoritativeGameTime(repository);
+  const [cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
+    getSettlementCursor(repository, clock.gameDay),
     repository.query("SELECT id, world_seed, status, genesis_at FROM world_state WHERE id = 'WORLD'"),
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
     repository.query("SELECT id, house_id, display_name, age_years, standing, final_legacy, status FROM humans WHERE status = 'ACTIVE' ORDER BY id"),
