@@ -2836,7 +2836,7 @@ test('PostgreSQL V5 Economic Core Phase 9: New building defaults to max accessib
 
   try {
     await repository.transaction(async (tx) => {
-      const day = Number((await tx.query("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+      const day = Number((await tx.query("SELECT game_day FROM earth_get_current_game_time()")).rows[0]?.game_day ?? 1);
 
       // 1. Setup Corporation & House & Human
       await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Gen Test Corp ${ts}`]);
@@ -2979,7 +2979,6 @@ test('PostgreSQL V5 Economic Core Phase 9: Corporation unlocking Gen 2 allows Co
 
   try {
     await repository.transaction(async (tx) => {
-      await tx.query("UPDATE world_state SET game_day = 2 WHERE id = 'WORLD'");
       const day = 2;
 
       // 1. Setup Corporation & House & Human
@@ -3028,7 +3027,6 @@ test('PostgreSQL V5 Economic Core Phase 9: Corporation unlocking Gen 2 allows Co
       assert.equal(houseBRow.technology_definition_version, 'tech-gen-v2');
     });
   } finally {
-    await client.query("UPDATE world_state SET game_day = 1 WHERE id = 'WORLD'");
     await client.query("DELETE FROM earth_technology_frontier_versions WHERE domain_id = 'TECH-DOMAIN-ENERGY' AND generation_number > 1");
     await client.query("UPDATE earth_technology_frontier SET max_generation_number = 1 WHERE domain_id = 'TECH-DOMAIN-ENERGY'");
     if (houseBuildingId) {
@@ -3067,7 +3065,6 @@ test('PostgreSQL V5 Economic Core Phase 9: Retrofit quote shows zero footprint d
 
   try {
     await repository.transaction(async (tx) => {
-      await tx.query("UPDATE world_state SET game_day = 2 WHERE id = 'WORLD'");
       const day = 2;
 
       // Setup
@@ -3121,7 +3118,6 @@ test('PostgreSQL V5 Economic Core Phase 9: Retrofit quote shows zero footprint d
       assert.equal(computeReq.requiredUnits, '2', '40% of 5 COMPUTE = 2.0 = 2');
     });
   } finally {
-    await client.query("UPDATE world_state SET game_day = 1 WHERE id = 'WORLD'");
     await client.query("DELETE FROM earth_technology_frontier_versions WHERE domain_id = 'TECH-DOMAIN-ENERGY' AND generation_number > 1");
     await client.query("UPDATE earth_technology_frontier SET max_generation_number = 1 WHERE domain_id = 'TECH-DOMAIN-ENERGY'");
     await client.query('DELETE FROM corporation_technology_generations WHERE corporation_economic_id = $1', [corpEconId]);
@@ -3157,7 +3153,6 @@ test('PostgreSQL V5 Economic Core Phase 9: Retrofit execution consumes balanced 
 
   try {
     await repository.transaction(async (tx) => {
-      await tx.query("UPDATE world_state SET game_day = 2 WHERE id = 'WORLD'");
       const day = 2;
 
       // Setup
@@ -3252,7 +3247,6 @@ test('PostgreSQL V5 Economic Core Phase 9: Retrofit execution consumes balanced 
       assert.ok(installRecord, 'Generation installation record must be inserted');
     });
   } finally {
-    await client.query("UPDATE world_state SET game_day = 1 WHERE id = 'WORLD'");
     await client.query("DELETE FROM earth_technology_frontier_versions WHERE domain_id = 'TECH-DOMAIN-ENERGY' AND generation_number > 1");
     await client.query("UPDATE earth_technology_frontier SET max_generation_number = 1 WHERE domain_id = 'TECH-DOMAIN-ENERGY'");
     await client.query('DELETE FROM corporation_technology_generations WHERE corporation_economic_id = $1', [corpEconId]);
@@ -3795,7 +3789,6 @@ test('PostgreSQL V5 Economic Core Phase 11: Construction, Tier Upgrade, Demoliti
       ON CONFLICT (corporation_economic_id, domain_id, generation_number) DO NOTHING
     `, [corpEconId, energyDomain.id]);
 
-    await repository.query("UPDATE world_state SET game_day = 2 WHERE id = 'WORLD'");
     const retrofitRes = await retrofitBuilding(repository, {
       buildingId,
       humanId,
@@ -3855,7 +3848,6 @@ test('PostgreSQL V5 Economic Core Phase 11: Construction, Tier Upgrade, Demoliti
     assert.equal(postDemoProfile.productive_capacity_units, '0');
     assert.equal(postDemoProfile.active_building_count, 0);
   } finally {
-    await client.query("UPDATE world_state SET game_day = 1 WHERE id = 'WORLD'");
     await client.query("DELETE FROM earth_technology_frontier_versions WHERE domain_id = 'TECH-DOMAIN-ENERGY' AND generation_number > 1");
     await client.query("UPDATE earth_technology_frontier SET max_generation_number = 1 WHERE domain_id = 'TECH-DOMAIN-ENERGY'");
     await client.query('DELETE FROM game_events WHERE actor_human_id = $1 OR correlation_id LIKE $2', [humanId, `p11-%-${testId}`]);
@@ -4139,7 +4131,7 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
   const territoryId = `TERR-${testId}`;
   const residencyId = `RES-${testId}`;
 
-  const initialWorldDay = Number((await repository.query("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  const initialWorldDay = Number((await repository.query("SELECT game_day FROM earth_get_current_game_time()")).rows[0]?.game_day ?? 1);
   let currentWorldDay = initialWorldDay;
 
   try {
@@ -4211,7 +4203,7 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
     assert.equal(proposalRes.proposal.status, 'VOTING');
     assert.equal(proposalRes.proposal.electorate_size, 1);
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [Number(proposalRes.proposal.voting_start_game_day)]);
+    await repository.query("UPDATE v5_governance_proposals SET voting_start_game_day = $1 WHERE id = $2", [initialWorldDay, proposalId]);
     const voteRes = await castV5GovernanceVote(repository, {
       humanId,
       proposalId,
@@ -4220,13 +4212,12 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
     });
     assert.ok(voteRes.ok);
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [Number(proposalRes.proposal.voting_end_game_day) + 1]);
+    await repository.query("UPDATE v5_governance_proposals SET voting_end_game_day = $1 WHERE id = $2", [initialWorldDay - 1, proposalId]);
     const resolveRes = await resolveV5GovernanceProposal(repository, proposalId);
     assert.ok(resolveRes.ok);
     assert.equal(resolveRes.status, 'SCHEDULED');
     assert.equal(resolveRes.quorumMet, true);
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [effectiveDay1]);
     const activateRes = await repository.transaction((tx) => activateDueV5GovernancePoliciesInTransaction(tx, effectiveDay1));
     assert.ok(activateRes.ok);
     assert.equal(activateRes.applied, 1);
@@ -4262,7 +4253,7 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
     assert.ok(scalePropRes.ok);
     const scalePropId = scalePropRes.proposal.id;
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [Number(scalePropRes.proposal.voting_start_game_day)]);
+    await repository.query("UPDATE v5_governance_proposals SET voting_start_game_day = $1 WHERE id = $2", [initialWorldDay, scalePropId]);
     await castV5GovernanceVote(repository, {
       humanId,
       proposalId: scalePropId,
@@ -4270,11 +4261,10 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
       correlationId: `p12-vote-scale-${testId}`,
     });
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [Number(scalePropRes.proposal.voting_end_game_day) + 1]);
+    await repository.query("UPDATE v5_governance_proposals SET voting_end_game_day = $1 WHERE id = $2", [initialWorldDay - 1, scalePropId]);
     const resolveScaleRes = await resolveV5GovernanceProposal(repository, scalePropId);
     assert.equal(resolveScaleRes.status, 'SCHEDULED');
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [effectiveDay2]);
     const activateScaleRes = await repository.transaction((tx) => activateDueV5GovernancePoliciesInTransaction(tx, effectiveDay2));
     assert.equal(activateScaleRes.applied, 1);
 
@@ -4306,7 +4296,7 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
     assert.ok(frontierPropRes.ok);
     const frontierPropId = frontierPropRes.proposal.id;
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [Number(frontierPropRes.proposal.voting_start_game_day)]);
+    await repository.query("UPDATE v5_governance_proposals SET voting_start_game_day = $1 WHERE id = $2", [initialWorldDay, frontierPropId]);
     await repository.query(
       `INSERT INTO v5_governance_ballots (proposal_id, house_id, cast_by_human_id, choice, cast_game_day, correlation_id)
        SELECT $1, house_id, $3, 'SUPPORT', $2, $1 || ':' || house_id
@@ -4324,18 +4314,16 @@ test('Phase 12: Governance Integration - Private vs Public Construction, Scale R
       [frontierPropId],
     );
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [Number(frontierPropRes.proposal.voting_end_game_day) + 1]);
+    await repository.query("UPDATE v5_governance_proposals SET voting_end_game_day = $1 WHERE id = $2", [initialWorldDay - 1, frontierPropId]);
     const resolveFrontierRes = await resolveV5GovernanceProposal(repository, frontierPropId);
     assert.equal(resolveFrontierRes.status, 'SCHEDULED');
 
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [effectiveDay3]);
     const activateFrontierRes = await repository.transaction((tx) => activateDueV5GovernancePoliciesInTransaction(tx, effectiveDay3));
     assert.equal(activateFrontierRes.applied, 1);
 
     const frontierRow = (await repository.query(`SELECT max_generation_number FROM earth_technology_frontier WHERE domain_id = 'TECH-DOMAIN-ENERGY'`)).rows[0];
     assert.equal(frontierRow.max_generation_number, 2);
   } finally {
-    await repository.query("UPDATE world_state SET game_day = $1 WHERE id = 'WORLD'", [initialWorldDay]);
     await repository.query('DELETE FROM game_events WHERE actor_human_id = $1 OR correlation_id LIKE $2', [humanId, `%${testId}%`]);
     await repository.query('DELETE FROM v5_governance_ballots WHERE proposal_id IN (SELECT id FROM v5_governance_proposals WHERE correlation_id LIKE $1) OR correlation_id LIKE $1', [`%${testId}%`]);
     await repository.query('DELETE FROM v5_governance_activation_queue WHERE proposal_id IN (SELECT id FROM v5_governance_proposals WHERE correlation_id LIKE $1)', [`%${testId}%`]);

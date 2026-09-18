@@ -34,7 +34,7 @@ async function request(path, method = 'GET', body) {
 
 try {
   const before = {
-    day: await dbScalar("SELECT game_day AS value FROM world_state WHERE id = 'WORLD'"),
+    day: await dbScalar("SELECT game_day AS value FROM earth_get_current_game_time()"),
     events: await dbScalar('SELECT COUNT(*) AS value FROM game_events'),
     outbox: await dbScalar('SELECT COUNT(*) AS value FROM event_outbox'),
   };
@@ -64,7 +64,7 @@ try {
   if (heartbeat.response.status >= 400) throw new Error(`Scheduler heartbeat returned HTTP ${heartbeat.response.status}`);
   await request('/api/house/motto', 'POST', { motto: 'Clean-room certification', correlationId: `clean-room-motto-${Date.now()}` });
   const after = {
-    day: await dbScalar("SELECT game_day AS value FROM world_state WHERE id = 'WORLD'"),
+    day: await dbScalar("SELECT game_day AS value FROM earth_get_current_game_time()"),
     events: await dbScalar('SELECT COUNT(*) AS value FROM game_events'),
     outbox: await dbScalar('SELECT COUNT(*) AS value FROM event_outbox'),
   };

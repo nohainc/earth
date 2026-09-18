@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 130,
+  "migrationVersion": 131,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -99,8 +99,6 @@
     ],
     "world_state": [
       "id",
-      "game_day",
-      "game_minute",
       "world_seed",
       "status",
       "genesis_at"

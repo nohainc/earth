@@ -1,6 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { formatCreditUnits } from './money.ts';
-import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { readAuthoritativeGameTime, projectDeadline } from './world-clock-postgres.ts';
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
 
@@ -66,11 +66,7 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     const durationDays = Number(targetCatalog.rows[0]?.research_duration_game_days ?? 5);
     // The database clock is the sole source of time. Do not derive or submit
     // a client/server timestamp for research start or completion.
-    const timeRes = await tx.query<{ game_day: number }>(
-      'SELECT earth_game_day_from_total_minutes(total_game_minutes) AS game_day FROM earth_get_current_game_time()',
-    );
-    const time = timeRes.rows[0];
-    if (!time) throw new Error('Authoritative game clock is unavailable');
+    const clock = await readAuthoritativeGameTime(tx);
     const projectId = `CBR-${crypto.randomUUID().slice(0, 10).toUpperCase()}`;
 
     const fundingAccounts = await tx.query<{ debit_account_id: string; research_account_id: string }>(`SELECT payer.id::TEXT AS debit_account_id, service.id::TEXT AS research_account_id
@@ -89,19 +85,19 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     const budget = (await tx.query<{ id: string }>(`SELECT l.id FROM institution_budget_lines l JOIN budget_categories c ON c.id=l.category_id
       WHERE l.institution_id=$1 AND c.institution_kind='CORPORATION' AND c.category_code='RESEARCH'
         AND l.fiscal_period_id=(SELECT id FROM fiscal_periods WHERE start_game_day <= $2 AND end_game_day >= $2 AND status='ACTIVE' LIMIT 1)
-        AND l.authorized_units-l.committed_units-l.spent_units >= $3 FOR UPDATE`, [corporationId, time.game_day, costUnits.toString()])).rows[0];
+        AND l.authorized_units-l.committed_units-l.spent_units >= $3 FOR UPDATE`, [corporationId, clock.gameDay, costUnits.toString()])).rows[0];
     if (!budget) throw new Error('Corporation research budget authority is unavailable');
     const commitmentId = `COMMIT-RESEARCH-${projectId}`;
     await tx.query(`INSERT INTO institution_budget_commitments
       (id,institution_id,budget_line_id,source_type,source_id,original_units,remaining_units,status,due_game_day)
-      VALUES ($1,$2,$3,'CORPORATION_RESEARCH',$4,$5,$5,'OPEN',$6)`, [commitmentId, corporationId, budget.id, projectId, costUnits.toString(), time.game_day + durationDays]);
+      VALUES ($1,$2,$3,'CORPORATION_RESEARCH',$4,$5,$5,'OPEN',$6)`, [commitmentId, corporationId, budget.id, projectId, costUnits.toString(), clock.gameDay + durationDays]);
     await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units+$1 WHERE id=$2', [costUnits.toString(), budget.id]);
 
     const corporationOwner = await tx.query<{ economic_id: string }>('SELECT economic_id::TEXT FROM owner_registry WHERE id = $1', [corporationId]);
     if (!corporationOwner.rows[0]) throw new Error('Corporation economic owner is not provisioned');
     const funding = await tx.query<{ transaction_id: string }>(
       `SELECT transaction_id FROM earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,'building-catalog-v1',$4::jsonb)`,
-      [input.correlationId, time.game_day, projectId, JSON.stringify([
+      [input.correlationId, clock.gameDay, projectId, JSON.stringify([
         { account_id: fundingAccounts.rows[0].debit_account_id, delta_units: (-costUnits).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
         { account_id: fundingAccounts.rows[0].research_account_id, delta_units: costUnits.toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
       ])],
@@ -115,7 +111,7 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
        priority, status, started_game_day, funding_transaction_id, correlation_id)
       VALUES ($1,$2,'BUILDING_BLUEPRINT',$3,'building-catalog-v1',$4,0,$5,100,'ACTIVE',$6,$7,$8)
       ON CONFLICT (id) DO NOTHING`,
-      [projectId, corporationOwner.rows[0].economic_id, targetCatalogId, durationDays * 100, costUnits.toString(), time.game_day, funding.rows[0].transaction_id, input.correlationId]);
+      [projectId, corporationOwner.rows[0].economic_id, targetCatalogId, durationDays * 100, costUnits.toString(), clock.gameDay, funding.rows[0].transaction_id, input.correlationId]);
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_research_projects WHERE id = $1', [projectId])).rows[0], catalogId: targetCatalogId, correlationId: input.correlationId };
 }
 
@@ -152,7 +148,10 @@ export async function quoteCorporationBuildingResearch(repository: PostgresRepos
     )).rows[0] ?? null;
     const costUnits = BigInt(target.research_credit_units);
     const durationDays = Number(target.research_duration_game_days);
-    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+    const durationMinutes = durationDays * 1440;
+    const clock = await readAuthoritativeGameTime(tx);
+    const day = clock.gameDay;
+    const deadline = projectDeadline(day + 1, 0, durationMinutes);
     return {
       ok: true,
       corporationId,
@@ -163,8 +162,13 @@ export async function quoteCorporationBuildingResearch(repository: PostgresRepos
       quote: {
         researchCostUnits: costUnits.toString(),
         durationDays,
+        durationMinutes,
         startsGameDay: day + 1,
-        completesGameDay: day + 1 + durationDays,
+        startsGameMinute: 0,
+        startedAbsoluteGameMinute: deadline.startedAbsoluteMinute,
+        completionAbsoluteGameMinute: deadline.completionAbsoluteMinute,
+        completesGameDay: deadline.completionGameDay,
+        completesGameMinute: deadline.completionGameMinute,
         alreadyActive: existing,
       },
       generatedFrom: 'postgres-canonical-building-catalog-v5',

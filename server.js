@@ -2846,9 +2846,12 @@ async function serveStatic(res, pathname) {
 async function hydrateFromDatabase() {
   if (!database) return;
   const canonical = await database.loadCanonical();
+  if (canonical.clock) {
+    state.clock.day = Number(canonical.clock.day ?? state.clock.day);
+    state.clock.minute = Number(canonical.clock.minute ?? state.clock.minute);
+    if (canonical.clock.totalGameMinutes != null) state.clock.totalGameMinutes = Number(canonical.clock.totalGameMinutes);
+  }
   if (canonical.world) {
-    state.clock.day = Number(canonical.world.game_day ?? state.clock.day);
-    state.clock.minute = Number(canonical.world.game_minute ?? state.clock.minute);
     state.world.health = Number(canonical.world.health ?? state.world.health);
     state.world.batch = Number(canonical.world.market_batch_seconds ?? state.world.batch);
   }

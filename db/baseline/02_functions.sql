@@ -445,25 +445,47 @@ RETURNS BIGINT LANGUAGE SQL IMMUTABLE STRICT AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION earth_get_current_game_time()
-RETURNS TABLE(game_day BIGINT, game_minute INTEGER, total_game_minutes BIGINT)
-LANGUAGE SQL STABLE AS $$
-  SELECT game_day, game_minute, game_day * 1440 + game_minute
-    FROM world_state WHERE id = 'WORLD';
-$$;
-
-CREATE OR REPLACE FUNCTION earth_advance_world_clock(p_minutes INTEGER)
-RETURNS TABLE(game_day BIGINT, game_minute INTEGER, advanced_minutes INTEGER)
-LANGUAGE plpgsql AS $$
+RETURNS TABLE (
+  game_day BIGINT,
+  game_minute INTEGER,
+  total_game_minutes BIGINT,
+  genesis_at TIMESTAMPTZ,
+  server_now TIMESTAMPTZ,
+  elapsed_real_seconds NUMERIC,
+  real_seconds_per_game_minute INTEGER
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+  v_genesis TIMESTAMPTZ;
+  v_now TIMESTAMPTZ := CURRENT_TIMESTAMP;
+  v_elapsed_sec NUMERIC;
+  v_total_min BIGINT;
+  v_game_day BIGINT;
+  v_game_minute INTEGER;
 BEGIN
-  IF p_minutes IS NULL OR p_minutes < 1 OR p_minutes > 1440 THEN
-    RAISE EXCEPTION 'World advancement must be between 1 and 1,440 game minutes';
+  SELECT w.genesis_at INTO v_genesis
+  FROM world_state w
+  WHERE w.id = 'WORLD';
+
+  IF v_genesis IS NULL THEN
+    RAISE EXCEPTION 'world_state.genesis_at is not configured';
   END IF;
-  RETURN QUERY
-  UPDATE world_state
-     SET game_day = world_state.game_day + ((world_state.game_minute + p_minutes) / 1440),
-         game_minute = (world_state.game_minute + p_minutes) % 1440
-   WHERE world_state.id = 'WORLD'
-   RETURNING world_state.game_day, world_state.game_minute, p_minutes;
+
+  v_elapsed_sec := GREATEST(0, EXTRACT(EPOCH FROM (v_now - v_genesis)));
+  v_total_min := FLOOR(v_elapsed_sec)::BIGINT;
+  v_game_day := FLOOR(v_total_min / 1440)::BIGINT + 1;
+  v_game_minute := (v_total_min % 1440)::INTEGER;
+
+  RETURN QUERY SELECT
+    v_game_day,
+    v_game_minute,
+    v_total_min,
+    v_genesis,
+    v_now,
+    v_elapsed_sec,
+    1::INTEGER;
 END;
 $$;
 

@@ -20,7 +20,7 @@ async function fingerprint(connectionString) {
     const result = await client.query(`SELECT COUNT(*)::TEXT AS count FROM ${table}`);
     values[table] = result.rows[0].count;
   }
-  const world = await client.query("SELECT id, game_day, game_minute FROM world_state WHERE id = 'WORLD'");
+  const world = await client.query("SELECT id, world_seed, status, genesis_at FROM world_state WHERE id = 'WORLD'");
   await client.end();
   return { values, world: world.rows[0] ?? null };
 }

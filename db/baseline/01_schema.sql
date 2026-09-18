@@ -63,7 +63,7 @@ CREATE TABLE auth_action_tokens (id TEXT PRIMARY KEY, account_id TEXT NOT NULL R
 CREATE TABLE house_succession_plans (house_id TEXT PRIMARY KEY REFERENCES houses(id), successor_name TEXT NOT NULL, registered_game_day BIGINT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE');
 CREATE TABLE succession_events (id BIGSERIAL PRIMARY KEY, house_id TEXT NOT NULL REFERENCES houses(id), predecessor_human_id TEXT NOT NULL REFERENCES humans(id), successor_human_id TEXT REFERENCES humans(id), death_game_day BIGINT NOT NULL, effective_game_day BIGINT NOT NULL, generation INTEGER NOT NULL, status TEXT NOT NULL, correlation_id TEXT NOT NULL UNIQUE);
 
-CREATE TABLE world_state (id TEXT PRIMARY KEY, game_day BIGINT NOT NULL CHECK (game_day >= 0), game_minute INTEGER NOT NULL CHECK (game_minute BETWEEN 0 AND 1439), world_seed TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE');
+CREATE TABLE world_state (id TEXT PRIMARY KEY, world_seed TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE', genesis_at TIMESTAMPTZ);
 CREATE TABLE institutions (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('EARTH','CORPORATION','BANK')), name TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'ACTIVE');
 CREATE TABLE corporations (
   id TEXT PRIMARY KEY REFERENCES institutions(id),

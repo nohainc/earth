@@ -20,8 +20,9 @@ test("Page 2: Command Center, Decision Queue & World Vitals", async (t) => {
   await t.test("TC-2.1: World Vitals & Planetary Health Status", async () => {
     const worldRes = await repo.query("SELECT * FROM world_state WHERE id = 'WORLD'");
     assert.ok(worldRes.rows[0], "World state row must exist");
-    const world = worldRes.rows[0];
-    assert.ok(typeof world.game_day === "number" || typeof world.game_day === "string");
+    const clockRes = await repo.query("SELECT game_day FROM earth_get_current_game_time()");
+    assert.ok(clockRes.rows[0], "Clock time must exist");
+    assert.ok(typeof clockRes.rows[0].game_day === "number" || typeof clockRes.rows[0].game_day === "string");
   });
 
   await t.test("TC-2.2: Fetch User Notifications & Activity Stream", async () => {

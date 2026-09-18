@@ -146,3 +146,46 @@ export async function getSettlementCursor(
     ...(failedGameDay != null ? { failedGameDay, failedPhase, failedError } : {}),
   };
 }
+
+/**
+ * Projects a duration in game minutes from a start day and minute into absolute minutes and completion position.
+ */
+export function projectDeadline(
+  startDay: number,
+  startMinute: number,
+  durationMinutes: number,
+): {
+  startedAbsoluteMinute: number;
+  completionAbsoluteMinute: number;
+  completionGameDay: number;
+  completionGameMinute: number;
+} {
+  const startedAbsoluteMinute = toAbsoluteGameMinute(startDay, startMinute);
+  const completionAbsoluteMinute = startedAbsoluteMinute + Math.max(0, Math.floor(durationMinutes));
+  const completion = fromAbsoluteGameMinute(completionAbsoluteMinute);
+  return {
+    startedAbsoluteMinute,
+    completionAbsoluteMinute,
+    completionGameDay: completion.gameDay,
+    completionGameMinute: completion.gameMinute,
+  };
+}
+
+/**
+ * Evaluates whether an absolute completion minute or day/minute has elapsed relative to current clock.
+ */
+export function isDeadlineDue(
+  completionOrDay: { completionAbsoluteMinute?: number; gameDay?: number; gameMinute?: number } | number,
+  currentClock: AuthoritativeGameTime | { totalGameMinutes: number },
+): boolean {
+  const currentAbs = currentClock.totalGameMinutes;
+  if (typeof completionOrDay === 'number') {
+    return currentAbs >= completionOrDay;
+  }
+  if (completionOrDay.completionAbsoluteMinute != null) {
+    return currentAbs >= completionOrDay.completionAbsoluteMinute;
+  }
+  const day = completionOrDay.gameDay ?? 1;
+  const minute = completionOrDay.gameMinute ?? 0;
+  return currentAbs >= toAbsoluteGameMinute(day, minute);
+}

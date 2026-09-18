@@ -15,14 +15,17 @@ if (command === 'heartbeat') {
   process.exit(0);
 }
 
-const minutes = command === 'advance-hour' ? 60 : command === 'advance-day' ? 1440 : null;
-if (minutes === null) throw new Error('Usage: advance-hour | advance-day | heartbeat | settle');
-const client = new Client({ connectionString: databaseUrl });
-await client.connect();
-try {
-  const result = await client.query('SELECT game_day, game_minute FROM earth_advance_world_clock($1::integer)', [minutes]);
-  const row = result.rows[0];
-  console.log(`Manual clock advanced to game day ${row.game_day}, minute ${row.game_minute}.`);
-} finally {
-  await client.end();
+if (command === 'time' || command === 'status') {
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    const result = await client.query('SELECT game_day, game_minute, total_game_minutes, genesis_at FROM earth_get_current_game_time()');
+    const row = result.rows[0];
+    console.log(`Authoritative game time: Day ${row.game_day}, Minute ${row.game_minute} (Total minutes: ${row.total_game_minutes}, Genesis: ${row.genesis_at}).`);
+  } finally {
+    await client.end();
+  }
+  process.exit(0);
 }
+
+throw new Error('Usage: status | time | heartbeat (Note: World time is continuously derived from genesis_at; direct clock advancement is obsolete)');

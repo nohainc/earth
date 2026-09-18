@@ -67,9 +67,10 @@ test('canonical registration creates one House principal and outbox delivery is 
 test('canonical PostgreSQL world projection contains no legacy economic authority', { skip: !connectionString }, async () => {
   const { client, repository } = await connect();
   try {
-    const world = (await repository.query("SELECT game_day, game_minute, world_seed FROM world_state WHERE id = 'WORLD'")).rows[0];
-    assert.ok(Number(world.game_day) >= 1);
-    assert.ok(Number(world.game_minute) >= 0 && Number(world.game_minute) <= 1439);
+    const world = (await repository.query("SELECT world_seed FROM world_state WHERE id = 'WORLD'")).rows[0];
+    const clock = (await repository.query("SELECT game_day, game_minute FROM earth_get_current_game_time()")).rows[0];
+    assert.ok(Number(clock.game_day) >= 1);
+    assert.ok(Number(clock.game_minute) >= 0 && Number(clock.game_minute) <= 1439);
     assert.equal(world.world_seed, 'EARTH-GENESIS');
     assert.equal((await repository.query("SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('account_balances','resource_balances','ledger_entries','businesses')")).rows[0].count, '0');
     assert.ok(Number((await repository.query('SELECT COUNT(*) FROM economic_assets')).rows[0].count) >= 6);

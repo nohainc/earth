@@ -53,7 +53,7 @@ export async function runRankingsCalculation({
     `);
 
     // 2. Fetch current world game day
-    const worldRes = await client.query("SELECT game_day FROM world_state WHERE id = 'WORLD'").catch(() => ({ rows: [] }));
+    const worldRes = await client.query("SELECT game_day FROM earth_get_current_game_time()").catch(() => ({ rows: [] }));
     const gameDay = Number(worldRes.rows[0]?.game_day ?? 184);
 
     console.log(`[Rankings Engine] Running relative data-driven settlement for Game Day ${gameDay}...`);

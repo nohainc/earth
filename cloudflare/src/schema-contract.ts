@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 130;
+export const EARTH_SCHEMA_VERSION = 131;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -97,8 +97,6 @@ export const REQUIRED_SCHEMA_TABLES = {
   ],
   "world_state": [
     "id",
-    "game_day",
-    "game_minute",
     "world_seed",
     "status",
     "genesis_at"

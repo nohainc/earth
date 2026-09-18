@@ -11,14 +11,14 @@ export function createDatabase(connectionString = process.env.DATABASE_URL) {
   const write = (operation) => readOnly ? Promise.resolve() : operation();
   return {
     async saveSuccession(successor) { await write(() => pool.query(`insert into succession_plans (human_id, successor_name, registered_game_day, estate_period_days) values ('H-0044',$1,$2,$3) on conflict (human_id) do update set successor_name=excluded.successor_name, registered_game_day=excluded.registered_game_day`, [successor.name, successor.registeredOnDay, 30])); },
-    async saveWorld(world) { await write(() => pool.query(`update world_state set game_day=$1, game_minute=$2, health=$3, market_batch_seconds=$4 where id='WORLD'`, [world.day, world.minute, world.health, world.batch])); },
+    async saveWorld(world) { await write(() => pool.query(`update world_state set health=$1, market_batch_seconds=$2 where id='WORLD'`, [world.health, world.batch])); },
     async saveBusiness(business) { await write(() => pool.query(`update businesses set policy=$1, condition=$2 where id=$3`, [business.policy, business.condition, business.id])); },
     async saveResources(resources) { await write(async () => { for (const [resource, amount] of Object.entries(resources)) await pool.query(`insert into resource_balances (owner_id, resource, amount) values ('H-0044',$1,$2) on conflict (owner_id,resource) do update set amount=excluded.amount`, [resource, amount]); }); },
     async saveTechnology(technology) { await write(() => pool.query(`update technologies set progress=$1 where id=$2`, [technology.progress, technology.id])); },
     async loadCanonical() {
       // 1. Required queries: must exist in PostgreSQL
-      const [worldRes, humanRes] = await Promise.all([
-        pool.query('select game_day, game_minute, health, market_batch_seconds from world_state where id=$1', ['WORLD']),
+      const [worldRes, humanRes, clockRes] = await Promise.all([
+        pool.query('select health, market_batch_seconds, genesis_at from world_state where id=$1', ['WORLD']),
         pool.query(`
           select h.id, h.display_name, h.standing, h.legacy, h.age_years, h.life_status, h.political_eligibility_game_day,
                  coalesce(ab.balance, (select balance from account_balances where owner_id = h.id and currency = 'CREDIT' limit 1), 0) as credits
@@ -26,6 +26,7 @@ export function createDatabase(connectionString = process.env.DATABASE_URL) {
           left join account_balances ab on ab.account_id = h.account_id and ab.currency = 'CREDIT'
           where h.id = $1
         `, ['H-0044']),
+        pool.query('select game_day as day, game_minute as minute, total_game_minutes as "totalGameMinutes", genesis_at as "genesisAt", server_now as "serverNow", real_seconds_per_game_minute as "realSecondsPerGameMinute" from earth_get_current_game_time()').catch(() => ({ rows: [] }))
       ]);
 
       if (!worldRes.rows[0]) {
@@ -88,6 +89,7 @@ export function createDatabase(connectionString = process.env.DATABASE_URL) {
       const pop = Number(mem?.member_count ?? mem?.residents ?? 0);
       const votingWeight = Math.round((1 + Math.min(2, pop / 100)) * 1000) / 1000;
       return {
+        clock: clockRes.rows[0] || null,
         world: worldRes.rows[0],
         human: humanRes.rows[0],
         resources,

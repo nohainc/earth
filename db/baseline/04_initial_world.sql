@@ -1,5 +1,5 @@
-INSERT INTO world_state(id, game_day, game_minute, world_seed, status)
-VALUES ('WORLD', 1, 0, 'EARTH-GENESIS', 'ACTIVE');
+INSERT INTO world_state(id, world_seed, status, genesis_at)
+VALUES ('WORLD', 'EARTH-GENESIS', 'ACTIVE', CURRENT_TIMESTAMP);
 
 INSERT INTO institutions(id, kind, name) VALUES
   ('EARTH', 'EARTH', 'EARTH UC'),

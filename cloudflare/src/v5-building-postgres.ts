@@ -12,7 +12,7 @@ import {
 } from './v5-settlement-profiles-postgres.ts';
 import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
-import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { readAuthoritativeGameTime, projectDeadline } from './world-clock-postgres.ts';
 
 type Catalog = {
   id: string;
@@ -127,7 +127,10 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
       generationAuthorization: genAuth,
       resourceRequirements: requirements.map((item) => ({ code: item.code, requiredUnits: item.required_units, availableUnits: item.available_units, missingUnits: item.missing_units })),
       effectiveConstructionMinutes: duration.minutes,
-      expectedCompletionGameDay: gameDay + Math.max(1, Math.ceil(duration.minutes / 1440)),
+      startedAbsoluteGameMinute: clock.totalGameMinutes,
+      completionAbsoluteGameMinute: projectDeadline(gameDay, clock.gameMinute, duration.minutes).completionAbsoluteMinute,
+      expectedCompletionGameDay: projectDeadline(gameDay, clock.gameMinute, duration.minutes).completionGameDay,
+      expectedCompletionGameMinute: projectDeadline(gameDay, clock.gameMinute, duration.minutes).completionGameMinute,
       capacity,
       delinquencyStatus: delinquency,
       generatedFrom: 'postgres-canonical-building-catalog-v5',
@@ -223,10 +226,10 @@ export async function purchaseV5Building(
       ? await getCorporationSettlementProfileSnapshot(tx, ownerCorpId!)
       : await getHouseSettlementProfileSnapshot(tx, ownerHouseId!);
 
-    await tx.query(`SELECT earth_post_transaction($1,$2,$3,'ASSET_TRANSFER',$4,$5,'construction-v5',$6::JSONB)`, [input.correlationId, gameDay, Number(currentWorld?.game_minute ?? 0), isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION', buildingId, JSON.stringify([{ account_id: wallet.id, delta_units: (-cost).toString(), asset_id: 1 }, { account_id: destination.id, delta_units: cost.toString(), asset_id: 1 }])]);
+    const deadline = projectDeadline(gameDay, clock.gameMinute, duration.minutes);
+    await tx.query(`SELECT earth_post_transaction($1,$2,$3,'ASSET_TRANSFER',$4,$5,'construction-v5',$6::JSONB)`, [input.correlationId, gameDay, clock.gameMinute, isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION', buildingId, JSON.stringify([{ account_id: wallet.id, delta_units: (-cost).toString(), asset_id: 1 }, { account_id: destination.id, delta_units: cost.toString(), asset_id: 1 }])]);
     await tx.query(`INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, construction_state, installed_generation, technology_definition_version, started_game_day, commissioned_game_day, territory_right_id) VALUES ($1,$2,$3,$4,'UNDER_CONSTRUCTION','UNDER_CONSTRUCTION',$5,$6,$7,NULL,NULL)`, [buildingId, ownerEconomicId, territoryId, blueprint.id, targetGen, `tech-gen-v${targetGen}`, gameDay]);
-    const completionDay = gameDay + Math.max(1, Math.ceil(duration.minutes / 1440));
-    await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,NULL,'V5_POOLED_CONSTRUCTION',$11)`, [`PROJECT-${buildingId.slice(4)}`, buildingId, ownerEconomicId, territoryId, blueprint.id, cost.toString(), JSON.stringify(Object.fromEntries(requirements.map((item) => [item.code, item.required_units]))), gameDay, completionDay, input.correlationId, targetGenRow?.id ?? null]);
+    await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,NULL,'V5_POOLED_CONSTRUCTION',$11)`, [`PROJECT-${buildingId.slice(4)}`, buildingId, ownerEconomicId, territoryId, blueprint.id, cost.toString(), JSON.stringify(Object.fromEntries(requirements.map((item) => [item.code, item.required_units]))), gameDay, deadline.completionGameDay, input.correlationId, targetGenRow?.id ?? null]);
     if (isPublic) await rebuildV5CorporationSettlementProfile(tx, ownerCorpId!, gameDay);
     else await refreshV5SettlementProfilesForHouse(tx, ownerHouseId!, gameDay);
 

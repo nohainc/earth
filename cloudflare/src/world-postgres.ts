@@ -34,7 +34,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     repository.query('SELECT code, asset_kind FROM economic_assets ORDER BY id'),
     listCommunities(repository, viewerHouseId),
     viewerHouseId ? repository.query<{ need_code: string; risk_level: string; game_day: number }>(`SELECT need_code, risk_level, game_day FROM house_need_assessments WHERE house_id = $1 ORDER BY game_day DESC, need_code`, [viewerHouseId]) : Promise.resolve({ rows: [] as { need_code: string; risk_level: string; game_day: number }[] }),
-    listWorldConditions(repository),
+    listWorldConditions(repository, clock.gameDay),
     viewerId ? repository.query(`SELECT h.id, h.house_id, h.display_name, h.age_years, h.standing, h.final_legacy, h.status,
                                         hs.house_name, hs.motto, hs.generation, hs.dynasty_legacy
                                    FROM humans h JOIN houses hs ON hs.id = h.house_id
@@ -358,7 +358,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     feeRate: Number(await marketFeeRate(repository, viewerId)),
     reservedCredits: marketOrders.rows.reduce((sum: number, row: any) => sum + (row.side === 'BUY' ? Number(priceUnitsToDisplayPrice(String(row.reserved_credit_units ?? '0'))) : 0), 0),
     clearingIntervalMinutes: MARKET_BATCH_GAME_MINUTES,
-    nextClearingGameMinute: gameMinute + (MARKET_BATCH_GAME_MINUTES - (gameMinute % MARKET_BATCH_GAME_MINUTES)),
+    nextClearingGameMinute: (gameMinute + (MARKET_BATCH_GAME_MINUTES - (gameMinute % MARKET_BATCH_GAME_MINUTES))) % 1440,
+    nextClearingAbsoluteMinute: (Math.floor(clock.totalGameMinutes / MARKET_BATCH_GAME_MINUTES) + 1) * MARKET_BATCH_GAME_MINUTES,
     gameDay,
     generatedFrom: 'postgres-canonical-facts',
   };
@@ -377,7 +378,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   return toJsonSafe({
     ok: true,
     viewerId: viewerId ?? null,
-    world: world.rows[0] ? { ...world.rows[0], game_day: clock.gameDay, game_minute: clock.gameMinute } : null,
+    world: world.rows[0] ? { ...world.rows[0] } : null,
     clock: {
       day: clock.gameDay,
       minute: clock.gameMinute,
