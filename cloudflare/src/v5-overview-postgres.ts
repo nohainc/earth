@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 /** Convert database bigint values to the JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -17,8 +18,8 @@ function toJsonSafe<T>(value: T): T {
  * prices, resource balances, or Territory capacity on the client.
  */
 export async function getV5Overview(repository: PostgresRepository, houseId: string) {
-  const [world, house, affiliation, wallet, statement, delinquency] = await Promise.all([
-    repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"),
+  const [clock, house, affiliation, wallet, statement, delinquency] = await Promise.all([
+    readAuthoritativeGameTime(repository),
     repository.query<{ id: string; house_name: string; generation: number; status: string }>(
       'SELECT id, house_name, generation, status FROM houses WHERE id = $1', [houseId]),
     repository.query<{ corporation_id: string; status: string }>(
@@ -37,7 +38,7 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
        FROM v5_capacity_delinquency_state WHERE subject_type = 'HOUSE' AND subject_id = $1`, [houseId]),
   ]);
 
-  const currentGameDay = Number(world.rows[0]?.game_day ?? 0);
+  const currentGameDay = clock.gameDay;
   const houseRow = house.rows[0];
   if (!houseRow) throw new Error('House not found');
   const capacity = await getV5HouseCapacity(repository, houseId);

@@ -140,20 +140,94 @@ export async function runResumableSettlementDay(repository: PostgresRepository, 
   return { status: 'completed', gameDay, phasesCompleted: requiredPhases.length, workUnitsCompleted: completed, workUnitsPending: 0 };
 }
 
-export async function runWorldSchedulerTick(repository: PostgresRepository, idempotencyKey = crypto.randomUUID(), _features?: FeatureConfig, minutesPerTick = 60, schedulerRunId?: string): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; settlementStatus: SettlementResult['status']; productionEvents: number; marketSettlements: number; policyActions?: number; policyExceptions?: number; alreadyProcessed?: boolean }> {
-  validateWorldAdvanceMinutes(minutesPerTick);
-  const world = (await repository.query<{ game_day: string; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
-  if (!world) throw new Error('WORLD state is missing');
-  const day = Number(world.game_day);
-  const settlement = await runResumableSettlementDay(repository, day, { workerId: `scheduler:${idempotencyKey}` });
-  if (settlement.status === 'busy' || settlement.status === 'failed') return { day, minute: Number(world.game_minute), newDay: false, settledGameDay: day, settlementStatus: settlement.status, productionEvents: 0, marketSettlements: 0 };
-  const policy = settlement.status === 'completed' ? await executeHousePoliciesForDay(repository, day) : { actions: 0, exceptions: 0 };
-  return repository.transaction(async (tx) => {
-    const current = (await tx.query<{ game_day: string; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE")).rows[0];
-    if (!current || Number(current.game_day) !== day) return { day: Number(current?.game_day ?? day), minute: Number(current?.game_minute ?? 0), newDay: false, settledGameDay: day, settlementStatus: 'busy' as const, productionEvents: 0, marketSettlements: 0 };
-    const clock = (await tx.query<{ game_day: string; game_minute: number }>('SELECT game_day, game_minute FROM earth_advance_world_clock($1)', [minutesPerTick])).rows[0];
-    if (!clock) throw new Error('WORLD clock advancement returned no state');
-    if (schedulerRunId) await tx.query("UPDATE scheduler_runs SET completed_at = CURRENT_TIMESTAMP, status = 'completed', game_day = $2, phase = 'daily_economy' WHERE id = $1", [schedulerRunId, clock.game_day]);
-    return { day: Number(clock.game_day), minute: Number(clock.game_minute), newDay: Number(clock.game_day) > day, settledGameDay: day, settlementStatus: settlement.status, productionEvents: 0, marketSettlements: 0, policyActions: policy.actions, policyExceptions: policy.exceptions, alreadyProcessed: settlement.status === 'already_processed' };
-  });
+import { readAuthoritativeGameTime, getSettlementCursor, lastClosedGameDay } from './world-clock-postgres.ts';
+
+export async function runWorldSchedulerTick(
+  repository: PostgresRepository,
+  idempotencyKey = crypto.randomUUID(),
+  _features?: FeatureConfig,
+  _minutesPerTick = 60,
+  schedulerRunId?: string,
+  options: { workBudgetMs?: number; maxCatchupDays?: number } = {},
+): Promise<{
+  day: number;
+  minute: number;
+  newDay: boolean;
+  settledGameDay?: number;
+  settlementStatus: SettlementResult['status'];
+  productionEvents: number;
+  marketSettlements: number;
+  policyActions?: number;
+  policyExceptions?: number;
+  alreadyProcessed?: boolean;
+}> {
+  // 1. Authoritative game clock is derived from real-world time (genesis_at).
+  // Time advances continuously regardless of scheduler executions.
+  const clock = await readAuthoritativeGameTime(repository);
+  const targetDay = lastClosedGameDay(clock); // Never settle the open game day
+  const cursor = await getSettlementCursor(repository, clock.gameDay);
+
+  const workBudgetMs = options.workBudgetMs ?? 20_000;
+  const maxCatchupDays = options.maxCatchupDays ?? 10;
+  const startedAt = Date.now();
+
+  let currentSettled = cursor.settledThroughGameDay;
+  let lastStatus: SettlementResult['status'] = currentSettled >= targetDay ? 'already_processed' : 'completed';
+  let totalPolicyActions = 0;
+  let totalPolicyExceptions = 0;
+
+  // 2. Strict sequential catch-up for all uncompleted closed days
+  while (currentSettled < targetDay) {
+    if (Date.now() - startedAt >= workBudgetMs) {
+      break;
+    }
+    const nextDay = currentSettled + 1;
+    const workerId = `scheduler:${idempotencyKey}:${nextDay}`;
+    const remainingBudget = Math.max(1000, workBudgetMs - (Date.now() - startedAt));
+
+    const settlement = await runResumableSettlementDay(repository, nextDay, {
+      workerId,
+      workBudgetMs: remainingBudget,
+    });
+
+    lastStatus = settlement.status;
+
+    if (settlement.status !== 'completed' && settlement.status !== 'already_processed') {
+      // Must halt immediately on failure or busy state. Never skip a failed day.
+      break;
+    }
+
+    if (settlement.status === 'completed') {
+      const policy = await executeHousePoliciesForDay(repository, nextDay);
+      totalPolicyActions += policy.actions;
+      totalPolicyExceptions += policy.exceptions;
+    }
+
+    currentSettled = nextDay;
+
+    if (currentSettled - cursor.settledThroughGameDay >= maxCatchupDays) {
+      break;
+    }
+  }
+
+  if (schedulerRunId) {
+    await repository.query(
+      "UPDATE scheduler_runs SET completed_at = CURRENT_TIMESTAMP, status = 'completed', game_day = $2, phase = 'daily_economy' WHERE id = $1",
+      [schedulerRunId, clock.gameDay],
+    ).catch(() => {});
+  }
+
+  return {
+    day: clock.gameDay,
+    minute: clock.gameMinute,
+    newDay: false,
+    settledGameDay: currentSettled,
+    settlementStatus: lastStatus,
+    productionEvents: 0,
+    marketSettlements: 0,
+    policyActions: totalPolicyActions,
+    policyExceptions: totalPolicyExceptions,
+    alreadyProcessed: cursor.settledThroughGameDay >= targetDay,
+  };
 }
+

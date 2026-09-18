@@ -12,6 +12,11 @@ import {
 } from './v5-settlement-profiles-postgres.ts';
 import { getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 import { toJsonSafe } from './json-safe.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+
+async function currentDay(tx: PostgresRepository): Promise<number> {
+  return (await readAuthoritativeGameTime(tx)).gameDay;
+}
 
 type HouseContext = { houseId: string; currentCorporationId: string | null; buildingUnits: bigint };
 
@@ -66,7 +71,7 @@ async function v5Pricing(tx: PostgresRepository, corporationId: string, building
 export async function quoteV5CorporationMembership(repository: PostgresRepository, humanId: string, corporationId: string) {
   return repository.transaction(async (tx) => {
     const house = await houseContext(tx, humanId);
-    const world = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const world = await currentDay(tx);
     const corp = await corporation(tx, corporationId, world);
     return { ok: true, corporationId, corporationName: corp.name, admissionPolicy: corp.admissionPolicy, currentCorporationId: house.currentCorporationId, eligible: house.currentCorporationId === null, capacity: await v5Pricing(tx, corporationId, house.buildingUnits, world) };
   });
@@ -75,7 +80,7 @@ export async function quoteV5CorporationMembership(repository: PostgresRepositor
 export async function applyV5CorporationMembership(repository: PostgresRepository, input: { humanId: string; corporationId: string; correlationId: string; inviteToken?: string }) {
   return repository.transaction(async (tx) => {
     const house = await houseContext(tx, input.humanId);
-    const world = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const world = await currentDay(tx);
     const corp = await corporation(tx, input.corporationId, world);
     if (house.currentCorporationId === input.corporationId) return { ok: true, alreadyMember: true, corporationId: input.corporationId };
     if (house.currentCorporationId) throw new Error('House already belongs to an active Corporation');
@@ -150,7 +155,7 @@ export async function leaveV5Corporation(repository: PostgresRepository, input: 
       [input.correlationId],
     )).rows[0];
     if (prior) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, correlationId: input.correlationId };
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
 
     const beforeHouseProfile = await getHouseSettlementProfileSnapshot(tx, house.houseId);
     const beforeCorpProfile = await getCorporationSettlementProfileSnapshot(tx, input.corporationId);
@@ -253,7 +258,7 @@ export async function delegateV5CorporationLeadership(repository: PostgresReposi
        VALUES ($1, $2, 'CORPORATION_EXECUTIVE', 'ACTIVE'), ($1, $2, 'CORPORATION_TREASURER', 'ACTIVE')`,
       [input.corporationId, input.targetHumanId],
     );
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     await enqueueOutbox(tx, { eventKey: `v5-leadership-delegate:${input.correlationId}`, topic: 'institutions', aggregateType: 'CORPORATION', aggregateId: input.corporationId, payload: { type: 'CORPORATION_LEADERSHIP_DELEGATED', previousHumanId: input.humanId, newHumanId: input.targetHumanId, corporationId: input.corporationId, gameDay: day } });
     return { ok: true, corporationId: input.corporationId, previousHumanId: input.humanId, newHumanId: input.targetHumanId, gameDay: day };
   });
@@ -269,7 +274,7 @@ export async function scheduleV5CorporationDissolution(repository: PostgresRepos
     )).rows[0];
     if (existing) return { ok: true, alreadyScheduled: true, scheduleId: existing.id, effectiveGameDay: Number(existing.effective_game_day), status: existing.status };
     
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const transitionDays = input.transitionDays ?? 3;
     const effectiveDay = day + transitionDays;
     const id = `V5-DISSOLVE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
@@ -321,7 +326,7 @@ export async function decideV5MembershipApplication(repository: PostgresReposito
     if (!role) throw new Error('Corporation authorization is required');
     const application = (await tx.query<{ id: string; house_id: string; status: string }>(`SELECT id, house_id, status FROM corporation_membership_applications_v5 WHERE id = $1 AND corporation_id = $2 FOR UPDATE`, [input.applicationId, input.corporationId])).rows[0];
     if (!application || application.status !== 'PENDING') throw new Error('Pending Corporation membership application not found');
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     if (input.decision === 'APPROVED') {
       const current = (await tx.query('SELECT 1 FROM house_affiliations WHERE house_id = $1 AND status = \'ACTIVE\' FOR UPDATE', [application.house_id])).rows[0];
       if (current) throw new Error('House already belongs to an active Corporation');
@@ -400,7 +405,7 @@ export async function issueV5CorporationInvite(repository: PostgresRepository, i
     const role = (await tx.query(`SELECT 1 FROM institution_governance_roles WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE' AND role_code IN ('CORPORATION_EXECUTIVE','CORPORATION_TREASURER')`, [input.corporationId, input.humanId])).rows[0];
     if (!role) throw new Error('Corporation authorization is required');
     if (!Number.isInteger(input.expiresGameDay) || input.expiresGameDay < 1 || !Number.isInteger(input.maxUses) || input.maxUses < 1 || input.maxUses > 100) throw new Error('Invite expiry or use limit is invalid');
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     if (input.expiresGameDay < day) throw new Error('Invite expiry must be in the future');
     if (input.targetHouseId && !(await tx.query('SELECT 1 FROM houses WHERE id = $1 AND status = \'ACTIVE\'', [input.targetHouseId])).rows[0]) throw new Error('Target House not found');
     const token = `${crypto.randomUUID()}-${crypto.randomUUID()}`;

@@ -1,11 +1,12 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveOrganizationAuthority } from './organization-authority.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 const TOTAL_OWNERSHIP_UNITS = 10000n;
 
 async function currentDay(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 export async function getAssetOwnership(repository: PostgresRepository, assetType: string, assetId: string): Promise<Record<string, unknown>> {

@@ -26,16 +26,14 @@ function positiveInteger(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+import { readAuthoritativeGameTime, getSettlementCursor } from './world-clock-postgres.ts';
+
 async function readSettlementPosition(repository: PostgresRepository): Promise<{ day: number; watermark: number }> {
-  const result = await repository.query<{ day: string; watermark: string }>(
-    `SELECT w.game_day::text AS day,
-            earth_settlement_watermark(w.game_day)::text AS watermark
-       FROM world_state w
-      WHERE w.id = 'WORLD'`,
-  );
+  const clock = await readAuthoritativeGameTime(repository);
+  const cursor = await getSettlementCursor(repository, clock.gameDay);
   return {
-    day: Number(result.rows[0]?.day ?? 0),
-    watermark: Number(result.rows[0]?.watermark ?? 0),
+    day: clock.gameDay,
+    watermark: cursor.settledThroughGameDay,
   };
 }
 

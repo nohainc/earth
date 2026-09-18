@@ -101,20 +101,20 @@ export async function healthResponse(request: Request, env: Env, options: { read
       }>(`
         WITH clock AS (
           SELECT game_day AS current_game_day
-          FROM world_state
-          WHERE id = 'WORLD'
+          FROM earth_get_current_game_time()
         ), completed AS (
-          SELECT earth_settlement_watermark(clock.current_game_day) AS game_day,
+          SELECT control.settled_through_game_day AS game_day,
                  (SELECT MAX(r.completed_at)
                     FROM daily_settlement_runs r
-                   WHERE r.game_day = earth_settlement_watermark(clock.current_game_day)
+                   WHERE r.game_day = control.settled_through_game_day
                      AND r.status IN ('completed', 'baseline')) AS completed_at
-            FROM clock
+            FROM daily_settlement_control control
+           WHERE control.id = 'WORLD'
         )
         SELECT control.status,
                clock.current_game_day::text,
                completed.game_day::text AS last_completed_game_day,
-               GREATEST(0, (clock.current_game_day - 1) - COALESCE(completed.game_day, 0))::text AS backlog_game_days,
+               GREATEST(0, (clock.current_game_day - 1) - COALESCE(control.settled_through_game_day, 0))::text AS backlog_game_days,
                completed.completed_at::text AS last_completed_at,
                active.current_phase,
                active.lease_owner,

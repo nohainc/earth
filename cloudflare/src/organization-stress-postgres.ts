@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { evaluateOrganizationHealth } from './organization-stress.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export async function refreshOrganizationFinancialStates(tx: PostgresRepository, gameDay: number): Promise<Record<string, unknown>> {
   const organizations = await tx.query<{ id: string; economic_id: string }>("SELECT o.id, e.economic_id FROM organizations o JOIN organization_economies e ON e.organization_id = o.id WHERE o.status <> 'DISSOLVED' ORDER BY o.id LIMIT 100");
@@ -33,10 +34,10 @@ export async function getOrganizationFinancialState(repository: PostgresReposito
   return { organizationId, state: state ?? null, cases: cases.rows, claims: claims.rows, generatedFrom: 'postgres-canonical-facts' };
 }
 
-export async function createOrganizationResolutionCase(repository: PostgresRepository, input: { organizationId: string; caseType: 'RESTRUCTURE' | 'MERGER' | 'SPLIT' | 'DISSOLUTION'; successorOrganizationId?: string; proposalId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
+export async function openOrganizationResolutionCase(repository: PostgresRepository, input: { organizationId: string; proposalId: string; caseType: 'DISSOLUTION' | 'MERGER' | 'SPLIT' | 'RESTRUCTURE'; successorOrganizationId?: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const existing = (await tx.query<{ id: string }>('SELECT id FROM organization_resolution_cases WHERE correlation_id = $1', [input.correlationId])).rows[0];
-    if (existing) return { ok: true, alreadyProcessed: true, caseId: existing.id, correlationId: input.correlationId };
+    const prior = (await tx.query<{ id: string }>('SELECT id FROM organization_resolution_cases WHERE correlation_id = $1', [input.correlationId])).rows[0];
+    if (prior) return { ok: true, alreadyProcessed: true, caseId: prior.id, correlationId: input.correlationId };
     const proposal = (await tx.query<{ subject_type: string; subject_id: string | null; status: string }>('SELECT subject_type, subject_id, status FROM governance_proposals_v4 WHERE id = $1', [input.proposalId])).rows[0];
     if (!proposal || proposal.subject_type !== 'ORGANIZATION' || proposal.subject_id !== input.organizationId || proposal.status !== 'PASSED') throw new Error('Resolution requires a passed proposal for this Organization');
     const organization = (await tx.query<{ id: string }>("SELECT id FROM organizations WHERE id = $1 AND status <> 'DISSOLVED' FOR UPDATE", [input.organizationId])).rows[0];
@@ -46,7 +47,7 @@ export async function createOrganizationResolutionCase(repository: PostgresRepos
       const successor = (await tx.query<{ id: string }>("SELECT id FROM organizations WHERE id = $1 AND status = 'ACTIVE'", [input.successorOrganizationId])).rows[0];
       if (!successor || successor.id === input.organizationId) throw new Error('Successor Organization is unavailable');
     }
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const caseId = `RESOLUTION-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const effectiveDay = day + 1;
     await tx.query(`INSERT INTO organization_resolution_cases (id, organization_id, case_type, status, opened_game_day, effective_game_day, approved_proposal_id, correlation_id, details) VALUES ($1,$2,$3,'APPROVED',$4,$5,$6,$7,$8::JSONB)`, [caseId, input.organizationId, input.caseType, day, effectiveDay, input.proposalId, input.correlationId, JSON.stringify({ successorOrganizationId: input.successorOrganizationId ?? null, approvedByHumanId: input.humanId, rulesVersion: 'organization-resolution-v1' })]);

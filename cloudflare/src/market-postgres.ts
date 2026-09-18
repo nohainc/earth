@@ -52,6 +52,8 @@ async function earthTreasury(tx: PostgresRepository): Promise<string | null> {
   return result.rows[0]?.account_id ?? null;
 }
 
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+
 export async function submitMarketOrder(repository: PostgresRepository, input: MarketOrderInput): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query('SELECT * FROM market_orders WHERE correlation_id = $1', [input.correlationId]);
@@ -65,7 +67,8 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
     const buyerFeeRate = input.side === 'buy' ? await marketFeeRate(tx, input.humanId) : '0';
     const reservedCents = input.side === 'buy' ? calculateQuoteUnits(quantityUnits, limitPriceUnits) + calculateFeeUnits(calculateQuoteUnits(quantityUnits, limitPriceUnits), buyerFeeRate) : 0n;
     const buyerFeeBps = input.side === 'buy' ? displayRateToBps(buyerFeeRate) : 0;
-    const batchId = await ensureMarketBatch(tx, Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), Number((await tx.query<{ game_minute: number }>("SELECT game_minute FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_minute ?? 0));
+    const clock = await readAuthoritativeGameTime(tx);
+    const batchId = await ensureMarketBatch(tx, clock.gameDay, clock.gameMinute);
     
     let ownerEconomicId: string;
     let ownerRegistryId: string;
@@ -132,8 +135,8 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
        VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'OPEN', $9, $10, $11, $12, $13, $14)`,
       [orderId, batchId, instrument.id, ownerEconomicId, input.side.toUpperCase(), quantityUnits.toString(), limitPriceUnits.toString(), buyerFeeBps, instrument.rules_version, input.correlationId, input.sourceType ?? 'MANUAL', input.policyId ?? null, input.policyBudgetId ?? null, input.goodTilGameDay ?? null],
     );
-    await reserveForOrder(tx, { ownerId: ownerRegistryId, assetId: assetIdToReserve, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0), reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' });
-    await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0));
+    await reserveForOrder(tx, { ownerId: ownerRegistryId, assetId: assetIdToReserve, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, gameDay: clock.gameDay, reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' });
+    await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), clock.gameDay);
     const order = await tx.query('SELECT * FROM market_orders WHERE id = $1', [orderId]);
     return { ok: true, order: order.rows[0], correlationId: input.correlationId };
   });
@@ -155,7 +158,7 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
       sellOrders: sells.map((row, sequenceNo) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.quantity_units)) - BigInt(String(row.remaining_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(sequenceNo) })),
     });
     if (!auction.fills.length) return { ok: true, filled: false, fillCount: 0 };
-    const day = settlementGameDay ?? Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
+    const day = settlementGameDay ?? (await readAuthoritativeGameTime(tx)).gameDay;
     const effects = new Map<string, EscrowEffect>();
     const add = (accountId: string, assetId: number, delta: bigint, reason: string) => {
       const key = `${accountId}:${assetId}`;
@@ -278,7 +281,7 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
       assetId: reservation.asset_id,
       amountUnits: BigInt(reservation.remaining_units),
       orderId: input.orderId,
-      gameDay: Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0),
+      gameDay: (await readAuthoritativeGameTime(tx)).gameDay,
       reason: 'market_order_cancellation',
     });
     await tx.query("UPDATE market_orders SET status = 'CANCELLED', remaining_units = 0 WHERE id = $1", [input.orderId]);

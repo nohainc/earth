@@ -2,6 +2,8 @@ import type { Env } from './index.ts';
 import { currentHuman } from './auth-session.ts';
 import { withRepository, type PostgresRepository } from './repository.ts';
 import { cancelMarketOrder, submitMarketOrder } from './market-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { assertEconomyCaughtUp, SettlementCatchupBarrierError } from './settlement-barrier-postgres.ts';
 import { assetUnitScale, MARKET_ASSET_IDS } from './market-model.ts';
 import { calculateFeeUnits, calculateQuoteUnits, displayPriceToUnits, displayQuantityToUnits, displayRateToBps, priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
@@ -131,7 +133,7 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
         `WITH recent AS (
           SELECT price_units::NUMERIC AS price_units, quantity_units::NUMERIC AS quantity_units
             FROM market_fills
-           WHERE instrument_id = $1 AND batch_id IN (SELECT id FROM market_batches WHERE game_day >= (SELECT game_day - 7 FROM world_state WHERE id = 'WORLD'))
+           WHERE instrument_id = $1 AND batch_id IN (SELECT id FROM market_batches WHERE game_day >= (SELECT game_day - 7 FROM earth_get_current_game_time()))
         )
         SELECT COUNT(*)::INTEGER AS fill_count,
                COALESCE(SUM(quantity_units), 0)::TEXT AS volume_units,
@@ -278,11 +280,9 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
                 WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = $2
                   AND a.account_type IN ('WALLET','INVENTORY') AND a.status = 'ACTIVE'
                 GROUP BY a.owner_economic_id`, [viewer!.house_id, assetId]);
-        const world = (await repository.query<{ game_day: string; game_minute: string }>(
-          "SELECT game_day::TEXT, game_minute::TEXT FROM world_state WHERE id = 'WORLD'",
-        )).rows[0];
-        const currentDay = Number(world?.game_day ?? 0);
-        const currentMinute = Number(world?.game_minute ?? 0);
+        const clock = await readAuthoritativeGameTime(repository);
+        const currentDay = clock.gameDay;
+        const currentMinute = clock.gameMinute;
         const batchMinutes = 60;
         const nextMinute = Math.ceil((currentMinute + 1) / batchMinutes) * batchMinutes;
         return {
@@ -316,7 +316,10 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0 || !correlationId) {
         return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
       }
-      const result = await withRepository(env, (repository) => submitMarketOrder(repository, { humanId: viewer!.id, product, side, quantity, limitPrice, correlationId, instrumentId: body.instrumentId, corporationId: body.corporationId, ownerId: body.ownerId }));
+      const result = await withRepository(env, async (repository) => {
+        await assertEconomyCaughtUp(repository);
+        return submitMarketOrder(repository, { humanId: viewer!.id, product, side, quantity, limitPrice, correlationId, instrumentId: body.instrumentId, corporationId: body.corporationId, ownerId: body.ownerId });
+      });
       if (!result) return unavailable();
       const order = result.order && typeof result.order === 'object' ? serializeOrder(result.order as Record<string, unknown>) : result.order;
       return Response.json({ ...result, order, persistence: 'planetscale-postgres' });
@@ -327,6 +330,9 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
   } catch (error) {
+    if (error instanceof SettlementCatchupBarrierError) {
+      return error.toResponse();
+    }
     const message = error instanceof Error ? error.message : 'Market request failed';
     return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 400 });
   }

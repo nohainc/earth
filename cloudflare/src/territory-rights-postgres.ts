@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 const MAX_RIGHT_DAYS = 365;
 const BASE_RENT_UNITS = 10n;
@@ -15,7 +16,7 @@ async function houseForHuman(tx: PostgresRepository, humanId: string) {
 }
 
 async function worldDay(tx: PostgresRepository) {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 async function beneficiaryAccount(tx: PostgresRepository, territoryId: string) {

@@ -1,17 +1,19 @@
 import type { PostgresRepository } from './repository.ts';
 import { quoteLoan } from './banking.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type CreditFacts = { borrowerEconomicId: string; walletId: string; walletBalance: bigint; reserveId: string; reserveBalance: bigint; operationsId: string; cashflow: bigint; policy: any; day: number };
 
 async function creditFacts(tx: PostgresRepository, humanId: string): Promise<CreditFacts> {
+  const clock = await readAuthoritativeGameTime(tx);
+  const day = clock.gameDay;
   const owner = (await tx.query<{ economic_id: string }>(`SELECT o.economic_id
     FROM humans h JOIN owner_registry o ON o.id = h.house_id AND o.owner_type = 'HOUSE'
     WHERE h.id = $1 AND h.status = 'ACTIVE'`, [humanId])).rows[0];
-  const policy = (await tx.query<any>(`SELECT p.* FROM bank_credit_policies p WHERE p.bank_economic_id = 'ECON-GLOBAL-BANK-001' AND p.status = 'ACTIVE' AND p.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD') AND (p.effective_to_game_day IS NULL OR p.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD')) ORDER BY p.effective_from_game_day DESC LIMIT 1`)).rows[0];
+  const policy = (await tx.query<any>(`SELECT p.* FROM bank_credit_policies p WHERE p.bank_economic_id = 'ECON-GLOBAL-BANK-001' AND p.status = 'ACTIVE' AND p.effective_from_game_day <= $1 AND (p.effective_to_game_day IS NULL OR p.effective_to_game_day >= $1) ORDER BY p.effective_from_game_day DESC LIMIT 1`, [day])).rows[0];
   const accounts = await tx.query<{ reserve_id: string; reserve_balance: string; operations_id: string; wallet_id: string; wallet_balance: string }>(`SELECT r.id::TEXT AS reserve_id, r.balance_units::TEXT AS reserve_balance, o.id::TEXT AS operations_id, w.id::TEXT AS wallet_id, w.balance_units::TEXT AS wallet_balance FROM economic_accounts r JOIN economic_accounts o ON o.owner_economic_id = r.owner_economic_id AND o.asset_id = 1 AND o.account_type = 'OPERATIONS' AND o.status = 'ACTIVE' JOIN economic_accounts w ON w.owner_economic_id = $1 AND w.asset_id = 1 AND w.account_type = 'WALLET' AND w.status = 'ACTIVE' WHERE r.owner_economic_id = 'ECON-GLOBAL-BANK-001' AND r.asset_id = 1 AND r.account_type = 'RESERVE' AND r.status = 'ACTIVE'`, [owner?.economic_id]);
   const row = accounts.rows[0];
-  const cashflow = (await tx.query<{ units: string }>(`SELECT COALESCE(SUM(e.delta_units) FILTER (WHERE e.delta_units > 0), 0)::TEXT AS units FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id WHERE e.account_id = $1 AND t.game_day >= (SELECT game_day - 30 FROM world_state WHERE id = 'WORLD')`, [row?.wallet_id])).rows[0];
-  const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  const cashflow = (await tx.query<{ units: string }>(`SELECT COALESCE(SUM(e.delta_units) FILTER (WHERE e.delta_units > 0), 0)::TEXT AS units FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id WHERE e.account_id = $1 AND t.game_day >= $2`, [row?.wallet_id, Math.max(1, day - 30)])).rows[0];
   if (!owner || !policy || !row) throw new Error('Bank credit policy or liquidity state is unavailable');
   return { borrowerEconomicId: owner.economic_id, walletId: row.wallet_id, walletBalance: BigInt(row.wallet_balance), reserveId: row.reserve_id, reserveBalance: BigInt(row.reserve_balance), operationsId: row.operations_id, cashflow: BigInt(cashflow?.units ?? 0), policy, day };
 }

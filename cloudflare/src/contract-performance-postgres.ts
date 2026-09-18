@@ -1,8 +1,11 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveOrganizationAuthority } from './organization-authority.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
-async function currentDay(tx: PostgresRepository): Promise<number> { return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1); }
+async function currentDay(tx: PostgresRepository): Promise<number> {
+  return (await readAuthoritativeGameTime(tx)).gameDay;
+}
 
 export async function listContractPerformance(repository: PostgresRepository, organizationId: string): Promise<Record<string, unknown>> {
   const rows = await repository.query(`SELECT p.id, p.contract_id, c.buyer_organization_id, c.seller_organization_id, p.period_start_game_day, p.period_end_game_day, p.status, p.obligation_id, p.dispute_reason, p.delivered_game_day, p.delivery_note, p.delivered_units, p.quality_score_bps, p.accepted_game_day, p.resolution_action, p.resolution_reason, p.resolved_game_day

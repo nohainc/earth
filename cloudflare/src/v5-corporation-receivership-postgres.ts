@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { toJsonSafe } from './json-safe.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 // @mutation-boundary atomic-sql
 
@@ -29,7 +30,7 @@ export async function submitV5CorporationRestructuringPlan(repository: PostgresR
     if (existing) return { ok: true, alreadyProcessed: true, plan: toJsonSafe(existing), correlationId: input.correlationId };
     const caseRow = (await tx.query<{ id: string; status: string }>(`SELECT id, status FROM v5_corporation_receivership_cases WHERE id = $1 AND corporation_id = $2 FOR UPDATE`, [input.caseId, input.corporationId])).rows[0];
     if (!caseRow || !['OPEN', 'RESTRUCTURING'].includes(caseRow.status)) throw new Error('Open Corporation receivership case not found');
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const id = `V5-RESTRUCTURE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     await tx.query(`INSERT INTO v5_corporation_restructuring_plans (id, case_id, corporation_id, proposed_by_human_id, plan_text, proposed_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [id, input.caseId, input.corporationId, input.humanId, text, day, input.correlationId]);
     await tx.query("UPDATE v5_corporation_receivership_cases SET status = 'RESTRUCTURING' WHERE id = $1", [input.caseId]);

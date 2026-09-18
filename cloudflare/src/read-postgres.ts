@@ -3,6 +3,7 @@ import { mapTechnologyCatalogRow } from './technology-postgres.ts';
 import { listRankings as listRankingsSnapshot } from './rankings-postgres.ts';
 import { priceUnitsToDisplayPrice } from './market-units.ts';
 import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export { listEvents } from './read-models/events-read.ts';
 export { listHistory } from './read-models/events-read.ts';
@@ -80,7 +81,7 @@ export async function listGovernanceProposals(repository: PostgresRepository): P
 }
 
 export async function listGovernanceRules(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const day = Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  const day = (await readAuthoritativeGameTime(repository)).gameDay;
   return getConstitutionReadModel(repository, { gameDay: day });
 }
 
@@ -148,7 +149,7 @@ export async function listPantheonOfAchievements(repository: PostgresRepository,
     livingLeaders: living.rows,
     houses: houses.rows,
     dynasticHouses: houses.rows,
-    game_day: Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id='WORLD'")).rows[0]?.game_day ?? 1),
+    game_day: (await readAuthoritativeGameTime(repository)).gameDay,
     search,
     limit,
     generatedFrom: 'postgres-canonical-facts',

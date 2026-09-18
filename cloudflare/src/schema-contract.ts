@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 129;
+export const EARTH_SCHEMA_VERSION = 130;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -100,7 +100,8 @@ export const REQUIRED_SCHEMA_TABLES = {
     "game_day",
     "game_minute",
     "world_seed",
-    "status"
+    "status",
+    "genesis_at"
   ],
   "institutions": [
     "id",
@@ -708,7 +709,8 @@ export const REQUIRED_SCHEMA_TABLES = {
     "status",
     "activated_at",
     "activated_by",
-    "updated_at"
+    "updated_at",
+    "settled_through_game_day"
   ],
   "daily_settlement_runs": [
     "game_day",
@@ -890,6 +892,8 @@ export const REQUIRED_SCHEMA_FUNCTIONS = [
   "earth_assert_baseline_integrity",
   "earth_game_day_from_total_minutes",
   "earth_get_current_game_time",
+  "earth_absolute_game_minute",
+  "earth_advance_settlement_cursor",
   "earth_advance_world_clock",
   "earth_post_settlement_batch",
   "earth_refresh_territory_capacity",

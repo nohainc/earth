@@ -4,6 +4,7 @@ import type { VotingMethod } from './governance-voting.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { proposalActionHandler } from './proposal-actions.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 const VOTING_METHODS = new Set<VotingMethod>(['ONE_HOUSE_ONE_VOTE', 'DELEGATED', 'SHARE_WEIGHTED', 'QUADRATIC_VOICE']);
 
@@ -12,7 +13,7 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 async function currentDay(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 async function canGovern(tx: PostgresRepository, humanId: string, subjectType: 'EARTH' | 'ORGANIZATION', subjectId: string | null): Promise<string> {
@@ -20,7 +21,7 @@ async function canGovern(tx: PostgresRepository, humanId: string, subjectType: '
   if (!human) throw new Error('Active Human not found');
   if (subjectType === 'EARTH') return human.house_id;
   // organization_capabilities remains a compatibility mirror; the charter is authoritative.
-  const allowed = await tx.query(`SELECT 1 FROM organization_memberships m JOIN organization_charter_versions v ON v.organization_id = m.organization_id AND v.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD') AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD')) WHERE m.organization_id = $1 AND m.house_id = $2 AND m.status = 'ACTIVE' AND (v.charter->'capabilities') ? 'GOVERNANCE'`, [subjectId, human.house_id]);
+  const allowed = await tx.query(`SELECT 1 FROM organization_memberships m JOIN organization_charter_versions v ON v.organization_id = m.organization_id AND v.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time()) AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time())) WHERE m.organization_id = $1 AND m.house_id = $2 AND m.status = 'ACTIVE' AND (v.charter->'capabilities') ? 'GOVERNANCE'`, [subjectId, human.house_id]);
   if (!allowed.rows[0]) throw new Error('Organization governance capability denied');
   return human.house_id;
 }
@@ -34,7 +35,7 @@ async function canVote(tx: PostgresRepository, humanId: string, proposalId: stri
 }
 
 export async function getOrganizationVotingSettings(repository: PostgresRepository, organizationId: string): Promise<Record<string, unknown>> {
-  const result = await repository.query(`SELECT s.organization_id, COALESCE(s.voting_method, v.charter->>'votingMethod') AS voting_method, s.voice_cycle_days, s.voice_per_cycle FROM organization_charter_versions v LEFT JOIN organization_governance_settings s ON s.organization_id = v.organization_id WHERE v.organization_id = $1 AND v.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD') AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD')) ORDER BY v.version DESC LIMIT 1`, [organizationId]);
+  const result = await repository.query(`SELECT s.organization_id, COALESCE(s.voting_method, v.charter->>'votingMethod') AS voting_method, s.voice_cycle_days, s.voice_per_cycle FROM organization_charter_versions v LEFT JOIN organization_governance_settings s ON s.organization_id = v.organization_id WHERE v.organization_id = $1 AND v.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time()) AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time())) ORDER BY v.version DESC LIMIT 1`, [organizationId]);
   if (!result.rows[0]) throw new Error('Organization not found');
   return { organizationId, settings: result.rows[0], generatedFrom: 'postgres-canonical-facts' };
 }

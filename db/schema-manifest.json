@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 129,
+  "migrationVersion": 130,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -102,7 +102,8 @@
       "game_day",
       "game_minute",
       "world_seed",
-      "status"
+      "status",
+      "genesis_at"
     ],
     "institutions": [
       "id",
@@ -710,7 +711,8 @@
       "status",
       "activated_at",
       "activated_by",
-      "updated_at"
+      "updated_at",
+      "settled_through_game_day"
     ],
     "daily_settlement_runs": [
       "game_day",
@@ -892,6 +894,8 @@
     "earth_assert_baseline_integrity",
     "earth_game_day_from_total_minutes",
     "earth_get_current_game_time",
+    "earth_absolute_game_minute",
+    "earth_advance_settlement_cursor",
     "earth_advance_world_clock",
     "earth_post_settlement_batch",
     "earth_refresh_territory_capacity",

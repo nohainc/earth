@@ -4,10 +4,11 @@ import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { createAffiliationEvent } from './game-events-postgres.ts';
 import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 async function day(repository: PostgresRepository): Promise<number> {
-  const result = await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-  return Number(result.rows[0]?.game_day ?? 0);
+  const clock = await readAuthoritativeGameTime(repository);
+  return clock.gameDay;
 }
 
 async function uniqueInstitutionName(repository: PostgresRepository, name: string): Promise<void> {
@@ -70,8 +71,8 @@ export async function listCorporations(repository: PostgresRepository, search = 
               FROM constitutional_rule_versions_v5 v
              WHERE v.authority_type = 'EARTH' AND v.authority_id = 'EARTH'
                AND v.status IN ('ACTIVE', 'RETIRED')
-               AND v.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
-               AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
+               AND v.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time())
+               AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time()))
              ORDER BY v.rule_code, v.effective_from_game_day DESC, v.version DESC
           ) earth_versions
       ) earth_rules ON TRUE
@@ -82,8 +83,8 @@ export async function listCorporations(repository: PostgresRepository, search = 
               FROM constitutional_rule_versions_v5 v
              WHERE v.authority_type = 'CORPORATION' AND v.authority_id = c.id
                AND v.status IN ('ACTIVE', 'RETIRED')
-               AND v.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
-               AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
+               AND v.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time())
+               AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time()))
              ORDER BY v.rule_code, v.effective_from_game_day DESC, v.version DESC
           ) corporation_versions
       ) corp_rules ON TRUE
@@ -349,7 +350,7 @@ export async function setCorporationTaxCharter(repository: PostgresRepository, i
     const current = JSON.stringify(prior.tax_charter ?? {});
     const next = JSON.stringify(charter);
     if (current === next) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, charter, version: prior.tax_charter_version, correlationId: input.correlationId };
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const version = Number(prior.tax_charter_version ?? 0) + 1;
     await tx.query(
       'UPDATE corporations SET tax_charter = $1::JSONB, tax_charter_version = $2, tax_charter_updated_game_day = $3, tax_charter_correlation_id = $4 WHERE id = $5',

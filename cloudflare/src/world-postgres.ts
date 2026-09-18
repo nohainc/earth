@@ -12,6 +12,7 @@ import { marketFeeRate } from './market-rules.ts';
 import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 import { getHouseSettlementProfileSnapshot, getCorporationSettlementProfileSnapshot } from './v5-settlement-profiles-postgres.ts';
 import { getAvailableScaleCapabilities } from './v5-scale-postgres.ts';
+import { readAuthoritativeGameTime, getSettlementCursor } from './world-clock-postgres.ts';
 
 /** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -24,8 +25,10 @@ function toJsonSafe<T>(value: T): T {
 }
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId?: string, viewerHouseId?: string): Promise<Record<string, unknown>> {
-  const [world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
-    repository.query("SELECT id, game_day, game_minute, world_seed, status FROM world_state WHERE id = 'WORLD'"),
+  const [clock, cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
+    readAuthoritativeGameTime(repository),
+    getSettlementCursor(repository),
+    repository.query("SELECT id, game_day, game_minute, world_seed, status, genesis_at FROM world_state WHERE id = 'WORLD'"),
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
     repository.query("SELECT id, house_id, display_name, age_years, standing, final_legacy, status FROM humans WHERE status = 'ACTIVE' ORDER BY id"),
     repository.query('SELECT code, asset_kind FROM economic_assets ORDER BY id'),
@@ -201,8 +204,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   ]);
   const latestServiceDay = serviceAssessments.rows[0]?.game_day;
   const serviceStatus = Object.fromEntries(serviceAssessments.rows.filter((row) => row.game_day === latestServiceDay).map((row) => [row.need_code, row.risk_level === 'NORMAL' ? 'normal' : row.risk_level === 'WATCH' ? 'basic' : 'critical']));
-  const gameDay = Number(world.rows[0]?.game_day ?? 1);
-  const gameMinute = Number(world.rows[0]?.game_minute ?? 0);
+  const gameDay = clock.gameDay;
+  const gameMinute = clock.gameMinute;
   const constitution = await getConstitutionReadModel(repository, {
     gameDay,
     corporationId: corporation.rows[0]?.id,
@@ -375,7 +378,20 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     ok: true,
     viewerId: viewerId ?? null,
     world: world.rows[0] ?? null,
-    clock: { day: gameDay, minute: gameMinute },
+    clock: {
+      day: clock.gameDay,
+      minute: clock.gameMinute,
+      totalGameMinutes: clock.totalGameMinutes,
+      genesisAt: clock.genesisAt,
+      serverNow: clock.serverNow,
+      realSecondsPerGameMinute: clock.realSecondsPerGameMinute,
+    },
+    settlement: {
+      settledThroughGameDay: cursor.settledThroughGameDay,
+      lastClosedGameDay: cursor.lastClosedGameDay,
+      backlogDays: cursor.backlogDays,
+      status: cursor.status,
+    },
     human: house,
     resources,
     resourceFlows: {},

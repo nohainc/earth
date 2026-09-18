@@ -10,6 +10,11 @@ import {
 } from './v5-settlement-profiles-postgres.ts';
 import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+
+async function currentDay(tx: PostgresRepository): Promise<number> {
+  return (await readAuthoritativeGameTime(tx)).gameDay;
+}
 
 type UpgradeResourceRequirement = {
   code: string;
@@ -142,7 +147,7 @@ async function getCorporationBuildingActionContext(repository: PostgresRepositor
 
 async function quoteCorporationBuildingUpgrade(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const next = (await tx.query<{ id: string; tier: number; slot_footprint: string; construction_credit_units: string; construction_minutes: number; minimum_scale_capability: string }>(
       'SELECT id, tier, slot_footprint::TEXT, construction_credit_units::TEXT, construction_minutes, minimum_scale_capability FROM building_catalog WHERE family_code = $1 AND tier = $2',
@@ -188,7 +193,7 @@ async function upgradeCorporationBuilding(repository: PostgresRepository, input:
   return repository.transaction(async (tx) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: prior.source_id, correlationId: input.correlationId };
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     if (building.tier >= 5) throw new Error('Building is already at the maximum tier');
     if ((await tx.query("SELECT 1 FROM construction_projects WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId])).rows[0]) throw new Error('This building already has an investment project in progress');
@@ -249,7 +254,7 @@ async function upgradeCorporationBuilding(repository: PostgresRepository, input:
 
 async function quoteCorporationBuildingDemolition(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const capacity = await quoteV5CorporationCapacityChange(tx, building.corporation_id, -BigInt(building.slot_footprint), day);
     return { ok: true, eligible: true, buildingId: building.id, ownerType: 'CORPORATION', footprintReleased: building.slot_footprint, capacity, status: 'ACTIVE_OR_UNDER_CONSTRUCTION', generatedFrom: 'postgres-canonical-corporation-demolition-quote-v5' };
@@ -260,7 +265,7 @@ async function decommissionCorporationBuilding(repository: PostgresRepository, i
   return repository.transaction(async (tx) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: input.buildingId, status: 'INACTIVE', correlationId: input.correlationId };
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const capacity = await quoteV5CorporationCapacityChange(tx, building.corporation_id, -BigInt(building.slot_footprint), day);
     const beforeProfile = await getCorporationSettlementProfileSnapshot(tx, building.corporation_id);
@@ -301,7 +306,7 @@ async function setCorporationBuildingOperatingMode(repository: PostgresRepositor
   return repository.transaction(async (tx) => {
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const result = await tx.query<{ id: string; operating_mode: string }>('UPDATE buildings SET operating_mode = $1 WHERE id = $2 RETURNING id, operating_mode', [input.mode, input.buildingId]);
-    await createGameEvent(tx, { id: `BUILDING-POLICY-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_OPERATING_POLICY_CHANGED', gameDay: Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1), actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: 'Corporation building operating policy changed', details: { buildingId: building.id, ownerType: 'CORPORATION', operatingMode: result.rows[0].operating_mode, capacityModel: 'V5_POOLED' }, correlationId: input.correlationId });
+    await createGameEvent(tx, { id: `BUILDING-POLICY-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_OPERATING_POLICY_CHANGED', gameDay: await currentDay(tx), actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: 'Corporation building operating policy changed', details: { buildingId: building.id, ownerType: 'CORPORATION', operatingMode: result.rows[0].operating_mode, capacityModel: 'V5_POOLED' }, correlationId: input.correlationId });
     return { ok: true, ownerType: 'CORPORATION', building: result.rows[0], correlationId: input.correlationId };
   });
 }
@@ -315,7 +320,7 @@ export async function quoteBuildingUpgrade(repository: PostgresRepository, input
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return quoteCorporationBuildingUpgrade(repository, input);
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
     await refreshV5SettlementProfilesForHouse(tx, building.house_id, day);
     const next = (await tx.query<{ id: string; tier: number; slot_footprint: string; construction_credit_units: string; construction_minutes: number; operating_credit_units: string; resource_input_units: unknown; resource_output_units: unknown; service_capacity_units: string; minimum_scale_capability: string }>(
@@ -383,7 +388,7 @@ export async function quoteBuildingDemolition(repository: PostgresRepository, in
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return quoteCorporationBuildingDemolition(repository, input);
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
     const capacity = await quoteV5HouseCapacityChange(tx, building.house_id, -BigInt(building.slot_footprint), day);
     return { ok: true, eligible: true, buildingId: building.id, footprintReleased: building.slot_footprint, capacity, status: 'ACTIVE_OR_UNDER_CONSTRUCTION' };
@@ -399,7 +404,7 @@ export async function upgradeBuilding(repository: PostgresRepository, input: { b
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return upgradeCorporationBuilding(repository, input);
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = (await tx.query<{ id: string; owner_economic_id: string; family_code: string; tier: number; catalog_id: string; slot_footprint: string; construction_credit_units: string; construction_minutes: number }>(`SELECT b.id, b.owner_economic_id, c.family_code, c.tier, c.id AS catalog_id, c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id JOIN humans h ON h.id = $2 AND h.house_id = (SELECT id FROM owner_registry WHERE economic_id = b.owner_economic_id AND owner_type = 'HOUSE') AND h.status = 'ACTIVE' WHERE b.id = $1 AND b.status = 'ACTIVE' FOR UPDATE`, [input.buildingId, input.humanId])).rows[0];
     if (!building) throw new Error('Building not found or not owned by the active House');
     await refreshV5SettlementProfilesForHouse(tx, (await tx.query<{ house_id: string }>('SELECT house_id FROM humans WHERE id = $1', [input.humanId])).rows[0].house_id, day);
@@ -489,7 +494,7 @@ export async function setBuildingOperatingMode(repository: PostgresRepository, i
       id: `BUILDING-POLICY-${input.correlationId}`,
       category: 'BUILDING',
       eventType: 'BUILDING_OPERATING_POLICY_CHANGED',
-      gameDay: Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1),
+      gameDay: await currentDay(tx),
       actorHumanId: input.humanId,
       subjectType: 'BUILDING',
       subjectId: building.id,
@@ -522,7 +527,7 @@ export async function decommissionBuilding(repository: PostgresRepository, input
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return decommissionCorporationBuilding(repository, input);
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const building = (await tx.query<{ id: string; territory_id: string | null; house_id: string; slot_footprint: string }>(`SELECT b.id, b.territory_id, h.house_id, c.slot_footprint::TEXT FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE' JOIN humans h ON h.house_id = o.id AND h.id = $2 AND h.status = 'ACTIVE' JOIN building_catalog c ON c.id = b.catalog_id WHERE b.id = $1 AND b.status IN ('ACTIVE','UNDER_CONSTRUCTION') FOR UPDATE`, [input.buildingId, input.humanId])).rows[0];
     if (!building) throw new Error('Building not found, inactive, or not owned by the active House');
     const v5CapacityQuote = await quoteV5HouseCapacityChange(tx, building.house_id, -BigInt(building.slot_footprint), day);
@@ -560,7 +565,7 @@ export async function quoteBuildingRetrofit(
   input: { buildingId: string; humanId: string; targetGeneration?: number },
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const owner = (await tx.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
       `SELECT owner.owner_type
          FROM buildings b
@@ -672,7 +677,7 @@ export async function retrofitBuilding(
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: prior.source_id, correlationId: input.correlationId };
 
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = await currentDay(tx);
     const owner = (await tx.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
       `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
     )).rows[0];
