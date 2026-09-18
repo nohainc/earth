@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { formatCreditUnits } from './money.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
 
@@ -151,7 +152,7 @@ export async function quoteCorporationBuildingResearch(repository: PostgresRepos
     )).rows[0] ?? null;
     const costUnits = BigInt(target.research_credit_units);
     const durationDays = Number(target.research_duration_game_days);
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     return {
       ok: true,
       corporationId,

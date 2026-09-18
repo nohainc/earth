@@ -44,6 +44,7 @@ export type DailySettlementPhaseHandlers = {
   corporationDynamics: (context: DailySettlementPhaseContext) => Promise<unknown>;
   houseNeedsServices: (context: DailySettlementPhaseContext) => Promise<unknown>;
   perishableResourceDecay: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  housePolicyExecution: (context: DailySettlementPhaseContext) => Promise<unknown>;
   budgetDividendEligibility: (context: DailySettlementPhaseContext) => Promise<unknown>;
   patentExpirations: (context: DailySettlementPhaseContext) => Promise<unknown>;
   researchAndProgress: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -107,6 +108,7 @@ export function createDailySettlementPhaseRegistry(
     required('research_and_progress', 128, 'all', handlers.researchAndProgress),
     required('global_programs', 129, 'all', handlers.globalPrograms),
     required('public_projects', 130, 'all', handlers.publicProjects),
+    required('house_policy_execution', 132, 'owner-shards', handlers.housePolicyExecution),
     deferred('budget_dividend_eligibility', 135, 'all', handlers.budgetDividendEligibility),
     required('financial_states', 140, 'all', handlers.financialStates),
     required('lifecycle', 145, 'all', handlers.lifecycle),

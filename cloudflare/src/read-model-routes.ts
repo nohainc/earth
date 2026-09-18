@@ -1,5 +1,6 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { currentHuman, currentViewer } from './auth-session.ts';
 import {
   auditWorld as auditWorldPostgres,
@@ -275,7 +276,7 @@ export async function handleReadModelRoutes(
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const result = await withRepository(env, async (repository) => {
-      const current = Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+      const current = (await readAuthoritativeGameTime(repository)).gameDay;
       return settlePublicProject(repository, publicProjectSettleMatch[1], current);
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -335,7 +336,7 @@ export async function handleReadModelRoutes(
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     try {
-      const result = await withRepository(env, async (repository) => settleGlobalProgramFunding(repository, programSettleMatch[1], Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1)));
+      const result = await withRepository(env, async (repository) => settleGlobalProgramFunding(repository, programSettleMatch[1], (await readAuthoritativeGameTime(repository)).gameDay));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json(result);
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program settlement failed' }, { status: 409 }); }
@@ -346,8 +347,9 @@ export async function handleReadModelRoutes(
     const viewer = await currentViewer(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const result = await withRepository(env, async (repository) => {
-      const [world, technology] = await Promise.all([
-        repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
+      const [clock, worldBatch, technology] = await Promise.all([
+        readAuthoritativeGameTime(repository),
+        repository.query('SELECT market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
         repository.query(`SELECT ROUND(p.progress_research_points * 100.0 / NULLIF(p.required_research_points, 0), 2) AS progress
           FROM corporation_research_projects p
           JOIN house_affiliations m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
@@ -357,9 +359,9 @@ export async function handleReadModelRoutes(
       ]);
       return {
         activity: [
-          { type: 'world_clock', day: world.rows[0]?.game_day ?? 0 },
+          { type: 'world_clock', day: clock.gameDay },
           { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 },
-          { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 0 },
+          { type: 'market_cycle', batch: worldBatch.rows[0]?.market_batch_seconds ?? 0 },
         ],
       };
     });

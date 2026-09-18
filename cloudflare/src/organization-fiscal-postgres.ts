@@ -1,13 +1,14 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveOrganizationAuthority } from './organization-authority.ts';
 
 async function day(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 async function authorized(tx: PostgresRepository, organizationId: string, houseId: string, capability: string): Promise<void> {
-  const result = await tx.query(`SELECT 1 FROM organization_memberships m JOIN organization_charter_versions v ON v.organization_id = m.organization_id AND v.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD') AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD')) WHERE m.organization_id = $1 AND m.house_id = $2 AND m.status = 'ACTIVE' AND m.role_code IN ('FOUNDER','ADMIN','TREASURER','GOVERNOR') AND (v.charter->'capabilities') ? $3`, [organizationId, houseId, capability]);
+  const result = await tx.query(`SELECT 1 FROM organization_memberships m JOIN organization_charter_versions v ON v.organization_id = m.organization_id AND v.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time()) AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time())) WHERE m.organization_id = $1 AND m.house_id = $2 AND m.status = 'ACTIVE' AND m.role_code IN ('FOUNDER','ADMIN','TREASURER','GOVERNOR') AND (v.charter->'capabilities') ? $3`, [organizationId, houseId, capability]);
   if (!result.rows[0]) throw new Error(`Organization ${capability.toLowerCase()} capability denied`);
 }
 
@@ -15,7 +16,7 @@ export async function provisionOrganizationEconomy(repository: PostgresRepositor
   return repository.transaction(async (tx) => {
     const organization = (await tx.query<{ id: string; archetype: string }>("SELECT id, archetype FROM organizations WHERE id = $1 AND status = 'ACTIVE'", [organizationId])).rows[0];
     if (!organization) throw new Error('Organization not found');
-    const capable = await tx.query("SELECT 1 FROM organization_charter_versions WHERE organization_id = $1 AND effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD') AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD')) AND (charter->'capabilities') ? 'ECONOMIC_OWNER' AND (charter->'authorityLimits'->>'canOwnAssets')::BOOLEAN = TRUE", [organizationId]);
+    const capable = await tx.query("SELECT 1 FROM organization_charter_versions WHERE organization_id = $1 AND effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time()) AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time())) AND (charter->'capabilities') ? 'ECONOMIC_OWNER' AND (charter->'authorityLimits'->>'canOwnAssets')::BOOLEAN = TRUE", [organizationId]);
     if (!capable.rows[0]) throw new Error('Organization is not eligible for an economy');
     const existing = (await tx.query<{ economic_id: string }>('SELECT economic_id FROM organization_economies WHERE organization_id = $1', [organizationId])).rows[0];
     const economicId = existing?.economic_id ?? `ECON-ORG-${organizationId}`;

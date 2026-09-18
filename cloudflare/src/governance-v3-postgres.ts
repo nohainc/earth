@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type ProposalInput = {
   humanId: string;
@@ -41,7 +42,7 @@ export async function createProposalV3(repository: PostgresRepository, input: Pr
       if (!territory) throw new Error('Territory not found or inactive');
       if (institution.kind === 'CORPORATION' && territory.corporation_id !== input.institutionId) throw new Error('Corporation may only target its own Territory');
     }
-    const gameDay = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const gameDay = (await readAuthoritativeGameTime(tx)).gameDay;
     const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const targetValue = { ...value, correlationId: input.correlationId, category: input.targetCategory };
     await tx.query(`INSERT INTO proposals

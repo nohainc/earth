@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { EARTH_SCHEMA_VERSION } from './schema-contract.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type ReadinessRow = { count: string };
 
@@ -8,9 +9,8 @@ type ReadinessRow = { count: string };
  * produces the evidence required before an operator may enable V5 posting.
  */
 export async function getV5CutoverReadiness(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"))
-    .rows[0];
-  const gameDay = Number(world?.game_day ?? 0);
+  const clock = await readAuthoritativeGameTime(repository);
+  const gameDay = clock.gameDay;
   const assessedGameDay = Math.max(1, gameDay - 1);
   const [migration, earthPolicy, corporationCoverage, admissionCoverage, backfill, missingCapacity, failedRuns, earthSnapshot, corporationSnapshots, definitions, taxReconciliation, legacyConstitutionalProposals] = await Promise.all([
     repository.query<ReadinessRow>('SELECT COALESCE(MAX(version), 0)::TEXT AS count FROM earth_schema_migrations'),

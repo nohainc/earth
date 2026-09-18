@@ -1,21 +1,37 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 
-export const ONBOARDING_MILESTONES = [
-  { code: 'review_house_assets', title: 'Review your House assets', description: 'Understand your starting Credit, Food, Energy, and Materials.' },
-  { code: 'inspect_territory', title: 'Inspect your Territory', description: 'Choose where your House will build and which capacity constraints matter.' },
-  { code: 'set_operating_policy', title: 'Set an operating policy', description: 'Protect reserves and define how your House participates in the Spot Market.' },
-  { code: 'start_first_producer', title: 'Start your first producer', description: 'Use a valid server quote to begin a sustainable production loop.' },
-  { code: 'place_first_market_order', title: 'Place your first market order', description: 'Buy or sell through the canonical Spot Market with escrow protection.' },
-  { code: 'discover_organization', title: 'Discover an Organization', description: 'Find a Corporation or Community that matches your House strategy.' },
-] as const;
+type Milestone = {
+  code: string;
+  title: string;
+  description: string;
+  rewardCredits: string;
+  targetCategory: string;
+  targetAction: string;
+};
 
-type ProgressRow = { house_id: string; onboarding_version: string; status: 'ACTIVE' | 'COMPLETED' | 'SKIPPED'; completed_milestones: string[]; completed_game_day: string | null };
+type ProgressRow = {
+  house_id: string;
+  onboarding_version: number;
+  status: 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
+  completed_milestones: string[];
+  completed_game_day: number | null;
+};
 type QueryRows<Row> = { rows?: Row[] } | undefined;
 
 function rowsOf<Row>(result: QueryRows<Row>): Row[] {
   return result?.rows ?? [];
 }
+
+export const ONBOARDING_MILESTONES: Milestone[] = [
+  { code: 'EXPLORE_OVERVIEW', title: 'Tour Your House', description: 'Review your initial household wallet balance and food reserves.', rewardCredits: '100', targetCategory: 'OVERVIEW', targetAction: 'review_house_assets' },
+  { code: 'INSPECT_TERRITORY', title: 'Inspect Territory', description: 'Check local territory capacity, congestion, and public amenities.', rewardCredits: '100', targetCategory: 'TERRITORY', targetAction: 'inspect_territory' },
+  { code: 'SET_HOUSE_POLICY', title: 'Set First House Policy', description: 'Adopt an operating stance for dividend reinvestment and resource consumption.', rewardCredits: '150', targetCategory: 'POLICY', targetAction: 'set_operating_policy' },
+  { code: 'PRODUCE_FIRST_OUTPUT', title: 'Activate A Production Facility', description: 'Ensure your house or workplace has an active productive installation.', rewardCredits: '250', targetCategory: 'PRODUCTION', targetAction: 'start_first_producer' },
+  { code: 'EXECUTE_FIRST_ORDER', title: 'Participate In The Market', description: 'Submit an order to purchase missing inputs or sell surplus inventory.', rewardCredits: '200', targetCategory: 'MARKET', targetAction: 'place_first_market_order' },
+  { code: 'JOIN_ORGANIZATION', title: 'Explore Social Entities', description: 'Inspect available corporations, syndicates, and communities.', rewardCredits: '200', targetCategory: 'ORGANIZATIONS', targetAction: 'discover_organization' },
+];
 
 const ACTION_ROUTES: Record<string, string> = {
   review_house_assets: '/app/house',
@@ -26,14 +42,14 @@ const ACTION_ROUTES: Record<string, string> = {
   discover_organization: '/app/organizations',
 };
 
-function nextMilestone(completed: Set<string>): typeof ONBOARDING_MILESTONES[number] | null {
+function nextMilestone(completed: Set<string>): Milestone | null {
   return ONBOARDING_MILESTONES.find((milestone) => !completed.has(milestone.code)) ?? null;
 }
 
 export async function getHouseOnboarding(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
-  const [progress, world, assets, credit, buildings, orders, residence, territory] = await Promise.all([
+  const [progress, clock, assets, credit, buildings, orders, residence, territory] = await Promise.all([
     repository.query<ProgressRow>('SELECT house_id, onboarding_version, status, completed_milestones, completed_game_day FROM house_onboarding_progress WHERE house_id = $1', [houseId]),
-    repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"),
+    readAuthoritativeGameTime(repository),
     repository.query<{ code: string; balance_units: string }>(`SELECT asset.code, COALESCE(account.balance_units, 0)::TEXT AS balance_units
       FROM economic_assets asset LEFT JOIN owner_registry owner ON owner.id = $1 AND owner.owner_type = 'HOUSE'
       LEFT JOIN economic_accounts account ON account.owner_economic_id = owner.economic_id AND account.asset_id = asset.id AND account.account_type = 'INVENTORY' AND account.status = 'ACTIVE'
@@ -60,13 +76,12 @@ export async function getHouseOnboarding(repository: PostgresRepository, houseId
        ORDER BY r.effective_from_game_day DESC LIMIT 1`, [houseId]),
   ]);
   const progressRows = rowsOf(progress);
-  const worldRows = rowsOf(world);
   const assetRows = rowsOf(assets);
   const creditRows = rowsOf(credit);
   const buildingRows = rowsOf(buildings);
   const orderRows = rowsOf(orders);
   const territoryRows = rowsOf(territory);
-  const row = progressRows[0] ?? { house_id: houseId, onboarding_version: 'onboarding-v4-1', status: 'ACTIVE', completed_milestones: [], completed_game_day: null };
+  const row = progressRows[0] ?? { house_id: houseId, onboarding_version: 1, status: 'ACTIVE', completed_milestones: [], completed_game_day: null };
   const completed = new Set(Array.isArray(row.completed_milestones) ? row.completed_milestones : []);
   const next = nextMilestone(completed);
   const residenceRow = territoryRows[0];
@@ -84,7 +99,7 @@ export async function getHouseOnboarding(repository: PostgresRepository, houseId
     : null;
   return {
     status: row.status, version: row.onboarding_version,
-    currentGameDay: Number(worldRows[0]?.game_day ?? 1), completedMilestones: [...completed],
+    currentGameDay: clock.gameDay, completedMilestones: [...completed],
     milestones: ONBOARDING_MILESTONES, recommendedNext: next, recommendation,
     facts: {
       creditBalanceUnits: creditRows[0]?.balance_units ?? '0',
@@ -108,7 +123,7 @@ export async function advanceHouseOnboarding(repository: PostgresRepository, hou
   return repository.transaction(async (tx) => {
     const replay = await tx.query('SELECT 1 FROM game_events WHERE correlation_id = $1 LIMIT 1', [correlationId]);
     if (replay.rows[0]) return { ok: true, alreadyProcessed: true, correlationId };
-    const gameDay = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const gameDay = (await readAuthoritativeGameTime(tx)).gameDay;
     const current = (await tx.query<ProgressRow>('SELECT house_id, onboarding_version, status, completed_milestones, completed_game_day FROM house_onboarding_progress WHERE house_id = $1 FOR UPDATE', [houseId])).rows[0];
     if (!current) throw new Error('House onboarding state is unavailable');
     if (current.status !== 'ACTIVE') return { ok: true, alreadyProcessed: true, status: current.status, completedMilestones: current.completed_milestones };

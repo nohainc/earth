@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { applyConditionStack } from './world-conditions.ts';
 import { quoteV5HouseCapacityChange } from './v5-capacity-postgres.ts';
@@ -114,7 +115,7 @@ export async function getConstructionQuote(
     const credit = (await tx.query<{ balance_units: string }>(
       `SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = $2 AND status = 'ACTIVE'`, [economicOwner, isPublic ? 'TREASURY' : 'WALLET'])).rows[0]?.balance_units ?? '0';
     const requirements = await loadConstructionRequirements(tx, catalog.id, economicOwner, isPublic);
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const duration = await effectiveConstructionMinutes(tx, day, input.territoryId, catalog.code, catalog.construction_minutes);
     return {
       catalog: { id: catalog.id, code: catalog.code, ownershipScope: catalog.ownership_scope, constructionMinutes: catalog.construction_minutes, effectiveConstructionMinutes: duration.minutes, constructionIndexModifiersBps: duration.modifiersBps, conditionModifiers: duration.modifierDetails },
@@ -166,8 +167,8 @@ export async function purchaseBuildingInTerritory(
       )).rows[0]?.economic_id
       : owner.economic_id;
     if (!ownerEconomicId) throw new Error(`${isPublic ? 'Corporation' : 'House'} economic owner not found`);
-    const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
-    const gameDay = Number(world?.game_day ?? 1);
+    const clock = await readAuthoritativeGameTime(tx);
+    const gameDay = clock.gameDay;
     const duration = await effectiveConstructionMinutes(tx, gameDay, input.territoryId, catalog.code, catalog.construction_minutes);
     const v5CapacityQuote = !isPublic
       ? await quoteV5HouseCapacityChange(tx, owner.house_id, BigInt(catalog.slot_footprint), gameDay)
@@ -284,7 +285,7 @@ export async function cancelConstructionProject(repository: PostgresRepository, 
     )).rows[0];
     if (!project) throw new Error('Construction project not found');
     if (project.status !== 'IN_PROGRESS') return { ok: true, alreadyProcessed: true, status: project.status, projectId, correlationId };
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const refund = BigInt(project.credit_cost_units) * BigInt(project.cancellation_refund_bps) / 10_000n;
     if (refund > 0n) {
       const source = (await tx.query<{ id: string }>(`SELECT a.id::TEXT AS id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`)).rows[0];

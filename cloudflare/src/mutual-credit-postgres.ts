@@ -1,9 +1,10 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 const NETWORK_UNIT_RE = /^[A-Z][A-Z0-9_]{2,15}$/;
 
 async function currentDay(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 async function houseForHuman(tx: PostgresRepository, humanId: string): Promise<string> {

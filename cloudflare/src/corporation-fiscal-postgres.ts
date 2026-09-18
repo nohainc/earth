@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
@@ -37,7 +38,7 @@ export async function getCorporationFiscalState(repository: PostgresRepository, 
     repository.query(`SELECT rules_json, version_ids, game_day
         FROM resolved_constitution_snapshots_v5
        WHERE authority_type = 'CORPORATION' AND authority_id = $1
-         AND game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD')`, [corporationId]),
+         AND game_day = (SELECT game_day FROM earth_get_current_game_time())`, [corporationId]),
     getActiveV5StandardCapacity(repository)
       .then((policy) => getV5CorporationCapacity(repository, corporationId, policy.standardTerritoryCapacity))
       .catch(() => null),
@@ -101,8 +102,8 @@ export async function spendCorporationBudget(
     if (!authority.rows[0]) throw new Error('Corporation spending permission is required');
     const amountUnits = moneyToCents(input.amount);
     if (amountUnits <= 0n) throw new Error('Public spending amount must be positive');
-    const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
-    const gameDay = Number(world?.game_day ?? 1);
+    const clock = await readAuthoritativeGameTime(tx);
+    const gameDay = clock.gameDay;
     const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [input.corporationId])).rows[0]?.status;
     const spendingCategory = budgetCategory(input.category);
     if (delinquency === 'EARTH_RECEIVERSHIP' && spendingCategory !== 'ESSENTIAL_SERVICES') throw new Error('Corporation receivership blocks discretionary spending');

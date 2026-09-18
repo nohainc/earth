@@ -1,12 +1,13 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { charterPreset, charterTemplateId, validateOrganizationCharter } from './organization-charter.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 const ARCHETYPES = new Set(['COMMUNITY', 'CORPORATION', 'COOPERATIVE', 'PUBLIC_BODY', 'RESEARCH', 'BANK']);
 const CAPABILITIES = new Set(['ECONOMIC_OWNER', 'GOVERNANCE', 'TERRITORY_GOVERNOR', 'RESEARCH', 'BANKING', 'PUBLIC_PROJECTS']);
 
 async function gameDay(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 async function requireHouse(tx: PostgresRepository, humanId: string): Promise<{ houseId: string; displayName: string }> {

@@ -5,15 +5,54 @@ import { worldSnapshot } from '../cloudflare/src/world-postgres.ts';
 test('the canonical world payload contains the V4 client gameplay read model', async () => {
   const repository = {
     async query(sql) {
-      if (sql.includes("FROM world_state WHERE id = 'WORLD'")) {
-        return { rows: [{ id: 'WORLD', game_day: 12, game_minute: 240, world_seed: 'test', status: 'ACTIVE' }] };
+      if (sql.includes('earth_get_current_game_time()') || sql.includes("FROM world_state WHERE id = 'WORLD'")) {
+        return {
+          rows: [{
+            id: 'WORLD',
+            game_day: '12',
+            game_minute: 240,
+            total_game_minutes: '17520',
+            genesis_at: new Date('2026-01-01T00:00:00Z'),
+            server_now: new Date('2026-01-01T04:00:00Z'),
+            elapsed_real_seconds: '17520',
+            real_seconds_per_game_minute: 1,
+            world_seed: 'test',
+            status: 'ACTIVE',
+          }],
+        };
+      }
+      if (sql.includes('resolved_constitution_snapshots_v5') || sql.includes('earth_resolve_effective_constitution')) {
+        return {
+          rows: [{
+            id: 'CONST-EARTH-EARTH-D12',
+            rate_bps: '100',
+            market_fee_rate_bps: 100,
+            transaction_tax_rate_bps: 50,
+            rules_json: { 'EARTH.MARKET.TRANSACTION_TAX_RATE': '100' },
+            version_ids: { 'EARTH.MARKET.TRANSACTION_TAX_RATE': 'CRV-1' },
+            provenance_json: { 'EARTH.MARKET.TRANSACTION_TAX_RATE': 'EARTH' },
+          }],
+        };
+      }
+      if (sql.includes('constitutional_rule_versions_v5')) {
+        return {
+          rows: [{
+            id: 'CRV-1',
+            rule_code: 'EARTH.MARKET.TRANSACTION_TAX_RATE',
+            authority_type: 'EARTH',
+            authority_id: 'EARTH',
+            value_json: { value: 100 },
+            version: 1,
+          }],
+        };
       }
       if (sql.includes('FROM economic_assets')) return { rows: [{ code: 'CREDIT', asset_kind: 'CREDIT' }] };
       return { rows: [] };
     },
   };
   const snapshot = await worldSnapshot(repository, 'HUMAN-1', 'HOUSE-1');
-  assert.deepEqual(snapshot.clock, { day: 12, minute: 240 });
+  assert.equal(snapshot.clock.day, 12);
+  assert.equal(snapshot.clock.minute, 240);
   assert.equal(snapshot.human, null);
   assert.deepEqual(snapshot.resources, {});
   assert.deepEqual(snapshot.buildings, []);

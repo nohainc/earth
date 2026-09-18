@@ -3,6 +3,7 @@ import { createAffiliationEvent } from './game-events-postgres.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
 import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type FoundingPolicy = { id: string; version: number; fee: bigint; reserve: bigint; rulesVersion: string };
 
@@ -28,7 +29,7 @@ export async function quoteV5CorporationFounding(repository: PostgresRepository,
     const normalized = name.trim();
     if (normalized.length < 3 || normalized.length > 80) throw new Error('Corporation name must be between 3 and 80 characters');
     const founderContext = await founder(tx, humanId);
-    const world = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const world = (await readAuthoritativeGameTime(tx)).gameDay;
     const policy = await foundingPolicy(tx, world);
     const existing = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1) AND status = \'ACTIVE\'', [normalized])).rows[0];
     const earthCapacityPolicy = await getActiveV5StandardCapacity(tx, world);
@@ -45,8 +46,7 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
     const house = await founder(tx, input.humanId);
     const duplicate = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1) AND status = \'ACTIVE\'', [normalized])).rows[0];
     if (duplicate) throw new Error('Corporation name already exists');
-    const dayRow = (await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
-    const day = Number(dayRow?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const policy = await foundingPolicy(tx, day);
     const earthCapacityPolicy = await getActiveV5StandardCapacity(tx, day);
     const id = `CORP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;

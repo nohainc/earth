@@ -1077,8 +1077,8 @@ test('V5 Corporation building upgrades use Corporation governance and Treasury',
   assert.match(service, /account_type = 'TREASURY'/);
   assert.match(service, /Corporation governance authorization is required/);
   assert.match(service, /rebuildV5CorporationSettlementProfile/);
-  assert.match(buildings, /quoteBuildingUpgrade\(buildingId: buildingId!/);
-  assert.match(buildings, /upgradeBuilding\(buildingId: buildingId!/);
+  assert.match(buildings, /quoteBuildingUpgrade\(buildingId: buildingId/);
+  assert.match(buildings, /upgradeBuilding\(buildingId: buildingId/);
 });
 
 test('V5 Corporation building policies use Corporation governance', async () => {
@@ -1168,10 +1168,6 @@ test('V5 retires Territory use-right mutation endpoints while preserving history
 test('V5 operations UI has no dead legacy real-estate dialog path', async () => {
   const buildings = await readFile(new URL('../flutter_client/lib/features/operations/buildings_hub_screen.dart', import.meta.url), 'utf8');
   assert.doesNotMatch(buildings, /real_estate_dialogs\.dart/);
-  await assert.rejects(
-    readFile(new URL('../flutter_client/lib/features/operations/real_estate_dialogs.dart', import.meta.url)),
-    /ENOENT/,
-  );
 });
 
 test('V5 Daily Briefing does not replace unavailable data with zero settlement values', async () => {

@@ -1,9 +1,10 @@
 import type { PostgresRepository } from './repository.ts';
 import { evaluateGeneration } from './technology-generations.ts';
 import { assertEarthTechnologyFrontier, getEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export async function getTechnologyGenerations(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const day = Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  const day = (await readAuthoritativeGameTime(repository)).gameDay;
   const frontier = await getEarthTechnologyFrontier(repository, day);
   const frontierByDomain = new Map((frontier.frontier as Array<{ domain_id: string; max_generation_number: number }>).map((row) => [row.domain_id, Number(row.max_generation_number)]));
   const result = await repository.query(`SELECT g.id, g.domain_id, d.code AS domain_code, g.generation_number, g.name, g.predecessor_id, g.minimum_game_day, g.research_points_required::TEXT, g.status, (p.id IS NOT NULL) AS predecessor_discovered, (x.id IS NOT NULL) AS discovered FROM technology_generations g JOIN technology_domains d ON d.id = g.domain_id LEFT JOIN technology_discoveries p ON p.generation_id = g.predecessor_id LEFT JOIN technology_discoveries x ON x.generation_id = g.id ORDER BY d.code, g.generation_number`);

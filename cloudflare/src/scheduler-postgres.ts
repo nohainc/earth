@@ -87,6 +87,7 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   }),
   globalPrograms: async ({ tx, day }) => advanceGlobalPrograms(tx, day),
   publicProjects: async ({ tx, day }) => settleDuePublicProjectsInTransaction(tx, day),
+  housePolicyExecution: async ({ tx, day, shard, shardCount }) => executeHousePoliciesForDay(tx, day, { shard, shardCount }),
   lifecycle: async ({ tx, day }) => processHouseMortality(tx, day),
   postSuccessionAccessRefresh: async ({ tx, day }) => refreshPostSuccessionAccess(tx, day),
   financialStates: async ({ tx, day }) => refreshOrganizationFinancialStates(tx, day),
@@ -173,8 +174,6 @@ export async function runWorldSchedulerTick(
 
   let currentSettled = cursor.settledThroughGameDay;
   let lastStatus: SettlementResult['status'] = currentSettled >= targetDay ? 'already_processed' : 'completed';
-  let totalPolicyActions = 0;
-  let totalPolicyExceptions = 0;
 
   // 2. Strict sequential catch-up for all uncompleted closed days
   while (currentSettled < targetDay) {
@@ -197,17 +196,25 @@ export async function runWorldSchedulerTick(
       break;
     }
 
-    if (settlement.status === 'completed') {
-      const policy = await executeHousePoliciesForDay(repository, nextDay);
-      totalPolicyActions += policy.actions;
-      totalPolicyExceptions += policy.exceptions;
-    }
-
     currentSettled = nextDay;
 
     if (currentSettled - cursor.settledThroughGameDay >= maxCatchupDays) {
       break;
     }
+  }
+
+  let totalPolicyActions = 0;
+  let totalPolicyExceptions = 0;
+  if (currentSettled > cursor.settledThroughGameDay) {
+    const policySummary = await repository.query<{ actions: string; exceptions: string }>(
+      `SELECT COUNT(*) FILTER (WHERE action_type <> 'EXCEPTION')::TEXT AS actions,
+              COUNT(*) FILTER (WHERE action_type = 'EXCEPTION')::TEXT AS exceptions
+         FROM policy_execution_log
+        WHERE game_day > $1 AND game_day <= $2`,
+      [cursor.settledThroughGameDay, currentSettled],
+    ).catch(() => ({ rows: [] }));
+    totalPolicyActions = Number(policySummary.rows[0]?.actions ?? 0);
+    totalPolicyExceptions = Number(policySummary.rows[0]?.exceptions ?? 0);
   }
 
   if (schedulerRunId) {
@@ -230,4 +237,5 @@ export async function runWorldSchedulerTick(
     alreadyProcessed: cursor.settledThroughGameDay >= targetDay,
   };
 }
+
 

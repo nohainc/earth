@@ -6,7 +6,7 @@ test('House Daily Summary derives deterministic values from V2 records', async (
   const repository = {
     async query(sql) {
       const normalized = sql.toLowerCase();
-      if (normalized.includes('from world_state')) return { rows: [{ game_day: 5 }] };
+      if (normalized.includes('earth_get_current_game_time')) return { rows: [{ game_day: 5, game_minute: 0, total_game_minutes: 5 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
       if (normalized.includes('from house_daily_statements')) return { rows: [{ opening_assets: { CREDIT: '40' }, closing_assets: { CREDIT: '100' }, production: { FOOD: '2' }, consumption: { FOOD: '1' }, market_activity: {}, obligations: {}, exceptions: {}, net_credit_units: '60' }] };
       if (normalized.includes('as income')) return { rows: [{ income: '100', expenses: '40' }] };
       if (normalized.includes('as taxes')) return { rows: [{ taxes: '5' }] };
@@ -40,7 +40,7 @@ test('House Daily Summary derives deterministic values from V2 records', async (
 test('House Daily Summary returns clean default summary when statement row is missing', async () => {
   const repository = {
     async query(sql) {
-      if (sql.toLowerCase().includes('from world_state')) return { rows: [{ game_day: 5 }] };
+      if (sql.toLowerCase().includes('earth_get_current_game_time')) return { rows: [{ game_day: 5, game_minute: 0, total_game_minutes: 5 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
       if (sql.toLowerCase().includes('from house_daily_statements')) return { rows: [] };
       return { rows: [] };
     },
@@ -62,7 +62,7 @@ test('House Daily Summary preserves large fixed-point units exactly', async () =
   const repository = {
     async query(sql) {
       const normalized = sql.toLowerCase();
-      if (normalized.includes('from world_state')) return { rows: [{ game_day: 8 }] };
+      if (normalized.includes('earth_get_current_game_time')) return { rows: [{ game_day: 8, game_minute: 0, total_game_minutes: 8 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
       if (normalized.includes('from house_daily_statements')) return { rows: [{ opening_assets: {}, closing_assets: {}, production: { COMPUTE: '9007199254740993' }, consumption: { COMPUTE: '2' }, market_activity: {}, obligations: {}, exceptions: {}, net_credit_units: '9007199254740991' }] };
       if (normalized.includes('as income')) return { rows: [{ income: '9007199254740993', expenses: '2' }] };
       if (normalized.includes('as taxes')) return { rows: [{ taxes: '0' }] };
@@ -83,7 +83,7 @@ test('House Daily Summary returns clean genesis summary for Day 0 before first s
   const repository = {
     async query(sql) {
       const normalized = sql.toLowerCase();
-      if (normalized.includes('from world_state')) return { rows: [{ game_day: 1 }] };
+      if (normalized.includes('earth_get_current_game_time')) return { rows: [{ game_day: 1, game_minute: 0, total_game_minutes: 1 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
       if (normalized.includes('from house_daily_statements')) return { rows: [] };
       if (normalized.includes('as income')) return { rows: [{ income: '0', expenses: '0' }] };
       if (normalized.includes('as taxes')) return { rows: [{ taxes: '0' }] };

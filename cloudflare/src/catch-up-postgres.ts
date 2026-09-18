@@ -1,12 +1,13 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { ENTRY_SUPPORT_RULES, evaluateEntrySupportEligibility } from './catch-up.ts';
 
 type SupportRow = { house_id: string; status: string; entry_game_day: string | null; eligible_until_game_day: string | null; claimed_game_day: string | null; correlation_id: string | null };
 
 async function facts(repository: PostgresRepository, houseId: string) {
-  const [world, progress, house, buildings, orders, affiliations, support] = await Promise.all([
-    repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'"),
+  const [clock, progress, house, buildings, orders, affiliations, support] = await Promise.all([
+    readAuthoritativeGameTime(repository),
     repository.query<{ status: string }>('SELECT status FROM house_onboarding_progress WHERE house_id = $1', [houseId]),
     repository.query<{ created_game_day: string | null }>('SELECT NULL::BIGINT AS created_game_day FROM houses WHERE id = $1', [houseId]),
     repository.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM buildings WHERE owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1) AND status IN ('ACTIVE','UNDER_CONSTRUCTION')", [houseId]),
@@ -14,7 +15,7 @@ async function facts(repository: PostgresRepository, houseId: string) {
     repository.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM organization_memberships WHERE house_id = $1 AND status = 'ACTIVE'", [houseId]),
     repository.query<SupportRow>('SELECT house_id, status, entry_game_day::TEXT, eligible_until_game_day::TEXT, claimed_game_day::TEXT, correlation_id FROM house_entry_support WHERE house_id = $1', [houseId]),
   ]);
-  const day = Number(world.rows[0]?.game_day ?? 1);
+  const day = clock.gameDay;
   const supportRow = support.rows[0] ?? { house_id: houseId, status: 'INELIGIBLE', entry_game_day: null, eligible_until_game_day: null, claimed_game_day: null, correlation_id: null };
   const entry = evaluateEntrySupportEligibility({
     onboardingStatus: progress.rows[0]?.status ?? 'ACTIVE', currentGameDay: day, entryGameDay: supportRow.entry_game_day == null ? null : Number(supportRow.entry_game_day),

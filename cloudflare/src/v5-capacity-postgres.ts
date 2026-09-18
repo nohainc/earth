@@ -1,13 +1,14 @@
 import type { PostgresRepository } from './repository.ts';
 import { quoteCapacityChange, type CorporationCapacity, type HouseCapacity } from './v5-capacity.ts';
 import { calculateProgressiveCharge } from './v5-progressive.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 // @mutation-boundary atomic-sql
 // @mutation-boundary read-only
 // Capacity quotes are read-only projections; callers own the surrounding mutation transaction.
 
 export async function getActiveV5StandardCapacity(repository: PostgresRepository, gameDay?: number): Promise<{ standardTerritoryCapacity: bigint; earthBaseRate: bigint; houseScheduleId: string; corporationScheduleId: string; policyVersion: string; gameDay: number }> {
-  const day = gameDay ?? Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  const day = gameDay ?? (await readAuthoritativeGameTime(repository)).gameDay;
   const snapshot = (await repository.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json
       FROM resolved_constitution_snapshots_v5
      WHERE authority_type = 'EARTH' AND authority_id = 'EARTH' AND game_day = $1`, [day])).rows[0];
@@ -53,7 +54,7 @@ export async function getV5HouseCapacity(repository: PostgresRepository, houseId
 export async function quoteV5HouseCapacityChange(repository: PostgresRepository, houseId: string, delta: bigint, gameDay?: number): Promise<Record<string, unknown> | null> {
   const house = (await repository.query<{ corporation_id: string | null; total_units: string }>(`SELECT corporation_id, total_capacity_units::TEXT AS total_units
     FROM v5_house_settlement_profiles WHERE house_id = $1`, [houseId])).rows[0];
-  const day = gameDay ?? Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  const day = gameDay ?? (await readAuthoritativeGameTime(repository)).gameDay;
   const globalPolicy = await getActiveV5StandardCapacity(repository, day);
   const corporationSnapshot = house?.corporation_id ? (await repository.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [house.corporation_id, day])).rows[0] : undefined;
   let policy: { rate: string; schedule_id: string; version: string };

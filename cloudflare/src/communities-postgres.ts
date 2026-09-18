@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent as writeGameEvent, type GameEventInput } from './game-events-postgres.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
@@ -22,9 +23,7 @@ async function createGameEvent(repo: PostgresRepository, input: GameEventInput) 
 }
 
 async function getClock(repo: PostgresRepository) {
-  const result = await repo.query<{ game_day: number; game_minute: number }>(`SELECT game_day, game_minute FROM world_state WHERE id='WORLD' FOR UPDATE`);
-  if (!result.rows[0]) throw earthError('SERVICE_UNAVAILABLE', 'World clock is not configured.');
-  return { gameDay: Number(result.rows[0].game_day), gameMinute: Number(result.rows[0].game_minute) };
+  return readAuthoritativeGameTime(repo);
 }
 
 async function assertActor(repo: PostgresRepository, houseId: string, humanId: string) {

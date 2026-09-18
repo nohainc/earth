@@ -15,6 +15,7 @@ import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVoting
 import { castV5GovernanceVote, createV5GovernanceProposal, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
 import { getConstitutionReadModel, getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { previewConstitutionAmendment, previewProgressivePolicyChange } from './v5-governance.ts';
 import type { ProgressiveBracket } from './v5-progressive.ts';
 
@@ -35,8 +36,8 @@ export async function handleGovernanceRoutes(
           const allowed = (await repository.query(`SELECT 1 FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.corporation_id = $2 AND h.status = 'ACTIVE' AND ha.status = 'ACTIVE'`, [viewer.id, corporationId])).rows[0];
           if (!allowed) throw new Error('Corporation membership is required to preview its Constitution');
         }
-        const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
-        const gameDay = Number(world?.game_day ?? 1);
+        const clock = await readAuthoritativeGameTime(repository);
+        const gameDay = clock.gameDay;
         const current = await getResolvedConstitutionForDay(repository, { corporationId, gameDay });
         const earth = corporationId ? await getResolvedConstitutionForDay(repository, { gameDay }) : undefined;
         for (const change of parsed.value.changes!) {
@@ -117,8 +118,8 @@ export async function handleGovernanceRoutes(
         const allowed = (await repository.query(`SELECT 1 FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.corporation_id = $2 AND h.status = 'ACTIVE' AND ha.status = 'ACTIVE'`, [viewer.id, corporationId])).rows[0];
         if (!allowed) throw new Error('Corporation membership is required to view its Constitution');
       }
-      const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
-      return getConstitutionReadModel(repository, { gameDay: Number(world?.game_day ?? 1), corporationId });
+      const gameDay = (await readAuthoritativeGameTime(repository)).gameDay;
+      return getConstitutionReadModel(repository, { gameDay, corporationId });
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
@@ -162,8 +163,8 @@ export async function handleGovernanceRoutes(
 
   if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const world = (await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0];
-      return getConstitutionReadModel(repository, { gameDay: Number(world?.game_day ?? 1) });
+      const gameDay = (await readAuthoritativeGameTime(repository)).gameDay;
+      return getConstitutionReadModel(repository, { gameDay });
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });

@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { assessBuildingAge } from './building-age.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
@@ -11,7 +12,7 @@ async function startCorporationCapitalProject(
   return repository.transaction(async (tx) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: input.buildingId, correlationId: input.correlationId };
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const building = (await tx.query<{ id: string; corporation_id: string; owner_economic_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string }>(
       `SELECT b.id, owner.id AS corporation_id, b.owner_economic_id, b.catalog_id, c.construction_credit_units::TEXT,
               c.definition_version, b.status
@@ -56,7 +57,7 @@ async function startCorporationCapitalProject(
 }
 
 export async function getBuildingCapitalOptions(repository: PostgresRepository, buildingId: string): Promise<Record<string, unknown>> {
-  const day = Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  const day = (await readAuthoritativeGameTime(repository)).gameDay;
   const row = (await repository.query<any>(`SELECT b.id, b.catalog_id, b.started_game_day, COALESCE(b.last_major_rebuild_game_day, b.started_game_day) AS last_major_rebuild_game_day, c.code, c.family_code, c.tier, c.construction_credit_units::TEXT, c.operating_credit_units::TEXT, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps, COALESCE(jsonb_agg(jsonb_build_object('domainId', i.domain_id, 'generationId', i.generation_id, 'installedGameDay', i.installed_game_day)) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS installed_generations FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id JOIN building_design_life_rules r ON r.catalog_id = b.catalog_id LEFT JOIN building_generation_installations i ON i.building_id = b.id AND i.status = 'ACTIVE' WHERE b.id = $1 GROUP BY b.id, c.code, c.family_code, c.tier, c.construction_credit_units, c.operating_credit_units, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps`, [buildingId])).rows[0];
   if (!row) throw new Error('Building not found');
   const age = assessBuildingAge({ currentGameDay: BigInt(day), lastMajorRebuildGameDay: BigInt(row.last_major_rebuild_game_day), designLifeDays: BigInt(row.design_life_days), overdueBurdenBpsPerDay: BigInt(row.overdue_burden_bps_per_day), maximumBurdenBps: BigInt(row.maximum_burden_bps) });
@@ -112,7 +113,7 @@ export async function startBuildingCapitalProject(
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return startCorporationCapitalProject(repository, input);
   return repository.transaction(async (tx) => {
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const building = (await tx.query<{ id: string; owner_economic_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string; house_id: string }>(
       `SELECT b.id, b.owner_economic_id, b.catalog_id, c.construction_credit_units::TEXT,
               c.definition_version, b.status, h.house_id

@@ -1,8 +1,9 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 
 async function currentDay(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 export async function listGlobalPrograms(repository: PostgresRepository): Promise<Record<string, unknown>> {
@@ -34,7 +35,7 @@ export async function createGlobalProgram(repository: PostgresRepository, input:
     const authorized = BigInt(input.authorizedUnits);
     const matching = BigInt(input.matchingAuthorizedUnits ?? '0');
     if (!input.name.trim() || input.name.trim().length > 120 || target <= 0n || authorized < target || matching < 0n || matching > authorized) throw new Error('Invalid global program definition or authority');
-    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const id = `EARTH-PROGRAM-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const deadline = input.fundingDeadlineGameDay ?? day + 365;
     if (!Number.isInteger(deadline) || deadline < day) throw new Error('Funding deadline must be a future game day');

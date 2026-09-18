@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export type FrontierAdvanceInput = {
   domainId: string;
@@ -20,9 +21,7 @@ async function currentFrontier(tx: PostgresRepository, domainId: string): Promis
 }
 
 export async function getEarthTechnologyFrontier(repository: PostgresRepository, gameDay?: number): Promise<Record<string, unknown>> {
-  const day = gameDay ?? Number((await repository.query<{ game_day: string }>(
-    "SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'",
-  )).rows[0]?.game_day ?? 1);
+  const day = gameDay ?? (await readAuthoritativeGameTime(repository)).gameDay;
   const result = await repository.query(`
     SELECT d.id AS domain_id, d.code AS domain_code, d.name AS domain_name,
            COALESCE(v.generation_number, 1) AS max_generation_number,

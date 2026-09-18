@@ -3,6 +3,7 @@ import { moneyToCents } from './money.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { toNanoMarkup } from './nano-markup.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export type TechnologyCatalogRow = {
   id: string;
@@ -85,8 +86,7 @@ export async function createResearchProject(repository: PostgresRepository, inpu
     await requireResearchJurisdiction(tx, input.ownerId);
   const membership = await tx.query<{ corporation_id: string }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.ownerId]);
     const corporationId = membership.rows[0].corporation_id;
-    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-    const day = Number(world.rows[0]?.game_day ?? 0);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const catalog = await readTechnologyCatalog(tx, day);
     const catalogEntry = catalog.find((technology) => technology.name === input.name || technology.code === input.name);
     const minimumBudgetCents = Number(catalogEntry?.research_credit_cost_units ?? 0n) / 1;
@@ -149,8 +149,7 @@ export async function createResearchProject(repository: PostgresRepository, inpu
 }
 
 export async function quoteResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string }): Promise<Record<string, unknown>> {
-  const world = await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'");
-  const day = Number(world.rows[0]?.game_day ?? 0);
+  const day = (await readAuthoritativeGameTime(repository)).gameDay;
   await requireResearchJurisdiction(repository, input.ownerId);
   const catalog = await readTechnologyCatalog(repository, day);
   const entry = catalog.find((technology) => technology.name === input.name || technology.code === input.name);

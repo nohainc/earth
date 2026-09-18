@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 const TARGET_RULES = {
   version: 'catch-up-targets-v2',
@@ -39,8 +40,8 @@ function ratio(current: number, target: number) {
 
 export async function getHouseCatchUpTargets(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const world = (await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD' FOR SHARE")).rows[0];
-    const day = Number(world?.game_day ?? 1);
+    const clock = await readAuthoritativeGameTime(tx);
+    const day = clock.gameDay;
     const house = (await tx.query<{ created_game_day: string }>('SELECT created_game_day::TEXT FROM houses WHERE id = $1', [houseId])).rows[0];
     if (!house) return { ok: true, targets: null, generatedFrom: 'postgres-canonical-facts' };
 

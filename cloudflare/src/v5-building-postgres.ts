@@ -12,6 +12,7 @@ import {
 } from './v5-settlement-profiles-postgres.ts';
 import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type Catalog = {
   id: string;
@@ -68,8 +69,8 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
     if (isPublic) await requirePublicCorporationAuthorization(tx, owner.corporationId!, input.ownerId);
     const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
     const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId);
-    const world = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
-    const gameDay = Number(world?.game_day ?? 1);
+    const clock = await readAuthoritativeGameTime(tx);
+    const gameDay = clock.gameDay;
     const genInfo = await getAvailableGenerations(tx, blueprint.technology_domain, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId, gameDay);
     const targetGen = input.generation ? Number(input.generation) : genInfo.maxAccessibleGeneration;
     const genAuth = await assertGenerationAuthorized(tx, blueprint.technology_domain, targetGen, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId, gameDay);
@@ -184,8 +185,8 @@ export async function purchaseV5Building(
 
     const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId);
     if (!scaleAuth.authorized) throw new Error(String(scaleAuth.reason ?? 'Missing required scale capability'));
-    const currentWorld = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
-    const gameDay = Number(currentWorld?.game_day ?? 1);
+    const clock = await readAuthoritativeGameTime(tx);
+    const gameDay = clock.gameDay;
     const genInfo = await getAvailableGenerations(tx, blueprint.technology_domain, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId, gameDay);
     const targetGen = input.generation ? Number(input.generation) : genInfo.maxAccessibleGeneration;
     const genAuth = await assertGenerationAuthorized(tx, blueprint.technology_domain, targetGen, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId, gameDay);
@@ -287,8 +288,8 @@ export async function suspendBuilding(
       throw new Error(`Only active buildings can be suspended; current status: ${building.status}, productive: ${building.v5_productive_status}`);
     }
 
-    const currentWorld = (await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0];
-    const gameDay = Number(currentWorld?.game_day ?? 1);
+    const clock = await readAuthoritativeGameTime(tx);
+    const gameDay = clock.gameDay;
 
     const beforeProfile = building.owner_type === 'CORPORATION'
       ? await getCorporationSettlementProfileSnapshot(tx, building.owner_id)
@@ -375,8 +376,8 @@ export async function reactivateBuilding(
       throw new Error(`Only suspended buildings can be reactivated; current status: ${building.status}, productive: ${building.v5_productive_status}`);
     }
 
-    const currentWorld = (await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0];
-    const gameDay = Number(currentWorld?.game_day ?? 1);
+    const clock = await readAuthoritativeGameTime(tx);
+    const gameDay = clock.gameDay;
 
     const beforeProfile = building.owner_type === 'CORPORATION'
       ? await getCorporationSettlementProfileSnapshot(tx, building.owner_id)

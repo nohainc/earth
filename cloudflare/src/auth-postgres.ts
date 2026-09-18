@@ -3,11 +3,12 @@ import { calculateStarterPackage } from './starter-package.ts';
 import { base64ToBytes, bytesToBase64, derivePassword, digest, SESSION_DAYS } from './auth-crypto.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export async function registerIdentity(repository: PostgresRepository, input: { email: string; personName: string; houseSurname: string; password: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     if ((await tx.query('SELECT 1 FROM auth_accounts WHERE email = $1', [input.email])).rows[0]) throw new Error('Email is already registered');
-    const worldDay = Number((await tx.query("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const worldDay = (await readAuthoritativeGameTime(tx)).gameDay;
     const starter = calculateStarterPackage();
     const humanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const accountId = `account-${humanId.toLowerCase()}`;
@@ -72,7 +73,8 @@ export async function deleteAccount(repository: PostgresRepository, input: { hum
   return repository.transaction(async (tx) => {
     const account = (await tx.query('SELECT id, house_id FROM auth_accounts WHERE email = $1', [input.email])).rows[0];
     if (!account) throw new Error('Account not found');
-    await tx.query("UPDATE humans SET status = 'DECEASED', death_game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD') WHERE id = $1", [input.humanId]);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+    await tx.query("UPDATE humans SET status = 'DECEASED', death_game_day = $1 WHERE id = $2", [day, input.humanId]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE account_id = $1', [account.id]);
     await tx.query('DELETE FROM auth_action_tokens WHERE account_id = $1', [account.id]);
     return { ok: true, message: 'Account deactivated successfully' };

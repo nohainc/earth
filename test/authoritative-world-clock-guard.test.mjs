@@ -25,6 +25,27 @@ test('architecture guard: no production code advances world_state.game_day direc
   assert.deepEqual(violations, [], 'Direct game clock manipulation violations found');
 });
 
+test('architecture guard: no production code reads world_state.game_day or world_state.game_minute directly', () => {
+  const srcDir = path.resolve('cloudflare/src');
+  const files = fs.readdirSync(srcDir).filter((f) => f.endsWith('.ts'));
+
+  const violations = [];
+  for (const file of files) {
+    // schema-contract.ts defines DB column names for the schema contract, allow it
+    if (file === 'schema-contract.ts') continue;
+    const content = fs.readFileSync(path.join(srcDir, file), 'utf8');
+
+    // Disallow SELECT ... game_day / game_minute FROM world_state
+    if (/SELECT\s+[^;]*\bgame_(?:day|minute)\b[^;]*\bFROM\s+world_state\b/i.test(content) ||
+        /FROM\s+world_state\b[^;]*\bgame_(?:day|minute)\b/i.test(content) ||
+        /\bworld_state\.game_(?:day|minute)\b/i.test(content)) {
+      violations.push(`${file}: direct read of world_state.game_day/game_minute detected`);
+    }
+  }
+
+  assert.deepEqual(violations, [], 'Direct game clock read violations found');
+});
+
 test('architecture guard: scheduler is decoupled from game clock advancement', () => {
   const schedulerSrc = fs.readFileSync(path.resolve('cloudflare/src/scheduler-postgres.ts'), 'utf8');
   assert.doesNotMatch(schedulerSrc, /earth_advance_world_clock/);

@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: string, day: number): Promise<{ units: bigint; ruleVersion: string | null; transitionDays: number }> {
   const ruleRows = (await tx.query<{ id: string; rule_code: string; value_json: Record<string, unknown> }>(
@@ -56,8 +57,7 @@ export async function registerSuccessor(repository: PostgresRepository, input: {
   }
   return repository.transaction(async (tx) => {
     if (input.currentLifeStatus === 'estate') throw new Error('Estate inheritance requires the succession settlement slice');
-    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-    const day = Number(world.rows[0]?.game_day ?? 0);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     await tx.query('INSERT INTO house_succession_plans (house_id, successor_name, registered_game_day, status) VALUES ((SELECT house_id FROM humans WHERE id = $1), $2, $3, \'ACTIVE\') ON CONFLICT(house_id) DO UPDATE SET successor_name = excluded.successor_name, registered_game_day = excluded.registered_game_day, status = \'ACTIVE\', updated_at = CURRENT_TIMESTAMP', [input.humanId, input.successorName, day]);
     return { ok: true, successor: (await tx.query('SELECT * FROM house_succession_plans WHERE house_id = (SELECT house_id FROM humans WHERE id = $1)', [input.humanId])).rows[0] };
   });
@@ -143,7 +143,6 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
              0.68::NUMERIC AS city_service_index
         FROM humans human
         JOIN houses house ON house.id = human.house_id AND house.status = 'ACTIVE'
-        CROSS JOIN world_state world
         LEFT JOIN (
           SELECT human_id,
                  COUNT(*) FILTER (WHERE food_consumed_units < food_required_units) AS recent_food_shortfall_days,

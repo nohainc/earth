@@ -1,5 +1,6 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   listCorporations,
@@ -159,8 +160,8 @@ export async function handleInstitutionRoutes(
     try {
       const amountUnits = BigInt(body.amountUnits ?? 0);
       const result = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-        const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-        const gameDay = Number(world.rows[0]?.game_day ?? 0);
+        const clock = await readAuthoritativeGameTime(tx);
+        const gameDay = clock.gameDay;
         if (!body.budgetLineId || !body.commitmentType || !body.sourceType || !body.sourceId) throw new Error('Commitment fields are required');
         return createInstitutionCommitment(tx, { humanId: viewer.id, institutionId: commitmentMatch[1], budgetLineId: body.budgetLineId, commitmentType: body.commitmentType, sourceType: body.sourceType, sourceId: body.sourceId, amountUnits, gameDay, dueGameDay: Number(body.dueGameDay ?? gameDay) });
       }));
@@ -175,8 +176,8 @@ export async function handleInstitutionRoutes(
     if (!parsed.ok) return parsed.response;
     try {
       const result = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-        const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-        const gameDay = Number(world.rows[0]?.game_day ?? 0);
+        const clock = await readAuthoritativeGameTime(tx);
+        const gameDay = clock.gameDay;
         if (parsed.value.action === 'cancel') return cancelInstitutionCommitment(tx, { humanId: viewer.id, institutionId: commitmentMatch[1], commitmentId: commitmentMatch[2]!, gameDay });
         return payInstitutionCommitment(tx, { humanId: viewer.id, institutionId: commitmentMatch[1], commitmentId: commitmentMatch[2]!, amountUnits: BigInt(parsed.value.amountUnits ?? 0), gameDay });
       }));

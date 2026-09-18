@@ -1,10 +1,11 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export type OrganizationAction = 'ECONOMIC_OWNER' | 'ORGANIZATION_BUDGET_SPEND' | 'ORGANIZATION_OPERATE' | 'GOVERNANCE' | 'CHARTER_AMEND' | 'RESEARCH';
 
 /** Canonical V4 authority resolver. Membership and office authority are deliberately separate. */
 export async function resolveOrganizationAuthority(repository: PostgresRepository, input: { organizationId: string; humanId: string; action: OrganizationAction; amountUnits?: bigint }): Promise<{ officeId: string; officeCode: string; authorityRules: Record<string, unknown> }> {
-  const result = await repository.query<{ office_id: string; office_code: string; authority_rules: Record<string, unknown> }>(`SELECT o.id AS office_id, o.office_code, o.authority_rules FROM organization_office_grants g JOIN organization_offices o ON o.id = g.office_id JOIN humans h ON h.id = g.principal_id AND h.status = 'ACTIVE' WHERE o.organization_id = $1 AND g.principal_type = 'HUMAN' AND g.principal_id = $2 AND o.status = 'ACTIVE' AND g.status = 'ACTIVE' AND g.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD') AND (g.effective_to_game_day IS NULL OR g.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD')) AND (o.authority_rules->'actions') ? $3 ORDER BY o.office_code LIMIT 1`, [input.organizationId, input.humanId, input.action]);
+  const result = await repository.query<{ office_id: string; office_code: string; authority_rules: Record<string, unknown> }>(`SELECT o.id AS office_id, o.office_code, o.authority_rules FROM organization_office_grants g JOIN organization_offices o ON o.id = g.office_id JOIN humans h ON h.id = g.principal_id AND h.status = 'ACTIVE' WHERE o.organization_id = $1 AND g.principal_type = 'HUMAN' AND g.principal_id = $2 AND o.status = 'ACTIVE' AND g.status = 'ACTIVE' AND g.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time()) AND (g.effective_to_game_day IS NULL OR g.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time())) AND (o.authority_rules->'actions') ? $3 ORDER BY o.office_code LIMIT 1`, [input.organizationId, input.humanId, input.action]);
   const authority = result.rows[0];
   if (!authority) throw new Error(`Organization authority denied for ${input.action}`);
   const max = authority.authority_rules.maxAmountUnits;
@@ -18,8 +19,8 @@ export async function listOrganizationAuthority(repository: PostgresRepository, 
     LEFT JOIN LATERAL (
       SELECT g1.* FROM organization_office_grants g1
        WHERE g1.office_id = o.id AND g1.status = 'ACTIVE'
-         AND g1.effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
-         AND (g1.effective_to_game_day IS NULL OR g1.effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
+         AND g1.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time())
+         AND (g1.effective_to_game_day IS NULL OR g1.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time()))
        ORDER BY g1.effective_from_game_day DESC, g1.id DESC LIMIT 1
     ) g ON TRUE
     LEFT JOIN humans h ON h.id = g.principal_id AND g.principal_type = 'HUMAN'
@@ -30,7 +31,7 @@ export async function listOrganizationAuthority(repository: PostgresRepository, 
 export type OfficeCode = 'EXECUTIVE' | 'TREASURER' | 'GOVERNOR' | 'OPERATOR' | 'RESEARCHER';
 
 async function currentDay(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 async function requireActiveOrganizationMember(tx: PostgresRepository, organizationId: string, humanId: string): Promise<{ house_id: string }> {

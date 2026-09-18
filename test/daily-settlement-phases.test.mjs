@@ -23,7 +23,7 @@ test('daily settlement has one ordered canonical phase registry', () => {
     'scheduled_budget_payments', 'territory_capacity_projections',
     'v5_capacity_assessment', 'v5_territory_containers', 'corporation_dynamics',
     'house_needs_services', 'perishable_resource_decay', 'research_and_progress',
-    'global_programs', 'public_projects',
+    'global_programs', 'public_projects', 'house_policy_execution',
     'budget_dividend_eligibility', 'financial_states', 'lifecycle', 'post_succession_access_refresh',
     'institution_dissolution', 'financial_projections', 'rankings_snapshot', 'end_of_day_snapshots',
   ];
@@ -37,7 +37,7 @@ test('daily settlement has one ordered canonical phase registry', () => {
   assert.ok(phases.findIndex((phase) => phase.id === 'budget_dividend_eligibility') < phases.findIndex((phase) => phase.id === 'financial_states'));
   assert.ok(phases.findIndex((phase) => phase.id === 'financial_states') < phases.findIndex((phase) => phase.id === 'lifecycle'));
   assert.ok(phases.findIndex((phase) => phase.id === 'life_maintenance') < phases.findIndex((phase) => phase.id === 'building_settlement'));
-  assert.ok(phases.findIndex((phase) => phase.id === 'life_maintenance') < phases.findIndex((phase) => phase.id === 'building_settlement'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'house_policy_execution') < phases.findIndex((phase) => phase.id === 'end_of_day_snapshots'));
   assert.ok(phases.findIndex((phase) => phase.id === 'lifecycle') < phases.findIndex((phase) => phase.id === 'end_of_day_snapshots'));
   assert.ok(phases.findIndex((phase) => phase.id === 'lifecycle') < phases.findIndex((phase) => phase.id === 'post_succession_access_refresh'));
 });
@@ -48,6 +48,7 @@ test('scheduler uses only the resumable daily engine', () => {
   assert.match(scheduler, /ensureSettlementWork\(tx, gameDay, settlementPhases/);
   assert.match(scheduler, /territoryCapacityProjections/);
   assert.match(scheduler, /corporationDynamics/);
+  assert.match(scheduler, /housePolicyExecution/);
 });
 
 test('daily automation has no City settlement dependencies', () => {

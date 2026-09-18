@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 
 async function activeHouse(tx: PostgresRepository, humanId: string): Promise<{ houseId: string; currentTerritoryId: string | null }> {
@@ -8,7 +9,7 @@ async function activeHouse(tx: PostgresRepository, humanId: string): Promise<{ h
 }
 
 async function worldDay(tx: PostgresRepository): Promise<number> {
-  return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 export async function getHouseResidency(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {

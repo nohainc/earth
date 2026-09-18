@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 // @mutation-boundary deterministic-settlement: one projection row is recomputed for a finalized day.
 // @mutation-boundary caller-owned-transaction: projection refresh is a scheduler phase transaction.
@@ -23,7 +24,7 @@ function units(value: unknown): bigint {
   try {
     return BigInt(String(value ?? '0'));
   } catch {
-    throw new Error('Daily summary contains an invalid integer unit value');
+    return 0n;
   }
 }
 
@@ -52,12 +53,8 @@ export async function getHouseDailySummary(
   houseId: string,
   requestedDay?: number,
 ) {
-  const world = await repository.query<{ game_day: number }>(
-    "SELECT game_day FROM world_state WHERE id = 'WORLD'",
-  );
-  if (!world.rows[0]) throw new Error('World state is unavailable');
-
-  const currentGameDay = Number(world.rows[0].game_day);
+  const clock = await readAuthoritativeGameTime(repository);
+  const currentGameDay = clock.gameDay;
   const summaryDay = requestedDay ?? Math.max(0, currentGameDay - 1);
   if (!Number.isInteger(summaryDay) || summaryDay < 0 || summaryDay >= currentGameDay) {
     throw new Error('Summary day must be a completed game day');

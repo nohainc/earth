@@ -1,5 +1,6 @@
 import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { getCorporationFiscalState, spendCorporationBudget } from './corporation-fiscal-postgres.ts';
 import { getNetWorthHistory } from './net-worth-postgres.ts';
@@ -339,7 +340,7 @@ export async function handleFinanceRoutes(
           walletUnits: walletUnits.toString(),
           protectedReserveUnits: protectedUnits.toString(),
           availableToSpendUnits: availableToSpendUnits.toString(),
-          nextSettlementGameDay: Number((await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0) + 1,
+          nextSettlementGameDay: (await readAuthoritativeGameTime(repository)).gameDay + 1,
           generatedFrom: 'postgres-canonical-facts-v5',
         },
         bank: { deposits: bankDeposits.rows },

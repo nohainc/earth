@@ -9,6 +9,7 @@ import { proposalActionHandler, validateProposalActionSnapshot } from './proposa
 import { attemptProposalFunding } from './proposal-funding.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -42,7 +43,7 @@ async function eligible(tx: PostgresRepository, humanId: string, institutionId: 
     if (membership.rows[0]?.city_id) {
       return membership.rows[0].city_id === institutionId || membership.rows[0].city_id === instId;
     }
-    await tx.query("SELECT earth_set_house_affiliation((SELECT house_id FROM humans WHERE id = $1), $2, NULL, (SELECT game_day FROM world_state WHERE id = 'WORLD'))", [humanId, instId]);
+    await tx.query("SELECT earth_set_house_affiliation((SELECT house_id FROM humans WHERE id = $1), $2, NULL, (SELECT game_day FROM earth_get_current_game_time()))", [humanId, instId]);
     return true;
   }
   return Boolean((await tx.query("SELECT 1 FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [institutionId, humanId])).rows[0]);
@@ -154,7 +155,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     const rule = await tx.query<{ id: string; value_json: unknown; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>("SELECT id, value_json, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE institution_id = $1 AND category = 'governance' AND status = 'active' ORDER BY version DESC LIMIT 1", [input.institutionId]);
     let ruleRow = rule.rows[0];
     const institutionKind = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1', [input.institutionId])).rows[0]?.kind;
-    const constitutionDay = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const constitutionDay = (await readAuthoritativeGameTime(tx)).gameDay;
     const canonical = institutionKind === 'CORPORATION' || institutionKind === 'EARTH'
       ? await resolveEffectiveConstitution(tx, { corporationId: institutionKind === 'CORPORATION' ? input.institutionId : undefined, gameDay: constitutionDay })
       : null;
@@ -220,10 +221,8 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     const implementationDelay = canonicalGovernanceValue('IMPLEMENTATION_DELAY_DAYS') ?? Number(ruleRow.implementation_delay_days ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays);
     if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(votingPeriodDays) || votingPeriodDays < 1 || votingPeriodDays > 90 || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) throw new Error('Governance rule parameters are invalid');
     const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    const world = await tx.query<{ genesis_at: string | null }>("SELECT genesis_at FROM world_state WHERE id = 'WORLD' FOR UPDATE");
-    const currentGameDay = getAuthoritativeGameTime({
-      genesisAt: world.rows[0]?.genesis_at,
-    }).gameDay;
+    const clock = await readAuthoritativeGameTime(tx);
+    const currentGameDay = clock.gameDay;
     // A submission never receives a partial voting day. Voting starts tomorrow
     // and its final whole day closes during end-of-day automation.
     const votingStartDay = currentGameDay + 1;
@@ -391,8 +390,7 @@ export async function castVote(repository: PostgresRepository, input: { proposal
   return repository.transaction(async (tx) => {
     const proposal = await tx.query<{ institution_id: string; voting_due_end_day: number; eligibility_cutoff_game_day: number }>("SELECT institution_id, voting_due_end_day, eligibility_cutoff_game_day FROM proposals WHERE id = $1 AND decision_status = 'voting'", [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Open proposal not found');
-    const world = await tx.query<{ genesis_at: string | null }>("SELECT genesis_at FROM world_state WHERE id = 'WORLD'");
-    const now = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at });
+    const now = await readAuthoritativeGameTime(tx);
     if (now.gameDay > Number(proposal.rows[0].voting_due_end_day)) throw new Error('Voting deadline has passed');
     if (!(await eligible(tx, input.humanId, proposal.rows[0].institution_id))) throw new Error('Human is not eligible to vote at this institution');
     const cutoff = Number(proposal.rows[0].eligibility_cutoff_game_day ?? 0);
@@ -448,8 +446,7 @@ export async function castVote(repository: PostgresRepository, input: { proposal
 }
 
 export async function resolveProposalsInTransaction(repository: PostgresRepository, completedDay?: number): Promise<number> {
-  const worldClock = await repository.query<{ genesis_at: string | null }>("SELECT genesis_at FROM world_state WHERE id = 'WORLD'");
-  const now = getAuthoritativeGameTime({ genesisAt: worldClock.rows[0]?.genesis_at });
+  const now = await readAuthoritativeGameTime(repository);
   // Resolution is an end-of-day operation. A vote remains valid throughout
   // its due day and can only be closed after that day has settled.
   const gameDay = completedDay ?? (now.gameMinute === 0 ? now.gameDay - 1 : now.gameDay);
@@ -521,9 +518,9 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     if (current.decision_status !== 'passed' && current.outcome !== 'passed') throw new Error('Only passed proposals can be executed');
     if (current.executed_at) return { ok: true, executionStatus: current.execution_status === 'started' ? 'started' : 'executed', proposal: current };
     if (current.challenge_status === 'pending') throw new Error('Proposal is currently under constitutional challenge');
-    const world = await tx.query<{ game_day: number; genesis_at: string | null }>("SELECT game_day, genesis_at FROM world_state WHERE id = 'WORLD'");
+    const clock = await readAuthoritativeGameTime(tx);
     if (!input.systemExecution) throw new Error('Proposal execution is automatic after daily settlement');
-    const day = Math.max(1, Number(input.completedDay ?? world.rows[0]?.game_day ?? 1));
+    const day = Math.max(1, Number(input.completedDay ?? clock.gameDay));
     const category = String(current.target_category ?? '').trim();
     const value = jsonObject(current.target_value_json);
     const action = jsonObject(current.action_snapshot);
@@ -768,8 +765,7 @@ export async function challengeProposal(repository: PostgresRepository, input: {
     if (proposal.rows[0].executed_at) throw new Error('Proposal has already been executed');
     const authority = await tx.query('SELECT 1 FROM proposal_challenge_authorities WHERE institution_id = $1 AND human_id = $2 AND role_code IN (\'constitutional_judge\', \'judicial_delegate\', \'ouc_court\') AND status = \'active\' LIMIT 1', [proposal.rows[0].institution_id, input.humanId]);
     if (!authority.rows[0]) throw new Error('Constitutional challenge authority is required');
-    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-    const day = Number(world.rows[0]?.game_day ?? 0);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     const snapshot = await tx.query<{ governance_snapshot: unknown; resolved_game_day: number | null }>('SELECT governance_snapshot, resolved_game_day FROM proposals WHERE id = $1', [input.proposalId]);
     const governance = jsonObject(snapshot.rows[0]?.governance_snapshot);
     const challengeDays = Number(governance.challengePeriodDays ?? 0);
@@ -795,8 +791,7 @@ export async function resolveConstitutionalAppeal(repository: PostgresRepository
     if (!proposal.rows[0]) throw new Error('Proposal not found');
     if (proposal.rows[0].executed_at) throw new Error('Proposal has already been executed');
     if (!(await eligible(tx, input.humanId, proposal.rows[0].institution_id))) throw new Error('Human is not authorized as a judicial delegate');
-    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-    const day = Number(world.rows[0]?.game_day ?? 0);
+    const day = (await readAuthoritativeGameTime(tx)).gameDay;
     if (input.ruling === 'void') {
       await tx.query("UPDATE proposals SET status = 'closed', decision_status = 'rejected', outcome = 'rejected', challenge_status = 'voided', execution_status = 'not_ready' WHERE id = $1", [input.proposalId]);
     } else {

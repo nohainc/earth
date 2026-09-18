@@ -3,6 +3,8 @@ import { readAuthoritativeGameTime, getSettlementCursor, type SettlementCursorSt
 
 export class SettlementCatchupBarrierError extends Error {
   readonly code = 'WORLD_SETTLEMENT_CATCHING_UP';
+  readonly statusCode = 409;
+  readonly status = 409;
   readonly currentGameDay: number;
   readonly settledThroughGameDay: number;
   readonly lastClosedGameDay: number;
@@ -41,7 +43,7 @@ export class SettlementCatchupBarrierError extends Error {
  */
 export async function assertEconomyCaughtUp(
   repository: PostgresRepository | { query: PostgresRepository['query'] },
-): Promise<SettlementCursorState> {
+): Promise<SettlementCursorState & { gameDay: number; gameMinute: number; totalGameMinutes: number }> {
   const clock = await readAuthoritativeGameTime(repository);
   const cursor = await getSettlementCursor(repository, clock.gameDay);
 
@@ -49,5 +51,11 @@ export async function assertEconomyCaughtUp(
     throw new SettlementCatchupBarrierError(cursor, clock.gameDay);
   }
 
-  return cursor;
+  return {
+    ...cursor,
+    gameDay: clock.gameDay,
+    gameMinute: clock.gameMinute,
+    totalGameMinutes: clock.totalGameMinutes,
+  };
 }
+

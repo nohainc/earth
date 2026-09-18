@@ -1,8 +1,9 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { calculateMatching } from './public-projects.ts';
 
-async function day(tx: PostgresRepository): Promise<number> { return Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1); }
+async function day(tx: PostgresRepository): Promise<number> { return (await readAuthoritativeGameTime(tx)).gameDay; }
 
 export async function createPublicProject(repository: PostgresRepository, input: { name: string; description: string; beneficiaryType: 'ORGANIZATION' | 'EARTH' | 'TERRITORY'; beneficiaryId: string; recipientAccountId: string; targetUnits: string; deadlineGameDay: number; matchingPoolAuthorizedUnits: string; proposalId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -32,7 +33,7 @@ export async function fundMatchingPool(repository: PostgresRepository, input: { 
     const treasury = (await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = \'ECON-EARTH-001\' AND account_type = \'TREASURY\' AND asset_id = 1 AND status = \'ACTIVE\' FOR UPDATE')).rows[0];
     if (!treasury || BigInt(treasury.balance_units) < amount) throw new Error('EARTH matching pool cash is insufficient');
     await tx.query("UPDATE public_projects SET matching_pool_funded_units = matching_pool_funded_units + $1 WHERE id = $2", [amount.toString(), input.projectId]);
-    await tx.query(`INSERT INTO public_project_matching_funds (id, project_id, amount_units, authorized_game_day, proposal_id, correlation_id) VALUES ($1,$2,$3,(SELECT game_day FROM world_state WHERE id = 'WORLD'),$4,$5)`, [`MATCH-FUND-${input.correlationId}`, input.projectId, amount.toString(), input.proposalId, input.correlationId]);
+    await tx.query(`INSERT INTO public_project_matching_funds (id, project_id, amount_units, authorized_game_day, proposal_id, correlation_id) VALUES ($1,$2,$3,(SELECT game_day FROM earth_get_current_game_time()),$4,$5)`, [`MATCH-FUND-${input.correlationId}`, input.projectId, amount.toString(), input.proposalId, input.correlationId]);
     return { ok: true, projectId: input.projectId, fundedUnits: (BigInt(project.matching_pool_funded_units) + amount).toString(), correlationId: input.correlationId };
   });
 }

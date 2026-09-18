@@ -95,7 +95,18 @@ function inventoryMap(rows: Array<{ code: string; balance_units: string }>): Rec
 /** Execute only policies effective for a newly completed day. Every order uses
  * the normal market escrow path; the policy log is an audit/idempotency ledger,
  * not a second economic authority. */
-export async function executeHousePoliciesForDay(repository: PostgresRepository, gameDay: number): Promise<{ actions: number; exceptions: number }> {
+export async function executeHousePoliciesForDay(
+  repository: PostgresRepository,
+  gameDay: number,
+  options: { shard?: number; shardCount?: number } = {},
+): Promise<{ actions: number; exceptions: number }> {
+  const shardFilter = options.shard !== undefined && options.shardCount !== undefined
+    ? 'AND mod(abs(hashtextextended(house_id, 0)), $2) = $3'
+    : '';
+  const params: unknown[] = [gameDay];
+  if (options.shard !== undefined && options.shardCount !== undefined) {
+    params.push(options.shardCount, options.shard);
+  }
   const policies = await repository.query<StoredPolicyRow>(
     `SELECT DISTINCT ON (house_id) id, house_id AS "houseId", policy_type AS "policyType", version,
             effective_from_game_day AS "effectiveFromGameDay", status,
@@ -105,7 +116,9 @@ export async function executeHousePoliciesForDay(repository: PostgresRepository,
             rules_version AS "rulesVersion"
        FROM house_operating_policies
       WHERE status = 'ACTIVE' AND effective_from_game_day <= $1
-      ORDER BY house_id, effective_from_game_day DESC, version DESC`, [gameDay],
+      ${shardFilter}
+      ORDER BY house_id, effective_from_game_day DESC, version DESC`,
+    params,
   );
   let actions = 0;
   let exceptions = 0;

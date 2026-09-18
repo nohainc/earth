@@ -43,8 +43,8 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
     if (sql.includes('FROM proposal_challenge_authorities')) {
       return { rows: [{ ok: 1 }] };
     }
-    if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
-      return { rows: [{ game_day: 100 }] };
+    if (sql.includes('earth_get_current_game_time')) {
+      return { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
     }
     if (sql.includes('UPDATE proposals SET challenge_status =')) {
       updatedStatus = 'challenged';
@@ -94,8 +94,8 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
     if (sql.includes('SELECT 1 FROM institutions WHERE id = $1 AND administrator_human_id = $2')) {
       return { rows: [{ id: 'INST-ADMIN' }] };
     }
-    if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
-      return { rows: [{ game_day: 100 }] };
+    if (sql.includes('earth_get_current_game_time')) {
+      return { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
     }
     if (sql.includes("UPDATE proposals SET status = 'closed', decision_status = 'rejected', outcome = 'rejected'")) {
       finalOutcome = 'rejected';
@@ -127,6 +127,9 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
 
 test('executeProposal blocks execution when under challenge', async () => {
   const repo = createMockRepository((sql, params) => {
+    if (sql.includes('earth_get_current_game_time')) {
+      return { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
+    }
     if (sql.includes('SELECT * FROM proposals WHERE id = $1')) {
       return {
         rows: [
@@ -152,6 +155,9 @@ test('executeProposal blocks execution when under challenge', async () => {
 
 test('listPantheonOfAchievements returns historical deceased pantheon and living legends', async () => {
   const repo = createMockRepository((sql) => {
+    if (sql.includes('earth_get_current_game_time')) {
+      return { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
+    }
     if (sql.includes("WHERE h.status = 'DECEASED'")) {
       return {
         rows: [

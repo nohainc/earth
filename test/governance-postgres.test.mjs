@@ -37,8 +37,8 @@ test('politicalMaturityReached evaluates game day threshold correctly', () => {
 
 test('proposal resolution counts only active members of its own institution', async () => {
   const client = new MockDbClient({
-    "SELECT genesis_at, simulated_day_offset FROM world_state": {
-      rows: [{ genesis_at: new Date(Date.now() - 20 * 86400000).toISOString(), simulated_day_offset: 0 }],
+    'SELECT * FROM earth_get_current_game_time()': {
+      rows: [{ game_day: 20, game_minute: 0, total_game_minutes: 20 * 1440, genesis_at: new Date(Date.now() - 20 * 86400000).toISOString(), server_now: new Date().toISOString(), real_seconds_per_game_minute: 1 }],
       rowCount: 1,
     },
     "SELECT id, institution_id, quorum, approval_threshold, eligible_voter_count FROM proposals WHERE decision_status": {
@@ -104,7 +104,7 @@ test('challengeProposal files constitutional challenge for passed proposal', asy
     'SELECT city_id FROM memberships': { rows: [{ city_id: 'INST-01' }], rowCount: 1 },
     'SELECT 1 FROM memberships': { rows: [{ '1': 1 }], rowCount: 1 },
     'SELECT 1 FROM proposal_challenge_authorities': { rows: [{ '1': 1 }], rowCount: 1 },
-    'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
+    'SELECT * FROM earth_get_current_game_time()': { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);
 
@@ -130,7 +130,7 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
     'SELECT id, life_status FROM humans': { rows: [{ id: 'H-01', life_status: 'active' }], rowCount: 1 },
     'SELECT city_id FROM memberships': { rows: [{ city_id: 'INST-01' }], rowCount: 1 },
     'SELECT 1 FROM memberships': { rows: [{ '1': 1 }], rowCount: 1 },
-    'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
+    'SELECT * FROM earth_get_current_game_time()': { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);
 
@@ -154,8 +154,8 @@ test('createProposal associates typed building_catalog target', async () => {
       rowCount: 1,
     },
     'SELECT kind, status FROM institutions': { rows: [{ id: 'CITY-1', kind: 'CITY', status: 'active' }], rowCount: 1 },
-    'SELECT game_day, game_minute': {
-      rows: [{ game_day: 10, game_minute: 100, genesis_at: new Date(Date.now() - 10 * 86400000).toISOString(), simulated_day_offset: 0 }],
+    'SELECT * FROM earth_get_current_game_time()': {
+      rows: [{ game_day: 10, game_minute: 100, total_game_minutes: 10 * 1440 + 100, genesis_at: new Date(Date.now() - 10 * 86400000).toISOString(), server_now: new Date().toISOString(), real_seconds_per_game_minute: 1 }],
       rowCount: 1,
     },
     'FROM building_catalog WHERE id = $1': {

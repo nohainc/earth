@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { toJsonSafe } from './json-safe.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type EarthLegacyTaxRule = { id: string; tax_rule_id: string; rate_bps: number };
 type CorporationTaxState = {
@@ -109,7 +110,7 @@ export async function reconcileV5TaxRulesInTransaction(tx: PostgresRepository, d
 
 /** Read-only operator report for one assessed game day. */
 export async function getV5TaxReconciliation(repository: PostgresRepository, requestedAssessedDay?: number): Promise<Record<string, unknown>> {
-  const assessedDay = requestedAssessedDay ?? Math.max(1, Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1) - 1);
+  const assessedDay = requestedAssessedDay ?? Math.max(1, (await readAuthoritativeGameTime(repository)).gameDay - 1);
   const run = (await repository.query('SELECT * FROM v5_tax_reconciliation_runs WHERE assessed_game_day = $1', [assessedDay])).rows[0];
   if (!run) return { ok: true, available: false, assessedGameDay: assessedDay, items: [], generatedFrom: 'postgres-v5-tax-reconciliation' };
   const items = (await repository.query('SELECT * FROM v5_tax_reconciliation_items WHERE run_id = $1 ORDER BY authority_type, authority_id, canonical_rule_code', [run.id])).rows;

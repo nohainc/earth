@@ -10,11 +10,12 @@ import { advanceEarthTechnologyFrontier } from './earth-technology-frontier-post
 import { purchaseV5Building } from './v5-building-postgres.ts';
 import { assertScaleCapabilityAuthorized, grantCorporationScaleCapability } from './v5-scale-postgres.ts';
 import { assertGenerationAuthorized } from './v5-generation-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
-function currentDay(tx: PostgresRepository): Promise<number> {
-  return tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'").then((result) => Number(result.rows[0]?.game_day ?? 1));
+async function currentDay(tx: PostgresRepository): Promise<number> {
+  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 function bigintPayload(value: unknown, field: string): bigint {

@@ -113,6 +113,7 @@ test('listInstitutions and listRankings return structured models', async () => {
 
 test('public memorial read models are bounded and sourced from canonical facts', async () => {
   const client = new MockDbClient({
+    'SELECT * FROM earth_get_current_game_time()': { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }], rowCount: 1 },
     "WHERE h.status = 'DECEASED'": { rows: [{ human_id: 'H-DEAD', display_name: 'Ada', final_legacy: '20' }], rowCount: 1 },
     "WHERE h.status = 'ACTIVE'": { rows: [{ id: 'H-LIVE', display_name: 'Bea', composite_legacy_score: '30' }], rowCount: 1 },
     'FROM houses WHERE status': { rows: [{ id: 'HOUSE-1', house_name: 'House One' }], rowCount: 1 },

@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type PolicyInput = {
   policyType: 'OPERATING' | 'INVENTORY_RESERVE' | 'MARKET_STANDING';
@@ -27,9 +28,7 @@ export async function listHousePolicies(repository: PostgresRepository, houseId:
 
 /** Read model for the single player-facing automation configuration. */
 export async function getHouseAutomation(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
-  const day = Number((await repository.query<{ game_day: string }>(
-    "SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'",
-  )).rows[0]?.game_day ?? 1);
+  const day = (await readAuthoritativeGameTime(repository)).gameDay;
   const [policies, history] = await Promise.all([
     repository.query(`SELECT id, policy_type, version, effective_from_game_day, status, operating_mode,
              daily_spend_cap_units::TEXT, reserve_floor_units, max_input_price_units,

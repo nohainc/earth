@@ -28,7 +28,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   const [clock, cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
     readAuthoritativeGameTime(repository),
     getSettlementCursor(repository),
-    repository.query("SELECT id, game_day, game_minute, world_seed, status, genesis_at FROM world_state WHERE id = 'WORLD'"),
+    repository.query("SELECT id, world_seed, status, genesis_at FROM world_state WHERE id = 'WORLD'"),
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
     repository.query("SELECT id, house_id, display_name, age_years, standing, final_legacy, status FROM humans WHERE status = 'ACTIVE' ORDER BY id"),
     repository.query('SELECT code, asset_kind FROM economic_assets ORDER BY id'),
@@ -377,7 +377,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   return toJsonSafe({
     ok: true,
     viewerId: viewerId ?? null,
-    world: world.rows[0] ?? null,
+    world: world.rows[0] ? { ...world.rows[0], game_day: clock.gameDay, game_minute: clock.gameMinute } : null,
     clock: {
       day: clock.gameDay,
       minute: clock.gameMinute,
