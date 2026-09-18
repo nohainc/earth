@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 124,
+  "migrationVersion": 126,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -829,6 +829,31 @@
       "action_correlation_id",
       "decision",
       "created_at"
+    ],
+    "resource_behavior_metadata": [
+      "asset_id",
+      "behavior",
+      "storage_limit_units",
+      "delivery_period_game_days",
+      "decay_bps_per_day",
+      "settlement_mode",
+      "definition_version",
+      "persistence_class"
+    ],
+    "owner_storage_capacities": [
+      "id",
+      "owner_economic_id",
+      "asset_id",
+      "storage_type",
+      "storage_capacity_units",
+      "decay_reduction_bps",
+      "source_type",
+      "source_id",
+      "status",
+      "effective_from_game_day",
+      "effective_to_game_day",
+      "created_at",
+      "updated_at"
     ]
   },
   "requiredUniqueConstraints": [
@@ -838,6 +863,7 @@
     ]
   ],
   "requiredIndexes": [
+    "owner_storage_capacities_active_idx",
     "territories_one_active_primary_idx",
     "house_affiliations_one_active_idx",
     "territory_capacity_state_game_day_idx",

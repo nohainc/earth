@@ -17,6 +17,16 @@ import { settleLifeMaintenanceInTransaction, estimateLifeMaintenance } from '../
 import { refreshHouseDailyStatementsInTransaction, getHouseDailySummary } from '../cloudflare/src/house-daily-summary-postgres.ts';
 import { settleCorporationDynamics } from '../cloudflare/src/territory-settlement-postgres.ts';
 
+import {
+  getResourcePersistenceMetadata,
+  resolveOwnerStorageCapacity,
+  grantOwnerStorageCapacity,
+  calculateResourceDecayUnits,
+  settleResourcePersistenceAndDecay,
+} from '../cloudflare/src/v5-resource-persistence-postgres.ts';
+import { settlePerishableResourceDecay } from '../cloudflare/src/resource-settlement-postgres.ts';
+import { getResourceBehaviorMetadata } from '../cloudflare/src/resource-behavior-postgres.ts';
+
 const execFileAsync = promisify(execFile);
 const connectionString = process.env.DATABASE_URL || 'postgres://earth:earth_dev_only@localhost:5432/earth';
 
@@ -51,12 +61,12 @@ async function connectTo(url) {
   return client;
 }
 
-test('PostgreSQL V5 Economic Core: Schema version is 124 and migration history is valid', async () => {
+test('PostgreSQL V5 Economic Core: Schema version is 126 and migration history is valid', async () => {
   const client = await connectTo(connectionString);
   try {
     const res = await client.query('SELECT MAX(version) AS max_version, COUNT(*)::int AS count FROM earth_schema_migrations');
-    assert.equal(Number(res.rows[0].max_version), 124, 'Max migration version must be 124');
-    assert.equal(Number(res.rows[0].count), 124, 'Total applied migrations count must be 124');
+    assert.equal(Number(res.rows[0].max_version), 126, 'Max migration version must be 126');
+    assert.equal(Number(res.rows[0].count), 126, 'Total applied migrations count must be 126');
 
     const v118 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 118');
     assert.equal(v118.rows[0]?.name, '118_v5_economic_core_schema.sql');
@@ -76,6 +86,10 @@ test('PostgreSQL V5 Economic Core: Schema version is 124 and migration history i
     assert.equal(v123.rows[0]?.name, '123_v5_earth_technology_frontier.sql');
     const v124 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 124');
     assert.equal(v124.rows[0]?.name, '124_v5_technology_domain_generations.sql');
+    const v125 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 125');
+    assert.equal(v125.rows[0]?.name, '125_v5_corporation_technology_adoptions.sql');
+    const v126 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 126');
+    assert.equal(v126.rows[0]?.name, '126_v5_resource_persistence_and_storage.sql');
   } finally {
     await client.end();
   }
@@ -2777,3 +2791,898 @@ test('PostgreSQL V5 Economic Core Phase 6: Architecture integrity report passes 
     await client.end();
   }
 });
+
+// ─── Phase 9: Generation-Aware Construction and Retrofits ───
+
+import { quoteBuildingRetrofit, retrofitBuilding } from '../cloudflare/src/building-investment-postgres.ts';
+import {
+  getAvailableGenerations,
+  assertGenerationAuthorized,
+  grantCorporationTechnologyGeneration,
+  grantEarthBaselineTechnologyGeneration,
+} from '../cloudflare/src/v5-generation-postgres.ts';
+import { completeDueConstructionProjects } from '../cloudflare/src/construction-settlement-postgres.ts';
+import {
+  rebuildV5CorporationSettlementProfile,
+  rebuildV5HouseSettlementProfile,
+} from '../cloudflare/src/v5-settlement-profiles-postgres.ts';
+
+test('PostgreSQL V5 Economic Core Phase 9: New building defaults to max accessible generation and stores installed_generation', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const ts = Date.now();
+  const corpId = `CORP-P9T1-${ts}`;
+  const corpEconId = `ECON-${corpId}`;
+  const houseId = `HOUSE-P9T1-${ts}`;
+  const houseEconId = `ECON-${houseId}`;
+  const humanId = `HUMAN-P9T1-${ts}`;
+  const email = `phase9t1+${ts}@test.local`;
+  const terrId = `TERR-P9T1-${ts}`;
+  let buildingId = `BLD-P9T1-${ts}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      const day = Number((await tx.query("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+
+      // 1. Setup Corporation & House & Human
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Gen Test Corp ${ts}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, email]);
+      await tx.query(`INSERT INTO houses (id, account_id, house_name, status) VALUES ($1, $2, $3, 'ACTIVE')`, [houseId, `AUTH-${humanId}`, `Gen Test House ${ts}`]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)`, [houseId, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, 'Gen Builder', 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId]);
+      await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, joined_game_day, status) VALUES ($1, $2, 1, 'ACTIVE')`, [houseId, corpId]);
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary, created_game_day) VALUES ($1, $2, 'Gen Terr 1', 'ACTIVE', true, 1)`, [terrId, corpId]);
+
+      // 2. Quote building without generation specified
+      const quote = await quoteV5Building(repository, {
+        ownerId: humanId,
+        buildingType: 'SOLAR-MICROGRID-T1',
+      });
+
+      assert.equal(quote.ok, true);
+      assert.equal(quote.installedGeneration, 1, 'Default installed generation must be 1');
+      assert.equal(quote.maxAccessibleGeneration, 1, 'Default max accessible generation must be 1');
+      assert.deepEqual(quote.availableGenerations, [1], 'Available generations should be [1]');
+      assert.equal(quote.technologyDomain, 'ENERGY');
+      assert.equal(quote.generationAuthorization.authorized, true);
+
+      // 3. Create active building with default generation
+      await tx.query(`INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day) VALUES ($1, 'SOLAR-MICROGRID-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)`, [buildingId, houseEconId, terrId]);
+
+      // 4. Verify building in DB has installed_generation = 1 and technology_definition_version = 'tech-gen-v1'
+      const bRow = (await tx.query(`SELECT installed_generation, technology_definition_version, construction_state, status FROM buildings WHERE id = $1`, [buildingId])).rows[0];
+      assert.equal(bRow.installed_generation, 1);
+      assert.equal(bRow.technology_definition_version, 'tech-gen-v1');
+      assert.equal(bRow.status, 'ACTIVE');
+    });
+  } finally {
+    if (buildingId) {
+      await client.query('DELETE FROM buildings WHERE id = $1', [buildingId]);
+    }
+    await client.query('DELETE FROM territories WHERE id = $1', [terrId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 9: Construction blocks when requesting unavailable generation without authorization', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const ts = Date.now();
+  const corpId = `CORP-P9T2-${ts}`;
+  const corpEconId = `ECON-${corpId}`;
+  const houseId = `HOUSE-P9T2-${ts}`;
+  const houseEconId = `ECON-${houseId}`;
+  const humanId = `HUMAN-P9T2-${ts}`;
+  const email = `phase9t2+${ts}@test.local`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      // 1. Setup Corporation & House & Human
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Gen Unauth Corp ${ts}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, email]);
+      await tx.query(`INSERT INTO houses (id, account_id, house_name, status) VALUES ($1, $2, $3, 'ACTIVE')`, [houseId, `AUTH-${humanId}`, `Gen Unauth House ${ts}`]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)`, [houseId, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, 'Gen Unauth User', 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId]);
+      await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, joined_game_day, status) VALUES ($1, $2, 1, 'ACTIVE')`, [houseId, corpId]);
+
+      // Fund wallet
+      const wallet = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 500000 WHERE id = $1`, [wallet.id]);
+
+      // 2. Quote with Generation 2 (not yet unlocked)
+      const quote = await quoteV5Building(repository, {
+        ownerId: humanId,
+        buildingType: 'SOLAR-MICROGRID-T1',
+        generation: 2,
+      });
+
+      assert.equal(quote.ok, true);
+      assert.equal(quote.generationAuthorization.authorized, false);
+      assert.ok(quote.blockers.some((b) => String(b).includes('generation')), 'Blockers must mention generation');
+
+      // 3. Purchasing Gen 2 directly must throw
+      await assert.rejects(
+        () =>
+          purchaseV5Building(repository, {
+            ownerId: humanId,
+            buildingType: 'SOLAR-MICROGRID-T1',
+            name: 'Gen2 Solar',
+            generation: 2,
+            correlationId: `p9t2-fail-${ts}`,
+          }),
+        /generation/i,
+      );
+    });
+  } finally {
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 9: Corporation unlocking Gen 2 allows Corporation and affiliated House to build Gen 2 directly', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const ts = Date.now();
+  const corpId = `CORP-P9T3-${ts}`;
+  const corpEconId = `ECON-${corpId}`;
+  const houseId = `HOUSE-P9T3-${ts}`;
+  const houseEconId = `ECON-${houseId}`;
+  const humanId = `HUMAN-P9T3-${ts}`;
+  const email = `phase9t3+${ts}@test.local`;
+  const terrId = `TERR-P9T3-${ts}`;
+  const houseBuildingId = `BLD-P9T3-H-${ts}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      const day = Number((await tx.query("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+
+      // 1. Setup Corporation & House & Human
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Tech Gen Corp ${ts}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, email]);
+      await tx.query(`INSERT INTO houses (id, account_id, house_name, status) VALUES ($1, $2, $3, 'ACTIVE')`, [houseId, `AUTH-${humanId}`, `Affiliated Gen House ${ts}`]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)`, [houseId, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, 'Affiliated Gen Engineer', 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId]);
+      await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, joined_game_day, status) VALUES ($1, $2, 1, 'ACTIVE')`, [houseId, corpId]);
+      await tx.query(`INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status) VALUES ($1, $2, 'CORPORATION_EXECUTIVE', 'ACTIVE')`, [corpId, humanId]);
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary, created_game_day) VALUES ($1, $2, 'Gen Terr 3', 'ACTIVE', true, 1)`, [terrId, corpId]);
+
+      // 2. Advance Earth frontier to Gen 2 for ENERGY and grant Gen 2 to Corporation
+      await grantEarthBaselineTechnologyGeneration(tx, 'ENERGY', 2, day);
+      await grantCorporationTechnologyGeneration(tx, corpEconId, 'ENERGY', 2, day);
+
+      // Verify getAvailableGenerations reflects Gen 2 for Corporation and affiliated House
+      const corpGenInfo = await getAvailableGenerations(tx, 'ENERGY', corpEconId, 'CORPORATION', null, day);
+      assert.deepEqual(corpGenInfo.availableGenerations, [1, 2]);
+      assert.equal(corpGenInfo.maxAccessibleGeneration, 2);
+
+      const houseGenInfo = await getAvailableGenerations(tx, 'ENERGY', houseEconId, 'HOUSE', corpEconId, day);
+      assert.deepEqual(houseGenInfo.availableGenerations, [1, 2]);
+      assert.equal(houseGenInfo.maxAccessibleGeneration, 2);
+
+      // 3. Quote Gen 2 Solar Microgrid for Affiliated House
+      const houseQuote = await quoteV5Building(repository, {
+        ownerId: humanId,
+        buildingType: 'SOLAR-MICROGRID-T1',
+        generation: 2,
+      });
+      assert.equal(houseQuote.generationAuthorization.authorized, true);
+      assert.equal(houseQuote.installedGeneration, 2);
+
+      // 4. Create building with Gen 2
+      await tx.query(`INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day) VALUES ($1, 'SOLAR-MICROGRID-T1', $2, $3, 'ACTIVE', 'ACTIVE', 2, 'v5-alpha-1', 'tech-gen-v2', 'BALANCED', 1, 1)`, [houseBuildingId, houseEconId, terrId]);
+
+      // Verify DB records
+      const houseBRow = (await tx.query(`SELECT installed_generation, technology_definition_version FROM buildings WHERE id = $1`, [houseBuildingId])).rows[0];
+      assert.equal(houseBRow.installed_generation, 2);
+      assert.equal(houseBRow.technology_definition_version, 'tech-gen-v2');
+    });
+  } finally {
+    if (houseBuildingId) {
+      await client.query('DELETE FROM buildings WHERE id = $1', [houseBuildingId]);
+    }
+    await client.query('DELETE FROM territories WHERE id = $1', [terrId]);
+    await client.query('DELETE FROM corporation_technology_generations WHERE corporation_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM institution_governance_roles WHERE institution_id = $1', [corpId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 9: Retrofit quote shows zero footprint delta, identical rent, and 40% credit/resource costs', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const ts = Date.now();
+  const corpId = `CORP-P9T4-${ts}`;
+  const corpEconId = `ECON-${corpId}`;
+  const houseId = `HOUSE-P9T4-${ts}`;
+  const houseEconId = `ECON-${houseId}`;
+  const humanId = `HUMAN-P9T4-${ts}`;
+  const email = `phase9t4+${ts}@test.local`;
+  const territoryId = `TERR-P9T4-${ts}`;
+  const buildingId = `BLD-P9T4-${ts}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      const day = Number((await tx.query("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+
+      // Setup
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Retrofit Quote Corp ${ts}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, email]);
+      await tx.query(`INSERT INTO houses (id, account_id, house_name, status) VALUES ($1, $2, $3, 'ACTIVE')`, [houseId, `AUTH-${humanId}`, `Retrofit Quote House ${ts}`]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)`, [houseId, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, 'Retrofit Quoter', 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId]);
+      await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, joined_game_day, status) VALUES ($1, $2, 1, 'ACTIVE')`, [houseId, corpId]);
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary, created_game_day) VALUES ($1, $2, 'Gen Terr 4', 'ACTIVE', true, 1)`, [territoryId, corpId]);
+
+      // Create Active Gen 1 Building
+      await tx.query(`INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day) VALUES ($1, 'SOLAR-MICROGRID-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)`, [buildingId, houseEconId, territoryId]);
+
+      // Unlock Gen 2 on Earth and Corporation
+      await grantEarthBaselineTechnologyGeneration(tx, 'ENERGY', 2, day);
+      await grantCorporationTechnologyGeneration(tx, corpEconId, 'ENERGY', 2, day);
+
+      // Quote Retrofit
+      const quote = await quoteBuildingRetrofit(repository, {
+        buildingId,
+        humanId,
+        targetGeneration: 2,
+      });
+
+      assert.equal(quote.ok, true);
+      assert.equal(quote.currentGeneration, 1);
+      assert.equal(quote.targetGeneration, 2);
+      assert.equal(quote.footprintDelta, '0', 'Footprint delta must be 0 for retrofits');
+      assert.equal(quote.deltaRentUnits, '0', 'Delta rent units must be 0 for retrofits');
+      // 40% of 12000 credits = 4800
+      assert.equal(quote.creditCostUnits, '4800');
+
+      // Verify resource requirements
+      const matReq = quote.resourceRequirements.find((r) => r.code === 'MATERIAL');
+      const compReq = quote.resourceRequirements.find((r) => r.code === 'COMPONENTS');
+      const computeReq = quote.resourceRequirements.find((r) => r.code === 'COMPUTE');
+
+      assert.ok(matReq, 'MATERIAL requirement must exist');
+      assert.equal(matReq.requiredUnits, '48', '40% of 120 MATERIAL = 48');
+
+      assert.ok(compReq, 'COMPONENTS requirement must exist');
+      assert.equal(compReq.requiredUnits, '4', '40% of 12 COMPONENTS = 4');
+
+      assert.ok(computeReq, 'COMPUTE requirement must exist');
+      assert.equal(computeReq.requiredUnits, '2', '40% of 5 COMPUTE = 2.0 = 2');
+    });
+  } finally {
+    await client.query('DELETE FROM corporation_technology_generations WHERE corporation_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM buildings WHERE id = $1', [buildingId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [territoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 9: Retrofit execution consumes balanced CREDIT and resources, sets RETROFITTING state, and settles generation update', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const ts = Date.now();
+  const corpId = `CORP-P9T5-${ts}`;
+  const corpEconId = `ECON-${corpId}`;
+  const houseId = `HOUSE-P9T5-${ts}`;
+  const houseEconId = `ECON-${houseId}`;
+  const humanId = `HUMAN-P9T5-${ts}`;
+  const email = `phase9t5+${ts}@test.local`;
+  const territoryId = `TERR-P9T5-${ts}`;
+  const buildingId = `BLD-P9T5-${ts}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      const day = Number((await tx.query("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+
+      // Setup
+      await tx.query(`INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')`, [corpId, `Retrofit Exec Corp ${ts}`]);
+      await tx.query(`INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 'corporation-charter-v5', 'OPEN', 'ACTIVE', 1)`, [corpId]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)`, [corpId, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, email]);
+      await tx.query(`INSERT INTO houses (id, account_id, house_name, status) VALUES ($1, $2, $3, 'ACTIVE')`, [houseId, `AUTH-${humanId}`, `Retrofit Exec House ${ts}`]);
+      await tx.query(`INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)`, [houseId, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, 'Retrofit Executor', 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId]);
+      await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, joined_game_day, status) VALUES ($1, $2, 1, 'ACTIVE')`, [houseId, corpId]);
+      await tx.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary, created_game_day) VALUES ($1, $2, 'Gen Terr 5', 'ACTIVE', true, 1)`, [territoryId, corpId]);
+
+      // Provision balances
+      const wallet = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'WALLET'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 50000 WHERE id = $1`, [wallet.id]);
+      const matAcc = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 500 WHERE id = $1`, [matAcc.id]);
+      const compAcc = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 3 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 100 WHERE id = $1`, [compAcc.id]);
+      const computeAcc = (await tx.query(`SELECT id FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'`, [houseEconId])).rows[0];
+      await tx.query(`UPDATE economic_accounts SET balance_units = 50 WHERE id = $1`, [computeAcc.id]);
+
+      // Create Active Gen 1 Building
+      await tx.query(`INSERT INTO buildings (id, catalog_id, owner_economic_id, territory_id, status, construction_state, installed_generation, catalog_definition_version, technology_definition_version, operating_mode, started_game_day, last_major_rebuild_game_day) VALUES ($1, 'SOLAR-MICROGRID-T1', $2, $3, 'ACTIVE', 'ACTIVE', 1, 'v5-alpha-1', 'tech-gen-v1', 'BALANCED', 1, 1)`, [buildingId, houseEconId, territoryId]);
+
+      // Unlock Gen 2 on Earth and Corporation
+      await grantEarthBaselineTechnologyGeneration(tx, 'ENERGY', 2, day);
+      await grantCorporationTechnologyGeneration(tx, corpEconId, 'ENERGY', 2, day);
+
+      // Balances before retrofit
+      const walletBefore = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [wallet.id])).rows[0].b);
+      const matBefore = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [matAcc.id])).rows[0].b);
+      const compBefore = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [compAcc.id])).rows[0].b);
+      const computeBefore = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [computeAcc.id])).rows[0].b);
+
+      // Execute Retrofit
+      const correlationId = `p9t5-retrofit-${ts}`;
+      const result = await retrofitBuilding(repository, {
+        buildingId,
+        humanId,
+        targetGeneration: 2,
+        correlationId,
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.status, 'UNDER_CONSTRUCTION');
+      assert.equal(result.constructionState, 'RETROFITTING');
+      assert.equal(result.fromGeneration, 1);
+      assert.equal(result.toGeneration, 2);
+      assert.equal(result.creditCostUnits, '4800');
+
+      // Verify Credit deduction
+      const walletAfter = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [wallet.id])).rows[0].b);
+      assert.equal((walletBefore - walletAfter).toString(), '4800');
+
+      // Verify Resource deductions
+      const matAfter = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [matAcc.id])).rows[0].b);
+      assert.equal((matBefore - matAfter).toString(), '48');
+      const compAfter = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [compAcc.id])).rows[0].b);
+      assert.equal((compBefore - compAfter).toString(), '4');
+      const computeAfter = BigInt((await tx.query(`SELECT balance_units::TEXT AS b FROM economic_accounts WHERE id = $1`, [computeAcc.id])).rows[0].b);
+      assert.equal((computeBefore - computeAfter).toString(), '2');
+
+      // Verify Building status in DB
+      const bRow = (await tx.query(`SELECT status, construction_state, installed_generation FROM buildings WHERE id = $1`, [buildingId])).rows[0];
+      assert.equal(bRow.status, 'UNDER_CONSTRUCTION');
+      assert.equal(bRow.construction_state, 'RETROFITTING');
+      assert.equal(bRow.installed_generation, 1, 'Installed generation remains 1 while retrofitting is in progress');
+
+      // Verify Construction Project row
+      const proj = (await tx.query(`SELECT project_kind, target_generation_id, status FROM construction_projects WHERE correlation_id = $1`, [correlationId])).rows[0];
+      assert.equal(proj.project_kind, 'GENERATION_RETROFIT');
+      assert.equal(proj.status, 'IN_PROGRESS');
+
+      // 4. Complete construction project settlement
+      const settlement = await completeDueConstructionProjects(tx, result.expectedCompletionGameDay);
+      assert.equal(settlement.completed, 1);
+
+      // Verify Building is now ACTIVE with installed_generation = 2 and technology_definition_version = 'tech-gen-v2'
+      const completedBuilding = (await tx.query(`SELECT status, construction_state, installed_generation, technology_definition_version FROM buildings WHERE id = $1`, [buildingId])).rows[0];
+      assert.equal(completedBuilding.status, 'ACTIVE');
+      assert.equal(completedBuilding.construction_state, 'ACTIVE');
+      assert.equal(completedBuilding.installed_generation, 2);
+      assert.equal(completedBuilding.technology_definition_version, 'tech-gen-v2');
+
+      // Verify building_generation_installations record
+      const installRecord = (await tx.query(`SELECT * FROM building_generation_installations WHERE building_id = $1`, [buildingId])).rows[0];
+      assert.ok(installRecord, 'Generation installation record must be inserted');
+    });
+  } finally {
+    await client.query('DELETE FROM corporation_technology_generations WHERE corporation_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM building_generation_installations WHERE building_id = $1', [buildingId]);
+    await client.query('DELETE FROM construction_projects WHERE building_id = $1', [buildingId]);
+    await client.query('DELETE FROM game_events WHERE correlation_id LIKE $1', [`p9t5-%`]);
+    await client.query('DELETE FROM buildings WHERE id = $1', [buildingId]);
+    await client.query('DELETE FROM territories WHERE id = $1', [territoryId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query("DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE '%p9t5%')");
+    await client.query('DELETE FROM economic_transactions WHERE correlation_id LIKE $1', [`%p9t5%`]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 9: Architecture integrity report passes with 0 failures across all production entities', async () => {
+  const client = await connectTo(connectionString);
+  try {
+    const reportRes = await client.query('SELECT * FROM earth_integrity_report()');
+    for (const check of reportRes.rows) {
+      assert.equal(check.invalid_count, '0', `Integrity check ${check.check_name} must have 0 invalid rows`);
+    }
+  } finally {
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Authoritative persistence classes are configured in resource_behavior_metadata', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  try {
+    const metadata = await getResourcePersistenceMetadata(repository);
+    const byCode = Object.fromEntries(metadata.map((m) => [m.code, m]));
+
+    assert.equal(byCode.MATERIAL.persistenceClass, 'DURABLE');
+    assert.equal(byCode.MATERIAL.decayBpsPerDay, 0);
+
+    assert.equal(byCode.COMPONENTS.persistenceClass, 'DURABLE');
+    assert.equal(byCode.COMPONENTS.decayBpsPerDay, 0);
+
+    assert.equal(byCode.FOOD.persistenceClass, 'PERISHABLE');
+    assert.equal(byCode.FOOD.decayBpsPerDay, 500);
+
+    assert.equal(byCode.ENERGY.persistenceClass, 'FLOW');
+    assert.equal(byCode.ENERGY.decayBpsPerDay, 10000);
+
+    assert.equal(byCode.COMPUTE.persistenceClass, 'FLOW');
+    assert.equal(byCode.COMPUTE.decayBpsPerDay, 10000);
+
+    const behaviorMeta = await getResourceBehaviorMetadata(repository);
+    assert.ok(Array.isArray(behaviorMeta.resources));
+    const foodMeta = behaviorMeta.resources.find((r) => r.code === 'FOOD');
+    assert.equal(foodMeta.persistenceClass, 'PERISHABLE');
+  } finally {
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Durable resources (MATERIAL, COMPONENTS) do not decay across daily settlement', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testId = `p10t2-${Date.now()}`;
+  const humanId = `HUM-${testId}`;
+  const houseId = `HOUSE-${testId}`;
+  const houseEconId = `HOUSE-ECON-${testId}`;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, `${testId}@example.com`]);
+      await tx.query('INSERT INTO houses (id, account_id, house_name, dynasty_legacy, generation, status) VALUES ($1, $2, $3, 0, 1, $4)', [houseId, `AUTH-${humanId}`, `House ${testId}`, 'ACTIVE']);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, $4, 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId, `Human ${testId}`]);
+      await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
+      await tx.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)", [`REG-${testId}`, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+
+      // Seed durable balances
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 10000
+         WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = 'INVENTORY'
+      `, [houseEconId]);
+
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 5000
+         WHERE owner_economic_id = $1 AND asset_id = 3 AND account_type = 'INVENTORY'
+      `, [houseEconId]);
+
+      // Run settlement
+      const result = await settleResourcePersistenceAndDecay(tx, 10);
+      
+      // Verify balances unchanged
+      const matAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 2 AND account_type = $2', [houseEconId, 'INVENTORY'])).rows[0];
+      const compAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 3 AND account_type = $2', [houseEconId, 'INVENTORY'])).rows[0];
+
+      assert.equal(matAcc.balance_units, '10000');
+      assert.equal(compAcc.balance_units, '5000');
+    });
+  } finally {
+    await client.query("DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE '%p10t2%')");
+    await client.query("DELETE FROM economic_transactions WHERE correlation_id LIKE '%p10t2%'");
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [houseEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [houseEconId]);
+    await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [houseEconId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Perishable resource (FOOD) decays deterministically with explicit double-entry consumption transaction', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testId = `p10t3-${Date.now()}`;
+  const humanId = `HUM-${testId}`;
+  const houseId = `HOUSE-${testId}`;
+  const houseEconId = `HOUSE-ECON-${testId}`;
+  const gameDay = 10;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, `${testId}@example.com`]);
+      await tx.query('INSERT INTO houses (id, account_id, house_name, dynasty_legacy, generation, status) VALUES ($1, $2, $3, 0, 1, $4)', [houseId, `AUTH-${humanId}`, `House ${testId}`, 'ACTIVE']);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, $4, 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId, `Human ${testId}`]);
+      await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
+      await tx.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)", [`REG-${testId}`, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+
+      // Seed 10,000 units of FOOD (asset_id = 6)
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 10000
+         WHERE owner_economic_id = $1 AND asset_id = 6 AND account_type = 'INVENTORY'
+      `, [houseEconId]);
+
+      // Run perishable decay at day close
+      const result = await settlePerishableResourceDecay(tx, gameDay);
+      assert.ok(BigInt(result.expiredUnits) >= 500n);
+
+      // Verify House food balance decayed by 500 (5% of 10,000)
+      const foodAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 6 AND account_type = $2', [houseEconId, 'INVENTORY'])).rows[0];
+      assert.equal(foodAcc.balance_units, '9500');
+
+      // Verify double-entry ledger transaction
+      const txRow = (await tx.query(`
+        SELECT t.id, t.transaction_kind, t.source_type, t.source_id
+          FROM economic_transactions t
+         WHERE t.correlation_id = $1
+      `, [`food-decay:${houseEconId}:${gameDay}`])).rows[0];
+
+      assert.ok(txRow, 'Decay transaction must be recorded');
+      assert.equal(txRow.transaction_kind, 'RESOURCE_CONSUMPTION');
+      assert.equal(txRow.source_type, 'SYSTEM_CONSUMPTION');
+
+      const entries = (await tx.query(`
+        SELECT account_id, delta_units, asset_id
+          FROM economic_entries
+         WHERE transaction_id = $1
+         ORDER BY delta_units ASC
+      `, [txRow.id])).rows;
+
+      assert.equal(entries.length, 2);
+      assert.equal(entries[0].delta_units, '-500');
+      assert.equal(entries[1].delta_units, '500');
+    });
+  } finally {
+    await client.query("DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE '%food-decay%')");
+    await client.query("DELETE FROM economic_transactions WHERE correlation_id LIKE '%food-decay%'");
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [houseEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [houseEconId]);
+    await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [houseEconId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Flow resources (ENERGY, COMPUTE) remain available during daily window and unbuffered balance expires at day-close', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testId = `p10t4-${Date.now()}`;
+  const humanId = `HUM-${testId}`;
+  const houseId = `HOUSE-${testId}`;
+  const houseEconId = `HOUSE-ECON-${testId}`;
+  const corpId = `CORP-${testId}`;
+  const corpEconId = `CORP-ECON-${testId}`;
+  const gameDay = 12;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, `${testId}@example.com`]);
+      await tx.query('INSERT INTO houses (id, account_id, house_name, dynasty_legacy, generation, status) VALUES ($1, $2, $3, 0, 1, $4)', [houseId, `AUTH-${humanId}`, `House ${testId}`, 'ACTIVE']);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, $4, 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId, `Human ${testId}`]);
+      await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
+      await tx.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)", [`REG-H-${testId}`, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+
+      await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')", [corpId, `Corp ${testId}`]);
+      await tx.query("INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 1, 'OPEN', 'ACTIVE', 1)", [corpId]);
+      await tx.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)", [`REG-C-${testId}`, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      // Seed ENERGY (4) and COMPUTE (5) to Corporation with 0 storage capacity
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 2000
+         WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'
+      `, [corpEconId]);
+
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 1500
+         WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'
+      `, [corpEconId]);
+
+      // Run day-close settlement
+      const result = await settleResourcePersistenceAndDecay(tx, gameDay);
+      assert.ok(BigInt(result.expiredUnitsByAsset.ENERGY) >= 2000n);
+      assert.ok(BigInt(result.expiredUnitsByAsset.COMPUTE) >= 1500n);
+
+      // Verify Corporation flow balances expired to 0
+      const energyAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = $2', [corpEconId, 'INVENTORY'])).rows[0];
+      const computeAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = $2', [corpEconId, 'INVENTORY'])).rows[0];
+
+      assert.equal(energyAcc.balance_units, '0');
+      assert.equal(computeAcc.balance_units, '0');
+
+      // Verify double-entry ledger transactions
+      const energyTx = (await tx.query(`
+        SELECT t.id, t.transaction_kind FROM economic_transactions t WHERE t.correlation_id = $1
+      `, [`resource-decay:energy:${corpEconId}:${gameDay}`])).rows[0];
+      assert.ok(energyTx, 'Energy decay transaction must exist');
+
+      const computeTx = (await tx.query(`
+        SELECT t.id, t.transaction_kind FROM economic_transactions t WHERE t.correlation_id = $1
+      `, [`resource-decay:compute:${corpEconId}:${gameDay}`])).rows[0];
+      assert.ok(computeTx, 'Compute decay transaction must exist');
+    });
+  } finally {
+    await client.query("DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE '%resource-decay%')");
+    await client.query("DELETE FROM economic_transactions WHERE correlation_id LIKE '%resource-decay%'");
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Battery Storage modifier preserves ENERGY balance up to capacity limit, expiring only unbuffered excess', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testId = `p10t5-${Date.now()}`;
+  const corpId = `CORP-${testId}`;
+  const corpEconId = `CORP-ECON-${testId}`;
+  const gameDay = 14;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')", [corpId, `Corp ${testId}`]);
+      await tx.query("INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 1, 'OPEN', 'ACTIVE', 1)", [corpId]);
+      await tx.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)", [`REG-C-${testId}`, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      // Seed 2,500 units of ENERGY
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 2500
+         WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = 'INVENTORY'
+      `, [corpEconId]);
+
+      // Grant BATTERY_STORAGE with capacity 1,500 units
+      await grantOwnerStorageCapacity(tx, {
+        ownerEconomicId: corpEconId,
+        assetCode: 'ENERGY',
+        storageType: 'BATTERY_STORAGE',
+        capacityUnits: 1500n,
+        sourceType: 'BUILDING',
+        sourceId: `BLD-${testId}`,
+        effectiveFromGameDay: 1,
+      });
+
+      // Settle decay
+      await settleResourcePersistenceAndDecay(tx, gameDay);
+
+      // Verify Corporation ENERGY balance is preserved at exactly 1,500 units (excess 1,000 expired)
+      const energyAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 4 AND account_type = $2', [corpEconId, 'INVENTORY'])).rows[0];
+      assert.equal(energyAcc.balance_units, '1500');
+
+      // Verify ledger transaction was for exactly 1,000 units
+      const txRow = (await tx.query(`
+        SELECT t.id FROM economic_transactions t WHERE t.correlation_id = $1
+      `, [`resource-decay:energy:${corpEconId}:${gameDay}`])).rows[0];
+
+      const entries = (await tx.query(`
+        SELECT delta_units FROM economic_entries WHERE transaction_id = $1 ORDER BY delta_units ASC
+      `, [txRow.id])).rows;
+
+      assert.equal(entries[0].delta_units, '-1000');
+      assert.equal(entries[1].delta_units, '1000');
+    });
+  } finally {
+    await client.query('DELETE FROM owner_storage_capacities WHERE owner_economic_id = $1', [corpEconId]);
+    await client.query("DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE '%resource-decay%')");
+    await client.query("DELETE FROM economic_transactions WHERE correlation_id LIKE '%resource-decay%'");
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Food Reserve modifier protects FOOD inventory and mitigates decay', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testId = `p10t6-${Date.now()}`;
+  const humanId = `HUM-${testId}`;
+  const houseId = `HOUSE-${testId}`;
+  const houseEconId = `HOUSE-ECON-${testId}`;
+  const gameDay = 16;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, `${testId}@example.com`]);
+      await tx.query('INSERT INTO houses (id, account_id, house_name, dynasty_legacy, generation, status) VALUES ($1, $2, $3, 0, 1, $4)', [houseId, `AUTH-${humanId}`, `House ${testId}`, 'ACTIVE']);
+      await tx.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, $4, 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId, `Human ${testId}`]);
+      await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
+      await tx.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)", [`REG-${testId}`, houseEconId]);
+      await tx.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+
+      // Seed 10,000 units of FOOD
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 10000
+         WHERE owner_economic_id = $1 AND asset_id = 6 AND account_type = 'INVENTORY'
+      `, [houseEconId]);
+
+      // Grant FOOD_RESERVE with 6,000 capacity units protected
+      await grantOwnerStorageCapacity(tx, {
+        ownerEconomicId: houseEconId,
+        assetCode: 'FOOD',
+        storageType: 'FOOD_RESERVE',
+        capacityUnits: 6000n,
+        sourceType: 'BUILDING',
+        sourceId: `BLD-SILO-${testId}`,
+        effectiveFromGameDay: 1,
+      });
+
+      // Settle decay
+      await settleResourcePersistenceAndDecay(tx, gameDay);
+
+      // (10,000 - 6,000) = 4,000 decayable * 5% = 200 units decay.
+      // Expected balance = 10,000 - 200 = 9,800 units.
+      const foodAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 6 AND account_type = $2', [houseEconId, 'INVENTORY'])).rows[0];
+      assert.equal(foodAcc.balance_units, '9800');
+    });
+  } finally {
+    await client.query('DELETE FROM owner_storage_capacities WHERE owner_economic_id = $1', [houseEconId]);
+    await client.query("DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE '%food-decay%')");
+    await client.query("DELETE FROM economic_transactions WHERE correlation_id LIKE '%food-decay%'");
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [houseEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [houseEconId]);
+    await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [houseEconId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Compute Storage modifier protects COMPUTE flow balance up to capacity limit', async () => {
+  const client = await connectTo(connectionString);
+  const repository = new PostgresRepository(client);
+  const testId = `p10t7-${Date.now()}`;
+  const corpId = `CORP-${testId}`;
+  const corpEconId = `CORP-ECON-${testId}`;
+  const gameDay = 18;
+
+  try {
+    await repository.transaction(async (tx) => {
+      await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')", [corpId, `Corp ${testId}`]);
+      await tx.query("INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 1, 'OPEN', 'ACTIVE', 1)", [corpId]);
+      await tx.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)", [`REG-C-${testId}`, corpEconId]);
+      await tx.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+      // Seed 3,000 units of COMPUTE
+      await tx.query(`
+        UPDATE economic_accounts
+           SET balance_units = 3000
+         WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = 'INVENTORY'
+      `, [corpEconId]);
+
+      // Grant COMPUTE_STORAGE with 2,000 units capacity
+      await grantOwnerStorageCapacity(tx, {
+        ownerEconomicId: corpEconId,
+        assetCode: 'COMPUTE',
+        storageType: 'COMPUTE_STORAGE',
+        capacityUnits: 2000n,
+        sourceType: 'TECHNOLOGY',
+        sourceId: `TECH-OPTICAL-BUFFER-${testId}`,
+        effectiveFromGameDay: 1,
+      });
+
+      // Settle decay
+      await settleResourcePersistenceAndDecay(tx, gameDay);
+
+      // Verify Corporation COMPUTE balance is preserved at exactly 2,000 units (excess 1,000 expired)
+      const computeAcc = (await tx.query('SELECT balance_units FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 5 AND account_type = $2', [corpEconId, 'INVENTORY'])).rows[0];
+      assert.equal(computeAcc.balance_units, '2000');
+    });
+  } finally {
+    await client.query('DELETE FROM owner_storage_capacities WHERE owner_economic_id = $1', [corpEconId]);
+    await client.query("DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE '%resource-decay%')");
+    await client.query("DELETE FROM economic_transactions WHERE correlation_id LIKE '%resource-decay%'");
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = $1)', [corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 10: Architecture integrity report passes with 0 failures across all production and storage entities', async () => {
+  const client = await connectTo(connectionString);
+  try {
+    const reportRes = await client.query('SELECT * FROM earth_integrity_report()');
+    for (const check of reportRes.rows) {
+      assert.equal(check.invalid_count, '0', `Integrity check ${check.check_name} must have 0 invalid rows`);
+    }
+  } finally {
+    await client.end();
+  }
+});
+
+
+

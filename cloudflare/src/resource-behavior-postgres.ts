@@ -9,8 +9,9 @@ export async function getResourceBehaviorMetadata(repository: PostgresRepository
     decay_bps_per_day: number;
     settlement_mode: string;
     definition_version: string;
+    persistence_class: string;
   }>(`SELECT asset.code, behavior, storage_limit_units::TEXT, delivery_period_game_days::TEXT,
-             decay_bps_per_day, settlement_mode, definition_version
+             decay_bps_per_day, settlement_mode, definition_version, persistence_class
         FROM resource_behavior_metadata metadata
         JOIN economic_assets asset ON asset.id = metadata.asset_id
        WHERE asset.asset_kind = 'RESOURCE'
@@ -24,6 +25,7 @@ export async function getResourceBehaviorMetadata(repository: PostgresRepository
       decayBpsPerDay: row.decay_bps_per_day,
       settlementMode: row.settlement_mode,
       definitionVersion: row.definition_version,
+      persistenceClass: row.persistence_class,
     })),
     stagedSemantics: { phaseA: 'metadata', phaseB: 'food-decay', phaseC: 'flow-capacity-entitlements' },
     generatedFrom: 'postgres-canonical-facts',

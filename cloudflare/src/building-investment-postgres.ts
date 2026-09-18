@@ -3,6 +3,7 @@ import { createGameEvent } from './game-events-postgres.ts';
 import { quoteV5CorporationCapacityChange, quoteV5HouseCapacityChange } from './v5-capacity-postgres.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
+import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
 
 type UpgradeResourceRequirement = {
   code: string;
@@ -47,14 +48,55 @@ async function loadUpgradeResourceRequirements(
   }).filter((r) => BigInt(r.required_units) > 0n);
 }
 
+type RetrofitResourceRequirement = {
+  code: string;
+  asset_id: number;
+  required_units: string;
+  available_units: string;
+  missing_units: string;
+};
+
+/** Compute 40% construction resource requirements for a generation retrofit. */
+async function loadRetrofitResourceRequirements(
+  tx: PostgresRepository,
+  catalogId: string,
+  ownerEconomicId: string,
+): Promise<RetrofitResourceRequirement[]> {
+  const rows = (await tx.query<{ code: string; asset_id: number; construction_units: string; available_units: string }>(
+    `SELECT asset.code, asset.id AS asset_id,
+            COALESCE(flow.construction_units, 0)::TEXT AS construction_units,
+            COALESCE(account.balance_units, 0)::TEXT AS available_units
+       FROM building_catalog_resource_flows flow
+       JOIN economic_assets asset ON asset.id = flow.asset_id AND asset.asset_kind = 'RESOURCE'
+       LEFT JOIN economic_accounts account
+         ON account.owner_economic_id = $2 AND account.asset_id = flow.asset_id
+        AND account.account_type = 'INVENTORY' AND account.status = 'ACTIVE'
+      WHERE flow.catalog_id = $1 AND flow.construction_units > 0
+      ORDER BY asset.id`, [catalogId, ownerEconomicId],
+  )).rows;
+  return rows.map((row) => {
+    const raw = BigInt(row.construction_units);
+    const scaled = (raw * 4000n) / 10000n;
+    const required = raw > 0n && scaled === 0n ? 1n : scaled;
+    const available = BigInt(row.available_units);
+    return {
+      code: row.code,
+      asset_id: row.asset_id,
+      required_units: required.toString(),
+      available_units: row.available_units,
+      missing_units: (required > available ? required - available : 0n).toString(),
+    };
+  }).filter((r) => BigInt(r.required_units) > 0n);
+}
+
 async function getHouseBuildingActionContext(repository: PostgresRepository, buildingId: string, humanId: string) {
   const row = (await repository.query<{
     id: string; house_id: string; owner_economic_id: string; tier: number; family_code: string; catalog_id: string;
     slot_footprint: string; construction_credit_units: string; construction_minutes: number;
-    operating_mode: string;
+    operating_mode: string; status: string;
   }>(`SELECT b.id, h.house_id, b.owner_economic_id, c.tier, c.family_code, c.id AS catalog_id,
       c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes,
-      b.operating_mode
+      b.operating_mode, b.status
     FROM buildings b
     JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE'
     JOIN humans h ON h.house_id = o.id AND h.id = $2 AND h.status = 'ACTIVE'
@@ -69,8 +111,10 @@ async function getCorporationBuildingActionContext(repository: PostgresRepositor
   const row = (await repository.query<{
     id: string; corporation_id: string; owner_economic_id: string; tier: number; family_code: string;
     slot_footprint: string; construction_credit_units: string; construction_minutes: number; operating_mode: string;
+    status: string;
   }>(`SELECT b.id, owner.id AS corporation_id, b.owner_economic_id, c.tier, c.family_code,
-      c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes, b.operating_mode
+      c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes, b.operating_mode,
+      b.status
     FROM buildings b
     JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id AND owner.owner_type = 'CORPORATION'
     JOIN building_catalog c ON c.id = b.catalog_id
@@ -428,5 +472,279 @@ export async function decommissionBuilding(repository: PostgresRepository, input
     }
     await createGameEvent(tx, { id: `BUILDING-DECOMMISSIONED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_DECOMMISSIONED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: input.buildingId, title: 'Building decommissioned', details: { buildingId: input.buildingId }, correlationId: input.correlationId });
     return { ok: true, status: 'INACTIVE', buildingId: input.buildingId, v5Capacity: v5CapacityQuote, correlationId: input.correlationId };
+  });
+}
+
+export async function quoteBuildingRetrofit(
+  repository: PostgresRepository,
+  input: { buildingId: string; humanId: string; targetGeneration?: number },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const owner = (await tx.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
+      `SELECT owner.owner_type
+         FROM buildings b
+         JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id
+        WHERE b.id = $1`, [input.buildingId],
+    )).rows[0];
+    if (!owner) throw new Error('Building not found');
+
+    const isPublic = owner.owner_type === 'CORPORATION';
+    const building = isPublic
+      ? await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId)
+      : await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
+
+    const bldDetails = (await tx.query<{ installed_generation: number; construction_state: string; technology_domain: string }>(
+      `SELECT b.installed_generation, b.construction_state, c.technology_domain
+         FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id
+        WHERE b.id = $1`, [input.buildingId],
+    )).rows[0];
+
+    const currentGen = Number(bldDetails?.installed_generation ?? 1);
+    const domain = bldDetails?.technology_domain ?? 'ENERGY';
+
+    const affiliation = isPublic ? null : (await tx.query<{ corporation_economic_id: string }>(
+      `SELECT o.economic_id AS corporation_economic_id FROM house_affiliations ha JOIN owner_registry o ON o.id = ha.corporation_id AND o.owner_type = 'CORPORATION' WHERE ha.house_id = $1 AND ha.status = 'ACTIVE' LIMIT 1`,
+      [(building as any).house_id],
+    )).rows[0];
+
+    const genInfo = await getAvailableGenerations(
+      tx, domain, building.owner_economic_id, isPublic ? 'CORPORATION' : 'HOUSE',
+      isPublic ? null : affiliation?.corporation_economic_id ?? null, day,
+    );
+
+    const targetGen = input.targetGeneration ? Number(input.targetGeneration) : (currentGen + 1);
+    const genAuth = await assertGenerationAuthorized(
+      tx, domain, targetGen, building.owner_economic_id, isPublic ? 'CORPORATION' : 'HOUSE',
+      isPublic ? null : affiliation?.corporation_economic_id ?? null, day,
+    );
+
+    const projectInProgress = Boolean((await tx.query("SELECT 1 FROM construction_projects WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId])).rows[0]);
+    const creditCost = (BigInt(building.construction_credit_units) * 4000n) / 10000n;
+    const accountType = isPublic ? 'TREASURY' : 'WALLET';
+    const accountRow = (await tx.query<{ balance_units: string }>(
+      `SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = $2 AND status = 'ACTIVE'`,
+      [building.owner_economic_id, accountType],
+    )).rows[0];
+
+    if (isPublic) {
+      await rebuildV5CorporationSettlementProfile(tx, (building as any).corporation_id, day);
+    } else {
+      await refreshV5SettlementProfilesForHouse(tx, (building as any).house_id, day);
+    }
+
+    const resourceReqs = await loadRetrofitResourceRequirements(tx, building.catalog_id, building.owner_economic_id);
+    const insufficientResources = resourceReqs.filter((r) => BigInt(r.missing_units) > 0n);
+
+    let capacity: Record<string, unknown>;
+    try {
+      capacity = isPublic
+        ? (await quoteV5CorporationCapacityChange(tx, (building as any).corporation_id, 0n, day)) ?? { available: false, reason: 'V5 capacity quote unavailable' }
+        : (await quoteV5HouseCapacityChange(tx, (building as any).house_id, 0n, day)) ?? { available: false, reason: 'V5 capacity quote unavailable' };
+    } catch (error) {
+      capacity = { available: false, reason: error instanceof Error ? error.message : 'V5 capacity quote unavailable' };
+    }
+
+    const blockers = [
+      ...(targetGen <= currentGen ? ['TARGET_GENERATION_NOT_GREATER'] : []),
+      ...(!genAuth.authorized ? [String(genAuth.reason ?? 'GENERATION_UNAVAILABLE')] : []),
+      ...(projectInProgress ? ['PROJECT_IN_PROGRESS'] : []),
+      ...(building.status !== 'ACTIVE' ? ['BUILDING_NOT_ACTIVE'] : []),
+      ...(insufficientResources.length ? ['INSUFFICIENT_RESOURCES'] : []),
+      ...(accountRow && BigInt(accountRow.balance_units) >= creditCost ? [] : [isPublic ? 'INSUFFICIENT_TREASURY' : 'INSUFFICIENT_CREDITS']),
+    ];
+
+    const durationMinutes = Math.max(1440, Math.ceil(Number(building.construction_minutes) * 0.4));
+    const completionDay = day + Math.max(1, Math.ceil(durationMinutes / 1440));
+
+    return {
+      ok: true,
+      eligible: blockers.length === 0,
+      buildingId: building.id,
+      ownerType: isPublic ? 'CORPORATION' : 'HOUSE',
+      currentGeneration: currentGen,
+      targetGeneration: targetGen,
+      earthFrontierGeneration: genInfo.earthFrontierGeneration,
+      availableGenerations: genInfo.availableGenerations,
+      technologyDomain: domain,
+      generationAuthorization: genAuth,
+      creditCostUnits: creditCost.toString(),
+      resourceRequirements: resourceReqs.map((r) => ({ code: r.code, requiredUnits: r.required_units, availableUnits: r.available_units, missingUnits: r.missing_units })),
+      footprintDelta: '0',
+      beforeRentUnits: capacity?.currentChargeUnits ?? null,
+      afterRentUnits: capacity?.afterChargeUnits ?? null,
+      deltaRentUnits: '0',
+      constructionMinutes: durationMinutes,
+      effectiveConstructionMinutes: durationMinutes,
+      expectedCompletionGameDay: completionDay,
+      capacity,
+      blockers,
+      generatedFrom: 'postgres-canonical-retrofit-quote-v5',
+    };
+  });
+}
+
+export async function retrofitBuilding(
+  repository: PostgresRepository,
+  input: { buildingId: string; humanId: string; targetGeneration?: number; correlationId: string },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
+    if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: prior.source_id, correlationId: input.correlationId };
+
+    const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+    const owner = (await tx.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
+      `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
+    )).rows[0];
+    if (!owner) throw new Error('Building not found');
+
+    const isPublic = owner.owner_type === 'CORPORATION';
+    const building = isPublic
+      ? await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId)
+      : await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
+
+    if (building.status !== 'ACTIVE') throw new Error('Only an active building can be retrofitted');
+    if ((await tx.query("SELECT 1 FROM construction_projects WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId])).rows[0]) {
+      throw new Error('This building already has an investment project in progress');
+    }
+
+    const bldDetails = (await tx.query<{ installed_generation: number; technology_domain: string }>(
+      `SELECT b.installed_generation, c.technology_domain
+         FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id
+        WHERE b.id = $1`, [input.buildingId],
+    )).rows[0];
+    const currentGen = Number(bldDetails?.installed_generation ?? 1);
+    const domain = bldDetails?.technology_domain ?? 'ENERGY';
+
+    const affiliation = isPublic ? null : (await tx.query<{ corporation_economic_id: string }>(
+      `SELECT o.economic_id AS corporation_economic_id FROM house_affiliations ha JOIN owner_registry o ON o.id = ha.corporation_id AND o.owner_type = 'CORPORATION' WHERE ha.house_id = $1 AND ha.status = 'ACTIVE' LIMIT 1`,
+      [(building as any).house_id],
+    )).rows[0];
+
+    const genInfo = await getAvailableGenerations(
+      tx, domain, building.owner_economic_id, isPublic ? 'CORPORATION' : 'HOUSE',
+      isPublic ? null : affiliation?.corporation_economic_id ?? null, day,
+    );
+
+    const targetGen = input.targetGeneration ? Number(input.targetGeneration) : (currentGen + 1);
+    if (targetGen <= currentGen) throw new Error(`Target generation (${targetGen}) must be greater than current installed generation (${currentGen})`);
+
+    const genAuth = await assertGenerationAuthorized(
+      tx, domain, targetGen, building.owner_economic_id, isPublic ? 'CORPORATION' : 'HOUSE',
+      isPublic ? null : affiliation?.corporation_economic_id ?? null, day,
+    );
+    if (!genAuth.authorized) throw new Error(String(genAuth.reason ?? 'Missing required technology generation for retrofit'));
+
+    const targetGenRow = (await tx.query<{ id: string }>(
+      'SELECT id FROM technology_generations WHERE domain_id = $1 AND generation_number = $2 LIMIT 1',
+      [genInfo.domainId, targetGen],
+    )).rows[0];
+
+    const cost = (BigInt(building.construction_credit_units) * 4000n) / 10000n;
+    const accountType = isPublic ? 'TREASURY' : 'WALLET';
+    const payerAccount = (await tx.query<{ id: string; balance_units: string }>(
+      `SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = $2 AND status = 'ACTIVE' FOR UPDATE`,
+      [building.owner_economic_id, accountType],
+    )).rows[0];
+    const sink = (await tx.query<{ id: string }>(
+      `SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`,
+    )).rows[0];
+    if (!payerAccount || !sink || BigInt(payerAccount.balance_units) < cost) {
+      throw new Error(`Insufficient ${accountType === 'TREASURY' ? 'Corporation Treasury' : 'Credits'} for retrofit`);
+    }
+
+    // Incremental resource consumption (MATERIAL, COMPONENTS, COMPUTE)
+    const resourceReqs = await loadRetrofitResourceRequirements(tx, building.catalog_id, building.owner_economic_id);
+    const missing = resourceReqs.find((r) => BigInt(r.missing_units) > 0n);
+    if (missing) throw new Error(`Insufficient ${missing.code} for retrofit; missing ${missing.missing_units}`);
+
+    const resourceAccounts = await Promise.all(resourceReqs.map(async (item) => ({
+      ...item,
+      account: (await tx.query<{ id: string }>(
+        `SELECT id::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE' FOR UPDATE`,
+        [building.owner_economic_id, item.asset_id],
+      )).rows[0],
+      resSink: (await tx.query<{ id: string }>(
+        `SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-RESOURCE-CONSUMPTION' AND a.asset_id = $1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'`,
+        [item.asset_id],
+      )).rows[0],
+    })));
+    if (resourceAccounts.some((r) => !r.account || !r.resSink)) throw new Error('Retrofit resource settlement accounts are not provisioned');
+
+    // Post CREDIT transfer
+    await tx.query(
+      `SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER',$3,$4,'retrofit-investment-v5',$5::JSONB)`,
+      [input.correlationId, day, isPublic ? 'PUBLIC_RETROFIT' : 'PRIVATE_RETROFIT', input.buildingId, JSON.stringify([
+        { account_id: payerAccount.id, asset_id: 1, delta_units: (-cost).toString() },
+        { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
+      ])],
+    );
+
+    // Post RESOURCE CONSUMPTION transfer
+    if (resourceAccounts.length) {
+      await tx.query(
+        `SELECT earth_post_transaction($1,$2,1439,'RESOURCE_CONSUMPTION','SYSTEM_CONSUMPTION',$3,'retrofit-investment-v5',$4::JSONB)`,
+        [`retrofit:${input.correlationId}:resources`, day, input.buildingId, JSON.stringify(resourceAccounts.flatMap((r) => [
+          { account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_retrofit_resource_input' },
+          { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_retrofit_resource_input' },
+        ]))],
+      );
+    }
+
+    const resourceCostUnits = Object.fromEntries(resourceReqs.map((r) => [r.code, r.required_units]));
+    const projectId = `PROJECT-RETROFIT-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
+    const durationMinutes = Math.max(1440, Math.ceil(Number(building.construction_minutes) * 0.4));
+    const completion = day + Math.max(1, Math.ceil(durationMinutes / 1440));
+
+    await tx.query(
+      `INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,NULL,$4,$5,$6::JSONB,$7,$8,'IN_PROGRESS',$9,NULL,'GENERATION_RETROFIT',$10)`,
+      [projectId, building.id, building.owner_economic_id, building.catalog_id, cost.toString(), JSON.stringify(resourceCostUnits), day, completion, input.correlationId, targetGenRow?.id ?? null],
+    );
+
+    // Set downtime and RETROFITTING state
+    await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION', construction_state = 'RETROFITTING' WHERE id = $1", [building.id]);
+
+    // Update settlement profiles transactionally
+    if (isPublic) {
+      await rebuildV5CorporationSettlementProfile(tx, (building as any).corporation_id, day);
+    } else {
+      await refreshV5SettlementProfilesForHouse(tx, (building as any).house_id, day);
+    }
+
+    await createGameEvent(tx, {
+      id: `BUILDING-RETROFIT-${input.correlationId}`,
+      category: 'BUILDING',
+      eventType: 'BUILDING_RETROFIT_STARTED',
+      gameDay: day,
+      actorHumanId: input.humanId,
+      subjectType: 'BUILDING',
+      subjectId: building.id,
+      title: `Generation ${targetGen} retrofit started`,
+      details: {
+        projectId,
+        fromGeneration: currentGen,
+        toGeneration: targetGen,
+        costUnits: cost.toString(),
+        resourceCostUnits,
+        completionGameDay: completion,
+        ownerType: isPublic ? 'CORPORATION' : 'HOUSE',
+        capacityModel: 'V5_POOLED',
+      },
+      correlationId: input.correlationId,
+    });
+
+    return {
+      ok: true,
+      status: 'UNDER_CONSTRUCTION',
+      constructionState: 'RETROFITTING',
+      projectId,
+      ownerType: isPublic ? 'CORPORATION' : 'HOUSE',
+      fromGeneration: currentGen,
+      toGeneration: targetGen,
+      creditCostUnits: cost.toString(),
+      resourceCostUnits,
+      expectedCompletionGameDay: completion,
+      correlationId: input.correlationId,
+    };
   });
 }
