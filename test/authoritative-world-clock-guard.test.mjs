@@ -74,3 +74,17 @@ test('architecture guard: migration 130 defines canonical authoritative clock an
   assert.match(content, /earth_get_current_game_time/);
   assert.match(content, /earth_advance_settlement_cursor/);
 });
+
+test('architecture guard: mandatory daily actions execute inside settlement boundary', () => {
+  const schedulerSrc = fs.readFileSync(path.resolve('cloudflare/src/scheduler-postgres.ts'), 'utf8');
+  const phasesSrc = fs.readFileSync(path.resolve('cloudflare/src/daily-settlement-phases.ts'), 'utf8');
+
+  // Verify house_policy_execution is a required settlement phase
+  assert.match(phasesSrc, /required\('house_policy_execution'/);
+  assert.match(schedulerSrc, /housePolicyExecution:\s*async\s*\(\{ tx, day, shard, shardCount \}\)\s*=>\s*executeHousePoliciesForDay/);
+
+  // Verify executeHousePoliciesForDay is not called directly in runWorldSchedulerTick
+  const tickBody = schedulerSrc.slice(schedulerSrc.indexOf('function runWorldSchedulerTick'));
+  assert.doesNotMatch(tickBody, /executeHousePoliciesForDay\s*\(/);
+});
+
