@@ -3146,8 +3146,9 @@ class CorporationOverviewPanel extends StatelessWidget {
     String formatRate(int? bps) =>
         bps == null || bps < 0 ? 'UNAVAILABLE' : '${(bps / 100).toStringAsFixed(1)}%';
 
+    final rawGovProposals = state.governance['proposals'];
     final corpProposalsCount =
-        ((state.governance['proposals'] as List<dynamic>?) ?? const [])
+        (rawGovProposals is List ? rawGovProposals : const [])
             .where((raw) {
       if (raw is! Map) return false;
       final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();

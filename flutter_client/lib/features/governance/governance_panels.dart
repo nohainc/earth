@@ -270,7 +270,12 @@ class ActiveGovernanceRulePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rules = ((state.governance['rules'] as List<dynamic>?) ?? const [])
+    final rawRules = state.governance['legacyRules'] is List
+        ? (state.governance['legacyRules'] as List)
+        : (state.governance['rules'] is List
+            ? (state.governance['rules'] as List)
+            : const []);
+    final rules = rawRules
         .where((raw) =>
             raw is Map &&
             raw['institution_id']?.toString() == institutionId &&
@@ -339,8 +344,9 @@ class CivicInfluencePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const heldRoles = 0;
-    final proposals =
-        (state.governance['proposals'] as List<dynamic>?)?.length ?? 0;
+    final proposals = state.governance['proposals'] is List
+        ? (state.governance['proposals'] as List).length
+        : 0;
     final communities = state.communities.length;
 
     return EarthSection(
@@ -447,8 +453,9 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
   }
 
   List<Map<String, dynamic>> _proposalsForScope(String scope) {
-    final all =
-        ((widget.state.governance['proposals'] as List<dynamic>?) ?? const []);
+    final all = widget.state.governance['proposals'] is List
+        ? (widget.state.governance['proposals'] as List)
+        : const [];
     final filtered = <Map<String, dynamic>>[];
     for (final raw in all) {
       if (raw is! Map) continue;
@@ -641,10 +648,14 @@ class _ProposalTabContentState extends State<_ProposalTabContent> {
 
   @override
   Widget build(BuildContext context) {
-    final rules =
-        ((widget.state.governance['rules'] as List<dynamic>?) ?? const [])
-            .where((raw) => raw is Map && raw['status']?.toString() == 'active')
-            .toList();
+    final rawRules = widget.state.governance['legacyRules'] is List
+        ? (widget.state.governance['legacyRules'] as List)
+        : (widget.state.governance['rules'] is List
+            ? (widget.state.governance['rules'] as List)
+            : const []);
+    final rules = rawRules
+        .where((raw) => raw is Map && raw['status']?.toString() == 'active')
+        .toList();
     final proposalRuleId = widget.proposals
         .map((proposal) => proposal['rule_version_id']?.toString())
         .firstWhere((id) => id != null && id.isNotEmpty, orElse: () => null);
@@ -1609,9 +1620,9 @@ class _ProposalCard extends StatelessWidget {
             target['technology'] ??
             '')
         .toString();
+    final rawCorpProjects = state.corporationBuildingResearch['projects'];
     final corpResearchProjects =
-        ((state.corporationBuildingResearch['projects'] as List<dynamic>?) ??
-            const []);
+        rawCorpProjects is List ? rawCorpProjects : const [];
     final corpProj = corpResearchProjects
         .whereType<Map>()
         .map(Map<String, dynamic>.from)
@@ -1890,9 +1901,12 @@ class _ProposalCard extends StatelessWidget {
       final closesDay =
           asInt(proposal['closes_game_day'] ?? proposal['closesGameDay']);
       if (closesDay == null) return null;
-      final ruleId = proposal['rule_version_id'] ?? proposal['ruleVersionId'];
-      final rules = ((state.governance['rules'] as List<dynamic>?) ?? const []);
-      final rule = rules.whereType<Map>().cast<Map?>().firstWhere(
+      final rawRules = state.governance['legacyRules'] is List
+          ? (state.governance['legacyRules'] as List)
+          : (state.governance['rules'] is List
+              ? (state.governance['rules'] as List)
+              : const []);
+      final rule = rawRules.whereType<Map>().cast<Map?>().firstWhere(
           (item) => item?['id']?.toString() == ruleId?.toString(),
           orElse: () => null);
       final votingDays = asIntOr(rule?['voting_period_days'], 3);
@@ -2102,11 +2116,10 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taxRules = ((state.finance['taxRules'] ?? state.json['taxRules'])
-            as List<dynamic>?) ??
-        const [];
-    final proposals =
-        ((state.governance['proposals'] as List<dynamic>?) ?? const []);
+    final rawTaxRules = state.finance['taxRules'] ?? state.json['taxRules'];
+    final taxRules = rawTaxRules is List ? rawTaxRules : const [];
+    final rawProposals = state.governance['proposals'];
+    final proposals = rawProposals is List ? rawProposals : const [];
     final openProposals = proposals
         .where((raw) =>
             raw is Map &&

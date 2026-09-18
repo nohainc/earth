@@ -1681,7 +1681,8 @@ class _CreditIncomeSummaryCard extends StatelessWidget {
         0.0;
 
     final taxes = PersonalFinancePanel._map(personalFinanceData['taxes']);
-    final taxRules = (taxes['rules'] as List? ?? const [])
+    final rawTaxRules = taxes['rules'];
+    final taxRules = (rawTaxRules is List ? rawTaxRules : const [])
         .whereType<Map>()
         .map((r) => Map<String, dynamic>.from(r))
         .toList();

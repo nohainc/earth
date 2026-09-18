@@ -2435,8 +2435,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   }
 
   bool _hasActiveProposalForBuilding(String buildingType) {
-    final proposals =
-        (widget.state.governance['proposals'] as List<dynamic>?) ?? const [];
+    final rawProposals = widget.state.governance['proposals'];
+    final proposals = rawProposals is List ? rawProposals : const [];
     for (final raw in proposals) {
       if (raw is! Map ||
           raw['target_category']?.toString() != 'megaproject_procurement') {

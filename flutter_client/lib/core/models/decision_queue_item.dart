@@ -230,7 +230,8 @@ class DecisionQueueItem {
     // 2. Unresolved governance votes
     final rawGov = state.json['governance'];
     final governance = rawGov is Map ? rawGov : const {};
-    final proposals = (governance['proposals'] as List<dynamic>?) ?? const [];
+    final rawProposals = governance['proposals'];
+    final proposals = rawProposals is List ? rawProposals : const [];
     final openProps = proposals
         .where(
             (p) => p is Map && (p['status'] == 'open' || p['status'] == null))
