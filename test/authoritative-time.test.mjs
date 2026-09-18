@@ -164,7 +164,9 @@ test('16. Economic mutations resume after catch-up', async () => {
 
 test('17. Interactive transactions use the authoritative transaction clock', () => {
   const source = read('cloudflare/src/economic-transaction-postgres.ts');
-  assert.match(source, /readAuthoritativeGameTime/);
+  assert.match(source, /EconomicMutationContext/);
+  assert.match(source, /context: EconomicMutationContext/);
+  assert.doesNotMatch(source, /readAuthoritativeGameTime/);
   assert.match(source, /gameMinute/);
   assert.doesNotMatch(source, /earth_post_transaction[^;]*1439/);
 });

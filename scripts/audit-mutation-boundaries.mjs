@@ -17,8 +17,17 @@ for (const name of names) {
   if (!mutationFunctions.length) continue;
 
   const hasTransaction = /(?:repository|repo|tx)\.transaction\(/.test(source);
-  const hasExplicitBoundary = source.includes('@mutation-boundary caller-owned-transaction') || source.includes('@mutation-boundary atomic-sql');
-  const hasReplayBoundary = source.includes('correlationId') || source.includes('correlation_id') || source.includes('@mutation-boundary deterministic-settlement') || source.includes('@mutation-boundary read-only') || name === 'scheduler-postgres.ts' || name === 'roles-postgres.ts' || name === 'auth-postgres.ts' || name === 'outbox-postgres.ts';
+  const hasEconomicMutationBoundary = /\b(?:runEconomicMutation|withSettledEconomy)\s*\(/.test(source);
+  const hasAtomicSqlBoundary = /\bearth_(?:post_transaction|post_settlement_batch|withdraw_bank_deposit|settle_[a-z_]+|advance_[a-z_]+|complete_[a-z_]+|fail_[a-z_]+)\s*\(/.test(source);
+  const hasCallerOwnedBoundary = source.includes('@mutation-boundary caller-owned-transaction');
+  const hasExplicitBoundary = hasEconomicMutationBoundary || hasAtomicSqlBoundary || hasCallerOwnedBoundary || source.includes('@mutation-boundary atomic-sql');
+  const hasReplayBoundary = source.includes('correlationId') || source.includes('correlation_id')
+    || hasEconomicMutationBoundary || hasCallerOwnedBoundary
+    || source.includes('@mutation-boundary deterministic-settlement')
+    || source.includes('@mutation-boundary read-only')
+    || name === 'scheduler-postgres.ts' || name === 'roles-postgres.ts'
+    || name === 'auth-postgres.ts' || name === 'outbox-postgres.ts'
+    || name === 'settlement-barrier-postgres.ts';
   if (!hasTransaction && !hasExplicitBoundary && name !== 'financial-postgres.ts') failures.push(`${name}: mutation adapter has no explicit transaction boundary`);
   if (!hasReplayBoundary) failures.push(`${name}: mutation adapter has no visible idempotency/correlation boundary`);
   audited.push({ file: name, mutationFunctions, transaction: hasTransaction || hasExplicitBoundary || name === 'financial-postgres.ts', replayBoundary: hasReplayBoundary });

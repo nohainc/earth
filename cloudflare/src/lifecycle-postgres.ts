@@ -3,7 +3,7 @@ import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
-import { postEconomicTransaction } from './economic-transaction-postgres.ts';
+import { postSettlementTransaction, END_OF_GAME_DAY_MINUTE } from './economic-transaction-postgres.ts';
 
 async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: string, day: number): Promise<{ units: bigint; ruleVersion: string | null; transitionDays: number }> {
   const ruleRows = (await tx.query<{ id: string; rule_code: string; value_json: Record<string, unknown> }>(
@@ -37,7 +37,7 @@ async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: stri
   const requested = fixedUnits > 0n ? fixedUnits : (balance * costBps) / 10000n;
   const units = requested > 0n ? (requested < balance ? requested : balance) : 0n;
   if (units === 0n) return { units, ruleVersion: ruleRows[0].id, transitionDays };
-  await postEconomicTransaction(tx, {
+  await postSettlementTransaction(tx, {
     correlationId: `succession-cost:${houseId}:${day}`,
     kind: 'SUCCESSION_COST',
     sourceType: 'HOUSE',
@@ -47,6 +47,8 @@ async function applyOptionalSuccessionCost(tx: PostgresRepository, houseId: stri
       { account_id: house.account_id, asset_id: 1, delta_units: (-units).toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
       { account_id: ouc.account_id, asset_id: 1, delta_units: units.toString(), reason_code: 'SUCCESSION_ADMINISTRATIVE_COST' },
     ],
+    gameDay: day,
+    gameMinute: END_OF_GAME_DAY_MINUTE,
   });
   return { units, ruleVersion, transitionDays };
 }

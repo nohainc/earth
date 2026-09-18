@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { Client } from 'pg';
 
 const connectionString = process.env.DATABASE_URL;
@@ -122,11 +122,38 @@ try {
   );
   await client.query('COMMIT');
 
-  const verification = await client.query('SELECT version, name, checksum FROM earth_schema_migrations ORDER BY version');
-  if (verification.rowCount !== 1 || verification.rows[0].version !== 1 || verification.rows[0].checksum !== checksum) {
-    throw new Error('Reset verification failed: expected exactly migration 001 with the current checksum');
+  // A reset must produce the same schema as a fresh canonical installation:
+  // apply the immutable baseline, then every active forward migration.
+  const migrationDirectory = new URL('../db/migrations/', import.meta.url);
+  const forwardMigrations = [];
+  for (const name of (await readdir(migrationDirectory)).sort((a, b) => Number(a.match(/^\d+/)?.[0] ?? 0) - Number(b.match(/^\d+/)?.[0] ?? 0))) {
+    if (name === '001_baseline.sql' || !/^\d+_.+\.sql$/.test(name)) continue;
+    const sql = await readFile(new URL(name, migrationDirectory), 'utf8');
+    if (sql.includes('-- EARTH ACTIVE MIGRATION:')) forwardMigrations.push({ name, sql });
   }
-  console.log(JSON.stringify({ ok: true, reset: true, migrationVersion: 1, migration: '001_baseline.sql' }));
+  for (const migration of forwardMigrations) {
+    const version = Number(migration.name.match(/^\d+/)?.[0]);
+    const migrationChecksum = createHash('sha256').update(migration.sql).digest('hex');
+    await client.query('BEGIN');
+    try {
+      await client.query(migration.sql);
+      await client.query(
+        'INSERT INTO earth_schema_migrations (version, name, checksum) VALUES ($1, $2, $3)',
+        [version, migration.name, migrationChecksum],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  }
+
+  const verification = await client.query('SELECT version, name, checksum FROM earth_schema_migrations ORDER BY version');
+  const expectedVersion = 1 + forwardMigrations.length;
+  if (verification.rowCount !== expectedVersion || verification.rows.at(-1)?.version !== expectedVersion || verification.rows[0]?.checksum !== checksum) {
+    throw new Error(`Reset verification failed: expected canonical migration chain through ${expectedVersion}`);
+  }
+  console.log(JSON.stringify({ ok: true, reset: true, migrationVersion: expectedVersion, migration: '001_baseline.sql + active forward migrations' }));
 } catch (error) {
   await client.query('ROLLBACK').catch(() => {});
   throw error;

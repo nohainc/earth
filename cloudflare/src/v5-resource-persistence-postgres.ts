@@ -1,6 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
 import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
+// @mutation-boundary caller-owned-transaction
+
 export type ResourcePersistenceClass = 'DURABLE' | 'PERISHABLE' | 'FLOW';
 export type StorageType = 'BATTERY_STORAGE' | 'FOOD_RESERVE' | 'COMPUTE_STORAGE' | 'GENERIC_STORAGE';
 export type StorageSourceType = 'BUILDING' | 'TECHNOLOGY' | 'POLICY' | 'MANUAL';

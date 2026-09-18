@@ -12,6 +12,9 @@ test('institution spending uses one atomic Economy V2 engine', () => {
   for (const field of ['institutionId', 'budgetLineId', 'sourceAccountId', 'recipientAccountId', 'amountUnits', 'purpose', 'sourceType', 'sourceId', 'correlationId']) assert.match(source, new RegExp(field));
   assert.match(source, /FOR UPDATE/);
   assert.match(source, /earth_post_transaction/);
+  assert.doesNotMatch(source, /postingRow/);
+  assert.match(source, /posting\.transactionId/);
+  assert.match(source, /posting\.created/);
   assert.match(source, /earth_pay_budget_commitment/);
   assert.match(source, /SET spent_units = spent_units \+ \$1/);
   assert.match(source, /institution_spending_journals/);

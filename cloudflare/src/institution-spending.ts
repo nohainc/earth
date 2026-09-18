@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { postEconomicTransaction } from './economic-transaction-postgres.ts';
+import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 export type InstitutionalSpendingInput = {
   institutionId: string;
@@ -19,6 +20,7 @@ export type InstitutionalSpendingInput = {
 export async function spendInstitutionBudget(
   tx: PostgresRepository,
   input: InstitutionalSpendingInput,
+  context: EconomicMutationContext,
 ): Promise<{ transactionId: string; journalId: string; commitmentId: string | null; alreadyProcessed: boolean }> {
   const prior = await tx.query<{ id: string; economic_transaction_id: string; commitment_id: string | null }>(
     'SELECT id, economic_transaction_id, commitment_id FROM institution_spending_journals WHERE correlation_id = $1',
@@ -85,7 +87,7 @@ export async function spendInstitutionBudget(
       { account_id: input.sourceAccountId, asset_id: source.rows[0].asset_id, delta_units: (-input.amountUnits).toString(), reason_code: input.purpose },
       { account_id: input.recipientAccountId, asset_id: source.rows[0].asset_id, delta_units: input.amountUnits.toString(), reason_code: input.purpose },
     ],
-  }, { gameDay: input.gameDay, gameMinute: 0 });
+  }, context);
   if (input.commitmentId) {
     await tx.query('SELECT * FROM earth_pay_budget_commitment($1,$2)', [input.commitmentId, input.amountUnits]);
   } else {
@@ -101,10 +103,10 @@ export async function spendInstitutionBudget(
       (institution_id, budget_line_id, commitment_id, source_account_id, recipient_account_id, amount_units, purpose, source_type, source_id, economic_transaction_id, correlation_id, game_day)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING id`,
-    [input.institutionId, input.budgetLineId, input.commitmentId ?? null, input.sourceAccountId, input.recipientAccountId, input.amountUnits, input.purpose, input.sourceType, input.sourceId, postingRow.transaction_id, input.correlationId, input.gameDay],
+    [input.institutionId, input.budgetLineId, input.commitmentId ?? null, input.sourceAccountId, input.recipientAccountId, input.amountUnits, input.purpose, input.sourceType, input.sourceId, posting.transactionId, input.correlationId, input.gameDay],
   );
-  await tx.query(`SELECT earth_record_institution_financial_event($1,$2,'SPENDING',$3,$4,$5::bigint,$6,NULL,NULL,$7)`, [input.institutionId, input.gameDay, input.amountUnits, input.budgetLineId, postingRow.transaction_id, input.sourceId, input.correlationId]);
-  return { transactionId: postingRow.transaction_id, journalId: journal.rows[0].id, commitmentId: input.commitmentId ?? null, alreadyProcessed: !postingRow.created };
+  await tx.query(`SELECT earth_record_institution_financial_event($1,$2,'SPENDING',$3,$4,$5::bigint,$6,NULL,NULL,$7)`, [input.institutionId, input.gameDay, input.amountUnits, input.budgetLineId, posting.transactionId, input.sourceId, input.correlationId]);
+  return { transactionId: posting.transactionId, journalId: journal.rows[0].id, commitmentId: input.commitmentId ?? null, alreadyProcessed: !posting.created };
 }
 
 // Short domain name used by proposal/project execution code.

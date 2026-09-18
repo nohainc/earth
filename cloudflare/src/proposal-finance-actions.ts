@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { setBudgetAuthorization } from './budget-authorization.ts';
 import { approveInstitutionGrant } from './institution-grants.ts';
 import { spendInstitutionBudget } from './institution-spending.ts';
+import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 function payload(action: Record<string, unknown>, key: string): unknown {
   if (action[key] !== undefined) return action[key];
@@ -21,6 +22,7 @@ export async function executeProposalFinancialAction(
   proposal: Record<string, unknown>,
   action: Record<string, unknown>,
   gameDay: number,
+  context: EconomicMutationContext,
 ): Promise<Record<string, unknown>> {
   const actionType = String(action.actionType ?? '');
   const institutionId = String(proposal.institution_id ?? required(action, 'institutionId'));
@@ -60,7 +62,7 @@ export async function executeProposalFinancialAction(
       correlationId: `proposal-reserve:${String(proposal.id)}:1`,
       gameDay,
       commitmentId: payload(action, 'commitmentId') ? String(payload(action, 'commitmentId')) : undefined,
-    });
+    }, context);
   }
   if (['AMEND_TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(actionType)) {
     const taxRuleId = required(action, 'taxRuleId');

@@ -36,7 +36,7 @@ import { rebuildV5SettlementProfilesInShard, settleV5CorporationSettlementProfil
 import { materializeResolvedConstitutionSnapshot } from './constitutional-kernel-postgres.ts';
 import { reconcileV5TaxRulesInTransaction } from './v5-tax-reconciliation-postgres.ts';
 import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './economy-shadow.ts';
-import { processDueMarketBatches } from './market-scheduler.ts';
+import { marketBatchThroughClosedDay, processDueMarketBatches } from './market-scheduler.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -188,17 +188,35 @@ export async function runWorldSchedulerTick(
   let currentSettled = cursor.settledThroughGameDay;
   let settledDays = 0;
   let lastStatus: SettlementResult['status'] = currentSettled >= targetDay ? 'already_processed' : 'completed';
+  let marketSettlements = 0;
+  let lastMarket: Awaited<ReturnType<typeof processDueMarketBatches>> | null = null;
 
-  // 2. Strict sequential catch-up for all uncompleted closed days (single orchestrator)
+  // 2. Strict sequential catch-up for all uncompleted closed days (single orchestrator).
+  // Each day's market interval is drained before that day is settled. This
+  // preserves the same causal order after a scheduler outage as during normal
+  // continuous execution, while keeping the market watermark independent.
   while (currentSettled < targetDay && settledDays < maxCatchupDays && Date.now() - startedAt < workBudgetMs) {
     const nextDay = currentSettled + 1;
     const workerId = `scheduler:${idempotencyKey}:${nextDay}`;
     const remainingBudget = Math.max(1000, workBudgetMs - (Date.now() - startedAt));
+    const marketBudget = Math.max(1000, Math.floor(remainingBudget / 2));
+    const marketTargetBatch = marketBatchThroughClosedDay(nextDay);
+    const marketBeforeSettlement = await processDueMarketBatches(
+      repository,
+      marketBudget,
+      `${workerId}:market`,
+      _features,
+      nextDay,
+    );
+    lastMarket = marketBeforeSettlement;
+    marketSettlements += marketBeforeSettlement.batchesProcessed;
+    if (marketBeforeSettlement.processedThroughMarketBatch < marketTargetBatch) {
+      lastStatus = 'busy';
+      break;
+    }
 
-    const settlement = await runResumableSettlementDay(repository, nextDay, {
-      workerId,
-      workBudgetMs: remainingBudget,
-    });
+    const settlementBudget = Math.max(1000, workBudgetMs - (Date.now() - startedAt));
+    const settlement = await runResumableSettlementDay(repository, nextDay, { workerId, workBudgetMs: settlementBudget });
 
     lastStatus = settlement.status;
 
@@ -227,9 +245,18 @@ export async function runWorldSchedulerTick(
     totalPolicyExceptions = Number(policySummary.rows[0]?.exceptions ?? 0);
   }
 
-  // Market processing has its own absolute-time watermark and catches up
-  // independently of the daily economy cursor.
-  const market = await processDueMarketBatches(repository, Math.max(1000, (options.workBudgetMs ?? 20_000) / 2));
+  // Once all closed days are settled, market processing may catch up through
+  // the currently eligible partial open-day batches. If settlement is still
+  // behind, do not move the market beyond the last settled day.
+  const finalMarket = await processDueMarketBatches(
+    repository,
+    Math.max(1000, (options.workBudgetMs ?? 20_000) / 2),
+    `scheduler:${idempotencyKey}:market-final`,
+    _features,
+    currentSettled >= targetDay ? undefined : currentSettled,
+  );
+  lastMarket = finalMarket;
+  marketSettlements += finalMarket.batchesProcessed;
 
   if (schedulerRunId) {
     await repository.query(
@@ -247,9 +274,9 @@ export async function runWorldSchedulerTick(
     settledGameDay: currentSettled,
     settlementStatus: lastStatus,
     productionEvents: 0,
-    marketSettlements: market.batchesProcessed,
-    marketProcessedThroughBatch: market.processedThroughMarketBatch,
-    marketEligibleBatch: market.eligibleMarketBatch,
+    marketSettlements,
+    marketProcessedThroughBatch: lastMarket?.processedThroughMarketBatch,
+    marketEligibleBatch: lastMarket?.eligibleMarketBatch,
     policyActions: totalPolicyActions,
     policyExceptions: totalPolicyExceptions,
     alreadyProcessed: cursor.settledThroughGameDay >= targetDay,

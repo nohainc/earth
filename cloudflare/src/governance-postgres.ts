@@ -10,6 +10,7 @@ import { attemptProposalFunding } from './proposal-funding.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation } from './settlement-barrier-postgres.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -511,7 +512,7 @@ export async function resolveProposals(repository: PostgresRepository): Promise<
  * indivisible even when other Worker requests are active.
  */
 export async function executeProposal(repository: PostgresRepository, input: { proposalId: string; humanId: string; systemExecution?: boolean; completedDay?: number }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, economicContext) => {
   const proposal = await tx.query<{ id: string; institution_id: string; title: string; decision_status: string; outcome: string; executed_at: string | null; implementation_game_day: number | null; implementation_game_minute: number | null; target_category: string | null; target_value_json: unknown; action_snapshot: unknown; governance_snapshot: unknown; execution_status: string; challenge_status: string; created_by_human_id: string | null }>('SELECT * FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Proposal not found');
     const current = proposal.rows[0];
@@ -527,7 +528,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     const actionHandler = proposalActionHandler(action.actionType);
     await actionHandler.validateExecution({ repository: tx, proposal: current as Record<string, unknown>, action, gameDay: day });
     if (actionHandler.execute) {
-      const result = await actionHandler.execute({ repository: tx, proposal: current as Record<string, unknown>, action, gameDay: day });
+      const result = await actionHandler.execute({ repository: tx, proposal: current as Record<string, unknown>, action, gameDay: day, economicContext });
       await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'completed' WHERE id = $1", [current.id]);
       await tx.query("UPDATE proposal_actions SET execution_status = 'completed', completed_game_day = $2, result_json = $3 WHERE proposal_id = $1 AND sequence = 1", [current.id, day, JSON.stringify(result)]);
       return { ok: true, executionStatus: 'completed', result, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
@@ -561,7 +562,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
         });
       }
     };
-    const fundingAttempt = await attemptProposalFunding(tx, current.id, day);
+    const fundingAttempt = await attemptProposalFunding(tx, current.id, day, economicContext);
     if (fundingAttempt.configured && !fundingAttempt.available) {
       const funding = await tx.query<{ funding_start_day: number | null; funding_due_end_day: number | null }>('SELECT funding_start_day, funding_due_end_day FROM proposals WHERE id = $1 FOR UPDATE', [current.id]);
       const startDay = Number(funding.rows[0]?.funding_start_day ?? day + 1);

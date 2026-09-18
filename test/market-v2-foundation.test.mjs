@@ -43,3 +43,12 @@ test('Market V2 does not expose manual settlement endpoints', () => {
   assert.doesNotMatch(simulator, /path === '\/api\/market\/settle'/);
   assert.match(fs.readFileSync('cloudflare/src/market-scheduler.ts', 'utf8'), /settleMarketBatch/);
 });
+
+test('Market settlement timestamps use the closed batch boundary', () => {
+  const source = fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8');
+  const escrow = fs.readFileSync('cloudflare/src/market-escrow.ts', 'utf8');
+  assert.match(source, /marketBatchRange\(batchId, MARKET_BATCH_GAME_MINUTES\)/);
+  assert.match(source, /gamePosition\(batchRange\.endMinute - 1\)/);
+  assert.match(source, /postSettlementBatch\(tx, batchClosedAt\.gameDay, batchClosedAt\.gameMinute/);
+  assert.doesNotMatch(escrow, /earth_post_settlement_batch\([^\n]*, 0,/);
+});

@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { spendBudget } from './institution-spending.ts';
+import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 export type GrantApprovalInput = {
   grantorInstitutionId: string;
@@ -33,6 +34,7 @@ export async function approveInstitutionGrant(tx: PostgresRepository, input: Gra
 export async function payInstitutionGrant(
   tx: PostgresRepository,
   input: { grantId: string; sourceAccountId: string; recipientAccountId: string; correlationId: string; gameDay: number },
+  context: EconomicMutationContext,
 ): Promise<Record<string, unknown>> {
   const grant = await tx.query<{ grantor_institution_id: string; budget_line_id: string; commitment_id: string | null; recipient_institution_id: string; amount_units: string; status: string }>(
     'SELECT grantor_institution_id, budget_line_id, commitment_id, recipient_institution_id, amount_units, status FROM institution_grants WHERE id = $1 FOR UPDATE',
@@ -51,7 +53,7 @@ export async function payInstitutionGrant(
     correlationId: input.correlationId,
     gameDay: input.gameDay,
     commitmentId: grant.rows[0].commitment_id,
-  });
+  }, context);
   await tx.query('UPDATE institution_grants SET status = \'PAID\', paid_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [input.gameDay, input.grantId]);
   await tx.query(`SELECT earth_record_institution_financial_event($1,$2,'GRANT_SENT',$3,$4,$5::bigint,$6,NULL,NULL,$7), earth_record_institution_financial_event($8,$2,'GRANT_RECEIVED',$3,NULL,$5::bigint,$6,NULL,NULL,$7)`, [grant.rows[0].grantor_institution_id, input.gameDay, BigInt(grant.rows[0].amount_units), grant.rows[0].budget_line_id, posting.transactionId, input.grantId, input.correlationId, grant.rows[0].recipient_institution_id]);
   return { ...posting, grantId: input.grantId, recipientInstitutionId: grant.rows[0].recipient_institution_id };

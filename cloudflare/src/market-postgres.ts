@@ -3,11 +3,12 @@ import { marketFeeRate } from './market-rules.ts';
 import { getActiveMarketInstrument, getActiveSpotInstrument, MARKET_ASSET_IDS } from './market-model.ts';
 import { MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { calculateFeeUnits, calculateFeeUnitsBps, calculateQuoteUnits, displayPriceToUnits, displayQuantityToUnits, displayRateToBps, priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
-import { marketBatchId } from './market-time.ts';
+import { gamePosition, marketBatchId, marketBatchRange } from './market-time.ts';
 import { getMarketReservation, marketAccount, marketEconomicAccount, postSettlementBatch, releaseReservation, reserveForOrder, updateReservationRemaining } from './market-escrow.ts';
 import { clearMarketAuction } from './market-clearing-engine.ts';
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
 import { createGameEvent } from './game-events-postgres.ts';
+import { END_OF_GAME_DAY_MINUTE } from './economic-transaction-postgres.ts';
 
 type MarketOrderInput = {
   humanId: string;
@@ -52,7 +53,6 @@ async function earthTreasury(tx: PostgresRepository): Promise<string | null> {
   return result.rows[0]?.account_id ?? null;
 }
 
-import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { runEconomicMutation } from './settlement-barrier-postgres.ts';
 
 export async function submitMarketOrder(repository: PostgresRepository, input: MarketOrderInput): Promise<Record<string, unknown>> {
@@ -135,20 +135,33 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
        VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, 'OPEN', $9, $10, $11, $12, $13, $14)`,
       [orderId, batchId, instrument.id, ownerEconomicId, input.side.toUpperCase(), quantityUnits.toString(), limitPriceUnits.toString(), buyerFeeBps, instrument.rules_version, input.correlationId, input.sourceType ?? 'MANUAL', input.policyId ?? null, input.policyBudgetId ?? null, input.goodTilGameDay ?? null],
     );
-    await reserveForOrder(tx, { ownerId: ownerRegistryId, assetId: assetIdToReserve, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, gameDay: clock.gameDay, reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' });
+    await reserveForOrder(tx, { ownerId: ownerRegistryId, assetId: assetIdToReserve, sourceAccountId: sourceAccount, amountUnits: input.side === 'buy' ? reservedCents : quantityUnits, orderId, reason: input.side === 'buy' ? 'market_order_reservation' : 'market_sell_escrow' }, clock);
     await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), clock.gameDay);
     const order = await tx.query('SELECT * FROM market_orders WHERE id = $1', [orderId]);
     return { ok: true, order: order.rows[0], correlationId: input.correlationId };
   });
 }
 
-export async function settleMarketBatch(repository: PostgresRepository, product: string, batchId: number, settlementGameDay?: number, instrumentId?: string): Promise<Record<string, unknown>> {
+export async function settleMarketBatch(repository: PostgresRepository, product: string, batchId: number, instrumentId?: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const instrument = instrumentId ? await getActiveMarketInstrument(tx, instrumentId) : await getActiveSpotInstrument(tx, product);
     if (!instrument) throw new Error('Unknown or inactive market instrument');
+    const currentBatch = (await tx.query<{ game_day: number; game_minute: number }>(
+      'SELECT game_day, game_minute FROM market_batches WHERE id = $1',
+      [batchId],
+    )).rows[0];
+    if (!currentBatch) throw new Error(`Market batch ${batchId} does not exist`);
     const orders = await tx.query<Record<string, unknown>>(
-      `SELECT * FROM market_orders WHERE batch_id = $1 AND instrument_id = $2 AND status IN ('OPEN','PARTIAL') AND remaining_units > 0 ORDER BY created_at, id FOR UPDATE`,
-      [batchId, instrument.id],
+      `SELECT o.*
+         FROM market_orders o
+         JOIN market_batches origin ON origin.id = o.batch_id
+        WHERE o.instrument_id = $1
+          AND o.status IN ('OPEN','PARTIAL')
+          AND o.remaining_units > 0
+          AND (origin.game_day < $2 OR (origin.game_day = $2 AND origin.game_minute <= $3))
+        ORDER BY o.created_at, o.id
+        FOR UPDATE OF o`,
+      [instrument.id, currentBatch.game_day, currentBatch.game_minute],
     );
     const buys = orders.rows.filter((row) => row.side === 'BUY');
     const sells = orders.rows.filter((row) => row.side === 'SELL');
@@ -158,7 +171,9 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
       sellOrders: sells.map((row, sequenceNo) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.quantity_units)) - BigInt(String(row.remaining_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(sequenceNo) })),
     });
     if (!auction.fills.length) return { ok: true, filled: false, fillCount: 0 };
-    const day = settlementGameDay ?? (await readAuthoritativeGameTime(tx)).gameDay;
+    const batchRange = marketBatchRange(batchId, MARKET_BATCH_GAME_MINUTES);
+    const batchClosedAt = gamePosition(batchRange.endMinute - 1);
+    const day = batchClosedAt.gameDay;
     const effects = new Map<string, EscrowEffect>();
     const add = (accountId: string, assetId: number, delta: bigint, reason: string) => {
       const key = `${accountId}:${assetId}`;
@@ -213,7 +228,7 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
       }
       move.finalStatus = 'RELEASED';
     }
-    const posted = await postSettlementBatch(tx, day, `market-batch:${batchId}:${instrument.id}`, `${batchId}:${instrument.id}`, [...effects.values()].filter((entry) => entry.delta !== 0n));
+    const posted = await postSettlementBatch(tx, batchClosedAt.gameDay, batchClosedAt.gameMinute, `market-batch:${batchId}:${instrument.id}`, `${batchId}:${instrument.id}`, [...effects.values()].filter((entry) => entry.delta !== 0n));
     if (!posted.created) return { ok: true, filled: false, alreadyProcessed: true, fillCount: auction.fills.length };
     for (const move of reservationMoves.values()) await updateReservationRemaining(tx, move.orderId, move.assetId, move.amount, move.finalStatus);
     for (const [orderId, filled] of updates) await tx.query(`UPDATE market_orders SET remaining_units = remaining_units - $1, status = CASE WHEN remaining_units - $1 = 0 THEN 'FILLED' ELSE 'PARTIAL' END WHERE id = $2`, [filled.toString(), orderId]);
@@ -281,7 +296,7 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
       assetId: reservation.asset_id,
       amountUnits: BigInt(reservation.remaining_units),
       orderId: input.orderId,
-      gameDay: (await readAuthoritativeGameTime(tx)).gameDay,
+      context: clock,
       reason: 'market_order_cancellation',
     });
     await tx.query("UPDATE market_orders SET status = 'CANCELLED', remaining_units = 0 WHERE id = $1", [input.orderId]);
@@ -291,7 +306,7 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
 
 /** Expire a bounded batch of standing orders before matching. Escrow is always
  * returned through the same ledger-backed release path used by cancellation. */
-export async function expireMarketOrders(repository: PostgresRepository, gameDay: number, limit = 100): Promise<{ expired: number }> {
+export async function expireMarketOrders(repository: PostgresRepository, gameDay: number, gameMinute = END_OF_GAME_DAY_MINUTE, limit = 100): Promise<{ expired: number }> {
   return repository.transaction(async (tx) => {
     const orders = await tx.query<{ id: string; owner_economic_id: string; good_til_game_day: number }>(
       `SELECT id, owner_economic_id, good_til_game_day
@@ -314,6 +329,7 @@ export async function expireMarketOrders(repository: PostgresRepository, gameDay
           amountUnits: BigInt(reservation.remaining_units),
           orderId: order.id,
           gameDay,
+          settlement: { gameDay, gameMinute },
           reason: 'market_order_expiry',
         });
       }

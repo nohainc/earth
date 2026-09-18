@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 134,
+  "migrationVersion": 136,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [

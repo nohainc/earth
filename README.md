@@ -30,13 +30,15 @@ createdb earth
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
 ```
 
-The clean database is defined by the baseline sections under `db/baseline/` and
-applied by the immutable `db/migrations/001_baseline.sql`. For future changes,
-create active migrations starting at `002_...`; `npm run db:migrate:postgres`
-applies only migrations explicitly marked as active.
+Fresh installations use one canonical path: `db/migrations/001_baseline.sql`
+followed, in order, by every active forward migration through the current
+schema head. The files under `db/baseline/` are the frozen source sections used
+to build migration 001; they are not a complete current-schema installation.
+For future changes, create active migrations starting at the next version;
+`npm run db:migrate:postgres` applies the complete active chain.
 
-For the local database, apply the immutable baseline and then load development
-fixtures only when interactive testing requires them:
+For the local database, apply the complete migration chain and then load
+development fixtures only when interactive testing requires them:
 
 ```bash
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
@@ -110,8 +112,9 @@ in the canonical architecture documentation.
 
 - `cloudflare/` — authoritative production Cloudflare Worker API & settlement engine
 - `flutter_client/` — multiplatform production client (Web, macOS, iOS, Android, Linux, Windows)
-- `db/baseline/` — clean schema, functions, reference data, and initial system world
+- `db/baseline/` — frozen source sections for immutable migration 001
 - `db/migrations/001_baseline.sql` — immutable migration version 1
+- `db/migrations/002_...` onward — canonical forward schema evolution
 - `db/seed/` — development and test data only
 - `server.js` — non-production local reference API
 - `test/` — comprehensive automated test suites (Node.js test runner)
@@ -135,8 +138,9 @@ npm run qa
 
 ## PostgreSQL and Flutter verification
 
-The authoritative production schema is the v1 baseline and runs in PlanetScale
-PostgreSQL through the Hyperdrive binding. Verify the database before deploying:
+The authoritative production schema is the fully migrated PostgreSQL schema
+through the current migration head and runs through the Hyperdrive binding.
+Verify the database before deploying:
 
 ```bash
 DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres

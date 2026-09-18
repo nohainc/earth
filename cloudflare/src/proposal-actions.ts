@@ -2,12 +2,14 @@ import type { PostgresRepository } from './repository.ts';
 import { assertConstitutionalAmendableRule, validateConstitutionalRuleValue } from './v5-constitution.ts';
 import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
+import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 export type ProposalActionContext = {
   repository: PostgresRepository;
   proposal: Record<string, unknown>;
   action: Record<string, unknown>;
   gameDay: number;
+  economicContext?: EconomicMutationContext;
 };
 
 export interface ProposalActionHandler {
@@ -55,7 +57,10 @@ const financialHandler: ProposalActionHandler = {
       if (Number(financialSnapshotValue(action, 'effectiveDay')) < gameDay + 1) throw new Error(`${actionType} must take effect after the settlement day`);
     }
   },
-  execute: async ({ repository, proposal, action, gameDay }) => executeProposalFinancialAction(repository, proposal, action, gameDay),
+  execute: async ({ repository, proposal, action, gameDay, economicContext }) => {
+    if (!economicContext) throw new Error('Financial proposal execution requires an economic mutation context');
+    return executeProposalFinancialAction(repository, proposal, action, gameDay, economicContext);
+  },
 };
 
 const discussionHandler: ProposalActionHandler = {

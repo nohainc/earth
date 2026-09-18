@@ -107,6 +107,4 @@ export {
   type EconomicTransactionInput,
   type EconomicTransactionResult,
   type SettlementTransactionInput,
-  type GameTimeContext,
 } from './economic-transaction-postgres.ts';
-

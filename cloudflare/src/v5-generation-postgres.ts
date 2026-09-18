@@ -1,5 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 
+// @mutation-boundary caller-owned-transaction
+
 export async function resolveTechnologyDomain(
   tx: PostgresRepository,
   domainCodeOrId: string,

@@ -45,7 +45,7 @@ test('Authoritative World Clock Certification: 1. PostgreSQL migration & functio
   assert.match(baselineSchema, /CREATE TABLE world_state \([^)]*genesis_at TIMESTAMPTZ NOT NULL/);
 
   const manifest = JSON.parse(fs.readFileSync(path.resolve('db/schema-manifest.json'), 'utf8'));
-  assert.equal(manifest.migrationVersion, 134);
+  assert.equal(manifest.migrationVersion, 136);
   assert.deepEqual(manifest.requiredTables.world_state, ['id', 'world_seed', 'status', 'genesis_at']);
 });
 

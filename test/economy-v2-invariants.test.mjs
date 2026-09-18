@@ -31,15 +31,17 @@ test('clean baseline Economy V2 posting is balanced and idempotent', { skip: !co
   try {
     await client.query('UPDATE economic_accounts SET balance_units = 100 WHERE id = $1', [debitId]);
     const first = await client.query(
-      'SELECT earth_post_transaction($1, 1, 0, $2, $3, $4, $5, $6::jsonb) AS id',
+      'SELECT * FROM earth_post_transaction($1, 1, 0, $2, $3, $4, $5, $6::jsonb)',
       [correlation, 'TEST', 'baseline', 'baseline-test', 'baseline-v1', entries],
     );
     const second = await client.query(
-      'SELECT earth_post_transaction($1, 1, 0, $2, $3, $4, $5, $6::jsonb) AS id',
+      'SELECT * FROM earth_post_transaction($1, 1, 0, $2, $3, $4, $5, $6::jsonb)',
       [correlation, 'TEST', 'baseline', 'baseline-test', 'baseline-v1', entries],
     );
-    assert.equal(first.rows[0].id, second.rows[0].id);
-    const posted = await client.query('SELECT COUNT(*)::int AS count FROM economic_entries WHERE transaction_id = $1', [first.rows[0].id]);
+    assert.equal(first.rows[0].transaction_id, second.rows[0].transaction_id);
+    assert.equal(first.rows[0].created, true);
+    assert.equal(second.rows[0].created, false);
+    const posted = await client.query('SELECT COUNT(*)::int AS count FROM economic_entries WHERE transaction_id = $1', [first.rows[0].transaction_id]);
     assert.equal(posted.rows[0].count, 2);
   } finally {
     await client.query('ROLLBACK');

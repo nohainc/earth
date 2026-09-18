@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { postEconomicTransaction } from './economic-transaction-postgres.ts';
+import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 export type ProposalFundingResult = {
   configured: boolean;
@@ -13,6 +14,7 @@ export async function attemptProposalFunding(
   repository: PostgresRepository,
   proposalId: string,
   gameDay: number,
+  context: EconomicMutationContext,
 ): Promise<ProposalFundingResult> {
   const requirements = await repository.query<{
     asset_id: number;
@@ -55,6 +57,6 @@ export async function attemptProposalFunding(
     sourceId: proposalId,
     rulesVersion: 'economy-v2',
     entries,
-  });
+  }, context);
   return { configured: true, available: true, posted: Boolean(result.transactionId) };
 }

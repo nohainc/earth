@@ -11,7 +11,7 @@ import { purchaseV5Building } from './v5-building-postgres.ts';
 import { assertScaleCapabilityAuthorized, grantCorporationScaleCapability } from './v5-scale-postgres.ts';
 import { assertGenerationAuthorized } from './v5-generation-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
-import { postEconomicTransaction } from './economic-transaction-postgres.ts';
+import { postSettlementTransaction, END_OF_GAME_DAY_MINUTE } from './economic-transaction-postgres.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -421,7 +421,7 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
       )).rows[0];
       if (!wallet || BigInt(wallet.balance_units) < creditCost) throw new Error('Insufficient Credits in Corporation Treasury for scale research');
       if (!destination) throw new Error('Research settlement destination is not configured');
-      await postEconomicTransaction(tx, {
+      await postSettlementTransaction(tx, {
         correlationId: `scale-research-funding:${row.proposal_id}`,
         kind: 'ASSET_TRANSFER',
         sourceType: 'RESEARCH_FUNDING',
@@ -431,6 +431,8 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
           { accountId: wallet.id, deltaUnits: (-creditCost).toString(), assetId: 1 },
           { accountId: destination.id, deltaUnits: creditCost.toString(), assetId: 1 },
         ],
+        gameDay: day,
+        gameMinute: END_OF_GAME_DAY_MINUTE,
       });
     }
     const resourceCosts = action.researchResourceCosts ?? (payload.researchResourceCosts as Record<string, string> | undefined);
@@ -452,7 +454,7 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
           throw new Error(`Insufficient ${code} in Corporation inventory for scale research`);
         }
         if (!sink) throw new Error(`Resource consumption sink not found for asset ${code}`);
-        await postEconomicTransaction(tx, {
+        await postSettlementTransaction(tx, {
           correlationId: `scale-resource-${code}:${row.proposal_id}`,
           kind: 'ASSET_TRANSFER',
           sourceType: 'RESEARCH_CONSUMPTION',
@@ -462,6 +464,8 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
             { accountId: invAccount.id, deltaUnits: (-units).toString(), assetId: asset.id },
             { accountId: sink.id, deltaUnits: units.toString(), assetId: asset.id },
           ],
+          gameDay: day,
+          gameMinute: END_OF_GAME_DAY_MINUTE,
         });
       }
     }

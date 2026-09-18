@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { formatCreditUnits, parseCreditAmount, type CreditUnits } from './money.ts';
 import { resolveEconomicAccount } from './economic-account-resolver.ts';
-import { runEconomicMutation, postEconomicTransaction, type GameTimeContext } from './settlement-barrier-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction, type EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 export type CreditActorContext = { actorType: 'HUMAN' | 'SYSTEM'; actorId: string };
 export type CreditPrincipalContext = { principalId: string; accountPurpose: string };
@@ -17,7 +17,7 @@ export type CreditSettlementContext = {
 };
 export type CreditTransferResult = { status: 'applied' | 'already_processed'; transactionId: string; amountUnits: CreditUnits; amount: string };
 
-async function postCreditEntries(tx: PostgresRepository, context: CreditSettlementContext, debitAccountId: string, creditAccountId: string, amountUnits: CreditUnits, gameTime: GameTimeContext): Promise<CreditTransferResult> {
+async function postCreditEntries(tx: PostgresRepository, context: CreditSettlementContext, debitAccountId: string, creditAccountId: string, amountUnits: CreditUnits, gameTime: EconomicMutationContext): Promise<CreditTransferResult> {
   if (amountUnits <= 0n) throw new Error('CREDIT settlement amount must be positive');
   const result = await postEconomicTransaction(tx, {
     correlationId: context.correlationId,

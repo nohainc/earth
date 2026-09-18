@@ -1,19 +1,21 @@
 # EARTH clean database baseline
 
-This directory is the replacement starting point for a fresh EARTH database.
-It is the only source for fresh installs. Migration `001_baseline.sql` is the
-immutable first migration; future changes begin at `002_...`.
+This directory contains the frozen source sections for migration
+`db/migrations/001_baseline.sql`. It is not a complete current-schema install:
+later tables and functions are introduced by active forward migrations.
+Migration `001_baseline.sql` is the immutable first migration; future changes
+continue through the numbered active chain.
 
-Run the baseline with PostgreSQL's `psql` client:
+Fresh databases must be installed through the migration runner:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/baseline/001_baseline.sql
+DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres
 ```
 
 The bundle loads, in order:
 
-1. `01_schema.sql` — final tables, constraints, and indexes
-2. `02_functions.sql` — only final posting and integrity functions
+1. `01_schema.sql` — baseline tables, constraints, and indexes
+2. `02_functions.sql` — baseline posting and integrity functions
 3. `03_reference_data.sql` — canonical resources and reference rules
 4. `04_initial_world.sql` — system owners, accounts, instruments, and clock
 
@@ -21,9 +23,7 @@ No normal players, test houses, demo buildings, orders, deposits, or research
 projects are created here. Development and test fixtures belong under
 `db/seed/` and are intentionally outside the production baseline.
 
-While EARTH is still reconciling the clean baseline, domain changes belong in
-new numbered forward migrations under `db/migrations/` and are applied
-incrementally. Do not reset the local database between those changes. Once
-local and remote certification is complete, the temporary chain is consolidated
-and `001_baseline.sql` becomes permanently immutable; future changes then start
-at `002_...`.
+Domain changes belong in new numbered forward migrations under
+`db/migrations/` and are applied incrementally. Do not reset the local database
+between those changes. The migration chain is the canonical installation path;
+the source sections are not used directly by application environments.

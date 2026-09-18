@@ -26,6 +26,15 @@ export function eligibleMarketBatch(totalGameMinutes: number): number {
   return Math.floor(Math.max(0, totalGameMinutes) / MARKET_BATCH_GAME_MINUTES) - 1;
 }
 
+/** Highest market batch whose entire interval belongs to a closed game day. */
+export function marketBatchThroughClosedDay(gameDay: number): number {
+  return Math.floor(Math.max(0, gameDay) * 1440 / MARKET_BATCH_GAME_MINUTES) - 1;
+}
+
+export function marketBatchGameDay(batchNumber: number): number {
+  return Math.floor(Math.max(0, batchNumber) * MARKET_BATCH_GAME_MINUTES / 1440) + 1;
+}
+
 async function readMarketControl(repository: PostgresRepository): Promise<MarketControl> {
   const result = await repository.query<MarketControl>(
     `SELECT processed_through_market_batch, status, current_market_batch, lease_owner, lease_expires_at
@@ -90,17 +99,15 @@ export async function processDueMarketBatches(
   workBudgetMs = 10_000,
   leaseOwner = `market-scheduler:${crypto.randomUUID()}`,
   _features?: FeatureConfig,
+  maxGameDay?: number,
 ): Promise<MarketBatchResult> {
   const startedAt = Date.now();
   const clock = await readAuthoritativeGameTime(repository);
-  const eligibleBatch = eligibleMarketBatch(clock.totalGameMinutes);
+  const absoluteEligibleBatch = eligibleMarketBatch(clock.totalGameMinutes);
+  const eligibleBatch = maxGameDay == null
+    ? absoluteEligibleBatch
+    : Math.min(absoluteEligibleBatch, marketBatchThroughClosedDay(maxGameDay));
   const instruments = (await listActiveMarketInstruments(repository)).filter((instrument) => instrument.instrument_type === 'SPOT');
-  let expiryBudget = 100;
-  while (expiryBudget > 0 && Date.now() - startedAt < workBudgetMs) {
-    const expired = await expireMarketOrders(repository, clock.gameDay, Math.min(expiryBudget, 100));
-    expiryBudget -= expired.expired;
-    if (expired.expired === 0) break;
-  }
 
   let batchesProcessed = 0;
   let tradesCreated = 0;
@@ -108,24 +115,31 @@ export async function processDueMarketBatches(
     const batchNumber = await claimNextMarketBatch(repository, eligibleBatch, leaseOwner);
     if (batchNumber === null) break;
     try {
+      const batchGameDay = marketBatchGameDay(batchNumber);
       const batches = await repository.query<{ id: string; game_day: number; status: string }>(
-        `SELECT id, game_day, status FROM market_batches
-          WHERE correlation_id = $1 AND status IN ('OPEN','CLEARING','FAILED') LIMIT 1`,
-        [`market-batch:${batchNumber}`],
+        `INSERT INTO market_batches (game_day, game_minute, status, correlation_id)
+         VALUES ($1, $2, 'OPEN', $3)
+         ON CONFLICT (correlation_id) DO UPDATE SET correlation_id = EXCLUDED.correlation_id
+         RETURNING id, game_day, status`,
+        [batchGameDay, (batchNumber * MARKET_BATCH_GAME_MINUTES) % 1440, `market-batch:${batchNumber}`],
       );
       const batch = batches.rows[0];
+      // Expiry is part of historical batch replay. Evaluating it against the
+      // current clock would remove orders before older batches get a chance to
+      // match them, making catch-up diverge from continuous execution.
+      while (Date.now() - startedAt < workBudgetMs) {
+        const expired = await expireMarketOrders(repository, batchGameDay, (batchNumber * MARKET_BATCH_GAME_MINUTES + MARKET_BATCH_GAME_MINUTES - 1) % 1440, 100);
+        if (expired.expired === 0) break;
+      }
+      if (Date.now() - startedAt >= workBudgetMs) {
+        throw new Error(`Market batch ${batchNumber} expiry replay exceeded its work budget`);
+      }
       if (batch) {
         await repository.query(`UPDATE market_batches SET status = 'CLEARING' WHERE id = $1 AND status IN ('OPEN','FAILED')`, [batch.id]);
         for (const instrument of instruments) {
-          const orders = await repository.query<{ count: string }>(
-            `SELECT COUNT(*)::TEXT AS count FROM market_orders
-              WHERE batch_id = $1 AND instrument_id = $2 AND status IN ('OPEN','PARTIAL')`,
-            [batch.id, instrument.id],
-          );
-          if (Number(orders.rows[0]?.count ?? 0) === 0) continue;
-          const result = await settleMarketBatch(repository, instrument.product, Number(batch.id), Number(batch.game_day), instrument.id);
+          const result = await settleMarketBatch(repository, instrument.product, Number(batch.id), instrument.id);
           tradesCreated += Number(result.fillCount ?? 0);
-          await refreshMarketCandles(repository, instrument.id, Number(batch.id));
+          if (Number(result.fillCount ?? 0) > 0) await refreshMarketCandles(repository, instrument.id, Number(batch.id));
         }
         await repository.query(`UPDATE market_batches SET status = 'COMPLETED' WHERE id = $1 AND status IN ('CLEARING','OPEN')`, [batch.id]);
       }

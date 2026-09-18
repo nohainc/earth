@@ -1,5 +1,4 @@
 import type { PostgresRepository } from './repository.ts';
-import { readAuthoritativeGameTime, type AuthoritativeGameTime } from './world-clock-postgres.ts';
 import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 export type EconomicEntry = {
@@ -30,7 +29,7 @@ export type EconomicTransactionResult = {
   transactionId: string;
   gameDay: number;
   gameMinute: number;
-  created?: boolean;
+  created: boolean;
 };
 
 export type SettlementTransactionInput = EconomicTransactionInput & {
@@ -38,35 +37,21 @@ export type SettlementTransactionInput = EconomicTransactionInput & {
   gameMinute?: number;
 };
 
-export type GameTimeContext =
-  | EconomicMutationContext
-  | AuthoritativeGameTime
-  | { gameDay: number; gameMinute: number };
+export const END_OF_GAME_DAY_MINUTE = 1439;
 
 /**
  * Authoritative economic transaction posting helper for interactive operations.
- * Reads authoritative gameDay and gameMinute from PostgreSQL if not already provided
- * via EconomicMutationContext / GameTimeContext.
+ * Requires the mutation context returned by runEconomicMutation.
  *
  * Guarantees that interactive transactions are never posted with arbitrary, stale,
- * or end-of-day (1439) timestamps.
+ * or end-of-day timestamps.
  */
 export async function postEconomicTransaction(
   tx: PostgresRepository,
   input: EconomicTransactionInput,
-  context?: GameTimeContext,
+  context: EconomicMutationContext,
 ): Promise<EconomicTransactionResult> {
-  let gameDay: number;
-  let gameMinute: number;
-
-  if (context && typeof context.gameDay === 'number' && typeof context.gameMinute === 'number') {
-    gameDay = context.gameDay;
-    gameMinute = context.gameMinute;
-  } else {
-    const clock = await readAuthoritativeGameTime(tx);
-    gameDay = clock.gameDay;
-    gameMinute = clock.gameMinute;
-  }
+  const { gameDay, gameMinute } = context;
 
   if (gameDay < 1 || gameMinute < 0 || gameMinute > 1439) {
     throw new Error(`Invalid authoritative game time for transaction: day ${gameDay}, minute ${gameMinute}`);
@@ -89,8 +74,9 @@ export async function postEconomicTransaction(
     };
   });
 
-  const result = await tx.query<{ transaction_id?: string; created?: boolean; id?: string }>(
-    `SELECT earth_post_transaction($1, $2, $3, $4, $5, $6, $7, $8::JSONB) AS transaction_id`,
+  const result = await tx.query<{ transaction_id?: string; created?: boolean }>(
+    `SELECT transaction_id, created
+       FROM earth_post_transaction($1, $2, $3, $4, $5, $6, $7, $8::JSONB)`,
     [
       input.correlationId,
       gameDay,
@@ -104,27 +90,27 @@ export async function postEconomicTransaction(
   );
 
   const row = result.rows[0];
-  const txId = row?.transaction_id ?? row?.id;
+  const txId = row?.transaction_id;
   if (!txId) throw new Error(`Economic transaction ${input.correlationId} returned no result (no transaction ID)`);
 
   return {
     transactionId: String(txId),
     gameDay,
     gameMinute,
-    created: row.created !== false,
+    created: row.created === true,
   };
 }
 
 /**
  * Dedicated helper for scheduled daily settlement and end-of-day automations.
- * Uses explicit settlement game day and defaults gameMinute to 1439 (end of day).
+ * Uses explicit settlement game day and defaults to the canonical end-of-day minute.
  */
 export async function postSettlementTransaction(
   tx: PostgresRepository,
   input: SettlementTransactionInput,
 ): Promise<EconomicTransactionResult> {
   const gameDay = input.gameDay;
-  const gameMinute = input.gameMinute ?? 1439;
+  const gameMinute = input.gameMinute ?? END_OF_GAME_DAY_MINUTE;
 
   if (gameDay < 1 || gameMinute < 0 || gameMinute > 1439) {
     throw new Error(`Invalid settlement game time: day ${gameDay}, minute ${gameMinute}`);
@@ -147,8 +133,9 @@ export async function postSettlementTransaction(
     };
   });
 
-  const result = await tx.query<{ transaction_id?: string; created?: boolean; id?: string }>(
-    `SELECT earth_post_transaction($1, $2, $3, $4, $5, $6, $7, $8::JSONB) AS transaction_id`,
+  const result = await tx.query<{ transaction_id?: string; created?: boolean }>(
+    `SELECT transaction_id, created
+       FROM earth_post_transaction($1, $2, $3, $4, $5, $6, $7, $8::JSONB)`,
     [
       input.correlationId,
       gameDay,
@@ -162,13 +149,13 @@ export async function postSettlementTransaction(
   );
 
   const row = result.rows[0];
-  const txId = row?.transaction_id ?? row?.id;
+  const txId = row?.transaction_id;
   if (!txId) throw new Error(`Settlement transaction ${input.correlationId} returned no result (no transaction ID)`);
 
   return {
     transactionId: String(txId),
     gameDay,
     gameMinute,
-    created: row.created !== false,
+    created: row.created === true,
   };
 }

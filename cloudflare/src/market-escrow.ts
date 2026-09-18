@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
-import { postEconomicTransaction } from './economic-transaction-postgres.ts';
+import { postEconomicTransaction, postSettlementTransaction } from './economic-transaction-postgres.ts';
+import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
 export type EscrowEntry = { accountId: string; delta: bigint; assetId: number; reason: string };
 export type MarketReservation = { id: string; order_id: string; escrow_account_id: string; asset_id: number; reserved_units: string; remaining_units: string; status: string };
@@ -51,11 +52,10 @@ export async function ensureMarketEscrow(tx: PostgresRepository, ownerId: string
   return accountId;
 }
 
-export async function postEscrowTransaction(tx: PostgresRepository, day: number, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<boolean> {
+export async function postEscrowTransaction(tx: PostgresRepository, context: EconomicMutationContext, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<boolean> {
   if (entries.length < 2) throw new Error('Escrow movement requires at least two entries');
   const result = await postEconomicTransaction(tx, {
     correlationId,
-    gameDay: day,
     kind: 'MARKET_TRADE',
     sourceType: 'MARKET',
     sourceId,
@@ -66,15 +66,15 @@ export async function postEscrowTransaction(tx: PostgresRepository, day: number,
       deltaUnits: entry.delta.toString(),
       reasonCode: entry.reason,
     })),
-  });
+  }, context);
   return Boolean(result.transactionId);
 }
 
-export async function postSettlementBatch(tx: PostgresRepository, day: number, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<{ transactionId: string; created: boolean }> {
+export async function postSettlementBatch(tx: PostgresRepository, settlementGameDay: number, settlementGameMinute: number, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<{ transactionId: string; created: boolean }> {
   if (entries.length < 2) throw new Error('Settlement batch requires at least two entries');
   const result = await tx.query<{ transaction_id: string; created: boolean }>(
-    `SELECT transaction_id, created FROM earth_post_settlement_batch($1, $2, 0, 'MARKET', $3, 'market-v4', $4::jsonb)`,
-    [correlationId, day, sourceId, JSON.stringify(entries.map((entry) => ({ account_id: entry.accountId, asset_id: entry.assetId, delta_units: entry.delta.toString(), reason_code: entry.reason })))],
+    `SELECT transaction_id, created FROM earth_post_settlement_batch($1, $2, $3, 'MARKET', $4, 'market-v4', $5::jsonb)`,
+    [correlationId, settlementGameDay, settlementGameMinute, sourceId, JSON.stringify(entries.map((entry) => ({ account_id: entry.accountId, asset_id: entry.assetId, delta_units: entry.delta.toString(), reason_code: entry.reason })))],
   );
   if (!result.rows[0]) throw new Error('Market settlement batch returned no result');
   return { transactionId: result.rows[0].transaction_id, created: Boolean(result.rows[0].created) };
@@ -89,7 +89,7 @@ export async function getMarketReservation(tx: PostgresRepository, orderId: stri
   return result.rows[0] ?? null;
 }
 
-export async function reserveForOrder(tx: PostgresRepository, input: { ownerId: string; assetId: number; sourceAccountId: string; amountUnits: bigint; orderId: string; gameDay: number; reason: string }): Promise<string> {
+export async function reserveForOrder(tx: PostgresRepository, input: { ownerId: string; assetId: number; sourceAccountId: string; amountUnits: bigint; orderId: string; reason: string }, context: EconomicMutationContext): Promise<string> {
   if (input.amountUnits <= 0n) throw new Error('Reservation amount must be positive');
   const escrowAccountId = await ensureMarketEscrow(tx, input.ownerId, input.assetId);
   const reservation = await tx.query<{ id: string }>(
@@ -102,7 +102,7 @@ export async function reserveForOrder(tx: PostgresRepository, input: { ownerId: 
     if (!existing) throw new Error('Market reservation could not be recovered');
     return existing.escrow_account_id;
   }
-  await postEscrowTransaction(tx, input.gameDay, `market-order:${input.orderId}:reserve`, input.orderId, [
+  await postEscrowTransaction(tx, context, `market-order:${input.orderId}:reserve`, input.orderId, [
     { accountId: input.sourceAccountId, delta: -input.amountUnits, assetId: input.assetId, reason: input.reason },
     { accountId: escrowAccountId, delta: input.amountUnits, assetId: input.assetId, reason: input.reason },
   ]);
@@ -117,6 +117,8 @@ export type ReleaseReservationInput = {
   orderId: string;
   gameDay: number;
   reason?: string;
+  context?: EconomicMutationContext;
+  settlement?: { gameDay: number; gameMinute: number };
 };
 
 export async function releaseReservation(
@@ -138,10 +140,22 @@ export async function releaseReservation(
         reason: 'market_order_release',
       };
   if (input.amountUnits <= 0n) return;
-  await postEscrowTransaction(tx, input.gameDay, `market-order:${input.orderId}:release:${input.gameDay}`, input.orderId, [
+  const entries = [
     { accountId: input.escrowAccountId, delta: -input.amountUnits, assetId: input.assetId, reason: input.reason ?? 'market_order_release' },
     { accountId: input.destinationAccountId, delta: input.amountUnits, assetId: input.assetId, reason: input.reason ?? 'market_order_release' },
-  ]);
+  ];
+  if (input.context) {
+    await postEscrowTransaction(tx, input.context, `market-order:${input.orderId}:release:${input.gameDay}`, input.orderId, entries);
+  } else if (input.settlement) {
+    await postSettlementTransaction(tx, {
+      correlationId: `market-order:${input.orderId}:release:${input.gameDay}`,
+      kind: 'MARKET_TRADE', sourceType: 'MARKET', sourceId: input.orderId,
+      rulesVersion: 'market-v4', entries: entries.map((entry) => ({ account_id: entry.accountId, asset_id: entry.assetId, delta_units: entry.delta.toString(), reason_code: entry.reason })),
+      ...input.settlement,
+    });
+  } else {
+    throw new Error('Market reservation release requires an interactive mutation context or settlement coordinates');
+  }
   await tx.query(
     `UPDATE market_order_reservations
         SET remaining_units = GREATEST(0, remaining_units - $1::BIGINT),

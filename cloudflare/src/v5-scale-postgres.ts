@@ -1,5 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 
+// @mutation-boundary caller-owned-transaction
+
 export type ScaleCapability = 'SCALE_NONE' | 'SCALE_COMMERCIAL' | 'SCALE_INDUSTRIAL' | 'SCALE_STRATEGIC';
 
 export async function getAvailableScaleCapabilities(

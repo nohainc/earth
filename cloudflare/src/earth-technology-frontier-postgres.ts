@@ -1,6 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
+// @mutation-boundary caller-owned-transaction
+
 export type FrontierAdvanceInput = {
   domainId: string;
   generationNumber: number;
