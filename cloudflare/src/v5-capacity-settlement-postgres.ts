@@ -10,7 +10,9 @@ type Member = { houseId: string; corporationId: string | null; houseEconomicId: 
 async function loadSchedule(tx: PostgresRepository, scheduleId: string): Promise<Schedule> {
   const rows = (await tx.query<{ ordinal: number; lower_bound_units: string; upper_bound_units: string | null; marginal_multiplier_numerator: string; marginal_multiplier_denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT, upper_bound_units::TEXT, marginal_multiplier_numerator::TEXT, marginal_multiplier_denominator::TEXT
     FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [scheduleId])).rows;
-  const brackets = rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower_bound_units), upperBound: row.upper_bound_units === null ? null : BigInt(row.upper_bound_units), multiplierNumerator: BigInt(row.marginal_multiplier_numerator), multiplierDenominator: BigInt(row.marginal_multiplier_denominator) }));
+  const brackets = rows.length > 0
+    ? rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower_bound_units), upperBound: row.upper_bound_units === null ? null : BigInt(row.upper_bound_units), multiplierNumerator: BigInt(row.marginal_multiplier_numerator), multiplierDenominator: BigInt(row.marginal_multiplier_denominator) }))
+    : [{ ordinal: 1, lowerBound: 0n, upperBound: null, multiplierNumerator: 1n, multiplierDenominator: 1n }];
   return { id: scheduleId, brackets };
 }
 

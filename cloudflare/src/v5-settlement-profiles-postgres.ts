@@ -4,6 +4,159 @@ export const V5_SETTLEMENT_PROFILE_VERSION = 'v5-structural-capacity-1';
 
 type ProfileCount = { housesRebuilt: number; corporationsRebuilt: number };
 
+export type StructuralActionType =
+  | 'CONSTRUCTION'
+  | 'TIER_UPGRADE'
+  | 'DEMOLITION'
+  | 'RETROFIT'
+  | 'MEMBERSHIP_JOIN'
+  | 'MEMBERSHIP_LEAVE'
+  | 'MEMBERSHIP_TRANSFER'
+  | 'PUBLIC_BUILDING_CHANGE'
+  | 'BUILDING_SUSPEND'
+  | 'BUILDING_REACTIVATE'
+  | 'PROFILE_REBUILD';
+
+export interface RecordStructuralDeltaInput {
+  id?: string;
+  actionType: StructuralActionType;
+  entityType: 'HOUSE' | 'CORPORATION' | 'BUILDING';
+  entityId: string;
+  houseId?: string | null;
+  corporationId?: string | null;
+  buildingId?: string | null;
+  deltaFootprintUnits?: bigint;
+  deltaBuildingCount?: number;
+  deltaResidentialUnits?: bigint;
+  deltaProductiveUnits?: bigint;
+  deltaPublicUnits?: bigint;
+  beforeProfileSnapshot?: Record<string, unknown> | null;
+  afterProfileSnapshot?: Record<string, unknown> | null;
+  provenanceSource: string;
+  actorHumanId?: string | null;
+  correlationId: string;
+  gameDay: number;
+}
+
+export async function getHouseSettlementProfileSnapshot(
+  tx: PostgresRepository,
+  houseId: string,
+): Promise<Record<string, unknown> | null> {
+  const row = (await tx.query<{
+    house_id: string;
+    corporation_id: string | null;
+    residential_capacity_units: string;
+    productive_capacity_units: string;
+    total_capacity_units: string;
+    active_building_count: number;
+    profile_version: string;
+    dirty: boolean;
+  }>(`
+    SELECT house_id, corporation_id, residential_capacity_units::TEXT,
+           productive_capacity_units::TEXT, total_capacity_units::TEXT,
+           active_building_count, profile_version, dirty
+      FROM v5_house_settlement_profiles
+     WHERE house_id = $1
+  `, [houseId])).rows[0];
+  return row ? { ...row } : null;
+}
+
+export async function getCorporationSettlementProfileSnapshot(
+  tx: PostgresRepository,
+  corporationId: string,
+): Promise<Record<string, unknown> | null> {
+  const row = (await tx.query<{
+    corporation_id: string;
+    active_member_count: number;
+    member_residential_capacity_units: string;
+    member_productive_capacity_units: string;
+    public_capacity_units: string;
+    total_occupied_capacity_units: string;
+    active_public_building_count: number;
+    profile_version: string;
+    dirty: boolean;
+  }>(`
+    SELECT corporation_id, active_member_count, member_residential_capacity_units::TEXT,
+           member_productive_capacity_units::TEXT, public_capacity_units::TEXT,
+           total_occupied_capacity_units::TEXT, active_public_building_count,
+           profile_version, dirty
+      FROM v5_corporation_settlement_profiles
+     WHERE corporation_id = $1
+  `, [corporationId])).rows[0];
+  return row ? { ...row } : null;
+}
+
+export async function recordStructuralDelta(
+  tx: PostgresRepository,
+  input: RecordStructuralDeltaInput,
+): Promise<void> {
+  const id = input.id || `delta:${input.actionType.toLowerCase()}:${input.correlationId}:${input.entityId}`;
+  await tx.query(`
+    INSERT INTO v5_structural_deltas
+      (id, action_type, entity_type, entity_id, house_id, corporation_id, building_id,
+       delta_footprint_units, delta_building_count, delta_residential_units, delta_productive_units, delta_public_units,
+       before_profile_snapshot, after_profile_snapshot, provenance_source, actor_human_id, correlation_id, game_day)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    ON CONFLICT (id) DO UPDATE SET
+      delta_footprint_units = EXCLUDED.delta_footprint_units,
+      delta_building_count = EXCLUDED.delta_building_count,
+      delta_residential_units = EXCLUDED.delta_residential_units,
+      delta_productive_units = EXCLUDED.delta_productive_units,
+      delta_public_units = EXCLUDED.delta_public_units,
+      before_profile_snapshot = EXCLUDED.before_profile_snapshot,
+      after_profile_snapshot = EXCLUDED.after_profile_snapshot,
+      provenance_source = EXCLUDED.provenance_source,
+      actor_human_id = EXCLUDED.actor_human_id,
+      game_day = EXCLUDED.game_day
+  `, [
+    id,
+    input.actionType,
+    input.entityType,
+    input.entityId,
+    input.houseId ?? null,
+    input.corporationId ?? null,
+    input.buildingId ?? null,
+    (input.deltaFootprintUnits ?? 0n).toString(),
+    input.deltaBuildingCount ?? 0,
+    (input.deltaResidentialUnits ?? 0n).toString(),
+    (input.deltaProductiveUnits ?? 0n).toString(),
+    (input.deltaPublicUnits ?? 0n).toString(),
+    input.beforeProfileSnapshot ? JSON.stringify(input.beforeProfileSnapshot) : null,
+    input.afterProfileSnapshot ? JSON.stringify(input.afterProfileSnapshot) : null,
+    input.provenanceSource,
+    input.actorHumanId ?? null,
+    input.correlationId,
+    input.gameDay,
+  ]);
+}
+
+export async function getStructuralDeltas(
+  tx: PostgresRepository,
+  filters: { entityType?: string; entityId?: string; correlationId?: string; actionType?: string },
+): Promise<Array<Record<string, unknown>>> {
+  let query = 'SELECT * FROM v5_structural_deltas WHERE 1=1';
+  const params: unknown[] = [];
+  if (filters.entityType) {
+    params.push(filters.entityType);
+    query += ` AND entity_type = $${params.length}`;
+  }
+  if (filters.entityId) {
+    params.push(filters.entityId);
+    query += ` AND entity_id = $${params.length}`;
+  }
+  if (filters.correlationId) {
+    params.push(filters.correlationId);
+    query += ` AND correlation_id = $${params.length}`;
+  }
+  if (filters.actionType) {
+    params.push(filters.actionType);
+    query += ` AND action_type = $${params.length}`;
+  }
+  query += ' ORDER BY created_at DESC';
+  const res = await tx.query(query, params);
+  return res.rows;
+}
+
 /**
  * Rebuilds a House profile from canonical affiliation and building facts.
  * This is intentionally rebuildable: the profile is a materialized projection,
@@ -32,7 +185,7 @@ export async function rebuildV5HouseSettlementProfile(
        JOIN building_catalog bc ON bc.id = b.catalog_id
        JOIN owner_registry o ON o.economic_id = b.owner_economic_id
                             AND o.owner_type = 'HOUSE' AND o.id = $1
-      WHERE b.status = 'ACTIVE'`,
+      WHERE b.status = 'ACTIVE' AND b.v5_productive_status = 'ACTIVE'`,
     [houseId],
   )).rows[0] ?? { building_units: '0', building_count: '0' };
   await tx.query(

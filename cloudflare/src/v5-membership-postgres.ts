@@ -3,7 +3,13 @@ import { createAffiliationEvent } from './game-events-postgres.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
 import { calculateProgressiveCharge } from './v5-progressive.ts';
-import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import {
+  rebuildV5CorporationSettlementProfile,
+  refreshV5SettlementProfilesForHouse,
+  getHouseSettlementProfileSnapshot,
+  getCorporationSettlementProfileSnapshot,
+  recordStructuralDelta,
+} from './v5-settlement-profiles-postgres.ts';
 import { getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
 import { toJsonSafe } from './json-safe.ts';
 
@@ -19,7 +25,7 @@ async function houseContext(tx: PostgresRepository, humanId: string): Promise<Ho
   const row = (await tx.query<{ house_id: string; corporation_id: string | null; economic_id: string }>(`SELECT h.house_id, ha.corporation_id, o.economic_id
     FROM humans h JOIN owner_registry o ON o.id = h.house_id AND o.owner_type = 'HOUSE'
       LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE'
-    WHERE h.id = $1 AND h.status = 'ACTIVE' FOR UPDATE`, [humanId])).rows[0];
+    WHERE h.id = $1 AND h.status = 'ACTIVE' FOR UPDATE OF h, o`, [humanId])).rows[0];
   if (!row) throw new Error('Active House is required');
   const buildings = await tx.query<{ units: string }>(`SELECT COALESCE(SUM(bc.slot_footprint),0)::TEXT AS units
     FROM buildings b JOIN building_catalog bc ON bc.id = b.catalog_id WHERE b.owner_economic_id = $1 AND b.status = 'ACTIVE'`, [row.economic_id]);
@@ -48,7 +54,10 @@ async function v5Pricing(tx: PostgresRepository, corporationId: string, building
   }
   const rate = String(canonicalRate);
   const scheduleId = String(canonicalSchedule);
-  const brackets = (await tx.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [scheduleId])).rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }));
+  const rawBrackets = (await tx.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [scheduleId])).rows;
+  const brackets = rawBrackets.length > 0
+    ? rawBrackets.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }))
+    : [{ ordinal: 1, lowerBound: 0n, upperBound: null, multiplierNumerator: 1n, multiplierDenominator: 1n }];
   const current = calculateProgressiveCharge({ quantity: 1n + buildingUnits, baseRate: BigInt(rate), brackets });
   const after = calculateProgressiveCharge({ quantity: 2n + buildingUnits, baseRate: BigInt(rate), brackets });
   return { available: true, gameDay: day, residentialDelta: 1, currentUsage: current.quantity.toString(), afterUsage: after.quantity.toString(), currentCharge: current.totalCharge.toString(), afterCharge: after.totalCharge.toString(), incrementalCharge: (after.totalCharge - current.totalCharge).toString(), scheduleId, policyVersion: constitution.versionIds['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] ?? global.policyVersion };
@@ -81,8 +90,46 @@ export async function applyV5CorporationMembership(repository: PostgresRepositor
       if (!invite || invite.uses >= invite.max_uses) throw new Error('Invite is invalid, expired, or exhausted');
       await tx.query(`UPDATE corporation_invites_v5 SET uses = uses + 1, status = CASE WHEN uses + 1 >= max_uses THEN 'EXHAUSTED' ELSE status END WHERE id = $1`, [invite.id]);
     }
+    const beforeHouseProfile = await getHouseSettlementProfileSnapshot(tx, house.houseId);
+    const beforeCorpProfile = await getCorporationSettlementProfileSnapshot(tx, input.corporationId);
+
     await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1,$2,NULL,$3,'ACTIVE')`, [house.houseId, input.corporationId, world]);
     await refreshV5SettlementProfilesForHouse(tx, house.houseId, world, [input.corporationId]);
+
+    const afterHouseProfile = await getHouseSettlementProfileSnapshot(tx, house.houseId);
+    const afterCorpProfile = await getCorporationSettlementProfileSnapshot(tx, input.corporationId);
+
+    await recordStructuralDelta(tx, {
+      actionType: 'MEMBERSHIP_JOIN',
+      entityType: 'HOUSE',
+      entityId: house.houseId,
+      houseId: house.houseId,
+      corporationId: input.corporationId,
+      deltaResidentialUnits: 1n,
+      deltaProductiveUnits: house.buildingUnits,
+      beforeProfileSnapshot: beforeHouseProfile,
+      afterProfileSnapshot: afterHouseProfile,
+      provenanceSource: 'applyV5CorporationMembership',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: world,
+    });
+    await recordStructuralDelta(tx, {
+      actionType: 'MEMBERSHIP_JOIN',
+      entityType: 'CORPORATION',
+      entityId: input.corporationId,
+      houseId: house.houseId,
+      corporationId: input.corporationId,
+      deltaResidentialUnits: 1n,
+      deltaProductiveUnits: house.buildingUnits,
+      beforeProfileSnapshot: beforeCorpProfile,
+      afterProfileSnapshot: afterCorpProfile,
+      provenanceSource: 'applyV5CorporationMembership',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: world,
+    });
+
     await createAffiliationEvent(tx, { id: `V5-AFF-${input.correlationId}`, humanId: input.humanId, institutionType: 'CORPORATION', institutionId: input.corporationId, action: 'joined', gameDay: world, reason: 'v5_admission' });
     await enqueueOutbox(tx, { eventKey: `v5-membership:${input.correlationId}`, topic: 'institutions', aggregateType: 'CORPORATION', aggregateId: input.corporationId, payload: { type: 'HOUSE_CORPORATION_JOINED', houseId: house.houseId, corporationId: input.corporationId, gameDay: world } });
     return { ok: true, status: 'ACTIVE', corporationId: input.corporationId, residentialCapacityAdded: 1, capacity: await v5Pricing(tx, input.corporationId, house.buildingUnits, world), correlationId: input.correlationId };
@@ -104,8 +151,46 @@ export async function leaveV5Corporation(repository: PostgresRepository, input: 
     )).rows[0];
     if (prior) return { ok: true, alreadyProcessed: true, corporationId: input.corporationId, correlationId: input.correlationId };
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
+
+    const beforeHouseProfile = await getHouseSettlementProfileSnapshot(tx, house.houseId);
+    const beforeCorpProfile = await getCorporationSettlementProfileSnapshot(tx, input.corporationId);
+
     await tx.query(`UPDATE house_affiliations SET status = 'LEFT', left_game_day = $2 WHERE id = $1`, [affiliation.id, day]);
     await refreshV5SettlementProfilesForHouse(tx, house.houseId, day, [input.corporationId]);
+
+    const afterHouseProfile = await getHouseSettlementProfileSnapshot(tx, house.houseId);
+    const afterCorpProfile = await getCorporationSettlementProfileSnapshot(tx, input.corporationId);
+
+    await recordStructuralDelta(tx, {
+      actionType: 'MEMBERSHIP_LEAVE',
+      entityType: 'HOUSE',
+      entityId: house.houseId,
+      houseId: house.houseId,
+      corporationId: input.corporationId,
+      deltaResidentialUnits: -1n,
+      deltaProductiveUnits: -house.buildingUnits,
+      beforeProfileSnapshot: beforeHouseProfile,
+      afterProfileSnapshot: afterHouseProfile,
+      provenanceSource: 'leaveV5Corporation',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: day,
+    });
+    await recordStructuralDelta(tx, {
+      actionType: 'MEMBERSHIP_LEAVE',
+      entityType: 'CORPORATION',
+      entityId: input.corporationId,
+      houseId: house.houseId,
+      corporationId: input.corporationId,
+      deltaResidentialUnits: -1n,
+      deltaProductiveUnits: -house.buildingUnits,
+      beforeProfileSnapshot: beforeCorpProfile,
+      afterProfileSnapshot: afterCorpProfile,
+      provenanceSource: 'leaveV5Corporation',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: day,
+    });
     
     // Check if the leaving human held executive leadership roles
     const execRoles = await tx.query<{ id: number; role_code: string }>(
@@ -240,8 +325,50 @@ export async function decideV5MembershipApplication(repository: PostgresReposito
     if (input.decision === 'APPROVED') {
       const current = (await tx.query('SELECT 1 FROM house_affiliations WHERE house_id = $1 AND status = \'ACTIVE\' FOR UPDATE', [application.house_id])).rows[0];
       if (current) throw new Error('House already belongs to an active Corporation');
+      const beforeHouseProfile = await getHouseSettlementProfileSnapshot(tx, application.house_id);
+      const beforeCorpProfile = await getCorporationSettlementProfileSnapshot(tx, input.corporationId);
+
       await tx.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1,$2,NULL,$3,'ACTIVE')`, [application.house_id, input.corporationId, day]);
       await refreshV5SettlementProfilesForHouse(tx, application.house_id, day, [input.corporationId]);
+
+      const afterHouseProfile = await getHouseSettlementProfileSnapshot(tx, application.house_id);
+      const afterCorpProfile = await getCorporationSettlementProfileSnapshot(tx, input.corporationId);
+
+      const houseOwnerRow = (await tx.query<{ economic_id: string }>(`SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'HOUSE'`, [application.house_id])).rows[0];
+      const houseBuildings = houseOwnerRow ? (await tx.query<{ units: string }>(`SELECT COALESCE(SUM(bc.slot_footprint),0)::TEXT AS units FROM buildings b JOIN building_catalog bc ON bc.id = b.catalog_id WHERE b.owner_economic_id = $1 AND b.status = 'ACTIVE'`, [houseOwnerRow.economic_id])).rows[0] : null;
+      const buildingUnits = BigInt(houseBuildings?.units ?? '0');
+
+      await recordStructuralDelta(tx, {
+        actionType: 'MEMBERSHIP_JOIN',
+        entityType: 'HOUSE',
+        entityId: application.house_id,
+        houseId: application.house_id,
+        corporationId: input.corporationId,
+        deltaResidentialUnits: 1n,
+        deltaProductiveUnits: buildingUnits,
+        beforeProfileSnapshot: beforeHouseProfile,
+        afterProfileSnapshot: afterHouseProfile,
+        provenanceSource: 'decideV5MembershipApplication',
+        actorHumanId: input.humanId,
+        correlationId: `membership-app:${input.applicationId}:approved`,
+        gameDay: day,
+      });
+      await recordStructuralDelta(tx, {
+        actionType: 'MEMBERSHIP_JOIN',
+        entityType: 'CORPORATION',
+        entityId: input.corporationId,
+        houseId: application.house_id,
+        corporationId: input.corporationId,
+        deltaResidentialUnits: 1n,
+        deltaProductiveUnits: buildingUnits,
+        beforeProfileSnapshot: beforeCorpProfile,
+        afterProfileSnapshot: afterCorpProfile,
+        provenanceSource: 'decideV5MembershipApplication',
+        actorHumanId: input.humanId,
+        correlationId: `membership-app:${input.applicationId}:approved`,
+        gameDay: day,
+      });
+
       const applicant = (await tx.query<{ id: string }>("SELECT id FROM humans WHERE house_id = $1 AND status = 'ACTIVE' ORDER BY id LIMIT 1", [application.house_id])).rows[0];
       if (applicant) {
         await createAffiliationEvent(tx, { id: `V5-APP-AFF-${input.applicationId}`, humanId: applicant.id, institutionType: 'CORPORATION', institutionId: input.corporationId, action: 'joined', gameDay: day, reason: 'v5_admission_approved' });

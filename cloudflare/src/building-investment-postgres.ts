@@ -1,7 +1,13 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { quoteV5CorporationCapacityChange, quoteV5HouseCapacityChange } from './v5-capacity-postgres.ts';
-import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
+import {
+  rebuildV5CorporationSettlementProfile,
+  refreshV5SettlementProfilesForHouse,
+  getHouseSettlementProfileSnapshot,
+  getCorporationSettlementProfileSnapshot,
+  recordStructuralDelta,
+} from './v5-settlement-profiles-postgres.ts';
 import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
 
@@ -213,11 +219,29 @@ async function upgradeCorporationBuilding(repository: PostgresRepository, input:
     await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','PUBLIC_TIER_UPGRADE',$3,'construction-investment-v5',$4::JSONB)`, [input.correlationId, day, input.buildingId, JSON.stringify([{ account_id: treasury.id, asset_id: 1, delta_units: (-cost).toString() }, { account_id: sink.id, asset_id: 1, delta_units: cost.toString() }])]);
     if (resourceAccounts.length) await tx.query(`SELECT earth_post_transaction($1,$2,1439,'RESOURCE_CONSUMPTION','SYSTEM_CONSUMPTION',$3,'upgrade-investment-v5',$4::JSONB)`, [`upgrade:${input.correlationId}:resources`, day, input.buildingId, JSON.stringify(resourceAccounts.flatMap((r) => [{ account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_upgrade_resource_input' }, { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_upgrade_resource_input' }]))]);
     const resourceCostUnits = Object.fromEntries(resourceReqs.map((r) => [r.code, r.required_units]));
+    const beforeProfile = await getCorporationSettlementProfileSnapshot(tx, building.corporation_id);
     const projectId = `PROJECT-UPGRADE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const completion = day + Math.max(1, Math.ceil(Number(next.construction_minutes) / 1440));
     await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind) VALUES ($1,$2,$3,NULL,$4,$5,$6::JSONB,$7,$8,'IN_PROGRESS',$9,NULL,'TIER_UPGRADE')`, [projectId, building.id, building.owner_economic_id, next.id, cost.toString(), JSON.stringify(resourceCostUnits), day, completion, input.correlationId]);
     await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION' WHERE id = $1", [building.id]);
     await rebuildV5CorporationSettlementProfile(tx, building.corporation_id, day);
+    const afterProfile = await getCorporationSettlementProfileSnapshot(tx, building.corporation_id);
+
+    await recordStructuralDelta(tx, {
+      actionType: 'TIER_UPGRADE',
+      entityType: 'CORPORATION',
+      entityId: building.corporation_id,
+      corporationId: building.corporation_id,
+      buildingId: building.id,
+      deltaFootprintUnits: footprintDelta,
+      beforeProfileSnapshot: beforeProfile,
+      afterProfileSnapshot: afterProfile,
+      provenanceSource: 'upgradeCorporationBuilding',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: day,
+    });
+
     await createGameEvent(tx, { id: `BUILDING-UPGRADE-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_TIER_UPGRADE_STARTED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: `Tier ${building.tier + 1} upgrade started`, details: { projectId, fromTier: building.tier, toTier: building.tier + 1, costUnits: cost.toString(), resourceCostUnits, completionGameDay: completion, ownerType: 'CORPORATION', capacityModel: 'V5_POOLED', territoryPlacement: null }, correlationId: input.correlationId });
     return { ok: true, status: 'UNDER_CONSTRUCTION', projectId, ownerType: 'CORPORATION', fromTier: building.tier, toTier: building.tier + 1, creditCostUnits: cost.toString(), resourceCostUnits, expectedCompletionGameDay: completion, v5Capacity: capacity, correlationId: input.correlationId };
   });
@@ -239,10 +263,28 @@ async function decommissionCorporationBuilding(repository: PostgresRepository, i
     const day = Number((await tx.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const capacity = await quoteV5CorporationCapacityChange(tx, building.corporation_id, -BigInt(building.slot_footprint), day);
+    const beforeProfile = await getCorporationSettlementProfileSnapshot(tx, building.corporation_id);
     const result = await tx.query<{ id: string }>("UPDATE buildings SET status = 'INACTIVE' WHERE id = $1 AND status IN ('ACTIVE','UNDER_CONSTRUCTION') RETURNING id", [input.buildingId]);
     if (!result.rows[0]) throw new Error('Building is already inactive');
     await tx.query("UPDATE construction_projects SET status = 'CANCELLED', cancelled_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId, day]);
     await rebuildV5CorporationSettlementProfile(tx, building.corporation_id, day);
+    const afterProfile = await getCorporationSettlementProfileSnapshot(tx, building.corporation_id);
+
+    await recordStructuralDelta(tx, {
+      actionType: 'DEMOLITION',
+      entityType: 'CORPORATION',
+      entityId: building.corporation_id,
+      corporationId: building.corporation_id,
+      buildingId: input.buildingId,
+      deltaFootprintUnits: -BigInt(building.slot_footprint),
+      deltaBuildingCount: -1,
+      beforeProfileSnapshot: beforeProfile,
+      afterProfileSnapshot: afterProfile,
+      provenanceSource: 'decommissionCorporationBuilding',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: day,
+    });
     await createGameEvent(tx, { id: `BUILDING-DECOMMISSIONED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_DECOMMISSIONED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: input.buildingId, title: 'Corporation building decommissioned', details: { buildingId: input.buildingId, ownerType: 'CORPORATION', capacityModel: 'V5_POOLED', territoryPlacement: null }, correlationId: input.correlationId });
     return { ok: true, status: 'INACTIVE', buildingId: input.buildingId, ownerType: 'CORPORATION', v5Capacity: capacity, correlationId: input.correlationId };
   });
@@ -400,11 +442,31 @@ export async function upgradeBuilding(repository: PostgresRepository, input: { b
     await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','PRIVATE_TIER_UPGRADE',$3,'construction-investment-v5',$4::JSONB)`, [input.correlationId, day, input.buildingId, JSON.stringify([{ account_id: wallet.id, asset_id: 1, delta_units: (-cost).toString() }, { account_id: sink.id, asset_id: 1, delta_units: cost.toString() }])]);
     if (resourceAccounts.length) await tx.query(`SELECT earth_post_transaction($1,$2,1439,'RESOURCE_CONSUMPTION','SYSTEM_CONSUMPTION',$3,'upgrade-investment-v5',$4::JSONB)`, [`upgrade:${input.correlationId}:resources`, day, input.buildingId, JSON.stringify(resourceAccounts.flatMap((r) => [{ account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_upgrade_resource_input' }, { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_upgrade_resource_input' }]))]);
     const resourceCostUnits = Object.fromEntries(resourceReqs.map((r) => [r.code, r.required_units]));
+    const beforeProfile = houseId ? await getHouseSettlementProfileSnapshot(tx, houseId) : null;
     const projectId = `PROJECT-UPGRADE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const completion = day + Math.max(1, Math.ceil(Number(next.construction_minutes) / 1440));
     await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,$11,'TIER_UPGRADE')`, [projectId, building.id, building.owner_economic_id, null, next.id, cost.toString(), JSON.stringify(resourceCostUnits), day, completion, input.correlationId, null]);
     await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION' WHERE id = $1", [building.id]);
     await refreshV5SettlementProfilesForHouse(tx, houseId!, day);
+    const afterProfile = houseId ? await getHouseSettlementProfileSnapshot(tx, houseId) : null;
+
+    if (houseId) {
+      await recordStructuralDelta(tx, {
+        actionType: 'TIER_UPGRADE',
+        entityType: 'HOUSE',
+        entityId: houseId,
+        houseId,
+        buildingId: building.id,
+        deltaFootprintUnits: footprintDelta,
+        beforeProfileSnapshot: beforeProfile,
+        afterProfileSnapshot: afterProfile,
+        provenanceSource: 'upgradeBuilding',
+        actorHumanId: input.humanId,
+        correlationId: input.correlationId,
+        gameDay: day,
+      });
+    }
+
     await createGameEvent(tx, { id: `BUILDING-UPGRADE-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_TIER_UPGRADE_STARTED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: `Tier ${building.tier + 1} upgrade started`, details: { projectId, fromTier: building.tier, toTier: building.tier + 1, costUnits: cost.toString(), resourceCostUnits, completionGameDay: completion, capacityModel: 'V5_POOLED', territoryPlacement: null }, correlationId: input.correlationId });
     return { ok: true, status: 'UNDER_CONSTRUCTION', projectId, fromTier: building.tier, toTier: building.tier + 1, creditCostUnits: cost.toString(), resourceCostUnits, expectedCompletionGameDay: completion, v5Capacity: v5CapacityQuote, correlationId: input.correlationId };
   });
@@ -464,12 +526,30 @@ export async function decommissionBuilding(repository: PostgresRepository, input
     const building = (await tx.query<{ id: string; territory_id: string | null; house_id: string; slot_footprint: string }>(`SELECT b.id, b.territory_id, h.house_id, c.slot_footprint::TEXT FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE' JOIN humans h ON h.house_id = o.id AND h.id = $2 AND h.status = 'ACTIVE' JOIN building_catalog c ON c.id = b.catalog_id WHERE b.id = $1 AND b.status IN ('ACTIVE','UNDER_CONSTRUCTION') FOR UPDATE`, [input.buildingId, input.humanId])).rows[0];
     if (!building) throw new Error('Building not found, inactive, or not owned by the active House');
     const v5CapacityQuote = await quoteV5HouseCapacityChange(tx, building.house_id, -BigInt(building.slot_footprint), day);
+    const beforeProfile = await getHouseSettlementProfileSnapshot(tx, building.house_id);
     const result = await tx.query<{ id: string; territory_id: string }>('UPDATE buildings SET status = \'INACTIVE\' WHERE id = $1 RETURNING id, territory_id', [input.buildingId]);
     await refreshV5SettlementProfilesForHouse(tx, building.house_id, day);
+    const afterProfile = await getHouseSettlementProfileSnapshot(tx, building.house_id);
     await tx.query("UPDATE construction_projects SET status = 'CANCELLED', cancelled_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId, day]);
     if (result.rows[0].territory_id) {
       await tx.query('SELECT earth_refresh_territory_capacity($1, $2)', [result.rows[0].territory_id, day]);
     }
+
+    await recordStructuralDelta(tx, {
+      actionType: 'DEMOLITION',
+      entityType: 'HOUSE',
+      entityId: building.house_id,
+      houseId: building.house_id,
+      buildingId: input.buildingId,
+      deltaFootprintUnits: -BigInt(building.slot_footprint),
+      deltaBuildingCount: -1,
+      beforeProfileSnapshot: beforeProfile,
+      afterProfileSnapshot: afterProfile,
+      provenanceSource: 'decommissionBuilding',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: day,
+    });
     await createGameEvent(tx, { id: `BUILDING-DECOMMISSIONED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_DECOMMISSIONED', gameDay: day, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: input.buildingId, title: 'Building decommissioned', details: { buildingId: input.buildingId }, correlationId: input.correlationId });
     return { ok: true, status: 'INACTIVE', buildingId: input.buildingId, v5Capacity: v5CapacityQuote, correlationId: input.correlationId };
   });
@@ -701,6 +781,10 @@ export async function retrofitBuilding(
       [projectId, building.id, building.owner_economic_id, building.catalog_id, cost.toString(), JSON.stringify(resourceCostUnits), day, completion, input.correlationId, targetGenRow?.id ?? null],
     );
 
+    const beforeProfile = isPublic
+      ? await getCorporationSettlementProfileSnapshot(tx, (building as any).corporation_id)
+      : await getHouseSettlementProfileSnapshot(tx, (building as any).house_id);
+
     // Set downtime and RETROFITTING state
     await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION', construction_state = 'RETROFITTING' WHERE id = $1", [building.id]);
 
@@ -710,6 +794,26 @@ export async function retrofitBuilding(
     } else {
       await refreshV5SettlementProfilesForHouse(tx, (building as any).house_id, day);
     }
+
+    const afterProfile = isPublic
+      ? await getCorporationSettlementProfileSnapshot(tx, (building as any).corporation_id)
+      : await getHouseSettlementProfileSnapshot(tx, (building as any).house_id);
+
+    await recordStructuralDelta(tx, {
+      actionType: 'RETROFIT',
+      entityType: isPublic ? 'CORPORATION' : 'HOUSE',
+      entityId: isPublic ? (building as any).corporation_id : (building as any).house_id,
+      houseId: isPublic ? null : (building as any).house_id,
+      corporationId: isPublic ? (building as any).corporation_id : null,
+      buildingId: building.id,
+      deltaFootprintUnits: 0n,
+      beforeProfileSnapshot: beforeProfile,
+      afterProfileSnapshot: afterProfile,
+      provenanceSource: 'retrofitBuilding',
+      actorHumanId: input.humanId,
+      correlationId: input.correlationId,
+      gameDay: day,
+    });
 
     await createGameEvent(tx, {
       id: `BUILDING-RETROFIT-${input.correlationId}`,

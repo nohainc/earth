@@ -27,6 +27,29 @@ import {
 import { settlePerishableResourceDecay } from '../cloudflare/src/resource-settlement-postgres.ts';
 import { getResourceBehaviorMetadata } from '../cloudflare/src/resource-behavior-postgres.ts';
 
+import {
+  rebuildV5HouseSettlementProfile,
+  rebuildV5CorporationSettlementProfile,
+  refreshV5SettlementProfilesForHouse,
+  rebuildV5SettlementProfilesInShard,
+  settleV5CorporationSettlementProfiles,
+  getHouseSettlementProfileSnapshot,
+  getCorporationSettlementProfileSnapshot,
+  recordStructuralDelta,
+  getStructuralDeltas,
+} from '../cloudflare/src/v5-settlement-profiles-postgres.ts';
+import { quoteV5Building, purchaseV5Building, suspendBuilding, reactivateBuilding } from '../cloudflare/src/v5-building-postgres.ts';
+import { quoteBuildingUpgrade, upgradeBuilding, decommissionBuilding, quoteBuildingRetrofit, retrofitBuilding } from '../cloudflare/src/building-investment-postgres.ts';
+import { grantCorporationScaleCapability, grantEarthBaselineScaleCapability } from '../cloudflare/src/v5-scale-postgres.ts';
+import {
+  getAvailableGenerations,
+  assertGenerationAuthorized,
+  grantCorporationTechnologyGeneration,
+  grantEarthBaselineTechnologyGeneration,
+} from '../cloudflare/src/v5-generation-postgres.ts';
+import { completeDueConstructionProjects } from '../cloudflare/src/construction-settlement-postgres.ts';
+import { applyV5CorporationMembership, leaveV5Corporation } from '../cloudflare/src/v5-membership-postgres.ts';
+
 const execFileAsync = promisify(execFile);
 const connectionString = process.env.DATABASE_URL || 'postgres://earth:earth_dev_only@localhost:5432/earth';
 
@@ -61,12 +84,12 @@ async function connectTo(url) {
   return client;
 }
 
-test('PostgreSQL V5 Economic Core: Schema version is 126 and migration history is valid', async () => {
+test('PostgreSQL V5 Economic Core: Schema version is 127 and migration history is valid', async () => {
   const client = await connectTo(connectionString);
   try {
     const res = await client.query('SELECT MAX(version) AS max_version, COUNT(*)::int AS count FROM earth_schema_migrations');
-    assert.equal(Number(res.rows[0].max_version), 126, 'Max migration version must be 126');
-    assert.equal(Number(res.rows[0].count), 126, 'Total applied migrations count must be 126');
+    assert.equal(Number(res.rows[0].max_version), 127, 'Max migration version must be 127');
+    assert.equal(Number(res.rows[0].count), 127, 'Total applied migrations count must be 127');
 
     const v118 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 118');
     assert.equal(v118.rows[0]?.name, '118_v5_economic_core_schema.sql');
@@ -90,6 +113,8 @@ test('PostgreSQL V5 Economic Core: Schema version is 126 and migration history i
     assert.equal(v125.rows[0]?.name, '125_v5_corporation_technology_adoptions.sql');
     const v126 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 126');
     assert.equal(v126.rows[0]?.name, '126_v5_resource_persistence_and_storage.sql');
+    const v127 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 127');
+    assert.equal(v127.rows[0]?.name, '127_v5_settlement_profile_deltas.sql');
   } finally {
     await client.end();
   }
@@ -2377,10 +2402,6 @@ test('PostgreSQL V5 Economic Core Phase 5: Architecture integrity report passes 
 
 // ─── Phase 6: Enforce Tier and Scale Engineering ───
 
-import { quoteV5Building, purchaseV5Building } from '../cloudflare/src/v5-building-postgres.ts';
-import { quoteBuildingUpgrade, upgradeBuilding } from '../cloudflare/src/building-investment-postgres.ts';
-import { grantCorporationScaleCapability, grantEarthBaselineScaleCapability } from '../cloudflare/src/v5-scale-postgres.ts';
-
 test('PostgreSQL V5 Economic Core Phase 6: House cannot construct Tier 2 building without SCALE_COMMERCIAL', async () => {
   const client = await connectTo(connectionString);
   const repository = new PostgresRepository(client);
@@ -2793,19 +2814,6 @@ test('PostgreSQL V5 Economic Core Phase 6: Architecture integrity report passes 
 });
 
 // ─── Phase 9: Generation-Aware Construction and Retrofits ───
-
-import { quoteBuildingRetrofit, retrofitBuilding } from '../cloudflare/src/building-investment-postgres.ts';
-import {
-  getAvailableGenerations,
-  assertGenerationAuthorized,
-  grantCorporationTechnologyGeneration,
-  grantEarthBaselineTechnologyGeneration,
-} from '../cloudflare/src/v5-generation-postgres.ts';
-import { completeDueConstructionProjects } from '../cloudflare/src/construction-settlement-postgres.ts';
-import {
-  rebuildV5CorporationSettlementProfile,
-  rebuildV5HouseSettlementProfile,
-} from '../cloudflare/src/v5-settlement-profiles-postgres.ts';
 
 test('PostgreSQL V5 Economic Core Phase 9: New building defaults to max accessible generation and stores installed_generation', async () => {
   const client = await connectTo(connectionString);
@@ -3680,6 +3688,417 @@ test('PostgreSQL V5 Economic Core Phase 10: Architecture integrity report passes
       assert.equal(check.invalid_count, '0', `Integrity check ${check.check_name} must have 0 invalid rows`);
     }
   } finally {
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 11: Construction, Tier Upgrade, Demolition, and Retrofit record structural deltas and maintain profile parity', async () => {
+  const client = postgresClient(connectionString);
+  await client.connect();
+  const repository = new PostgresRepository(client);
+  const testId = `p11t1-${Date.now()}`;
+  const humanId = `HUM-${testId}`;
+  const houseId = `HOUSE-${testId}`;
+  const houseEconId = `HOUSE-ECON-${testId}`;
+  const corpId = `CORP-${testId}`;
+  const corpEconId = `CORP-ECON-${testId}`;
+  const territoryId = `TERR-${testId}`;
+  const residencyId = `RES-${testId}`;
+  const gameDay = 2;
+
+  try {
+    // 1. Setup Auth, House, Human, Corp, Territory
+    await repository.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, `${testId}@example.com`]);
+    await repository.query('INSERT INTO houses (id, account_id, house_name, dynasty_legacy, generation, status) VALUES ($1, $2, $3, 0, 1, $4)', [houseId, `AUTH-${humanId}`, `House ${testId}`, 'ACTIVE']);
+    await repository.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, $4, 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId, `Human ${testId}`]);
+    await repository.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
+    await repository.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)", [houseId, houseEconId]);
+    await repository.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+
+    await repository.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')", [corpId, `Corp ${testId}`]);
+    await repository.query("INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 1, 'OPEN', 'ACTIVE', 1)", [corpId]);
+    await repository.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)", [corpId, corpEconId]);
+    await repository.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+    await repository.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Territory', 'ACTIVE', true)`, [territoryId, corpId]);
+    await repository.query(`INSERT INTO house_residencies (id, house_id, territory_id, residency_class, status, effective_from_game_day, correlation_id) VALUES ($1, $2, $3, 'PRIMARY', 'ACTIVE', 1, $4)`, [residencyId, houseId, territoryId, `res:${houseId}:${territoryId}:${Date.now()}`]);
+    await repository.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1, $2, $3, 1, 'ACTIVE')`, [houseId, corpId, territoryId]);
+
+    // Seed Credits and Materials
+    await repository.query(`UPDATE economic_accounts SET balance_units = 100000 WHERE owner_economic_id = $1 AND asset_id = 1`, [houseEconId]);
+    await repository.query(`UPDATE economic_accounts SET balance_units = 500 WHERE owner_economic_id = $1 AND asset_id = 2`, [houseEconId]); // MATERIAL
+    await repository.query(`UPDATE economic_accounts SET balance_units = 500 WHERE owner_economic_id = $1 AND asset_id = 3`, [houseEconId]); // COMPONENTS
+    await repository.query(`UPDATE economic_accounts SET balance_units = 500 WHERE owner_economic_id = $1 AND asset_id = 5`, [houseEconId]); // COMPUTE
+
+    // Initial rebuild
+    await refreshV5SettlementProfilesForHouse(repository, houseId, gameDay, [corpId]);
+
+    const initialHouseProfile = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.ok(initialHouseProfile);
+    assert.equal(initialHouseProfile.residential_capacity_units, '1');
+    assert.equal(initialHouseProfile.productive_capacity_units, '0');
+    assert.equal(initialHouseProfile.active_building_count, 0);
+
+    let buildingId;
+    // Step 1: Purchase House building (SOLAR-MICROGRID-T1)
+    const bldRes = await purchaseV5Building(repository, {
+      buildingType: 'SOLAR-MICROGRID-T1',
+      name: 'Solar Grid 1',
+      ownerId: humanId,
+      correlationId: `p11-purchase-${testId}`,
+    });
+    assert.ok(bldRes.ok);
+    buildingId = bldRes.buildingId;
+
+    // Check structural delta recorded for construction
+    const constructionDeltas = await getStructuralDeltas(repository, { correlationId: `p11-purchase-${testId}` });
+    assert.equal(constructionDeltas.length, 1);
+    assert.equal(constructionDeltas[0].action_type, 'CONSTRUCTION');
+    assert.equal(constructionDeltas[0].entity_id, houseId);
+    assert.equal(constructionDeltas[0].delta_footprint_units, '2');
+
+    // Step 2: Retrofit building
+    await repository.query(`UPDATE buildings SET status = 'ACTIVE', construction_state = 'ACTIVE' WHERE id = $1`, [buildingId]);
+    await repository.query(`UPDATE construction_projects SET status = 'COMPLETED' WHERE building_id = $1`, [buildingId]);
+    await refreshV5SettlementProfilesForHouse(repository, houseId, gameDay, [corpId]);
+
+    const postActiveProfile = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(postActiveProfile.productive_capacity_units, '2');
+    assert.equal(postActiveProfile.active_building_count, 1);
+
+    const domains = (await repository.query(`SELECT id, code FROM technology_domains`)).rows;
+    const energyDomain = domains.find(d => d.code === 'ENERGY');
+
+    // Unlock generation 2 for Corporation
+    await repository.query(`
+      INSERT INTO corporation_technology_generations (corporation_economic_id, domain_id, generation_number, unlocked_game_day)
+      VALUES ($1, $2, 2, 1)
+      ON CONFLICT (corporation_economic_id, domain_id, generation_number) DO NOTHING
+    `, [corpEconId, energyDomain.id]);
+
+    const retrofitRes = await retrofitBuilding(repository, {
+      buildingId,
+      humanId,
+      targetGeneration: 2,
+      correlationId: `p11-retrofit-${testId}`,
+    });
+    assert.ok(retrofitRes.ok);
+
+    const retrofitDeltas = await getStructuralDeltas(repository, { correlationId: `p11-retrofit-${testId}` });
+    assert.equal(retrofitDeltas.length, 1);
+    assert.equal(retrofitDeltas[0].action_type, 'RETROFIT');
+    assert.equal(retrofitDeltas[0].building_id, buildingId);
+
+    // Step 3: Complete retrofit project and set back to ACTIVE
+    await repository.query(`UPDATE buildings SET status = 'ACTIVE', construction_state = 'ACTIVE', installed_generation = 2 WHERE id = $1`, [buildingId]);
+    await repository.query(`UPDATE construction_projects SET status = 'COMPLETED' WHERE building_id = $1`, [buildingId]);
+    await refreshV5SettlementProfilesForHouse(repository, houseId, gameDay, [corpId]);
+
+    // Grant SCALE_COMMERCIAL for Tier 2 upgrade
+    await repository.query(`
+      INSERT INTO corporation_scale_capabilities (corporation_economic_id, scale_capability)
+      VALUES ($1, 'SCALE_COMMERCIAL')
+      ON CONFLICT DO NOTHING
+    `, [corpEconId]);
+
+    // Step 4: Tier Upgrade (SOLAR-MICROGRID-T1 -> SOLAR-MICROGRID-T2)
+    const upgradeRes = await upgradeBuilding(repository, {
+      buildingId,
+      humanId,
+      correlationId: `p11-upgrade-${testId}`,
+    });
+    assert.ok(upgradeRes.ok);
+
+    const upgradeDeltas = await getStructuralDeltas(repository, { correlationId: `p11-upgrade-${testId}` });
+    assert.equal(upgradeDeltas.length, 1);
+    assert.equal(upgradeDeltas[0].action_type, 'TIER_UPGRADE');
+    assert.equal(upgradeDeltas[0].building_id, buildingId);
+
+    // Step 5: Complete upgrade and then Decommission
+    await repository.query(`UPDATE buildings SET status = 'ACTIVE', construction_state = 'ACTIVE' WHERE id = $1`, [buildingId]);
+    await repository.query(`UPDATE construction_projects SET status = 'COMPLETED' WHERE building_id = $1`, [buildingId]);
+    await refreshV5SettlementProfilesForHouse(repository, houseId, gameDay, [corpId]);
+
+    const demoRes = await decommissionBuilding(repository, {
+      buildingId,
+      humanId,
+      correlationId: `p11-demo-${testId}`,
+    });
+    assert.ok(demoRes.ok);
+
+    const demoDeltas = await getStructuralDeltas(repository, { correlationId: `p11-demo-${testId}` });
+    assert.equal(demoDeltas.length, 1);
+    assert.equal(demoDeltas[0].action_type, 'DEMOLITION');
+    assert.equal(demoDeltas[0].delta_building_count, -1);
+
+    const postDemoProfile = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(postDemoProfile.productive_capacity_units, '0');
+    assert.equal(postDemoProfile.active_building_count, 0);
+  } finally {
+    await client.query('DELETE FROM game_events WHERE actor_human_id = $1 OR correlation_id LIKE $2', [humanId, `p11-%-${testId}`]);
+    await client.query('DELETE FROM v5_structural_deltas WHERE correlation_id LIKE $1', [`p11-%-${testId}`]);
+    await client.query('DELETE FROM construction_projects WHERE correlation_id LIKE $1', [`p11-%-${testId}`]);
+    await client.query('DELETE FROM buildings WHERE owner_economic_id = $1', [houseEconId]);
+    await client.query('DELETE FROM corporation_scale_capabilities WHERE corporation_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM corporation_technology_generations WHERE corporation_economic_id = $1', [corpEconId]);
+    await client.query('DELETE FROM house_residencies WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    await client.query('DELETE FROM territories WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE $1)', [`%${testId}%`]);
+    await client.query('DELETE FROM economic_transactions WHERE correlation_id LIKE $1', [`%${testId}%`]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 11: Membership Join, Leave, Building Suspension and Reactivation update profiles transactionally with recorded deltas', async () => {
+  const client = postgresClient(connectionString);
+  await client.connect();
+  const repository = new PostgresRepository(client);
+  const testId = `p11t2-${Date.now()}`;
+  const humanId = `HUM-${testId}`;
+  const houseId = `HOUSE-${testId}`;
+  const houseEconId = `HOUSE-ECON-${testId}`;
+  const corpId = `CORP-${testId}`;
+  const corpEconId = `CORP-ECON-${testId}`;
+  const territoryId = `TERR-${testId}`;
+  const residencyId = `RES-${testId}`;
+  const gameDay = 5;
+
+  try {
+    // Setup Auth, House, Human, Corp, Territory
+    await repository.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, `${testId}@example.com`]);
+    await repository.query('INSERT INTO houses (id, account_id, house_name, dynasty_legacy, generation, status) VALUES ($1, $2, $3, 0, 1, $4)', [houseId, `AUTH-${humanId}`, `House ${testId}`, 'ACTIVE']);
+    await repository.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, $4, 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId, `Human ${testId}`]);
+    await repository.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
+    await repository.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)", [houseId, houseEconId]);
+    await repository.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+
+    await repository.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')", [corpId, `Corp ${testId}`]);
+    await repository.query("INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 1, 'OPEN', 'ACTIVE', 1)", [corpId]);
+    await repository.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)", [corpId, corpEconId]);
+    await repository.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+    await repository.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Territory', 'ACTIVE', true)`, [territoryId, corpId]);
+    await repository.query(`INSERT INTO house_residencies (id, house_id, territory_id, residency_class, status, effective_from_game_day, correlation_id) VALUES ($1, $2, $3, 'PRIMARY', 'ACTIVE', 1, $4)`, [residencyId, houseId, territoryId, `res:${houseId}:${territoryId}:${Date.now()}`]);
+    await repository.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1, $2, $3, 1, 'ACTIVE')`, [houseId, corpId, territoryId]);
+
+    // Seed building for House
+    const bldId = `BLD-${testId}`;
+    await repository.query(`
+      INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, construction_state, installed_generation, technology_definition_version, started_game_day, commissioned_game_day)
+      VALUES ($1, $2, $3, 'SOLAR-MICROGRID-T1', 'ACTIVE', 'ACTIVE', 1, 'tech-gen-v1', 1, 1)
+    `, [bldId, houseEconId, territoryId]);
+
+    await refreshV5SettlementProfilesForHouse(repository, houseId, gameDay, [corpId]);
+
+    // Step 1: Suspend Building
+    const suspendRes = await suspendBuilding(repository, {
+      buildingId: bldId,
+      humanId,
+      correlationId: `p11-suspend-${testId}`,
+    });
+    assert.ok(suspendRes.ok);
+    assert.equal(suspendRes.status, 'SUSPENDED');
+
+    const houseProfileAfterSuspend = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(houseProfileAfterSuspend.productive_capacity_units, '0');
+    assert.equal(houseProfileAfterSuspend.active_building_count, 0);
+
+    const corpProfileAfterSuspend = await getCorporationSettlementProfileSnapshot(repository, corpId);
+    assert.equal(corpProfileAfterSuspend.member_productive_capacity_units, '0');
+
+    const suspendDeltas = await getStructuralDeltas(repository, { correlationId: `p11-suspend-${testId}` });
+    assert.equal(suspendDeltas.length, 1);
+    assert.equal(suspendDeltas[0].action_type, 'BUILDING_SUSPEND');
+    assert.equal(suspendDeltas[0].delta_building_count, -1);
+
+    // Step 2: Reactivate Building
+    const reactivateRes = await reactivateBuilding(repository, {
+      buildingId: bldId,
+      humanId,
+      correlationId: `p11-reactivate-${testId}`,
+    });
+    assert.ok(reactivateRes.ok);
+    assert.equal(reactivateRes.status, 'ACTIVE');
+
+    const houseProfileAfterReactivate = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(houseProfileAfterReactivate.productive_capacity_units, '2');
+    assert.equal(houseProfileAfterReactivate.active_building_count, 1);
+
+    // Step 3: Leave Corporation
+    const leaveRes = await leaveV5Corporation(repository, {
+      humanId,
+      corporationId: corpId,
+      correlationId: `p11-leave-${testId}`,
+    });
+    assert.ok(leaveRes.ok);
+
+    const houseProfileAfterLeave = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(houseProfileAfterLeave.corporation_id, null);
+
+    const corpProfileAfterLeave = await getCorporationSettlementProfileSnapshot(repository, corpId);
+    assert.equal(corpProfileAfterLeave.active_member_count, 0);
+    assert.equal(corpProfileAfterLeave.member_residential_capacity_units, '0');
+    assert.equal(corpProfileAfterLeave.member_productive_capacity_units, '0');
+
+    const leaveDeltas = await getStructuralDeltas(repository, { correlationId: `p11-leave-${testId}` });
+    assert.equal(leaveDeltas.length, 2);
+    assert.equal(leaveDeltas[0].action_type, 'MEMBERSHIP_LEAVE');
+
+    // Step 4: Apply Corporation Membership (Join back)
+    const joinRes = await applyV5CorporationMembership(repository, {
+      humanId,
+      corporationId: corpId,
+      correlationId: `p11-join-${testId}`,
+    });
+    assert.ok(joinRes.ok);
+
+    const houseProfileAfterJoin = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(houseProfileAfterJoin.corporation_id, corpId);
+
+    const corpProfileAfterJoin = await getCorporationSettlementProfileSnapshot(repository, corpId);
+    assert.equal(corpProfileAfterJoin.active_member_count, 1);
+    assert.equal(corpProfileAfterJoin.member_residential_capacity_units, '1');
+    assert.equal(corpProfileAfterJoin.member_productive_capacity_units, '2');
+
+    const joinDeltas = await getStructuralDeltas(repository, { correlationId: `p11-join-${testId}` });
+    assert.equal(joinDeltas.length, 2);
+    assert.equal(joinDeltas[0].action_type, 'MEMBERSHIP_JOIN');
+  } finally {
+    await client.query('DELETE FROM game_events WHERE actor_human_id = $1 OR correlation_id LIKE $2', [humanId, `p11-%-${testId}`]);
+    await client.query('DELETE FROM v5_structural_deltas WHERE correlation_id LIKE $1', [`p11-%-${testId}`]);
+    await client.query('DELETE FROM buildings WHERE owner_economic_id = $1', [houseEconId]);
+    await client.query('DELETE FROM house_residencies WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    await client.query('DELETE FROM territories WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM economic_entries WHERE transaction_id IN (SELECT id FROM economic_transactions WHERE correlation_id LIKE $1)', [`%${testId}%`]);
+    await client.query('DELETE FROM economic_transactions WHERE correlation_id LIKE $1', [`%${testId}%`]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
+    await client.end();
+  }
+});
+
+test('PostgreSQL V5 Economic Core Phase 11: Deterministic rebuild reproduces live profiles exactly matching catalog totals', async () => {
+  const client = postgresClient(connectionString);
+  await client.connect();
+  const repository = new PostgresRepository(client);
+  const testId = `p11t3-${Date.now()}`;
+  const humanId = `HUM-${testId}`;
+  const houseId = `HOUSE-${testId}`;
+  const houseEconId = `HOUSE-ECON-${testId}`;
+  const corpId = `CORP-${testId}`;
+  const corpEconId = `CORP-ECON-${testId}`;
+  const territoryId = `TERR-${testId}`;
+  const residencyId = `RES-${testId}`;
+  const gameDay = 10;
+
+  try {
+    // Setup Auth, House, Human, Corp, Territory
+    await repository.query(`INSERT INTO auth_accounts (id, email, password_hash, password_salt, password_iterations) VALUES ($1, $2, 'test-password-hash', 'salt', 100000)`, [`AUTH-${humanId}`, `${testId}@example.com`]);
+    await repository.query('INSERT INTO houses (id, account_id, house_name, dynasty_legacy, generation, status) VALUES ($1, $2, $3, 0, 1, $4)', [houseId, `AUTH-${humanId}`, `House ${testId}`, 'ACTIVE']);
+    await repository.query(`INSERT INTO humans (id, account_id, house_id, display_name, status) VALUES ($1, $2, $3, $4, 'ACTIVE')`, [humanId, `AUTH-${humanId}`, houseId, `Human ${testId}`]);
+    await repository.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [humanId, houseId]);
+    await repository.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'HOUSE', $2)", [houseId, houseEconId]);
+    await repository.query('SELECT earth_provision_house_economy($1)', [houseEconId]);
+
+    await repository.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'CORPORATION', $2, 'ACTIVE')", [corpId, `Corp ${testId}`]);
+    await repository.query("INSERT INTO corporations (id, charter_version, admission_policy, status, created_game_day) VALUES ($1, 1, 'OPEN', 'ACTIVE', 1)", [corpId]);
+    await repository.query("INSERT INTO owner_registry (id, owner_type, economic_id) VALUES ($1, 'CORPORATION', $2)", [corpId, corpEconId]);
+    await repository.query('SELECT earth_provision_corporation_economy($1)', [corpEconId]);
+
+    await repository.query(`INSERT INTO territories (id, corporation_id, name, status, is_primary) VALUES ($1, $2, 'Territory', 'ACTIVE', true)`, [territoryId, corpId]);
+    await repository.query(`INSERT INTO house_residencies (id, house_id, territory_id, residency_class, status, effective_from_game_day, correlation_id) VALUES ($1, $2, $3, 'PRIMARY', 'ACTIVE', 1, $4)`, [residencyId, houseId, territoryId, `res:${houseId}:${territoryId}:${Date.now()}`]);
+    await repository.query(`INSERT INTO house_affiliations (house_id, corporation_id, primary_territory_id, joined_game_day, status) VALUES ($1, $2, $3, 1, 'ACTIVE')`, [houseId, corpId, territoryId]);
+
+    // Add 2 active buildings to House (footprint 2 each = 4)
+    await repository.query(`
+      INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, construction_state, installed_generation, technology_definition_version, started_game_day, commissioned_game_day)
+      VALUES
+        ($1, $3, $4, 'SOLAR-MICROGRID-T1', 'ACTIVE', 'ACTIVE', 1, 'tech-gen-v1', 1, 1),
+        ($2, $3, $4, 'VERTICAL-FARM-T1', 'ACTIVE', 'ACTIVE', 1, 'tech-gen-v1', 1, 1)
+    `, [`BLD-1-${testId}`, `BLD-2-${testId}`, houseEconId, territoryId]);
+
+    // Add 1 active public building to Corporation (footprint 5)
+    await repository.query(`
+      INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, construction_state, installed_generation, technology_definition_version, started_game_day, commissioned_game_day)
+      VALUES ($1, $2, $3, 'EXTRACTION-REFINING-T1', 'ACTIVE', 'ACTIVE', 1, 'tech-gen-v1', 1, 1)
+    `, [`BLD-PUB-${testId}`, corpEconId, territoryId]);
+
+    // Run rebuild functions
+    await rebuildV5HouseSettlementProfile(repository, houseId, gameDay);
+    await rebuildV5CorporationSettlementProfile(repository, corpId, gameDay);
+
+    const liveHouseProfile = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(liveHouseProfile.residential_capacity_units, '1');
+    assert.equal(liveHouseProfile.productive_capacity_units, '4');
+    assert.equal(liveHouseProfile.total_capacity_units, '5');
+    assert.equal(liveHouseProfile.active_building_count, 2);
+
+    const liveCorpProfile = await getCorporationSettlementProfileSnapshot(repository, corpId);
+    assert.equal(liveCorpProfile.active_member_count, 1);
+    assert.equal(liveCorpProfile.member_residential_capacity_units, '1');
+    assert.equal(liveCorpProfile.member_productive_capacity_units, '4');
+    assert.equal(liveCorpProfile.public_capacity_units, '5');
+    assert.equal(liveCorpProfile.total_occupied_capacity_units, '10');
+    assert.equal(liveCorpProfile.active_public_building_count, 1);
+
+    // Mark profiles as dirty
+    await repository.query(`UPDATE v5_house_settlement_profiles SET dirty = true WHERE house_id = $1`, [houseId]);
+    await repository.query(`UPDATE v5_corporation_settlement_profiles SET dirty = true WHERE corporation_id = $1`, [corpId]);
+
+    // Run shard rebuild
+    const shardRes = await rebuildV5SettlementProfilesInShard(repository, gameDay, 0, 1);
+    assert.ok(shardRes.housesRebuilt >= 1);
+
+    // Verify dirty flag is cleared and values match exactly
+    const rebuiltHouseProfile = await getHouseSettlementProfileSnapshot(repository, houseId);
+    assert.equal(rebuiltHouseProfile.dirty, false);
+    assert.equal(rebuiltHouseProfile.productive_capacity_units, '4');
+
+    const rebuiltCorpProfile = await getCorporationSettlementProfileSnapshot(repository, corpId);
+    assert.equal(rebuiltCorpProfile.dirty, false);
+    assert.equal(rebuiltCorpProfile.total_occupied_capacity_units, '10');
+  } finally {
+    await client.query('DELETE FROM game_events WHERE actor_human_id = $1', [humanId]);
+    await client.query('DELETE FROM buildings WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM house_residencies WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM house_affiliations WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);
+    await client.query('DELETE FROM territories WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM v5_house_settlement_profiles WHERE house_id = $1', [houseId]);
+    await client.query('DELETE FROM v5_corporation_settlement_profiles WHERE corporation_id = $1', [corpId]);
+    await client.query('DELETE FROM economic_entries WHERE account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id IN ($1, $2))', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM economic_accounts WHERE owner_economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('UPDATE houses SET current_human_id = NULL WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM humans WHERE id = $1', [humanId]);
+    await client.query('DELETE FROM houses WHERE id = $1', [houseId]);
+    await client.query('DELETE FROM corporations WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM institutions WHERE id = $1', [corpId]);
+    await client.query('DELETE FROM owner_registry WHERE economic_id IN ($1, $2)', [houseEconId, corpEconId]);
+    await client.query('DELETE FROM auth_accounts WHERE id = $1', [`AUTH-${humanId}`]);
     await client.end();
   }
 });

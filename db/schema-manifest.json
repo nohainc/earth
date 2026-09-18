@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 126,
+  "migrationVersion": 127,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -854,6 +854,27 @@
       "effective_to_game_day",
       "created_at",
       "updated_at"
+    ],
+    "v5_structural_deltas": [
+      "id",
+      "action_type",
+      "entity_type",
+      "entity_id",
+      "house_id",
+      "corporation_id",
+      "building_id",
+      "delta_footprint_units",
+      "delta_building_count",
+      "delta_residential_units",
+      "delta_productive_units",
+      "delta_public_units",
+      "before_profile_snapshot",
+      "after_profile_snapshot",
+      "provenance_source",
+      "actor_human_id",
+      "correlation_id",
+      "game_day",
+      "created_at"
     ]
   },
   "requiredUniqueConstraints": [
@@ -863,6 +884,8 @@
     ]
   ],
   "requiredIndexes": [
+    "v5_structural_deltas_entity_idx",
+    "v5_structural_deltas_correlation_idx",
     "owner_storage_capacities_active_idx",
     "territories_one_active_primary_idx",
     "house_affiliations_one_active_idx",

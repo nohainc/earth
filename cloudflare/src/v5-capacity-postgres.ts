@@ -55,14 +55,26 @@ export async function quoteV5HouseCapacityChange(repository: PostgresRepository,
     FROM v5_house_settlement_profiles WHERE house_id = $1`, [houseId])).rows[0];
   const day = gameDay ?? Number((await repository.query<{ game_day: string }>("SELECT game_day::TEXT FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 1);
   const globalPolicy = await getActiveV5StandardCapacity(repository, day);
-  const corporationSnapshot = house?.corporation_id ? (await repository.query<{ rules_json: Record<string, unknown> }>(`SELECT rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [house.corporation_id, day])).rows[0] : undefined;
-  const policy = house?.corporation_id && corporationSnapshot?.rules_json?.['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] !== undefined
-    ? { rate: String(corporationSnapshot.rules_json['CORPORATION.HOUSE_CAPACITY.BASE_RATE']), schedule_id: globalPolicy.houseScheduleId, version: corporationSnapshot.id }
-    : house?.corporation_id ? (() => { throw new Error(`Canonical Corporation capacity snapshot is unavailable for Corporation ${house.corporation_id} on game day ${day}`); })() : { rate: globalPolicy.earthBaseRate.toString(), schedule_id: globalPolicy.houseScheduleId, version: globalPolicy.policyVersion };
-  const currentUnits = BigInt(house.total_units);
-  const brackets = (await repository.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [policy.schedule_id])).rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }));
+  const corporationSnapshot = house?.corporation_id ? (await repository.query<{ id: string; rules_json: Record<string, unknown> }>(`SELECT id, rules_json FROM resolved_constitution_snapshots_v5 WHERE authority_type = 'CORPORATION' AND authority_id = $1 AND game_day = $2`, [house.corporation_id, day])).rows[0] : undefined;
+  let policy: { rate: string; schedule_id: string; version: string };
+  if (house?.corporation_id) {
+    if (corporationSnapshot?.rules_json?.['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] !== undefined) {
+      policy = { rate: String(corporationSnapshot.rules_json['CORPORATION.HOUSE_CAPACITY.BASE_RATE']), schedule_id: globalPolicy.houseScheduleId, version: corporationSnapshot.id };
+    } else {
+      const { resolveEffectiveConstitution } = await import('./constitutional-kernel-postgres.ts');
+      const resolved = await resolveEffectiveConstitution(repository, { corporationId: house.corporation_id, gameDay: day });
+      policy = { rate: String(resolved.rules['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] ?? globalPolicy.earthBaseRate), schedule_id: globalPolicy.houseScheduleId, version: `CONST-CORPORATION-${house.corporation_id}-D${day}` };
+    }
+  } else {
+    policy = { rate: globalPolicy.earthBaseRate.toString(), schedule_id: globalPolicy.houseScheduleId, version: globalPolicy.policyVersion };
+  }
+  const rawBrackets = (await repository.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [policy.schedule_id])).rows;
+  const brackets = rawBrackets.length > 0
+    ? rawBrackets.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }))
+    : [{ ordinal: 1, lowerBound: 0n, upperBound: null, multiplierNumerator: 1n, multiplierDenominator: 1n }];
+  const currentUnits = BigInt(house?.total_units ?? '1');
   const quote = quoteCapacityChange({ currentUsage: currentUnits, delta, baseRate: BigInt(policy.rate), brackets });
-  return { available: true, corporationId: house.corporation_id, gameDay: day, baseRateVersion: policy.version, scheduleId: policy.schedule_id, currentUsage: quote.currentUsage.toString(), usageDelta: quote.delta.toString(), afterUsage: quote.afterUsage.toString(), currentChargeUnits: quote.currentCharge.totalCharge.toString(), afterChargeUnits: quote.afterCharge.totalCharge.toString(), incrementalChargeUnits: quote.incrementalCharge.toString(), currentBracket: quote.currentCharge.currentBracket, resultingBracket: quote.afterCharge.currentBracket };
+  return { available: true, corporationId: house?.corporation_id ?? null, gameDay: day, baseRateVersion: policy.version, scheduleId: policy.schedule_id, currentUsage: quote.currentUsage.toString(), usageDelta: quote.delta.toString(), afterUsage: quote.afterUsage.toString(), currentChargeUnits: quote.currentCharge.totalCharge.toString(), afterChargeUnits: quote.afterCharge.totalCharge.toString(), incrementalChargeUnits: quote.incrementalCharge.toString(), currentBracket: quote.currentCharge.currentBracket, resultingBracket: quote.afterCharge.currentBracket };
 }
 
 export async function getV5CorporationCapacity(repository: PostgresRepository, corporationId: string, standardTerritoryCapacity: bigint): Promise<CorporationCapacity & { generatedFrom: string }> {
@@ -217,7 +229,10 @@ export async function getV5EarthCapacity(repository: PostgresRepository, gameDay
 export async function quoteV5CorporationCapacityChange(repository: PostgresRepository, corporationId: string, delta: bigint, gameDay?: number): Promise<Record<string, unknown>> {
   const policy = await getActiveV5StandardCapacity(repository, gameDay);
   const corporation = await getV5CorporationCapacity(repository, corporationId, policy.standardTerritoryCapacity);
-  const brackets = (await repository.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [policy.corporationScheduleId])).rows.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }));
+  const rawBrackets = (await repository.query<{ ordinal: number; lower: string; upper: string | null; numerator: string; denominator: string }>(`SELECT ordinal, lower_bound_units::TEXT AS lower, upper_bound_units::TEXT AS upper, marginal_multiplier_numerator::TEXT AS numerator, marginal_multiplier_denominator::TEXT AS denominator FROM progressive_policy_brackets WHERE schedule_id = $1 ORDER BY ordinal`, [policy.corporationScheduleId])).rows;
+  const brackets = rawBrackets.length > 0
+    ? rawBrackets.map((row) => ({ ordinal: Number(row.ordinal), lowerBound: BigInt(row.lower), upperBound: row.upper === null ? null : BigInt(row.upper), multiplierNumerator: BigInt(row.numerator), multiplierDenominator: BigInt(row.denominator) }))
+    : [{ ordinal: 1, lowerBound: 0n, upperBound: null, multiplierNumerator: 1n, multiplierDenominator: 1n }];
   const quote = quoteCapacityChange({ currentUsage: corporation.totalOccupiedUnits, delta, baseRate: policy.earthBaseRate, brackets });
   return { available: true, corporationId, gameDay: policy.gameDay, baseRateVersion: policy.policyVersion, scheduleId: policy.corporationScheduleId, currentUsage: quote.currentUsage.toString(), usageDelta: quote.delta.toString(), afterUsage: quote.afterUsage.toString(), currentChargeUnits: quote.currentCharge.totalCharge.toString(), afterChargeUnits: quote.afterCharge.totalCharge.toString(), incrementalChargeUnits: quote.incrementalCharge.toString(), currentBracket: quote.currentCharge.currentBracket, resultingBracket: quote.afterCharge.currentBracket };
 }
