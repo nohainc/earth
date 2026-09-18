@@ -13,11 +13,15 @@ import {
 import { worldSnapshot } from '../cloudflare/src/world-postgres.ts';
 
 test('Authoritative World Clock Certification: 1. PostgreSQL migration & function contracts', async () => {
-  // Verify migration 130 and 131 files exist and declare authoritative schema
+  // Verify the authoritative clock and settlement migrations exist.
   const mig130Path = path.resolve('db/migrations/130_authoritative_world_clock.sql');
   const mig131Path = path.resolve('db/migrations/131_drop_world_state_legacy_game_time_columns.sql');
+  const mig132Path = path.resolve('db/migrations/132_settlement_finalization_barrier.sql');
+  const mig134Path = path.resolve('db/migrations/134_genesis_at_not_null.sql');
   assert.ok(fs.existsSync(mig130Path), 'Migration 130 must exist');
   assert.ok(fs.existsSync(mig131Path), 'Migration 131 must exist');
+  assert.ok(fs.existsSync(mig132Path), 'Migration 132 must exist');
+  assert.ok(fs.existsSync(mig134Path), 'Migration 134 must exist');
 
   const mig130 = fs.readFileSync(mig130Path, 'utf8');
   assert.match(mig130, /ALTER TABLE world_state ADD COLUMN IF NOT EXISTS genesis_at TIMESTAMPTZ/);
@@ -27,17 +31,21 @@ test('Authoritative World Clock Certification: 1. PostgreSQL migration & functio
   assert.match(mig130, /CREATE OR REPLACE FUNCTION earth_advance_settlement_cursor/);
 
   const mig131 = fs.readFileSync(mig131Path, 'utf8');
+  const mig132 = fs.readFileSync(mig132Path, 'utf8');
+  const mig134 = fs.readFileSync(mig134Path, 'utf8');
   assert.match(mig131, /ALTER TABLE world_state DROP COLUMN IF EXISTS game_day/);
   assert.match(mig131, /ALTER TABLE world_state DROP COLUMN IF EXISTS game_minute/);
   assert.match(mig131, /DROP FUNCTION IF EXISTS earth_advance_world_clock/);
+  assert.match(mig132, /CREATE OR REPLACE FUNCTION earth_finalize_settlement_day/);
+  assert.match(mig134, /ALTER COLUMN genesis_at SET NOT NULL/);
 
-  // Verify baseline schema and manifest match migration 131
+  // Verify baseline schema and manifest match the active migration head
   const baselineSchema = fs.readFileSync(path.resolve('db/baseline/01_schema.sql'), 'utf8');
   assert.doesNotMatch(baselineSchema, /CREATE TABLE world_state \([^)]*game_day/);
-  assert.match(baselineSchema, /CREATE TABLE world_state \([^)]*genesis_at TIMESTAMPTZ/);
+  assert.match(baselineSchema, /CREATE TABLE world_state \([^)]*genesis_at TIMESTAMPTZ NOT NULL/);
 
   const manifest = JSON.parse(fs.readFileSync(path.resolve('db/schema-manifest.json'), 'utf8'));
-  assert.equal(manifest.migrationVersion, 131);
+  assert.equal(manifest.migrationVersion, 134);
   assert.deepEqual(manifest.requiredTables.world_state, ['id', 'world_seed', 'status', 'genesis_at']);
 });
 

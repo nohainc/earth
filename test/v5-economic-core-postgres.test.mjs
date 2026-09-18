@@ -90,12 +90,12 @@ async function connectTo(url) {
   return client;
 }
 
-test('PostgreSQL V5 Economic Core: Schema version is 129 and migration history is valid', async () => {
+test('PostgreSQL V5 Economic Core: Schema version is 134 and migration history is valid', async () => {
   const client = await connectTo(connectionString);
   try {
     const res = await client.query('SELECT MAX(version) AS max_version, COUNT(*)::int AS count FROM earth_schema_migrations');
-    assert.equal(Number(res.rows[0].max_version), 129, 'Max migration version must be 129');
-    assert.equal(Number(res.rows[0].count), 129, 'Total applied migrations count must be 129');
+    assert.equal(Number(res.rows[0].max_version), 134, 'Max migration version must be 134');
+    assert.equal(Number(res.rows[0].count), 134, 'Total applied migrations count must be 134');
 
     const v118 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 118');
     assert.equal(v118.rows[0]?.name, '118_v5_economic_core_schema.sql');
@@ -121,6 +121,14 @@ test('PostgreSQL V5 Economic Core: Schema version is 129 and migration history i
     assert.equal(v126.rows[0]?.name, '126_v5_resource_persistence_and_storage.sql');
     const v127 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 127');
     assert.equal(v127.rows[0]?.name, '127_v5_settlement_profile_deltas.sql');
+    const v130 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 130');
+    assert.equal(v130.rows[0]?.name, '130_authoritative_world_clock.sql');
+    const v131 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 131');
+    assert.equal(v131.rows[0]?.name, '131_drop_world_state_legacy_game_time_columns.sql');
+    const v132 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 132');
+    assert.equal(v132.rows[0]?.name, '132_settlement_finalization_barrier.sql');
+    const v134 = await client.query('SELECT name FROM earth_schema_migrations WHERE version = 134');
+    assert.equal(v134.rows[0]?.name, '134_genesis_at_not_null.sql');
   } finally {
     await client.end();
   }

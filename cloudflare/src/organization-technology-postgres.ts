@@ -3,6 +3,8 @@ import { createGameEvent } from './game-events-postgres.ts';
 import { resolveOrganizationAuthority } from './organization-authority.ts';
 import { assertEarthTechnologyFrontier, getEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation } from './settlement-barrier-postgres.ts';
+import { postEconomicTransaction } from './economic-transaction-postgres.ts';
 
 export async function listOrganizationTechnologyAdoptions(repository: PostgresRepository, organizationId: string, houseId: string): Promise<Record<string, unknown>> {
   const access = await repository.query('SELECT 1 FROM organization_memberships WHERE organization_id = $1 AND house_id = $2 AND status = \'ACTIVE\'', [organizationId, houseId]);
@@ -40,7 +42,7 @@ export async function retireTechnologyAdoption(repository: PostgresRepository, i
 }
 
 export async function adoptTechnologyGeneration(repository: PostgresRepository, input: { organizationId: string; generationId: string; proposalId: string; humanId: string; houseId: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = await tx.query<{ id: string }>('SELECT id FROM organization_technology_adoptions WHERE correlation_id = $1', [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, adoptionId: prior.rows[0].id, correlationId: input.correlationId };
     await resolveOrganizationAuthority(tx, { organizationId: input.organizationId, humanId: input.humanId, action: 'RESEARCH' });
@@ -48,7 +50,7 @@ export async function adoptTechnologyGeneration(repository: PostgresRepository, 
     if (!proposal || proposal.status !== 'PASSED' || proposal.subject_type !== 'ORGANIZATION' || proposal.subject_id !== input.organizationId) throw new Error('Technology adoption requires a passed Organization proposal');
     const generation = (await tx.query<{ id: string; name: string; research_points_required: string; minimum_game_day: number; predecessor_id: string | null; domain_id: string; generation_number: number }>('SELECT id, name, research_points_required::TEXT, minimum_game_day, predecessor_id, domain_id, generation_number FROM technology_generations WHERE id = $1 AND status <> \'RETIRED\'', [input.generationId])).rows[0];
     if (!generation) throw new Error('Technology generation not found');
-    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+    const day = clock.gameDay;
     await assertEarthTechnologyFrontier(tx, generation.domain_id, Number(generation.generation_number), day);
     const discovery = (await tx.query<{ effective_from_game_day: number }>('SELECT effective_from_game_day FROM technology_discoveries WHERE generation_id = $1', [input.generationId])).rows[0];
     if (!discovery || Number(discovery.effective_from_game_day) > day) throw new Error('Technology generation is not yet effective');
@@ -58,10 +60,20 @@ export async function adoptTechnologyGeneration(repository: PostgresRepository, 
     const account = (await tx.query<{ id: string; balance_units: string }>(`SELECT a.id::TEXT, a.balance_units::TEXT FROM economic_accounts a JOIN organization_economies e ON e.economic_id = a.owner_economic_id WHERE e.organization_id = $1 AND a.account_type = 'OPERATIONS' AND a.asset_id = 1 AND a.status = 'ACTIVE' FOR UPDATE`, [input.organizationId])).rows[0];
     const system = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = 'SYSTEM' AND a.account_type = 'SYSTEM_ACCOUNT' AND a.asset_id = 1 AND a.status = 'ACTIVE' LIMIT 1`)).rows[0];
     if (!account || !system || BigInt(account.balance_units) < cost) throw new Error('Organization research treasury is insufficient');
-    const posted = await tx.query<{ transaction_id: string }>(`SELECT transaction_id FROM earth_post_transaction($1,$2,0,'TECHNOLOGY_ADOPTION','ORGANIZATION',$3,'technology-adoption-v1',$4::JSONB)`, [input.correlationId, day, input.organizationId, JSON.stringify([{ account_id: account.id, asset_id: 1, delta_units: (-cost).toString() }, { account_id: system.id, asset_id: 1, delta_units: cost.toString() }])]);
+    const posted = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'TECHNOLOGY_ADOPTION',
+      sourceType: 'ORGANIZATION',
+      sourceId: input.organizationId,
+      rulesVersion: 'technology-adoption-v1',
+      entries: [
+        { accountId: account.id, assetId: 1, deltaUnits: (-cost).toString() },
+        { accountId: system.id, assetId: 1, deltaUnits: cost.toString() },
+      ],
+    }, clock);
     const adoptionId = `ADOPTION-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     await tx.query(`INSERT INTO organization_technology_adoptions (id, organization_id, generation_id, authorization_proposal_id, status, adoption_cost_units, adopted_game_day, effective_from_game_day, rules_version, correlation_id, created_by_human_id) VALUES ($1,$2,$3,$4,'ADOPTED',$5,$6,$7,'technology-adoption-v1',$8,$9)`, [adoptionId, input.organizationId, input.generationId, input.proposalId, cost.toString(), day, day + 1, input.correlationId, input.humanId]);
-    await createGameEvent(tx, { id: `ORG-TECH-ADOPTED-${adoptionId}`, category: 'RESEARCH', eventType: 'ORGANIZATION_TECHNOLOGY_ADOPTED', gameDay: day, actorHumanId: input.humanId, subjectType: 'ORGANIZATION', subjectId: input.organizationId, title: `${generation.name} adopted`, details: { generationId: input.generationId, costUnits: cost.toString(), proposalId: input.proposalId, transactionId: posted.rows[0].transaction_id }, correlationId: input.correlationId });
+    await createGameEvent(tx, { id: `ORG-TECH-ADOPTED-${adoptionId}`, category: 'RESEARCH', eventType: 'ORGANIZATION_TECHNOLOGY_ADOPTED', gameDay: day, actorHumanId: input.humanId, subjectType: 'ORGANIZATION', subjectId: input.organizationId, title: `${generation.name} adopted`, details: { generationId: input.generationId, costUnits: cost.toString(), proposalId: input.proposalId, transactionId: posted.transactionId }, correlationId: input.correlationId });
     return { ok: true, adoptionId, organizationId: input.organizationId, generationId: input.generationId, status: 'ADOPTED', effectiveFromGameDay: day + 1, costUnits: cost.toString(), correlationId: input.correlationId };
   });
 }

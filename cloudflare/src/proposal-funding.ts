@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { postEconomicTransaction } from './economic-transaction-postgres.ts';
 
 export type ProposalFundingResult = {
   configured: boolean;
@@ -44,12 +45,16 @@ export async function attemptProposalFunding(
   if (missing) return { configured: true, available: false, reason: `Insufficient ${missing.asset_id === 1 ? 'Credits' : 'resources'} for proposal action` };
 
   const entries = requirements.rows.flatMap((row) => [
-    { account_id: row.source_account_id, asset_id: row.asset_id, delta_units: (-BigInt(row.required_units)).toString(), reason_code: 'proposal_funding' },
-    { account_id: row.sink_account_id, asset_id: row.asset_id, delta_units: BigInt(row.required_units).toString(), reason_code: 'proposal_funding_sink' },
+    { account_id: row.source_account_id!, asset_id: row.asset_id, delta_units: (-BigInt(row.required_units)).toString(), reason_code: 'proposal_funding' },
+    { account_id: row.sink_account_id!, asset_id: row.asset_id, delta_units: BigInt(row.required_units).toString(), reason_code: 'proposal_funding_sink' },
   ]);
-  const result = await repository.query(
-    `SELECT * FROM earth_post_transaction($1,$2,0,'ASSET_TRANSFER','PROPOSAL',$3,'economy-v2',$4::jsonb)`,
-    [`proposal-start:${proposalId}`, gameDay, proposalId, JSON.stringify(entries)],
-  );
-  return { configured: true, available: true, posted: Boolean(result.rows[0]?.created) };
+  const result = await postEconomicTransaction(repository, {
+    correlationId: `proposal-start:${proposalId}`,
+    kind: 'ASSET_TRANSFER',
+    sourceType: 'PROPOSAL',
+    sourceId: proposalId,
+    rulesVersion: 'economy-v2',
+    entries,
+  });
+  return { configured: true, available: true, posted: Boolean(result.transactionId) };
 }

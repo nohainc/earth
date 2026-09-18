@@ -14,6 +14,7 @@ import { getTaxStatement } from './tax-statement-postgres.ts';
 import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
 import { listV5CapacityResolutionCases, liquidateV5HouseBuilding, openV5CapacityResolutionCase } from './v5-capacity-resolution-postgres.ts';
 import { listV5CorporationReceivershipCases, submitV5CorporationRestructuringPlan } from './v5-corporation-receivership-postgres.ts';
+import { isSettlementBarrierError } from './settlement-barrier-postgres.ts';
 
 export async function handleFinanceRoutes(
   request: Request,
@@ -227,7 +228,10 @@ export async function handleFinanceRoutes(
       const result = await withRepository(env, (repository) => originateBankLoan(repository, { humanId: viewer.id, requestedUnits: BigInt(requestedUnits), termDays, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan origination failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan origination failed' }, { status: 409 });
+    }
   }
   const bankLoanRepayMatch = url.pathname.match(/^\/api\/finance\/bank\/loan\/([^/]+)\/repay$/);
   if (bankLoanRepayMatch && request.method === 'POST') {
@@ -242,7 +246,10 @@ export async function handleFinanceRoutes(
       const result = await withRepository(env, (repository) => repayBankLoan(repository, { humanId: viewer.id, loanId: bankLoanRepayMatch[1], amountUnits: amountUnits === undefined ? undefined : BigInt(amountUnits), correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan repayment failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan repayment failed' }, { status: 409 });
+    }
   }
   const bankLoanGuaranteeMatch = url.pathname.match(/^\/api\/finance\/bank\/loan\/([^/]+)\/guarantee$/);
   if (bankLoanGuaranteeMatch && request.method === 'POST') {
@@ -256,7 +263,10 @@ export async function handleFinanceRoutes(
       const result = await withRepository(env, (repository) => addBankLoanGuarantee(repository, { humanId: viewer.id, loanId: bankLoanGuaranteeMatch[1], guaranteedUnits: BigInt(guaranteedUnits), correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan guarantee failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan guarantee failed' }, { status: 409 });
+    }
   }
   if (url.pathname === '/api/finance/bank/deposit' && request.method === 'POST') {
     if (!featureEnabled(env, 'bankDeposits')) return featureDisabledResponse('bankDeposits');
@@ -267,7 +277,10 @@ export async function handleFinanceRoutes(
     try {
       const result = await withRepository(env, (repository) => createBankDeposit(repository, { humanId: viewer.id, amount: Number(parsed.value.amount ?? 0), termDays: Number(parsed.value.termDays ?? 7), correlationId }));
       return Response.json({ ...(result ?? { ok: false }), persistence: 'planetscale-postgres' }, { status: result?.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Bank deposit failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Bank deposit failed' }, { status: 409 });
+    }
   }
   if (url.pathname === '/api/finance/bank/withdraw' && request.method === 'POST') {
     if (!featureEnabled(env, 'bankDeposits')) return featureDisabledResponse('bankDeposits');
@@ -279,7 +292,10 @@ export async function handleFinanceRoutes(
     try {
       const result = await withRepository(env, (repository) => withdrawBankDeposit(repository, { humanId: viewer.id, depositId, correlationId }));
       return Response.json({ ...(result ?? { ok: false }), persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Bank withdrawal failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Bank withdrawal failed' }, { status: 409 });
+    }
   }
   if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {

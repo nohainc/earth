@@ -12,4 +12,4 @@ When changing an API:
 
 The API-surface regression test is `test/api-surface.test.mjs`. It protects canonical replacements and prevents retired aliases from being reintroduced during future changes.
 
-Retired namespaces currently include public-investment share operations, patent/licensing operations, manual world advancement, dynasty aliases, and the successor alias. Their replacements are civic building operations, corporation research/subscriptions, the trusted scheduler, `/api/house/*`, and `/api/life/successor` respectively.
+Retired namespaces currently include public-investment share operations, patent/licensing operations, manual clock mutation, dynasty aliases, and the successor alias. Their replacements are civic building operations, corporation research/subscriptions, the trusted scheduler, `/api/house/*`, and `/api/life/successor` respectively.

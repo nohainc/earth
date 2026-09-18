@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { formatCreditUnits } from './money.ts';
 import { readAuthoritativeGameTime, projectDeadline } from './world-clock-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
 
@@ -95,14 +96,18 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
 
     const corporationOwner = await tx.query<{ economic_id: string }>('SELECT economic_id::TEXT FROM owner_registry WHERE id = $1', [corporationId]);
     if (!corporationOwner.rows[0]) throw new Error('Corporation economic owner is not provisioned');
-    const funding = await tx.query<{ transaction_id: string }>(
-      `SELECT transaction_id FROM earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,'building-catalog-v1',$4::jsonb)`,
-      [input.correlationId, clock.gameDay, projectId, JSON.stringify([
+    const funding = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'RESEARCH_FUNDING',
+      sourceType: 'CORPORATION_RESEARCH',
+      sourceId: projectId,
+      rulesVersion: 'building-catalog-v1',
+      entries: [
         { account_id: fundingAccounts.rows[0].debit_account_id, delta_units: (-costUnits).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
         { account_id: fundingAccounts.rows[0].research_account_id, delta_units: costUnits.toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
-      ])],
-    );
-    if (!funding.rows[0]?.transaction_id) throw new Error('Research funding transaction was not created');
+      ],
+    }, clock);
+    if (!funding.transactionId) throw new Error('Research funding transaction was not created');
     await tx.query(`UPDATE institution_budget_commitments SET remaining_units=0,status='PAID' WHERE id=$1`, [commitmentId]);
     await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units-$1, spent_units=spent_units+$1 WHERE id=$2', [costUnits.toString(), budget.id]);
     await tx.query(`INSERT INTO corporation_research_projects
@@ -111,12 +116,12 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
        priority, status, started_game_day, funding_transaction_id, correlation_id)
       VALUES ($1,$2,'BUILDING_BLUEPRINT',$3,'building-catalog-v1',$4,0,$5,100,'ACTIVE',$6,$7,$8)
       ON CONFLICT (id) DO NOTHING`,
-      [projectId, corporationOwner.rows[0].economic_id, targetCatalogId, durationDays * 100, costUnits.toString(), clock.gameDay, funding.rows[0].transaction_id, input.correlationId]);
+      [projectId, corporationOwner.rows[0].economic_id, targetCatalogId, durationDays * 100, costUnits.toString(), clock.gameDay, funding.transactionId, input.correlationId]);
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_research_projects WHERE id = $1', [projectId])).rows[0], catalogId: targetCatalogId, correlationId: input.correlationId };
 }
 
 export async function startCorporationBuildingResearch(repository: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
-  return repository.transaction((tx) => startCorporationBuildingResearchInTransaction(tx, input));
+  return runEconomicMutation(repository, (tx) => startCorporationBuildingResearchInTransaction(tx, input));
 }
 
 /** Server-authoritative preview for the next Corporation building blueprint tier. */

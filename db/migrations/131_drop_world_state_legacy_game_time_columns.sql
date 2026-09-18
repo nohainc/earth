@@ -1,4 +1,5 @@
 -- Migration: 131_drop_world_state_legacy_game_time_columns.sql
+-- EARTH ACTIVE MIGRATION: 131_drop_world_state_legacy_game_time_columns
 -- EARTH V5 Authoritative Clock & Schema Simplification
 --
 -- Drops legacy mutable game_day and game_minute columns from world_state in favor

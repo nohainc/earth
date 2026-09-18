@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 131;
+export const EARTH_SCHEMA_VERSION = 134;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -304,6 +304,16 @@ export const REQUIRED_SCHEMA_TABLES = {
     "status",
     "correlation_id",
     "completed_transaction_id"
+  ],
+  "market_processing_control": [
+    "id",
+    "processed_through_market_batch",
+    "status",
+    "current_market_batch",
+    "lease_owner",
+    "lease_expires_at",
+    "error_message",
+    "updated_at"
   ],
   "market_orders": [
     "id",
@@ -866,6 +876,7 @@ export const REQUIRED_INDEXES = [
   "auth_email_deliveries_account_idx",
   "market_orders_open_idx",
   "market_fills_orders_idx",
+  "market_processing_control_lease_idx",
   "tax_obligations_taxpayer_idx",
   "financial_obligations_debtor_status_idx",
   "financial_obligations_creditor_idx",
@@ -892,7 +903,6 @@ export const REQUIRED_SCHEMA_FUNCTIONS = [
   "earth_get_current_game_time",
   "earth_absolute_game_minute",
   "earth_advance_settlement_cursor",
-  "earth_advance_world_clock",
   "earth_post_settlement_batch",
   "earth_refresh_territory_capacity",
   "earth_validate_building_ownership",

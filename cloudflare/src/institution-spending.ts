@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { postEconomicTransaction } from './economic-transaction-postgres.ts';
 
 export type InstitutionalSpendingInput = {
   institutionId: string;
@@ -74,15 +75,17 @@ export async function spendInstitutionBudget(
     if (used > allocated) throw new Error('Spending exceeds the corporation allocation ceiling');
   }
 
-  const posting = await tx.query<{ transaction_id: string; created: boolean }>(
-    `SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,$3,$4,$5,$6,$7::jsonb)`,
-    [input.correlationId, input.gameDay, input.purpose, input.sourceType, input.sourceId, 'institution-budget-v2', JSON.stringify([
+  const posting = await postEconomicTransaction(tx, {
+    correlationId: input.correlationId,
+    kind: input.purpose,
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    rulesVersion: 'institution-budget-v2',
+    entries: [
       { account_id: input.sourceAccountId, asset_id: source.rows[0].asset_id, delta_units: (-input.amountUnits).toString(), reason_code: input.purpose },
       { account_id: input.recipientAccountId, asset_id: source.rows[0].asset_id, delta_units: input.amountUnits.toString(), reason_code: input.purpose },
-    ])],
-  );
-  const postingRow = posting.rows[0];
-  if (!postingRow) throw new Error('Economy V2 posting returned no transaction');
+    ],
+  }, { gameDay: input.gameDay, gameMinute: 0 });
   if (input.commitmentId) {
     await tx.query('SELECT * FROM earth_pay_budget_commitment($1,$2)', [input.commitmentId, input.amountUnits]);
   } else {

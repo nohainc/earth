@@ -84,11 +84,14 @@ class _CommandCenterState extends State<CommandCenter>
   Timer? liveHeartbeatTimer;
   Timer? liveHeartbeatTimeoutTimer;
   Timer? refreshCoalesceTimer;
+  Timer? clockResyncTimer;
   http.Client? liveClient;
   WebSocketChannel? liveSocket;
   StreamSubscription<String>? liveSubscription;
   bool _liveConnecting = false;
   bool _authExpiredHandled = false;
+  bool _clockResyncInFlight = false;
+  DateTime? _lastClockResyncAt;
   int _wsFailCount = 0;
   final Set<String> _seenEventKeys = <String>{};
   final Set<String> _pendingRefreshTopics = <String>{};
@@ -118,7 +121,9 @@ class _CommandCenterState extends State<CommandCenter>
     _connectLiveChannel();
     eventTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       _refreshEvents();
-      _syncWorldSilently();
+    });
+    clockResyncTimer = Timer.periodic(const Duration(minutes: 3), (_) {
+      unawaited(_resyncAuthoritativeClock());
     });
   }
 
@@ -175,6 +180,7 @@ class _CommandCenterState extends State<CommandCenter>
       liveSocket = socket;
       await socket.ready;
       _markLiveConnected();
+      unawaited(_resyncAuthoritativeClock());
       liveSubscription =
           socket.stream.map((message) => message.toString()).listen(
         (message) {
@@ -223,6 +229,7 @@ class _CommandCenterState extends State<CommandCenter>
         throw StateError('SSE connection failed (${response.statusCode})');
       }
       _markLiveConnected();
+      unawaited(_resyncAuthoritativeClock());
       liveSubscription = response.stream
           .transform(utf8.decoder)
           .transform(const LineSplitter())
@@ -285,7 +292,7 @@ class _CommandCenterState extends State<CommandCenter>
       final pending = Set<String>.from(_pendingRefreshTopics);
       _pendingRefreshTopics.clear();
       if (pending.any((topic) => topic != 'notifications')) {
-        unawaited(_syncWorldSilently());
+        unawaited(_resyncAuthoritativeClock());
       }
       unawaited(_refreshEvents());
     });
@@ -350,13 +357,11 @@ class _CommandCenterState extends State<CommandCenter>
     pollingFallbackTimer = null;
   }
 
-  Future<void> _onDayRecalculateTrigger() async {
-    // World advancement is server-owned. The HUD callback now only refreshes
-    // the prefetched snapshot; clients must not trigger a second clock path.
-    await _onDayPrefetch();
+  Future<void> _onPreRolloverRefresh() async {
+    await _onRolloverPrefetch();
   }
 
-  Future<void> _onDayPrefetch() async {
+  Future<void> _onRolloverPrefetch() async {
     try {
       final next = await api.world();
       if (mounted) {
@@ -367,7 +372,7 @@ class _CommandCenterState extends State<CommandCenter>
     }
   }
 
-  void _onDayRollover() {
+  void _onDisplayedDayChanged() {
     if (_prefetchedDayState != null && mounted) {
       final next = _prefetchedDayState!;
       _prefetchedDayState = null;
@@ -379,21 +384,34 @@ class _CommandCenterState extends State<CommandCenter>
     }
   }
 
-  Future<void> _syncWorldSilently() async {
+  Future<void> _resyncAuthoritativeClock({bool force = false}) async {
+    final now = DateTime.now();
+    if (_clockResyncInFlight ||
+        (!force &&
+            _lastClockResyncAt != null &&
+            now.difference(_lastClockResyncAt!) < const Duration(minutes: 2))) {
+      return;
+    }
+    _clockResyncInFlight = true;
     try {
-      final latest = await const EarthApi().world();
+      final latest = await api.world();
+      _lastClockResyncAt = DateTime.now();
       if (mounted) {
         setState(() {
           state = latest;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      // Keep projecting from the last good authoritative anchor until retry.
+    } finally {
+      _clockResyncInFlight = false;
+    }
   }
 
   Future<void> _pollFallbackSync() async {
     try {
       await _refreshEvents();
-      await _syncWorldSilently();
+      await _resyncAuthoritativeClock(force: true);
       if (mounted && connectionStatus == LiveConnectionStatus.offline) {
         setState(() => connectionStatus = LiveConnectionStatus.polling);
       }
@@ -618,7 +636,7 @@ class _CommandCenterState extends State<CommandCenter>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _syncWorldSilently();
+      unawaited(_resyncAuthoritativeClock(force: true));
       _refreshEvents();
     }
   }
@@ -632,6 +650,7 @@ class _CommandCenterState extends State<CommandCenter>
     liveHeartbeatTimer?.cancel();
     liveHeartbeatTimeoutTimer?.cancel();
     refreshCoalesceTimer?.cancel();
+    clockResyncTimer?.cancel();
     _closeLiveConnection();
     super.dispose();
   }
@@ -774,192 +793,201 @@ class _CommandCenterState extends State<CommandCenter>
                       child: Column(
                         children: [
                           TopFixedHudPanel(
-                        state: current,
-                        notifications: notifications,
-                        unreadNotifications: unreadNotifications,
-                        unreadCommMessages: unreadCommMessages,
-                        isLiveConnected: _isLiveConnected,
-                        isReconnecting: liveReconnectTimer?.isActive == true,
-                        connectionStatus: connectionStatus,
-                        showDrawerButton: compact,
-                        onOpenDrawer: () =>
-                            _scaffoldKey.currentState?.openDrawer(),
-                        onNavigate: (section) => _navigateToSection(
-                          context,
-                          section,
-                          closeDrawer: false,
-                        ),
-                        onLogout: () async {
-                          await api.logout();
-                          if (mounted) widget.onLogout();
-                        },
-                        onSecurity: () =>
-                            showSecurityDialog(context, api, widget.onLogout),
-                        onCommLink: () => _navigateToSection(
-                            context, 'messages',
-                            closeDrawer: false),
-                        onNotifications: () => _navigateToSection(
-                            context, 'notifications',
-                            closeDrawer: false),
-                        onOpenNotifications: () async {
-                          await api.markAllNotificationsRead();
-                          await _refreshEvents();
-                        },
-                        onReconnect: _manualReconnect,
-                        onDayRecalculateTrigger: _onDayRecalculateTrigger,
-                        onDayPrefetch: _onDayPrefetch,
-                        onDayRollover: _onDayRollover,
-                      ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            if (!compact)
-                              Sidebar(
-                                state: current,
-                                selectedSection: selectedSection,
-                                busy: busy,
-                                unreadNotifications: unreadNotifications,
-                                unreadCommMessages: unreadCommMessages,
-                                isSlim: isMessagesMode,
-                                onLogout: () async {
-                                  await api.logout();
-                                  if (mounted) widget.onLogout();
-                                },
-                                onSecurity: () => showSecurityDialog(
-                                    context, api, widget.onLogout),
-                                onNavigate: (section) => _navigateToSection(
-                                  context,
-                                  section,
-                                  closeDrawer: false,
-                                ),
-                              ),
-                            if (isMessagesMode)
-                              Expanded(
-                                child: CommLinkDialog(
-                                  api: api,
-                                  state: current,
-                                  initialChannelId:
-                                      selectedSection.contains(':')
+                            state: current,
+                            notifications: notifications,
+                            unreadNotifications: unreadNotifications,
+                            unreadCommMessages: unreadCommMessages,
+                            isLiveConnected: _isLiveConnected,
+                            isReconnecting:
+                                liveReconnectTimer?.isActive == true,
+                            connectionStatus: connectionStatus,
+                            showDrawerButton: compact,
+                            onOpenDrawer: () =>
+                                _scaffoldKey.currentState?.openDrawer(),
+                            onNavigate: (section) => _navigateToSection(
+                              context,
+                              section,
+                              closeDrawer: false,
+                            ),
+                            onLogout: () async {
+                              await api.logout();
+                              if (mounted) widget.onLogout();
+                            },
+                            onSecurity: () => showSecurityDialog(
+                                context, api, widget.onLogout),
+                            onCommLink: () => _navigateToSection(
+                                context, 'messages',
+                                closeDrawer: false),
+                            onNotifications: () => _navigateToSection(
+                                context, 'notifications',
+                                closeDrawer: false),
+                            onOpenNotifications: () async {
+                              await api.markAllNotificationsRead();
+                              await _refreshEvents();
+                            },
+                            onReconnect: _manualReconnect,
+                            onPreRolloverRefresh: _onPreRolloverRefresh,
+                            onRolloverPrefetch: _onRolloverPrefetch,
+                            onDisplayedDayChanged: _onDisplayedDayChanged,
+                            onClockResync: () =>
+                                _resyncAuthoritativeClock(force: true),
+                          ),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                if (!compact)
+                                  Sidebar(
+                                    state: current,
+                                    selectedSection: selectedSection,
+                                    busy: busy,
+                                    unreadNotifications: unreadNotifications,
+                                    unreadCommMessages: unreadCommMessages,
+                                    isSlim: isMessagesMode,
+                                    onLogout: () async {
+                                      await api.logout();
+                                      if (mounted) widget.onLogout();
+                                    },
+                                    onSecurity: () => showSecurityDialog(
+                                        context, api, widget.onLogout),
+                                    onNavigate: (section) => _navigateToSection(
+                                      context,
+                                      section,
+                                      closeDrawer: false,
+                                    ),
+                                  ),
+                                if (isMessagesMode)
+                                  Expanded(
+                                    child: CommLinkDialog(
+                                      api: api,
+                                      state: current,
+                                      initialChannelId: selectedSection
+                                              .contains(':')
                                           ? selectedSection.substring(
                                               selectedSection.indexOf(':') + 1)
                                           : null,
-                                  isPageMode: true,
-                                  compact: compact,
-                                  onNavigate: (section) => _navigateToSection(
-                                    context,
-                                    section,
-                                    closeDrawer: false,
-                                  ),
-                                  onClose: () => _navigateToSection(
-                                    context,
-                                    _previousSection.isNotEmpty &&
-                                            _previousSection != 'messages' &&
-                                            !_previousSection
-                                                .startsWith('messages:')
-                                        ? _previousSection
-                                        : 'command',
-                                    closeDrawer: false,
-                                  ),
-                                ),
-                              )
-                            else
-                              Expanded(
-                                child: ListView(
-                                  padding: EdgeInsets.fromLTRB(
-                                    compact ? 16 : 28,
-                                    compact ? 14 : 22,
-                                    compact ? 16 : 36,
-                                    56,
-                                  ),
-                                  children: [
-                                    if (error != null)
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 16),
-                                        child: EarthAlertBanner(
-                                          message: error!,
-                                          isError: true,
-                                          onClose: () =>
-                                              setState(() => error = null),
-                                        ),
+                                      isPageMode: true,
+                                      compact: compact,
+                                      onNavigate: (section) =>
+                                          _navigateToSection(
+                                        context,
+                                        section,
+                                        closeDrawer: false,
                                       ),
-                                    if (selectedSection == 'command')
-                                      HouseOnboardingPanel(
-                                        api: api,
-                                        onNavigate: (section) =>
-                                            _navigateToSection(
-                                          context,
-                                          section,
-                                          closeDrawer: false,
-                                        ),
-                                      ),
-                                    const SizedBox(height: 8),
-                                    ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minWidth: compact ? 320 : 860,
-                                      ),
-                                      child: Dashboard(
-                                        state: current,
-                                        selectedSection: selectedSection,
-                                        previousSection: _previousSection,
-                                        onNavigate: (section) =>
-                                            _navigateToSection(
-                                          context,
-                                          section,
-                                          closeDrawer: false,
-                                        ),
-                                        busy: busy,
-                                        events: events,
-                                        news: news,
-                                        newsHasMore: newsNextCursor != null &&
-                                            newsNextCursor!.isNotEmpty,
-                                        onLoadEarlierNews: _loadEarlierNews,
-                                        notifications: notifications,
-                                        decisionQueue: decisionQueue,
-                                        ownershipEvents: ownershipEvents,
-                                        membershipEvents: membershipEvents,
-                                        marketHistory: marketHistory,
-                                        pantheon: pantheon,
-                                        personalFinanceData:
-                                            personalFinanceData,
-                                        mutualCreditData: mutualCreditData,
-                                        territoryCommonsData:
-                                            territoryCommonsData,
-                                        isLiveConnected: _isLiveConnected,
-                                        isReconnecting:
-                                            liveReconnectTimer?.isActive ==
-                                                true,
-                                        connectionStatus: connectionStatus,
-                                        unreadNotifications:
-                                            unreadNotifications,
-                                        sectionKeys: _sectionKeys,
-                                        action: _run,
-                                        onRefreshEvents: _refreshEvents,
-                                        onRefreshTerritoryCommons: () =>
-                                            _loadSecondaryPanels(current),
-                                        onMarkNotificationRead: (id) async {
-                                          await api.markNotificationRead(id);
-                                          await _refreshEvents();
-                                        },
-                                        onMarkAllNotificationsRead: () async {
-                                          await api.markAllNotificationsRead();
-                                          await _refreshEvents();
-                                        },
-                                        onLogout: widget.onLogout,
+                                      onClose: () => _navigateToSection(
+                                        context,
+                                        _previousSection.isNotEmpty &&
+                                                _previousSection !=
+                                                    'messages' &&
+                                                !_previousSection
+                                                    .startsWith('messages:')
+                                            ? _previousSection
+                                            : 'command',
+                                        closeDrawer: false,
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
+                                  )
+                                else
+                                  Expanded(
+                                    child: ListView(
+                                      padding: EdgeInsets.fromLTRB(
+                                        compact ? 16 : 28,
+                                        compact ? 14 : 22,
+                                        compact ? 16 : 36,
+                                        56,
+                                      ),
+                                      children: [
+                                        if (error != null)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 16),
+                                            child: EarthAlertBanner(
+                                              message: error!,
+                                              isError: true,
+                                              onClose: () =>
+                                                  setState(() => error = null),
+                                            ),
+                                          ),
+                                        if (selectedSection == 'command')
+                                          HouseOnboardingPanel(
+                                            api: api,
+                                            onNavigate: (section) =>
+                                                _navigateToSection(
+                                              context,
+                                              section,
+                                              closeDrawer: false,
+                                            ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        ConstrainedBox(
+                                          constraints: BoxConstraints(
+                                            minWidth: compact ? 320 : 860,
+                                          ),
+                                          child: Dashboard(
+                                            state: current,
+                                            selectedSection: selectedSection,
+                                            previousSection: _previousSection,
+                                            onNavigate: (section) =>
+                                                _navigateToSection(
+                                              context,
+                                              section,
+                                              closeDrawer: false,
+                                            ),
+                                            busy: busy,
+                                            events: events,
+                                            news: news,
+                                            newsHasMore:
+                                                newsNextCursor != null &&
+                                                    newsNextCursor!.isNotEmpty,
+                                            onLoadEarlierNews: _loadEarlierNews,
+                                            notifications: notifications,
+                                            decisionQueue: decisionQueue,
+                                            ownershipEvents: ownershipEvents,
+                                            membershipEvents: membershipEvents,
+                                            marketHistory: marketHistory,
+                                            pantheon: pantheon,
+                                            personalFinanceData:
+                                                personalFinanceData,
+                                            mutualCreditData: mutualCreditData,
+                                            territoryCommonsData:
+                                                territoryCommonsData,
+                                            isLiveConnected: _isLiveConnected,
+                                            isReconnecting:
+                                                liveReconnectTimer?.isActive ==
+                                                    true,
+                                            connectionStatus: connectionStatus,
+                                            unreadNotifications:
+                                                unreadNotifications,
+                                            sectionKeys: _sectionKeys,
+                                            action: _run,
+                                            onRefreshEvents: _refreshEvents,
+                                            onRefreshTerritoryCommons: () =>
+                                                _loadSecondaryPanels(current),
+                                            onMarkNotificationRead: (id) async {
+                                              await api
+                                                  .markNotificationRead(id);
+                                              await _refreshEvents();
+                                            },
+                                            onMarkAllNotificationsRead:
+                                                () async {
+                                              await api
+                                                  .markAllNotificationsRead();
+                                              await _refreshEvents();
+                                            },
+                                            onLogout: widget.onLogout,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
       );
     });
   }

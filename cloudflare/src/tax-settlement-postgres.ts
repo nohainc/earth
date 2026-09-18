@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { calculateProgressiveCharge, type ProgressiveBracket } from './v5-progressive.ts';
+import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
 type TaxRule = { id: string; tax_rule_id: string; category: string; rate_bps: number; tax_base_definition: string; base_reference: string; base_amount_units: string; nexus_type: string; authority_type: string; authority_id: string | null; beneficiary_economic_id: string };
 type ConstitutionalHouseIncomeTax = { id: string; corporation_id: string; beneficiary_economic_id: string; schedule_id: string; version_id: string };
@@ -39,8 +40,19 @@ async function payObligation(tx: PostgresRepository, input: { obligationId: stri
     await tx.query("UPDATE tax_obligations SET status = 'ARREARS' WHERE id = $1 AND status NOT IN ('PAID','SETTLED')", [input.obligationId]);
     return { paid: false, transactionId: null };
   }
-  const result = await tx.query<{ transaction_id: string }>(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','TAX_COLLECTION',$3,$4,$5::JSONB) AS transaction_id`, [input.correlationId, input.day, input.obligationId, input.ruleVersion, JSON.stringify([{ account_id: wallet.id, asset_id: 1, delta_units: (-input.amount).toString() }, { account_id: beneficiary.id, asset_id: 1, delta_units: input.amount.toString() }])]);
-  const transactionId = result.rows[0]?.transaction_id;
+  const result = await postSettlementTransaction(tx, {
+    correlationId: input.correlationId,
+    gameDay: input.day,
+    kind: 'ASSET_TRANSFER',
+    sourceType: 'TAX_COLLECTION',
+    sourceId: input.obligationId,
+    rulesVersion: input.ruleVersion,
+    entries: [
+      { accountId: wallet.id, assetId: 1, deltaUnits: (-input.amount).toString() },
+      { accountId: beneficiary.id, assetId: 1, deltaUnits: input.amount.toString() },
+    ],
+  });
+  const transactionId = result.transactionId;
   if (!transactionId) throw new Error('Tax collection transaction was not created');
   await tx.query("UPDATE financial_obligations SET paid_units = principal_due_units + interest_due_units, status = 'PAID', payment_transaction_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1", [input.obligationId, transactionId]);
   await tx.query("UPDATE tax_obligations SET status = 'PAID', payment_transaction_id = $2 WHERE id = $1", [input.obligationId, transactionId]);

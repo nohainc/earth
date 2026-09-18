@@ -12,6 +12,7 @@ import { acquireTerritoryRight, listTerritoryRights, releaseTerritoryRight } fro
 import { declareCommonsDividend, getCommonsStatement } from './commons-dividends-postgres.ts';
 import { decommissionBuilding, quoteBuildingDemolition, quoteBuildingOperatingMode, quoteBuildingUpgrade, setBuildingOperatingMode, upgradeBuilding } from './building-investment-postgres.ts';
 import { purchaseV5Building, quoteV5Building } from './v5-building-postgres.ts';
+import { isSettlementBarrierError } from './settlement-barrier-postgres.ts';
 
 export async function handleRealEstateRoutes(
   request: Request,
@@ -28,7 +29,10 @@ export async function handleRealEstateRoutes(
       const result = await withRepository(env, (repository) => purchaseV5Building(repository, { ownerId: viewer.id, buildingType: parsed.value.buildingType!, name: parsed.value.name!.trim(), correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 pooled construction failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 pooled construction failed' }, { status: 409 });
+    }
   }
   if (url.pathname === '/api/v5/buildings/quote' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ buildingType?: string }>(request);
@@ -40,6 +44,7 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'V5 construction quote unavailable' }, { status: 409 });
     }
   }
@@ -56,7 +61,10 @@ export async function handleRealEstateRoutes(
       const result = await withRepository(env, (repository) => upgradeBuilding(repository, { buildingId: v5UpgradeMatch[1], humanId: viewer.id, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade failed' }, { status: 409 });
+    }
   }
   const upgradeQuoteMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/upgrade-quote$/);
   if (upgradeQuoteMatch && request.method === 'GET') {
@@ -68,7 +76,10 @@ export async function handleRealEstateRoutes(
       const result = await withRepository(env, (repository) => quoteBuildingUpgrade(repository, { buildingId: v5UpgradeQuoteMatch[1], humanId: viewer.id }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade quote unavailable' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade quote unavailable' }, { status: 409 });
+    }
   }
   if (url.pathname === '/api/real-estate/policy' && request.method === 'POST') {
     return Response.json({ ok: false, error: 'Legacy building policy mutations are retired; use /api/v5/buildings/{id}/policy.' }, { status: 410 });
@@ -83,7 +94,10 @@ export async function handleRealEstateRoutes(
       const result = await withRepository(env, (repository) => setBuildingOperatingMode(repository, { buildingId: v5PolicyMatch[1], humanId: viewer.id, mode: parsed.value.policy!, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building policy update failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building policy update failed' }, { status: 409 });
+    }
   }
   const policyQuoteMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/policy-quote$/);
   if (policyQuoteMatch && request.method === 'GET') {
@@ -95,7 +109,10 @@ export async function handleRealEstateRoutes(
       const result = await withRepository(env, (repository) => quoteBuildingOperatingMode(repository, { buildingId: v5PolicyQuoteMatch[1], humanId: viewer.id }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building policy quote unavailable' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building policy quote unavailable' }, { status: 409 });
+    }
   }
   if (url.pathname === '/api/real-estate/demolish' && request.method === 'POST') {
     return Response.json({ ok: false, error: 'Legacy building demolition is retired; use /api/v5/buildings/{id}/demolish.' }, { status: 410 });
@@ -110,7 +127,10 @@ export async function handleRealEstateRoutes(
       const result = await withRepository(env, (repository) => decommissionBuilding(repository, { buildingId: v5DemolishMatch[1], humanId: viewer.id, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building decommission failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building decommission failed' }, { status: 409 });
+    }
   }
   const demolitionQuoteMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/demolition-quote$/);
   if (demolitionQuoteMatch && request.method === 'GET') {
@@ -141,22 +161,28 @@ export async function handleRealEstateRoutes(
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commons statement unavailable' }, { status: 400 }); }
   }
   if (commonsMatch && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ gameDay?: number; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId) return Response.json({ ok: false, error: 'Idempotency key is required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => declareCommonsDividend(repository, { humanId: viewer.id, territoryId: commonsMatch[1], gameDay: parsed.value.gameDay, correlationId }));
+      const result = await withRepository(env, (repository) => declareCommonsDividend(repository, { humanId: viewer.id, territoryId: commonsMatch[1], correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commons dividend declaration failed' }, { status: 409 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commons dividend declaration failed' }, { status: 409 });
+    }
   }
   if (url.pathname === '/api/real-estate/rights' && request.method === 'GET') {
     try {
       const result = await withRepository(env, (repository) => listTerritoryRights(repository, { humanId: viewer.id }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Lease portfolio unavailable' }, { status: 400 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Lease portfolio unavailable' }, { status: 400 });
+    }
   }
   if (url.pathname === '/api/real-estate/rights' && request.method === 'POST') {
     return Response.json({ ok: false, error: 'Territory use-right acquisition is retired in V5; use pooled capacity construction.' }, { status: 410 });
@@ -171,6 +197,7 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Construction projects unavailable' }, { status: 400 });
     }
   }
@@ -184,7 +211,10 @@ export async function handleRealEstateRoutes(
       const result = await withRepository(env, (repository) => getBuildingCapitalOptions(repository, v5CapitalOptionsMatch[1]));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Capital options unavailable' }, { status: 404 }); }
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Capital options unavailable' }, { status: 404 });
+    }
   }
 
   const capitalProjectMatch = url.pathname.match(/^\/api\/real-estate\/buildings\/([^/]+)\/capital-projects$/);
@@ -202,6 +232,7 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
     } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Capital project failed' }, { status: 409 });
     }
   }
@@ -217,6 +248,7 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Construction cancellation failed' }, { status: 409 });
     }
   }
@@ -227,6 +259,7 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Territory capacity unavailable' }, { status: 404 });
     }
   }
@@ -264,6 +297,7 @@ export async function handleRealEstateRoutes(
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
     } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
       const message = error instanceof Error ? error.message : 'Building research initiation failed';
       return Response.json({ ok: false, error: message }, { status: /insufficient|already|not found|only to corporation/i.test(message) ? 409 : 400 });
     }

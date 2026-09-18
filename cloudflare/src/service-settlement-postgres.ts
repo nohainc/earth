@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { applyConditionStack } from './world-conditions.ts';
+import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
 type NeedRule = { need_code: string; service_type_code: string; demand_units_per_human: string; critical_threshold_bps: number; rules_version: string };
 type House = { house_id: string; economic_id: string; territory_id: string; residents: string };
@@ -37,14 +38,19 @@ async function payService(tx: PostgresRepository, day: number, house: House, pro
   const payer = await account(tx, house.economic_id, 'WALLET');
   const providerAccount = await account(tx, provider.economic_id, provider.owner_type === 'CORPORATION' ? 'OPERATIONS' : 'WALLET');
   if (!payer || !providerAccount || units(payer.balance_units) < total) return null;
-  const result = await tx.query<{ id: string }>(
-    `SELECT earth_post_transaction($1, $2, 1439, 'ASSET_TRANSFER', 'SYSTEM_SETTLEMENT', $3, 'services-v1', $4::JSONB) AS id`,
-    [`service:${day}:${house.house_id}:${serviceCode}:${provider.economic_id}`, day, serviceCode, JSON.stringify([
-      { account_id: payer.id, asset_id: 1, delta_units: (-total).toString(), reason_code: 'house_service_payment' },
-      { account_id: providerAccount.id, asset_id: 1, delta_units: total.toString(), reason_code: 'house_service_revenue' },
-    ])],
-  );
-  return result.rows[0]?.id ?? null;
+  const result = await postSettlementTransaction(tx, {
+    correlationId: `service:${day}:${house.house_id}:${serviceCode}:${provider.economic_id}`,
+    gameDay: day,
+    kind: 'ASSET_TRANSFER',
+    sourceType: 'SYSTEM_SETTLEMENT',
+    sourceId: serviceCode,
+    rulesVersion: 'services-v1',
+    entries: [
+      { accountId: payer.id, assetId: 1, deltaUnits: (-total).toString(), reasonCode: 'house_service_payment' },
+      { accountId: providerAccount.id, assetId: 1, deltaUnits: total.toString(), reasonCode: 'house_service_revenue' },
+    ],
+  });
+  return result.transactionId ?? null;
 }
 
 async function createServiceObligation(tx: PostgresRepository, day: number, house: House, provider: Provider, serviceCode: string, amount: bigint): Promise<void> {

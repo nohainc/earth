@@ -2,6 +2,11 @@ import { probePostgres } from './postgres';
 import { withPostgresRepository } from './repository';
 import { EARTH_SCHEMA_VERSION } from './schema-contract.ts';
 import { schedulerEnabled } from './maintenance.ts';
+import { MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
+
+const SETTLEMENT_BACKLOG_ALERT_THRESHOLD = 1;
+const MARKET_BACKLOG_ALERT_THRESHOLD = 1;
+const SETTLEMENT_LEASE_STALE_SECONDS = 300;
 
 export async function livenessResponse(request: Request): Promise<Response> {
   return Response.json({
@@ -53,11 +58,15 @@ export async function healthResponse(request: Request, env: Env, options: { read
         expectedSchemaVersion: EARTH_SCHEMA_VERSION,
         schemaMissingObjects: postgres.missingObjects ?? [],
       },
+      worldClock: null,
+      settlement: null,
+      market: null,
+      alerts: [{ code: 'SCHEMA_NOT_READY', severity: 'critical', message: 'Health details are unavailable until the canonical schema is ready' }],
       migration: { target: 'planetscale-postgres', stage: 'not-ready' },
     }, { status: 503 });
   }
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
-    const [core, feature, reservations, governance, financial, assets, taxed, invariants, scheduler, outbox, migrations, counts, settlement, observability] = await Promise.all([
+    const [core, feature, reservations, governance, financial, assets, taxed, invariants, scheduler, outbox, migrations, counts, settlement, observability, clockSnapshot, marketControl] = await Promise.all([
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_instruments', 'economic_accounts', 'economic_transactions', 'buildings', 'house_affiliations']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['buildings', 'bank_deposits', 'tax_rule_versions', 'corporations']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'market_orders'"),
@@ -88,6 +97,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
       repository.query<{
         status: string;
         current_game_day: string;
+        settled_through_game_day: string | null;
         last_completed_game_day: string | null;
         backlog_game_days: string;
         last_completed_at: string | null;
@@ -124,6 +134,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
         )
         SELECT control.status,
                clock.current_game_day::text,
+               control.settled_through_game_day::text AS settled_through_game_day,
                completed.game_day::text AS last_completed_game_day,
                GREATEST(0, (clock.current_game_day - 1) - COALESCE(control.settled_through_game_day, 0))::text AS backlog_game_days,
                completed.completed_at::text AS last_completed_at,
@@ -163,6 +174,25 @@ export async function healthResponse(request: Request, env: Env, options: { read
         repository.query<{ market_orders_processed: string }>(`SELECT COUNT(*)::text AS market_orders_processed
           FROM market_orders WHERE updated_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'`).catch(() => ({ rows: [{ market_orders_processed: '0' }] })),
       ]),
+      repository.query<{
+        game_day: string | number;
+        game_minute: string | number;
+        total_game_minutes: string | number;
+        genesis_at: string | Date;
+        server_now: string | Date;
+        real_seconds_per_game_minute: string | number;
+      }>('SELECT * FROM earth_get_current_game_time()').catch(() => ({ rows: [] })),
+      repository.query<{
+        processed_through_market_batch: string | number;
+        status: string;
+        current_market_batch: string | number | null;
+        lease_owner: string | null;
+        lease_expires_at: string | null;
+        updated_at: string | null;
+      }>(`SELECT processed_through_market_batch, status, current_market_batch,
+                 lease_owner, lease_expires_at, updated_at
+            FROM market_processing_control
+           WHERE id = 'WORLD'`).catch(() => ({ rows: [] })),
     ]);
     const schedulerIsEnabled = schedulerEnabled(env);
     const schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
@@ -187,6 +217,40 @@ export async function healthResponse(request: Request, env: Env, options: { read
         : settlementBacklog > 0
           ? 'CATCHING_UP'
           : 'CURRENT';
+    const clockRow = clockSnapshot.rows[0];
+    const clockAvailable = Boolean(clockRow);
+    const worldClock = clockRow ? {
+      gameDay: Number(clockRow.game_day),
+      gameMinute: Number(clockRow.game_minute),
+      totalGameMinutes: Number(clockRow.total_game_minutes),
+      genesisAt: clockRow.genesis_at instanceof Date ? clockRow.genesis_at.toISOString() : String(clockRow.genesis_at),
+      serverNow: clockRow.server_now instanceof Date ? clockRow.server_now.toISOString() : String(clockRow.server_now),
+      realSecondsPerGameMinute: Number(clockRow.real_seconds_per_game_minute),
+    } : null;
+    const marketRowState = marketControl.rows[0];
+    const currentMarketBatch = worldClock ? Math.floor(worldClock.totalGameMinutes / MARKET_BATCH_GAME_MINUTES) : null;
+    const eligibleMarketBatch = currentMarketBatch == null ? null : currentMarketBatch - 1;
+    const processedThroughMarketBatch = marketRowState ? Number(marketRowState.processed_through_market_batch) : null;
+    const marketBacklogBatches = eligibleMarketBatch == null || processedThroughMarketBatch == null
+      ? null
+      : Math.max(0, eligibleMarketBatch - processedThroughMarketBatch);
+    const settlementLeaseStale = settlementRow?.lease_heartbeat_at != null
+      && settlementStatus === 'active'
+      && (Date.now() - new Date(settlementRow.lease_heartbeat_at).getTime()) / 1000 > SETTLEMENT_LEASE_STALE_SECONDS;
+    const alerts: Array<{ code: string; severity: 'warning' | 'critical'; message: string; value?: number | string | null; threshold?: number }> = [];
+    if (!clockAvailable) alerts.push({ code: 'CLOCK_FUNCTION_FAILURE', severity: 'critical', message: 'Authoritative world clock function is unavailable' });
+    if (!worldClock?.genesisAt) alerts.push({ code: 'GENESIS_MISSING', severity: 'critical', message: 'World genesis timestamp is missing' });
+    if (settlementBacklog > SETTLEMENT_BACKLOG_ALERT_THRESHOLD) alerts.push({ code: 'SETTLEMENT_BACKLOG', severity: 'warning', message: 'Daily settlement is behind the closed world day', value: settlementBacklog, threshold: SETTLEMENT_BACKLOG_ALERT_THRESHOLD });
+    if (failedRunsCount > 0) alerts.push({ code: 'SETTLEMENT_FAILED', severity: 'critical', message: 'Settlement contains failed runs', value: failedRunsCount });
+    if (settlementLeaseStale) alerts.push({ code: 'SETTLEMENT_LEASE_STALE', severity: 'critical', message: 'Settlement lease heartbeat is stale', threshold: SETTLEMENT_LEASE_STALE_SECONDS });
+    if (marketBacklogBatches != null && marketBacklogBatches > MARKET_BACKLOG_ALERT_THRESHOLD) alerts.push({ code: 'MARKET_BACKLOG', severity: 'warning', message: 'Market processing is behind the eligible absolute-time batch', value: marketBacklogBatches, threshold: MARKET_BACKLOG_ALERT_THRESHOLD });
+    if (schedulerState === 'critical') alerts.push({ code: 'SCHEDULER_HEARTBEAT_STALE', severity: 'critical', message: 'Scheduler heartbeat is stale', value: schedulerAgeSeconds });
+    const operationalThresholds = {
+      settlementBacklogDays: SETTLEMENT_BACKLOG_ALERT_THRESHOLD,
+      marketBacklogBatches: MARKET_BACKLOG_ALERT_THRESHOLD,
+      settlementLeaseStaleSeconds: SETTLEMENT_LEASE_STALE_SECONDS,
+      schedulerCriticalAgeSeconds: 600,
+    };
     return {
       checks: {
         database: true,
@@ -199,6 +263,8 @@ export async function healthResponse(request: Request, env: Env, options: { read
         businessTaxSchema: Number(taxed.rows[0]?.count ?? 0) === 2,
         balancesNonNegative: Number(invariants.rows[0]?.invalid ?? 0) === 0,
         criticalInvariants: Number(invariants.rows[0]?.invalid ?? 0) === 0 && failedRunsCount === 0,
+        worldClockAvailable: clockAvailable,
+        marketProcessingControl: Boolean(marketRowState),
         schedulerFresh: !schedulerIsEnabled || schedulerState !== 'critical',
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
@@ -241,6 +307,17 @@ export async function healthResponse(request: Request, env: Env, options: { read
           failedError: settlementRow?.failed_error ?? null,
           retryCount: Number(settlementRow?.retry_count ?? 0),
         },
+        worldClock,
+        market: {
+          currentBatch: currentMarketBatch,
+          eligibleBatch: eligibleMarketBatch,
+          processedThroughBatch: processedThroughMarketBatch,
+          backlogBatches: marketBacklogBatches,
+          status: marketRowState?.status ?? 'UNAVAILABLE',
+          updatedAt: marketRowState?.updated_at ?? null,
+        },
+        alerts,
+        operationalThresholds,
         worldHealth: {
           humanCount: Number(counts[0].rows[0]?.count ?? 0),
           territoryCount: Number((await repository.query('SELECT COUNT(*)::integer AS count FROM territories')).rows[0]?.count ?? 0),
@@ -265,6 +342,20 @@ export async function healthResponse(request: Request, env: Env, options: { read
         ledger: Number(counts[2].rows[0]?.count ?? 0),
         world: Number(counts[3].rows[0]?.count ?? 0),
       },
+      worldClock,
+      settlement: {
+        settledThroughGameDay: settlementRow?.settled_through_game_day != null ? Number(settlementRow.settled_through_game_day) : null,
+        lastClosedGameDay: settlementRow?.current_game_day != null ? Math.max(0, Number(settlementRow.current_game_day) - 1) : null,
+        backlogDays: Number.isFinite(settlementBacklog) ? settlementBacklog : null,
+        status: cursorStatus,
+      },
+      market: {
+        currentBatch: currentMarketBatch,
+        processedThroughBatch: processedThroughMarketBatch,
+        backlogBatches: marketBacklogBatches,
+      },
+      alerts,
+      operationalThresholds,
     };
   }).catch((error) => {
     console.error(JSON.stringify({ event: 'health_probe_failed', error: error instanceof Error ? error.message : String(error) }));
@@ -292,6 +383,10 @@ export async function healthResponse(request: Request, env: Env, options: { read
     postgres: { serverVersion: postgres.serverVersion ?? null, featureTableCount: postgres.featureTableCount ?? 0, dataReady: postgres.dataReady, missingObjects: postgres.missingObjects ?? [] },
     shadow: { postgres: shadow, parity: Boolean(shadow && postgres.dataReady) },
     readiness: postgresChecks?.readiness ?? null,
+    worldClock: postgresChecks?.worldClock ?? null,
+    settlement: postgresChecks?.settlement ?? null,
+    market: postgresChecks?.market ?? null,
+    alerts: postgresChecks?.alerts ?? [{ code: 'HEALTH_QUERY_FAILURE', severity: 'critical', message: 'Operational health details are unavailable' }],
     persistence: 'planetscale-postgres',
     migration: { target: 'planetscale-postgres', stage: postgres.schemaReady && postgres.dataReady ? 'postgres-authority-active' : postgres.schemaReady ? 'schema-ready-awaiting-data-verification' : 'connectivity-probe' },
     authority: 'postgres',

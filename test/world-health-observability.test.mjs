@@ -8,6 +8,12 @@ test('world health reports actionable production metrics', () => {
     assert.match(source, new RegExp(metric));
   }
   assert.match(source, /worldHealth/);
+  for (const field of ['worldClock', 'settledThroughGameDay', 'lastClosedGameDay', 'backlogDays', 'currentBatch', 'processedThroughBatch', 'backlogBatches', 'alerts']) {
+    assert.match(source, new RegExp(field));
+  }
+  for (const alert of ['CLOCK_FUNCTION_FAILURE', 'GENESIS_MISSING', 'SETTLEMENT_BACKLOG', 'SETTLEMENT_FAILED', 'SETTLEMENT_LEASE_STALE', 'MARKET_BACKLOG', 'SCHEDULER_HEARTBEAT_STALE']) {
+    assert.match(source, new RegExp(alert));
+  }
 });
 
 test('optional PostgreSQL observability extensions cannot make health fail', () => {

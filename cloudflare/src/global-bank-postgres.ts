@@ -1,6 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
 import { parseCreditAmount, centsToMoney } from './money.ts';
 import { bankTransactionMetadata } from './bank-transaction-metadata.ts';
+import { runEconomicMutation } from './settlement-barrier-postgres.ts';
+
 export async function listBankDeposits(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const deposits = await repository.query(
     `SELECT d.id, d.principal_units, d.accrued_interest_units, d.rate_bps,
@@ -20,7 +22,7 @@ export async function listBankDeposits(repository: PostgresRepository, humanId: 
 }
 
 export async function createBankDeposit(repository: PostgresRepository, input: { humanId: string; amount: string | number | bigint; termDays: number; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const id = `DEP-${input.correlationId}`;
     const result = await tx.query(
       'SELECT * FROM earth_create_v2_bank_deposit($1, $2, $3, $4, $5)',
@@ -31,7 +33,7 @@ export async function createBankDeposit(repository: PostgresRepository, input: {
 }
 
 export async function withdrawBankDeposit(repository: PostgresRepository, input: { humanId: string; depositId: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const result = await tx.query(
       'SELECT * FROM earth_withdraw_bank_deposit($1, $2, $3)',
       [input.humanId, input.depositId, input.correlationId],

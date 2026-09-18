@@ -409,7 +409,7 @@ const worker = {
       return;
     }
     const result = await withRepository(env, async (repository) => {
-      // One real minute advances one game hour: a game day is 24 real minutes.
+      // Cron is only a scheduler heartbeat; PostgreSQL remains authoritative for world time.
       const schedulerConfig = env as unknown as Record<string, unknown>;
       const world = await runSchedulerHeartbeat(repository, _event.scheduledTime, {
         maxCatchupDays: schedulerConfig.EARTH_SCHEDULER_MAX_CATCHUP_DAYS,
@@ -418,7 +418,7 @@ const worker = {
       });
       return world;
     }, { workload: 'scheduler' });
-    if (!result) throw new Error('PostgreSQL repository is unavailable for scheduled world advancement');
+    if (!result) throw new Error('PostgreSQL repository is unavailable for scheduler heartbeat');
     let outboxDelivered = 0;
     try {
       outboxDelivered = await withRepository(env, (repository) => deliverOutbox(repository, (outboxEvent) =>

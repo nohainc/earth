@@ -4,6 +4,7 @@ import { createNotification } from './notifications-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 
 export type TechnologyCatalogRow = {
   id: string;
@@ -82,11 +83,11 @@ async function requireResearchJurisdiction(tx: PostgresRepository, ownerId: stri
 }
 
 export async function createResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string; budget: number; focus: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     await requireResearchJurisdiction(tx, input.ownerId);
-  const membership = await tx.query<{ corporation_id: string }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.ownerId]);
+    const membership = await tx.query<{ corporation_id: string }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.ownerId]);
     const corporationId = membership.rows[0].corporation_id;
-    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+    const day = clock.gameDay;
     const catalog = await readTechnologyCatalog(tx, day);
     const catalogEntry = catalog.find((technology) => technology.name === input.name || technology.code === input.name);
     const minimumBudgetCents = Number(catalogEntry?.research_credit_cost_units ?? 0n) / 1;
@@ -124,14 +125,18 @@ export async function createResearchProject(repository: PostgresRepository, inpu
       (id,institution_id,budget_line_id,source_type,source_id,original_units,remaining_units,status,due_game_day)
       VALUES ($1,$2,$3,'CORPORATION_RESEARCH',$4,$5,$5,'OPEN',$6)`, [commitmentId, corporationId, budgetLine.id, projectId, budgetCents.toString(), day + 30]);
     await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units+$1 WHERE id=$2', [budgetCents.toString(), budgetLine.id]);
-    const funding = await tx.query<{ transaction_id: string }>(
-      `SELECT earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,$4,$5::jsonb) AS transaction_id`,
-      [input.correlationId, day, projectId, `technology-catalog-v${catalogEntry.definition_version}`, JSON.stringify([
+    const funding = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'RESEARCH_FUNDING',
+      sourceType: 'CORPORATION_RESEARCH',
+      sourceId: projectId,
+      rulesVersion: `technology-catalog-v${catalogEntry.definition_version}`,
+      entries: [
         { account_id: fundingAccounts.rows[0].debit_account_id, delta_units: (-BigInt(budgetCents)).toString(), asset_id: 1 },
         { account_id: fundingAccounts.rows[0].research_account_id, delta_units: BigInt(budgetCents).toString(), asset_id: 1 },
-      ])],
-    );
-    const fundingTransactionId = funding.rows[0]?.transaction_id;
+      ],
+    }, clock);
+    const fundingTransactionId = funding.transactionId;
     if (!fundingTransactionId) throw new Error('Research funding transaction was not created');
     await tx.query(`UPDATE institution_budget_commitments SET remaining_units=0,status='PAID' WHERE id=$1`, [commitmentId]);
     await tx.query('UPDATE institution_budget_lines SET committed_units=committed_units-$1, spent_units=spent_units+$1 WHERE id=$2', [budgetCents.toString(), budgetLine.id]);

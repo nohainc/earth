@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
 const FOOD_ASSET_ID = 6;
 const FOOD_REQUIRED_PER_HUMAN = 1n;
@@ -99,23 +100,33 @@ export async function settleLifeMaintenanceInTransaction(tx: PostgresRepository,
     remainingEnergyByHouse.set(human.house_id, availableEnergy - consumedEnergy);
 
     if (consumedFood > 0n && human.food_account_id && foodSink) {
-      await tx.query(
-        `SELECT earth_post_transaction($1, $2, 1439, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', $3, 'life-maintenance-v1', $4::JSONB)`,
-        [`food-maintenance:${human.id}:${day}`, day, human.id, JSON.stringify([
-          { account_id: human.food_account_id, asset_id: FOOD_ASSET_ID, delta_units: (-consumedFood).toString(), reason_code: 'human_daily_food' },
-          { account_id: foodSink.id, asset_id: FOOD_ASSET_ID, delta_units: consumedFood.toString(), reason_code: 'human_daily_food' },
-        ])],
-      );
+      await postSettlementTransaction(tx, {
+        correlationId: `food-maintenance:${human.id}:${day}`,
+        gameDay: day,
+        kind: 'RESOURCE_CONSUMPTION',
+        sourceType: 'SYSTEM_CONSUMPTION',
+        sourceId: human.id,
+        rulesVersion: 'life-maintenance-v1',
+        entries: [
+          { accountId: human.food_account_id, assetId: FOOD_ASSET_ID, deltaUnits: (-consumedFood).toString(), reasonCode: 'human_daily_food' },
+          { accountId: foodSink.id, assetId: FOOD_ASSET_ID, deltaUnits: consumedFood.toString(), reasonCode: 'human_daily_food' },
+        ],
+      });
     }
 
     if (consumedEnergy > 0n && human.energy_account_id && energySink) {
-      await tx.query(
-        `SELECT earth_post_transaction($1, $2, 1439, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', $3, 'life-maintenance-v1', $4::JSONB)`,
-        [`energy-maintenance:${human.id}:${day}`, day, human.id, JSON.stringify([
-          { account_id: human.energy_account_id, asset_id: ENERGY_ASSET_ID, delta_units: (-consumedEnergy).toString(), reason_code: 'human_daily_energy' },
-          { account_id: energySink.id, asset_id: ENERGY_ASSET_ID, delta_units: consumedEnergy.toString(), reason_code: 'human_daily_energy' },
-        ])],
-      );
+      await postSettlementTransaction(tx, {
+        correlationId: `energy-maintenance:${human.id}:${day}`,
+        gameDay: day,
+        kind: 'RESOURCE_CONSUMPTION',
+        sourceType: 'SYSTEM_CONSUMPTION',
+        sourceId: human.id,
+        rulesVersion: 'life-maintenance-v1',
+        entries: [
+          { accountId: human.energy_account_id, assetId: ENERGY_ASSET_ID, deltaUnits: (-consumedEnergy).toString(), reasonCode: 'human_daily_energy' },
+          { accountId: energySink.id, assetId: ENERGY_ASSET_ID, deltaUnits: consumedEnergy.toString(), reasonCode: 'human_daily_energy' },
+        ],
+      });
     }
 
     const status = (shortfallFood === 0n && shortfallEnergy === 0n)

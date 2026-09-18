@@ -1,6 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
-import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction, postSettlementTransaction } from './settlement-barrier-postgres.ts';
 
 const MAX_RIGHT_DAYS = 365;
 const BASE_RENT_UNITS = 10n;
@@ -60,12 +60,12 @@ export async function listTerritoryRights(repository: PostgresRepository, input:
 export async function acquireTerritoryRight(repository: PostgresRepository, input: LeaseInput) {
   if (input.slotQuantity < 1n || input.slotQuantity > 1000n) throw new Error('slotQuantity must be between 1 and 1000');
   if (!Number.isInteger(input.termDays) || input.termDays < 1 || input.termDays > MAX_RIGHT_DAYS) throw new Error(`termDays must be between 1 and ${MAX_RIGHT_DAYS}`);
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = (await tx.query<{ id: string }>('SELECT id FROM territory_rights WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior) return { ok: true, alreadyProcessed: true, right: (await tx.query('SELECT * FROM territory_rights WHERE id = $1', [prior.id])).rows[0], correlationId: input.correlationId };
     const house = await houseForHuman(tx, input.humanId);
     if (!house) throw new Error('Active House is required');
-    const day = await worldDay(tx);
+    const day = clock.gameDay;
     const territory = (await tx.query<{ id: string; corporation_id: string }>("SELECT id, corporation_id FROM territories WHERE id = $1 AND status = 'ACTIVE' FOR UPDATE", [input.territoryId])).rows[0];
     if (!territory) throw new Error('Territory not found or inactive');
     if (input.slotClass !== 'PRIVATE') throw new Error('Only private House rights are currently available');
@@ -79,7 +79,17 @@ export async function acquireTerritoryRight(repository: PostgresRepository, inpu
     if (!wallet || BigInt(wallet.balance_units) < rent) throw new Error('Insufficient CREDIT for Territory right rent');
     if (!beneficiary) throw new Error('Territory commons beneficiary account is not configured');
     const rightId = `RIGHT-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
-    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','COMMONS_LEASE_RENT',$3,'territory-lease-v1',$4::JSONB)`, [input.correlationId, day, rightId, JSON.stringify([{ account_id: wallet.id, asset_id: 1, delta_units: (-rent).toString() }, { account_id: beneficiary.account_id, asset_id: 1, delta_units: rent.toString() }])]);
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: 'COMMONS_LEASE_RENT',
+      sourceId: rightId,
+      rulesVersion: 'territory-lease-v1',
+      entries: [
+        { account_id: wallet.id, asset_id: 1, delta_units: (-rent).toString() },
+        { account_id: beneficiary.account_id, asset_id: 1, delta_units: rent.toString() },
+      ],
+    }, clock);
     const endDay = day + input.termDays - 1;
     await tx.query(`INSERT INTO territory_rights (id, territory_id, holder_type, holder_id, slot_class, slot_quantity, rent_per_game_day_units, effective_from_game_day, effective_to_game_day, acquired_transaction_id, correlation_id) VALUES ($1,$2,'HOUSE',$3,$4,$5,$6,$7,$8,(SELECT id FROM economic_transactions WHERE correlation_id=$9),$9)`, [rightId, input.territoryId, house.house_id, input.slotClass, input.slotQuantity.toString(), rent.toString(), day, endDay, input.correlationId]);
     await tx.query(`INSERT INTO territory_right_events (id,right_id,event_type,game_day,previous_status,next_status,correlation_id) VALUES ($1,$2,'ACQUIRED',$3,NULL,'ACTIVE',$4)`, [`RIGHT-EVENT-${rightId}`, rightId, day, `right-event:${input.correlationId}`]);
@@ -89,12 +99,12 @@ export async function acquireTerritoryRight(repository: PostgresRepository, inpu
 }
 
 export async function releaseTerritoryRight(repository: PostgresRepository, input: { humanId: string; rightId: string; correlationId: string }) {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const house = await houseForHuman(tx, input.humanId);
     const right = (await tx.query<{ id: string; holder_id: string; status: string; territory_id: string }>(`SELECT id, holder_id, status, territory_id FROM territory_rights WHERE id = $1 AND holder_type = 'HOUSE' FOR UPDATE`, [input.rightId])).rows[0];
     if (!house || !right || right.holder_id !== house.house_id) throw new Error('Territory right not found');
     if (right.status === 'RELEASED' || right.status === 'EXPIRED') return { ok: true, alreadyProcessed: true, rightId: input.rightId, correlationId: input.correlationId };
-    const day = await worldDay(tx);
+    const day = clock.gameDay;
     await tx.query(`UPDATE territory_rights SET status='RELEASED', released_game_day=$2, effective_to_game_day=LEAST(COALESCE(effective_to_game_day,$2),$2) WHERE id=$1`, [input.rightId, day]);
     await tx.query(`INSERT INTO territory_right_events (id,right_id,event_type,game_day,previous_status,next_status,correlation_id) VALUES ($1,$2,'RELEASED',$3,$4,'RELEASED',$5)`, [`RIGHT-EVENT-${input.correlationId}`, input.rightId, day, right.status, `right-event:${input.correlationId}`]);
     return { ok: true, status: 'RELEASED', rightId: input.rightId, correlationId: input.correlationId };
@@ -137,7 +147,18 @@ export async function settleTerritoryLeases(repository: PostgresRepository, day:
         arrears += 1;
         return;
       }
-      await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','COMMONS_LEASE_RENT',$3,'territory-lease-v1',$4::JSONB)`, [paymentCorrelation, day, right.id, JSON.stringify([{ account_id: wallet.id, asset_id: 1, delta_units: (-rent).toString() }, { account_id: beneficiary.account_id, asset_id: 1, delta_units: rent.toString() }])]);
+      await postSettlementTransaction(tx, {
+        correlationId: paymentCorrelation,
+        gameDay: day,
+        kind: 'ASSET_TRANSFER',
+        sourceType: 'COMMONS_LEASE_RENT',
+        sourceId: right.id,
+        rulesVersion: 'territory-lease-v1',
+        entries: [
+          { account_id: wallet.id, asset_id: 1, delta_units: (-rent).toString() },
+          { account_id: beneficiary.account_id, asset_id: 1, delta_units: rent.toString() },
+        ],
+      });
       await tx.query(`INSERT INTO territory_lease_payments (id,right_id,territory_id,holder_type,holder_id,game_day,amount_units,beneficiary_economic_id,economic_transaction_id,status,correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,(SELECT id FROM economic_transactions WHERE correlation_id=$9),'PAID',$9)`, [`LEASE-PAYMENT-${right.id}-${day}`, right.id, right.territory_id, right.holder_type, right.holder_id, day, rent.toString(), beneficiary.economic_id, paymentCorrelation, paymentCorrelation]);
       paid += 1;
     }

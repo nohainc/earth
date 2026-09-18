@@ -5,6 +5,8 @@ import { createNotification } from './notifications-postgres.ts';
 import { createAffiliationEvent } from './game-events-postgres.ts';
 import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation } from './settlement-barrier-postgres.ts';
+import { postEconomicTransaction } from './economic-transaction-postgres.ts';
 
 async function day(repository: PostgresRepository): Promise<number> {
   const clock = await readAuthoritativeGameTime(repository);
@@ -291,7 +293,7 @@ export async function setCorporationAdmissionPolicy(repository: PostgresReposito
 }
 
 export async function contributeToCorporation(repository: PostgresRepository, input: { humanId: string; corporationId: string; amount: number; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const human = await activeHumanHouse(tx, input.humanId);
     const membership = await tx.query("SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [human.house_id, input.corporationId]);
     if (!membership.rows[0]) throw new Error('Corporation membership is required');
@@ -309,15 +311,18 @@ export async function contributeToCorporation(repository: PostgresRepository, in
     );
     const account = accounts.rows[0];
     if (!account?.house_account_id || !account.corporation_account_id) throw new Error('Contribution accounts are unavailable');
-    const gameDay = await day(tx);
-    const result = await tx.query<{ transaction_id: string }>(
-      `SELECT transaction_id FROM earth_post_transaction($1, $2, 0, 'CORPORATION_CONTRIBUTION', 'CORPORATION', $3, 'corp-finance-v3', $4::jsonb)`,
-      [input.correlationId, gameDay, input.corporationId, JSON.stringify([
-        { account_id: account.house_account_id, delta_units: -amountUnits, asset_id: 1 },
-        { account_id: account.corporation_account_id, delta_units: amountUnits, asset_id: 1 },
-      ])],
-    );
-    return { ok: true, amount: input.amount, transactionId: result.rows[0]?.transaction_id ?? null, corporationId: input.corporationId, correlationId: input.correlationId };
+    const result = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'CORPORATION_CONTRIBUTION',
+      sourceType: 'CORPORATION',
+      sourceId: input.corporationId,
+      rulesVersion: 'corp-finance-v3',
+      entries: [
+        { accountId: account.house_account_id, deltaUnits: (-amountUnits).toString(), assetId: 1 },
+        { accountId: account.corporation_account_id, deltaUnits: amountUnits.toString(), assetId: 1 },
+      ],
+    }, clock);
+    return { ok: true, amount: input.amount, transactionId: result.transactionId ?? null, corporationId: input.corporationId, correlationId: input.correlationId };
   });
 }
 

@@ -53,9 +53,10 @@ async function earthTreasury(tx: PostgresRepository): Promise<string | null> {
 }
 
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation } from './settlement-barrier-postgres.ts';
 
 export async function submitMarketOrder(repository: PostgresRepository, input: MarketOrderInput): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = await tx.query('SELECT * FROM market_orders WHERE correlation_id = $1', [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, order: prior.rows[0], correlationId: input.correlationId };
     const human = await tx.query<{ id: string }>("SELECT id FROM humans WHERE id = $1 AND status = 'ACTIVE'", [input.humanId]);
@@ -67,7 +68,6 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
     const buyerFeeRate = input.side === 'buy' ? await marketFeeRate(tx, input.humanId) : '0';
     const reservedCents = input.side === 'buy' ? calculateQuoteUnits(quantityUnits, limitPriceUnits) + calculateFeeUnits(calculateQuoteUnits(quantityUnits, limitPriceUnits), buyerFeeRate) : 0n;
     const buyerFeeBps = input.side === 'buy' ? displayRateToBps(buyerFeeRate) : 0;
-    const clock = await readAuthoritativeGameTime(tx);
     const batchId = await ensureMarketBatch(tx, clock.gameDay, clock.gameMinute);
     
     let ownerEconomicId: string;
@@ -242,7 +242,7 @@ export async function listMarketOrders(repository: PostgresRepository, product: 
 }
 
 export async function cancelMarketOrder(repository: PostgresRepository, input: { orderId: string; humanId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const order = await tx.query<Record<string, unknown>>(
       `SELECT o.*, reg.id AS owner_id, reg.owner_type
          FROM market_orders o

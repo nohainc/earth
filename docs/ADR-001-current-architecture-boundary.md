@@ -120,7 +120,7 @@ The current source map is:
 | Lifecycle | `lifecycle-postgres.ts` |
 | Machines | `machines-postgres.ts`, `machines-recycling-postgres.ts` |
 | Technology and AI | `technology-postgres.ts`, `ai-postgres.ts` |
-| Scheduling | `scheduler-postgres.ts`, `scheduler-rules.ts`, `outbox-postgres.ts` |
+| Scheduling | `scheduler.ts`, `scheduler-postgres.ts`, `outbox-postgres.ts` |
 | Read projections | `read-postgres.ts`, `world-postgres.ts`, `opportunities.ts` |
 
 `production-catalog.ts` is the reference pattern for extracted read-only
@@ -146,7 +146,7 @@ restart must be recoverable from PostgreSQL and the outbox.
 
 ### Scheduler and outbox boundary
 
-Cron work is bounded, deterministic, and replay-safe. It advances PostgreSQL
+Cron work is bounded, deterministic, and replay-safe. It wakes PostgreSQL
 world state, records the scheduler heartbeat, and delivers only committed
 outbox events. External delivery and WebSocket broadcast occur after the
 authoritative transaction. Cloudflare Queues remain deferred until measured

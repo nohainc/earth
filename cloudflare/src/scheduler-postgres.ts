@@ -1,6 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
 import type { FeatureConfig } from './feature-config.ts';
-import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { createDailySettlementPhaseRegistry, type DailySettlementPhaseContext } from './daily-settlement-phases.ts';
 import { settleCorporationDynamics, settleTerritoryCapacityProjections } from './territory-settlement-postgres.ts';
 import { settleBuildingUpkeepAndRevenueV2 } from './building-settlement-v2.ts';
@@ -37,6 +36,7 @@ import { rebuildV5SettlementProfilesInShard, settleV5CorporationSettlementProfil
 import { materializeResolvedConstitutionSnapshot } from './constitutional-kernel-postgres.ts';
 import { reconcileV5TaxRulesInTransaction } from './v5-tax-reconciliation-postgres.ts';
 import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './economy-shadow.ts';
+import { processDueMarketBatches } from './market-scheduler.ts';
 
 // Settlement claiming is delegated to the database lease function
 // earth_claim_settlement_day so concurrent schedulers cannot double-claim work.
@@ -136,8 +136,18 @@ export async function runResumableSettlementDay(repository: PostgresRepository, 
   const progress = await settlementWorkProgress(repository, gameDay);
   if (progress.failed > 0) return { status: 'failed', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: progress.pending };
   if (progress.pending > 0) return { status: 'busy', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: progress.pending };
-  await repository.query('SELECT earth_complete_settlement_day($1)', [gameDay]);
-  await reconcileEconomyShadowDay(repository, gameDay);
+  try {
+    await reconcileEconomyShadowDay(repository, gameDay);
+    await repository.query('SELECT earth_finalize_settlement_day($1)', [gameDay]);
+  } catch (error) {
+    await repository.query(
+      `UPDATE daily_settlement_runs
+          SET status = 'failed', error_message = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE game_day = $1 AND status = 'running'`,
+      [gameDay, error instanceof Error ? error.message.slice(0, 1000) : String(error).slice(0, 1000)],
+    ).catch(() => {});
+    return { status: 'failed', gameDay, phasesCompleted: 0, workUnitsCompleted: completed, workUnitsPending: 0 };
+  }
   return { status: 'completed', gameDay, phasesCompleted: requiredPhases.length, workUnitsCompleted: completed, workUnitsPending: 0 };
 }
 
@@ -147,7 +157,6 @@ export async function runWorldSchedulerTick(
   repository: PostgresRepository,
   idempotencyKey = crypto.randomUUID(),
   _features?: FeatureConfig,
-  _minutesPerTick = 60,
   schedulerRunId?: string,
   options: { workBudgetMs?: number; maxCatchupDays?: number } = {},
 ): Promise<{
@@ -158,6 +167,8 @@ export async function runWorldSchedulerTick(
   settlementStatus: SettlementResult['status'];
   productionEvents: number;
   marketSettlements: number;
+  marketProcessedThroughBatch?: number;
+  marketEligibleBatch?: number;
   policyActions?: number;
   policyExceptions?: number;
   alreadyProcessed?: boolean;
@@ -216,6 +227,10 @@ export async function runWorldSchedulerTick(
     totalPolicyExceptions = Number(policySummary.rows[0]?.exceptions ?? 0);
   }
 
+  // Market processing has its own absolute-time watermark and catches up
+  // independently of the daily economy cursor.
+  const market = await processDueMarketBatches(repository, Math.max(1000, (options.workBudgetMs ?? 20_000) / 2));
+
   if (schedulerRunId) {
     await repository.query(
       "UPDATE scheduler_runs SET completed_at = CURRENT_TIMESTAMP, status = 'completed', game_day = $2, phase = 'daily_economy' WHERE id = $1",
@@ -232,7 +247,9 @@ export async function runWorldSchedulerTick(
     settledGameDay: currentSettled,
     settlementStatus: lastStatus,
     productionEvents: 0,
-    marketSettlements: 0,
+    marketSettlements: market.batchesProcessed,
+    marketProcessedThroughBatch: market.processedThroughMarketBatch,
+    marketEligibleBatch: market.eligibleMarketBatch,
     policyActions: totalPolicyActions,
     policyExceptions: totalPolicyExceptions,
     alreadyProcessed: cursor.settledThroughGameDay >= targetDay,
@@ -240,5 +257,3 @@ export async function runWorldSchedulerTick(
     backlogDays,
   };
 }
-
-

@@ -2,6 +2,8 @@ import type { PostgresRepository } from './repository.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveOrganizationAuthority } from './organization-authority.ts';
+import { runEconomicMutation } from './settlement-barrier-postgres.ts';
+import { postEconomicTransaction } from './economic-transaction-postgres.ts';
 
 async function day(tx: PostgresRepository): Promise<number> {
   return (await readAuthoritativeGameTime(tx)).gameDay;
@@ -42,7 +44,7 @@ export async function getOrganizationFinance(repository: PostgresRepository, org
 }
 
 export async function spendOrganizationBudget(repository: PostgresRepository, input: { organizationId: string; houseId: string; budgetLineId: string; sourceAccountType: 'TREASURY' | 'OPERATIONS'; destinationAccountId: string; amountUnits: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const actor = (await tx.query<{ human_id: string }>('SELECT h.current_human_id AS human_id FROM houses h WHERE h.id = $1 AND h.status = \'ACTIVE\'', [input.houseId])).rows[0];
     if (!actor?.human_id) throw new Error('Active Human authority is required');
     await resolveOrganizationAuthority(tx, { organizationId: input.organizationId, humanId: actor.human_id, action: 'ECONOMIC_OWNER', amountUnits: BigInt(input.amountUnits) });
@@ -55,9 +57,19 @@ export async function spendOrganizationBudget(repository: PostgresRepository, in
     if (!account || BigInt(account.balance_units) < amount) throw new Error('Organization cash balance is insufficient');
     const destination = (await tx.query<{ id: string }>('SELECT id::TEXT FROM economic_accounts WHERE id = $1 AND asset_id = 1 AND status = \'ACTIVE\' AND id <> $2', [input.destinationAccountId, account.id])).rows[0];
     if (!destination) throw new Error('Spend destination account is unavailable');
-    const dayValue = await day(tx);
-    const result = await tx.query(`SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,'ASSET_TRANSFER','ORGANIZATION',$3,'organization-spend-v1',$4::JSONB)`, [input.correlationId, dayValue, input.organizationId, JSON.stringify([{ account_id: account.id, asset_id: 1, delta_units: (-amount).toString() }, { account_id: destination.id, asset_id: 1, delta_units: amount.toString() }])]);
-    if (!result.rows[0]?.created) return { ok: true, alreadyProcessed: true, correlationId: input.correlationId };
+    const dayValue = clock.gameDay;
+    const result = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: 'ORGANIZATION',
+      sourceId: input.organizationId,
+      rulesVersion: 'organization-spend-v1',
+      entries: [
+        { accountId: account.id, assetId: 1, deltaUnits: (-amount).toString() },
+        { accountId: destination.id, assetId: 1, deltaUnits: amount.toString() },
+      ],
+    }, clock);
+    if (!result.created) return { ok: true, alreadyProcessed: true, correlationId: input.correlationId };
     await tx.query('UPDATE organization_budget_lines SET spent_units = spent_units + $1 WHERE id = $2', [amount.toString(), input.budgetLineId]);
     await createGameEvent(tx, { id: `ORG-SPEND-${input.correlationId}`, category: 'ORGANIZATION', eventType: 'ORGANIZATION_BUDGET_SPENT', gameDay: dayValue, subjectType: 'ORGANIZATION', subjectId: input.organizationId, title: 'Organization budget spent', details: { budgetLineId: input.budgetLineId, amountUnits: amount.toString() }, correlationId: input.correlationId });
     return { ok: true, amountUnits: amount.toString(), budgetLineId: input.budgetLineId, correlationId: input.correlationId };

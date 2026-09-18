@@ -1,4 +1,5 @@
 -- Migration: 130_authoritative_world_clock.sql
+-- EARTH ACTIVE MIGRATION: 130_authoritative_world_clock
 -- EARTH V5 Authoritative Clock & Settlement Architecture
 --
 -- 1. Canonical world epoch (genesis_at) in world_state with immutability guard.
@@ -57,6 +58,7 @@ END;
 $$;
 
 -- 3. Canonical clock functions
+DROP FUNCTION IF EXISTS earth_get_current_game_time();
 CREATE OR REPLACE FUNCTION earth_get_current_game_time()
 RETURNS TABLE (
   game_day BIGINT,

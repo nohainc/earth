@@ -13,6 +13,7 @@ import {
 import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
 import { readAuthoritativeGameTime, projectDeadline } from './world-clock-postgres.ts';
+import { postEconomicTransaction, runEconomicMutation } from './settlement-barrier-postgres.ts';
 
 type Catalog = {
   id: string;
@@ -151,7 +152,7 @@ export async function purchaseV5Building(
     corporationId?: string;
   },
 ): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, building: toJsonSafe((await tx.query('SELECT * FROM buildings WHERE id = $1', [prior.source_id])).rows[0]), correlationId: input.correlationId };
     const blueprint = await catalog(tx, input.buildingType);
@@ -188,7 +189,6 @@ export async function purchaseV5Building(
 
     const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId);
     if (!scaleAuth.authorized) throw new Error(String(scaleAuth.reason ?? 'Missing required scale capability'));
-    const clock = await readAuthoritativeGameTime(tx);
     const gameDay = clock.gameDay;
     const genInfo = await getAvailableGenerations(tx, blueprint.technology_domain, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId, gameDay);
     const targetGen = input.generation ? Number(input.generation) : genInfo.maxAccessibleGeneration;
@@ -227,7 +227,17 @@ export async function purchaseV5Building(
       : await getHouseSettlementProfileSnapshot(tx, ownerHouseId!);
 
     const deadline = projectDeadline(gameDay, clock.gameMinute, duration.minutes);
-    await tx.query(`SELECT earth_post_transaction($1,$2,$3,'ASSET_TRANSFER',$4,$5,'construction-v5',$6::JSONB)`, [input.correlationId, gameDay, clock.gameMinute, isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION', buildingId, JSON.stringify([{ account_id: wallet.id, delta_units: (-cost).toString(), asset_id: 1 }, { account_id: destination.id, delta_units: cost.toString(), asset_id: 1 }])]);
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION',
+      sourceId: buildingId,
+      rulesVersion: 'construction-v5',
+      entries: [
+        { account_id: wallet.id, delta_units: (-cost).toString(), asset_id: 1 },
+        { account_id: destination.id, delta_units: cost.toString(), asset_id: 1 },
+      ],
+    }, clock);
     await tx.query(`INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, construction_state, installed_generation, technology_definition_version, started_game_day, commissioned_game_day, territory_right_id) VALUES ($1,$2,$3,$4,'UNDER_CONSTRUCTION','UNDER_CONSTRUCTION',$5,$6,$7,NULL,NULL)`, [buildingId, ownerEconomicId, territoryId, blueprint.id, targetGen, `tech-gen-v${targetGen}`, gameDay]);
     await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,NULL,'V5_POOLED_CONSTRUCTION',$11)`, [`PROJECT-${buildingId.slice(4)}`, buildingId, ownerEconomicId, territoryId, blueprint.id, cost.toString(), JSON.stringify(Object.fromEntries(requirements.map((item) => [item.code, item.required_units]))), gameDay, deadline.completionGameDay, input.correlationId, targetGenRow?.id ?? null]);
     if (isPublic) await rebuildV5CorporationSettlementProfile(tx, ownerCorpId!, gameDay);
@@ -265,7 +275,7 @@ export async function suspendBuilding(
   repository: PostgresRepository,
   input: { buildingId: string; humanId: string; correlationId: string; reason?: string },
 ): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const building = (await tx.query<{
       id: string;
       status: string;
@@ -291,7 +301,6 @@ export async function suspendBuilding(
       throw new Error(`Only active buildings can be suspended; current status: ${building.status}, productive: ${building.v5_productive_status}`);
     }
 
-    const clock = await readAuthoritativeGameTime(tx);
     const gameDay = clock.gameDay;
 
     const beforeProfile = building.owner_type === 'CORPORATION'
@@ -353,7 +362,7 @@ export async function reactivateBuilding(
   repository: PostgresRepository,
   input: { buildingId: string; humanId: string; correlationId: string },
 ): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const building = (await tx.query<{
       id: string;
       status: string;
@@ -379,7 +388,6 @@ export async function reactivateBuilding(
       throw new Error(`Only suspended buildings can be reactivated; current status: ${building.status}, productive: ${building.v5_productive_status}`);
     }
 
-    const clock = await readAuthoritativeGameTime(tx);
     const gameDay = clock.gameDay;
 
     const beforeProfile = building.owner_type === 'CORPORATION'

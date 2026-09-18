@@ -145,7 +145,7 @@ void main() {
 
   testWidgets('TopFixedHudPanel triggers 3-stage rollover lifecycle callbacks',
       (tester) async {
-    bool recalculateTriggered = false;
+    bool preRolloverRefreshTriggered = false;
     bool prefetchTriggered = false;
     bool rolloverTriggered = false;
     int simulatedSeconds = 0;
@@ -162,7 +162,9 @@ void main() {
       'human': {'id': 'H-0044', 'name': 'Commander'},
       'world': {'health': 100},
       'resources': {},
-      'institutions': {'city': {'name': 'Neo Tokyo'}},
+      'institutions': {
+        'city': {'name': 'Neo Tokyo'}
+      },
     });
 
     await tester.pumpWidget(
@@ -171,9 +173,9 @@ void main() {
           body: TopFixedHudPanel(
             state: stateAt2349,
             elapsedDurationProvider: () => Duration(seconds: simulatedSeconds),
-            onDayRecalculateTrigger: () => recalculateTriggered = true,
-            onDayPrefetch: () => prefetchTriggered = true,
-            onDayRollover: () => rolloverTriggered = true,
+            onPreRolloverRefresh: () => preRolloverRefreshTriggered = true,
+            onRolloverPrefetch: () => prefetchTriggered = true,
+            onDisplayedDayChanged: () => rolloverTriggered = true,
           ),
         ),
       ),
@@ -182,7 +184,7 @@ void main() {
     // Advance 1 real second -> hits 23:50:00 (minute 1430)
     simulatedSeconds += 1;
     await tester.pump(const Duration(seconds: 1));
-    expect(recalculateTriggered, isTrue);
+    expect(preRolloverRefreshTriggered, isTrue);
     expect(prefetchTriggered, isFalse);
     expect(rolloverTriggered, isFalse);
 
@@ -198,7 +200,8 @@ void main() {
     expect(rolloverTriggered, isTrue);
   });
 
-  testWidgets('TopFixedHudPanel renders FAILED and CATCHING_UP settlement badges',
+  testWidgets(
+      'TopFixedHudPanel renders FAILED and CATCHING_UP settlement badges',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -260,8 +263,10 @@ void main() {
     expect(find.byIcon(Icons.sync), findsOneWidget);
   });
 
-  testWidgets('TopFixedHudPanel handles AppLifecycleState.resumed with monotonic anchor',
+  testWidgets(
+      'TopFixedHudPanel handles AppLifecycleState.resumed with monotonic anchor',
       (tester) async {
+    var resyncTriggered = false;
     final state = EarthState({
       'clock': {
         'day': 10,
@@ -271,7 +276,9 @@ void main() {
       'human': {'id': 'H-1', 'name': 'Tester'},
       'world': {'health': 100},
       'resources': {},
-      'institutions': {'city': {'name': 'Neo Tokyo'}},
+      'institutions': {
+        'city': {'name': 'Neo Tokyo'}
+      },
     });
 
     await tester.pumpWidget(
@@ -279,6 +286,9 @@ void main() {
         home: Scaffold(
           body: TopFixedHudPanel(
             state: state,
+            onClockResync: () async {
+              resyncTriggered = true;
+            },
           ),
         ),
       ),
@@ -290,6 +300,6 @@ void main() {
 
     // Verify clock is displayed
     expect(find.byType(TopFixedHudPanel), findsOneWidget);
+    expect(resyncTriggered, isTrue);
   });
 }
-

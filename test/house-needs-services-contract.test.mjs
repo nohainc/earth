@@ -14,7 +14,7 @@ test('House needs and services have versioned canonical records', () => {
   }
   assert.match(engine, /house_need_assessments/);
   assert.match(engine, /service_allocations/);
-  assert.match(engine, /earth_post_transaction/);
+  assert.match(engine, /postSettlementTransaction/);
   assert.match(engine, /remainingCapacity/);
 });
 

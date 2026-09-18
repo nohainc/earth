@@ -9,6 +9,27 @@ class FakeRepository {
 
   async query(sql, params) {
     this.calls.push({ sql, params });
+    if (sql.includes('earth_get_current_game_time')) {
+      return {
+        rows: [{
+          game_day: 12,
+          game_minute: 100,
+          total_game_minutes: 12 * 1440 + 100,
+          genesis_at: new Date(Date.now() - 100000).toISOString(),
+          server_now: new Date().toISOString(),
+          elapsed_real_seconds: 100,
+          real_seconds_per_game_minute: 1,
+        }],
+      };
+    }
+    if (sql.includes('daily_settlement_control')) {
+      return {
+        rows: [{
+          status: 'active',
+          settled_through_game_day: 11,
+        }],
+      };
+    }
     if (sql.includes('FROM economic_accounts')) return { rows: [{ account_id: params[0] === input.debitPrincipalId ? '101' : '102' }] };
     if (sql.includes('earth_post_transaction')) return { rows: this.row ? [{ transaction_id: input.ledgerId, created: this.row.already_processed !== true }] : [] };
     return { rows: this.row ? [this.row] : [] };

@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 
 // @mutation-boundary caller-owned-transaction
 import { calculateProgressiveCharge, type ProgressiveBracket } from './v5-progressive.ts';
+import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
 type Policy = { id: string; earthBaseRate: bigint; standardCapacity: bigint; corporationScheduleId: string; houseScheduleId: string };
 type Schedule = { id: string; brackets: ProgressiveBracket[] };
@@ -95,8 +96,19 @@ async function recordObligation(tx: PostgresRepository, input: {
   let transactionId: string | null = null;
   const totalPaid = paidPrior + paid;
   if (totalPaid > 0n) {
-    const result = await tx.query<{ transaction_id: string }>(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','CAPACITY_RENT',$3,$4,$5::JSONB) AS transaction_id`, [`v5-payment:${input.sourceKey}`, input.day, input.level === 'HOUSE' ? input.houseId : input.corporationId, input.rulesVersion, JSON.stringify([{ account_id: payer!.id, asset_id: 1, delta_units: (-totalPaid).toString() }, { account_id: beneficiary!.id, asset_id: 1, delta_units: totalPaid.toString() }])]);
-    transactionId = result.rows[0]?.transaction_id ?? null;
+    const result = await postSettlementTransaction(tx, {
+      correlationId: `v5-payment:${input.sourceKey}`,
+      gameDay: input.day,
+      kind: 'ASSET_TRANSFER',
+      sourceType: 'CAPACITY_RENT',
+      sourceId: input.level === 'HOUSE' ? input.houseId : input.corporationId,
+      rulesVersion: input.rulesVersion,
+      entries: [
+        { accountId: payer!.id, assetId: 1, deltaUnits: (-totalPaid).toString() },
+        { accountId: beneficiary!.id, assetId: 1, deltaUnits: totalPaid.toString() },
+      ],
+    });
+    transactionId = result.transactionId ?? null;
     if (priorObligations.length) {
       await tx.query(`UPDATE v5_capacity_obligations SET payment_transaction_id = COALESCE(payment_transaction_id, $2) WHERE id = ANY($1::TEXT[])`, [priorObligations.map((row) => row.id), transactionId]);
     }

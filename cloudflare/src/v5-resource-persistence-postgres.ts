@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
 export type ResourcePersistenceClass = 'DURABLE' | 'PERISHABLE' | 'FLOW';
 export type StorageType = 'BATTERY_STORAGE' | 'FOOD_RESERVE' | 'COMPUTE_STORAGE' | 'GENERIC_STORAGE';
@@ -273,19 +274,18 @@ export async function settleResourcePersistenceAndDecay(
         ? `food-decay:${row.economic_id}:${day}`
         : `resource-decay:${meta.code.toLowerCase()}:${row.economic_id}:${day}`;
 
-      await repository.query(`
-        SELECT earth_post_transaction(
-          $1, $2, 1439, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', $3, 'v5-resource-persistence-v1', $4::JSONB
-        )
-      `, [
+      await postSettlementTransaction(repository, {
         correlationId,
-        day,
-        row.economic_id,
-        JSON.stringify([
+        gameDay: day,
+        kind: 'RESOURCE_CONSUMPTION',
+        sourceType: 'SYSTEM_CONSUMPTION',
+        sourceId: row.economic_id,
+        rulesVersion: 'v5-resource-persistence-v1',
+        entries: [
           { account_id: row.account_id, asset_id: meta.assetId, delta_units: (-decayUnits).toString(), reason_code: reasonCode },
           { account_id: sink.id, asset_id: meta.assetId, delta_units: decayUnits.toString(), reason_code: reasonSinkCode },
-        ]),
-      ]);
+        ],
+      });
 
       totalExpired += decayUnits;
       expiredByAsset[meta.code] += decayUnits;

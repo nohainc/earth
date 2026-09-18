@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { formatCreditUnits, parseCreditAmount, type CreditUnits } from './money.ts';
 import { resolveEconomicAccount } from './economic-account-resolver.ts';
+import { runEconomicMutation, postEconomicTransaction, type GameTimeContext } from './settlement-barrier-postgres.ts';
 
 export type CreditActorContext = { actorType: 'HUMAN' | 'SYSTEM'; actorId: string };
 export type CreditPrincipalContext = { principalId: string; accountPurpose: string };
@@ -16,26 +17,28 @@ export type CreditSettlementContext = {
 };
 export type CreditTransferResult = { status: 'applied' | 'already_processed'; transactionId: string; amountUnits: CreditUnits; amount: string };
 
-async function postCreditEntries(tx: PostgresRepository, context: CreditSettlementContext, debitAccountId: string, creditAccountId: string, amountUnits: CreditUnits): Promise<CreditTransferResult> {
+async function postCreditEntries(tx: PostgresRepository, context: CreditSettlementContext, debitAccountId: string, creditAccountId: string, amountUnits: CreditUnits, gameTime: GameTimeContext): Promise<CreditTransferResult> {
   if (amountUnits <= 0n) throw new Error('CREDIT settlement amount must be positive');
-  const result = await tx.query<{ transaction_id: string; created: boolean }>(
-    `SELECT transaction_id, created FROM earth_post_transaction($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
-    [context.correlationId, context.gameDay, context.gameMinute ?? 0, context.transactionKind, context.actor.actorType === 'SYSTEM' ? 'SYSTEM_SETTLEMENT' : 'HUMAN_ACTION', context.reasonId ?? context.actor.actorId, context.ruleVersion, JSON.stringify([
+  const result = await postEconomicTransaction(tx, {
+    correlationId: context.correlationId,
+    kind: context.transactionKind,
+    sourceType: context.actor.actorType === 'SYSTEM' ? 'SYSTEM_SETTLEMENT' : 'HUMAN_ACTION',
+    sourceId: context.reasonId ?? context.actor.actorId,
+    rulesVersion: context.ruleVersion,
+    entries: [
       { account_id: debitAccountId, asset_id: 1, delta_units: (-amountUnits).toString(), reason_code: context.purpose },
       { account_id: creditAccountId, asset_id: 1, delta_units: amountUnits.toString(), reason_code: context.purpose },
-    ])],
-  );
-  const row = result.rows[0];
-  if (!row) throw new Error('CREDIT settlement transaction returned no result');
-  return { status: row.created ? 'applied' : 'already_processed', transactionId: row.transaction_id, amountUnits, amount: formatCreditUnits(amountUnits) };
+    ],
+  }, gameTime);
+  return { status: result.created ? 'applied' : 'already_processed', transactionId: result.transactionId, amountUnits, amount: formatCreditUnits(amountUnits) };
 }
 
 export async function externalTransfer(repository: PostgresRepository, input: { payer: CreditPrincipalContext; beneficiary: CreditPrincipalContext; amount: string | number | bigint; context: CreditSettlementContext }): Promise<CreditTransferResult> {
-  return repository.transaction(async (tx) => postCreditEntries(tx, input.context, await resolveEconomicAccount(tx, input.payer.principalId, input.payer.accountPurpose), await resolveEconomicAccount(tx, input.beneficiary.principalId, input.beneficiary.accountPurpose), parseCreditAmount(input.amount)));
+  return runEconomicMutation(repository, async (tx, clock) => postCreditEntries(tx, input.context, await resolveEconomicAccount(tx, input.payer.principalId, input.payer.accountPurpose), await resolveEconomicAccount(tx, input.beneficiary.principalId, input.beneficiary.accountPurpose), parseCreditAmount(input.amount), clock));
 }
 
 export async function internalTransfer(repository: PostgresRepository, input: { principalId: string; debitPurpose: string; creditPurpose: string; amount: string | number | bigint; context: CreditSettlementContext }): Promise<CreditTransferResult> {
-  return repository.transaction(async (tx) => postCreditEntries(tx, input.context, await resolveEconomicAccount(tx, input.principalId, input.debitPurpose), await resolveEconomicAccount(tx, input.principalId, input.creditPurpose), parseCreditAmount(input.amount)));
+  return runEconomicMutation(repository, async (tx, clock) => postCreditEntries(tx, input.context, await resolveEconomicAccount(tx, input.principalId, input.debitPurpose), await resolveEconomicAccount(tx, input.principalId, input.creditPurpose), parseCreditAmount(input.amount), clock));
 }
 
 export async function reserve(repository: PostgresRepository, input: { principalId: string; sourcePurpose: string; amount: string | number | bigint; context: CreditSettlementContext }): Promise<CreditTransferResult> {
@@ -47,7 +50,7 @@ export async function release(repository: PostgresRepository, input: { principal
 }
 
 export async function settleObligation(repository: PostgresRepository, input: { obligationId: string; context: CreditSettlementContext }): Promise<CreditTransferResult> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const obligation = await tx.query<{ debtor_economic_id: string; creditor_economic_id: string; principal_due_units: string; interest_due_units: string; paid_units: string; debtor_account_purpose: string; creditor_account_purpose: string; status: string; obligation_type: string; source_id: string | null }>(
       `SELECT debtor_economic_id, creditor_economic_id, principal_due_units::TEXT, interest_due_units::TEXT, paid_units::TEXT, debtor_account_purpose, creditor_account_purpose, status, obligation_type, source_id FROM financial_obligations WHERE id=$1 FOR UPDATE`, [input.obligationId]);
     const row = obligation.rows[0];
@@ -65,7 +68,7 @@ export async function settleObligation(repository: PostgresRepository, input: { 
     }
     const remaining = BigInt(row.principal_due_units) + BigInt(row.interest_due_units) - BigInt(row.paid_units);
     if (row.status === 'CANCELLED' || remaining <= 0n) return { status: 'already_processed', transactionId: 'already-paid', amountUnits: 0n, amount: formatCreditUnits(0n) };
-    const payment = await postCreditEntries(tx, { ...input.context, transactionKind: 'ASSET_TRANSFER', purpose: 'OBLIGATION_PAYMENT', reasonId: input.obligationId }, await resolveEconomicAccount(tx, row.debtor_economic_id, row.debtor_account_purpose), await resolveEconomicAccount(tx, row.creditor_economic_id, row.creditor_account_purpose), remaining);
+    const payment = await postCreditEntries(tx, { ...input.context, transactionKind: 'ASSET_TRANSFER', purpose: 'OBLIGATION_PAYMENT', reasonId: input.obligationId }, await resolveEconomicAccount(tx, row.debtor_economic_id, row.debtor_account_purpose), await resolveEconomicAccount(tx, row.creditor_economic_id, row.creditor_account_purpose), remaining, clock);
     await tx.query(`UPDATE financial_obligations SET paid_units=paid_units+$2, status=CASE WHEN paid_units+$2 >= principal_due_units+interest_due_units THEN 'PAID' ELSE 'PARTIAL' END, payment_transaction_id=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [input.obligationId, remaining, payment.transactionId]);
     return payment;
   });

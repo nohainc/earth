@@ -224,7 +224,7 @@ PostgreSQL transaction slices currently live in production:
 - machine acquisition, maintenance, and utilization updates.
 - succession registration and estate inheritance settlement;
 - production settlement, machine upgrades, recycling, and machine sales;
-- governance, research, licensing, and scheduled world advancement;
+- governance, research, licensing, and scheduled settlement processing;
 - scheduled depreciation, taxation, basic levy, AI maintenance, contract
   completion, financial-state transitions, and ranking snapshots.
 - starter-package onboarding with live market, production, governance, and
@@ -257,17 +257,18 @@ error behavior, and a rollback/replay test.
 
 ### Hybrid daily settlement
 
-Cloudflare Cron is the time coordinator and invokes the Worker every real
-minute. The Worker advances the game clock by 60 game minutes, runs complex
-rule orchestration, and opens the authoritative PostgreSQL transaction. At a
-game-day boundary, PostgreSQL function
+Cloudflare Cron is a scheduler heartbeat and invokes the Worker periodically.
+The Worker reads the authoritative PostgreSQL world-clock snapshot, runs
+bounded catch-up orchestration, and opens the required PostgreSQL transactions.
+At a game-day boundary, PostgreSQL function
 `apply_prepared_daily_resource_profiles(game_day)` applies clean human and city
 resource profiles set-wise. Source-table triggers only mark affected profiles
 dirty; they never run a world settlement themselves. The Worker rebuilds dirty
 profiles before the next daily application.
 
 For local development, start Wrangler with `--test-scheduled` through
-`scripts/run-local-ui-test.sh`, then invoke `scripts/run-local-game-tick.sh`.
+`scripts/run-local-ui-test.sh`, then invoke the heartbeat command when a
+scheduled run is needed. World time itself remains derived from `genesis_at`.
 Do not use the Flutter client as a simulation authority.
 - **Biometric Health & Stochastic Mortality Engine**:
   - Health (0–100%) governs operational labor capacity, machine maintenance speed, and living medical expenses.

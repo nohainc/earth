@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { applyConditionStack } from './world-conditions.ts';
 import { quoteV5HouseCapacityChange } from './v5-capacity-postgres.ts';
@@ -228,21 +229,29 @@ export async function purchaseBuildingInTerritory(
     })));
     if (resourceAccounts.some((item) => !item.account || !item.sink)) throw new Error('Construction resource settlement accounts are not provisioned');
     const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    await tx.query(
-      `SELECT earth_post_transaction($1, $2, $3, 'ASSET_TRANSFER', $4, $5, 'construction-credit-v1', $6::JSONB)`,
-      [input.correlationId, gameDay, Number(world?.game_minute ?? 0), isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION', buildingId, JSON.stringify([
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION',
+      sourceId: buildingId,
+      rulesVersion: 'construction-credit-v1',
+      entries: [
         { account_id: wallet.id, delta_units: (-cost).toString(), asset_id: 1 },
         { account_id: constructionDestination.id, delta_units: cost.toString(), asset_id: 1 },
-      ])],
-    );
+      ],
+    }, clock);
     if (resourceAccounts.length) {
-      await tx.query(
-        `SELECT earth_post_transaction($1, $2, $3, 'RESOURCE_CONSUMPTION', 'SYSTEM_CONSUMPTION', $4, 'building-territory-v3', $5::JSONB)`,
-        [`construction:${input.correlationId}:resources`, gameDay, Number(world?.game_minute ?? 0), buildingId, JSON.stringify(resourceAccounts.flatMap((item) => [
+      await postEconomicTransaction(tx, {
+        correlationId: `construction:${input.correlationId}:resources`,
+        kind: 'RESOURCE_CONSUMPTION',
+        sourceType: 'SYSTEM_CONSUMPTION',
+        sourceId: buildingId,
+        rulesVersion: 'building-territory-v3',
+        entries: resourceAccounts.flatMap((item) => [
           { account_id: item.account!.id, asset_id: item.asset_id, delta_units: (-BigInt(item.required_units)).toString(), reason_code: 'private_construction_resource_input' },
           { account_id: item.sink!.id, asset_id: item.asset_id, delta_units: BigInt(item.required_units).toString(), reason_code: 'private_construction_resource_input' },
-        ]))],
-      );
+        ]),
+      }, clock);
     }
     await tx.query(
       `INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, started_game_day, commissioned_game_day, territory_right_id)
@@ -277,7 +286,7 @@ export async function listConstructionProjects(repository: PostgresRepository, h
 }
 
 export async function cancelConstructionProject(repository: PostgresRepository, humanId: string, projectId: string, correlationId: string): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const project = (await tx.query<{ id: string; building_id: string; owner_economic_id: string; credit_cost_units: string; cancellation_refund_bps: number; status: string }>(
       `SELECT p.id, p.building_id, p.owner_economic_id, p.credit_cost_units::TEXT, p.cancellation_refund_bps, p.status
          FROM construction_projects p JOIN humans h ON h.house_id = (SELECT id FROM owner_registry WHERE economic_id = p.owner_economic_id)
@@ -285,13 +294,23 @@ export async function cancelConstructionProject(repository: PostgresRepository, 
     )).rows[0];
     if (!project) throw new Error('Construction project not found');
     if (project.status !== 'IN_PROGRESS') return { ok: true, alreadyProcessed: true, status: project.status, projectId, correlationId };
-    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+    const day = clock.gameDay;
     const refund = BigInt(project.credit_cost_units) * BigInt(project.cancellation_refund_bps) / 10_000n;
     if (refund > 0n) {
       const source = (await tx.query<{ id: string }>(`SELECT a.id::TEXT AS id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`)).rows[0];
       const destination = (await tx.query<{ id: string }>(`SELECT a.id::TEXT AS id FROM economic_accounts a WHERE a.owner_economic_id = $1 AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' LIMIT 1`, [project.owner_economic_id])).rows[0];
       if (!source || !destination) throw new Error('Construction refund accounts are not provisioned');
-      await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','CONSTRUCTION_CANCEL', $3, 'construction-project-v1', $4::JSONB)`, [correlationId, day, projectId, JSON.stringify([{ account_id: source.id, asset_id: 1, delta_units: (-refund).toString() }, { account_id: destination.id, asset_id: 1, delta_units: refund.toString() }])]);
+      await postEconomicTransaction(tx, {
+        correlationId,
+        kind: 'ASSET_TRANSFER',
+        sourceType: 'CONSTRUCTION_CANCEL',
+        sourceId: projectId,
+        rulesVersion: 'construction-project-v1',
+        entries: [
+          { account_id: source.id, asset_id: 1, delta_units: (-refund).toString() },
+          { account_id: destination.id, asset_id: 1, delta_units: refund.toString() },
+        ],
+      }, clock);
     }
     await tx.query(`UPDATE construction_projects SET status='CANCELLED', cancelled_game_day=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$1`, [projectId, day]);
     await tx.query(`UPDATE buildings SET status='INACTIVE' WHERE id=$1`, [project.building_id]);

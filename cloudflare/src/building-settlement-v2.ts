@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { applyConditionStack } from './world-conditions.ts';
+import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
 type Building = {
   id: string;
@@ -65,10 +66,20 @@ async function account(tx: PostgresRepository, ownerEconomicId: string, assetId:
 
 async function post(tx: PostgresRepository, day: number, correlationId: string, kind: string, sourceType: string, sourceId: string, entries: Array<{ accountId: string; assetId: number; delta: bigint; reason: string }>): Promise<void> {
   if (!entries.length) return;
-  await tx.query(
-    `SELECT earth_post_transaction($1, $2, 1439, $3, $4, $5, 'building-settlement-v4', $6::JSONB)`,
-    [correlationId, day, kind, sourceType, sourceId, JSON.stringify(entries.map((entry) => ({ account_id: entry.accountId, asset_id: entry.assetId, delta_units: entry.delta.toString(), reason_code: entry.reason })))],
-  );
+  await postSettlementTransaction(tx, {
+    correlationId,
+    gameDay: day,
+    kind,
+    sourceType,
+    sourceId,
+    rulesVersion: 'building-settlement-v4',
+    entries: entries.map((entry) => ({
+      accountId: entry.accountId,
+      assetId: entry.assetId,
+      deltaUnits: entry.delta.toString(),
+      reasonCode: entry.reason,
+    })),
+  });
 }
 
 async function loadModifierResolver(tx: PostgresRepository, day: number): Promise<ModifierResolver> {

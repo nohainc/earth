@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { resolveEconomicAccount } from './economic-account-resolver.ts';
+import { postSettlementTransaction } from './economic-transaction-postgres.ts';
 
 type LicenseContract = {
   id: string;
@@ -40,19 +41,23 @@ async function billContract(repository: PostgresRepository, contractId: string, 
     await repository.query("UPDATE technology_license_contracts SET status = 'SUSPENDED' WHERE id = $1", [contract.id]);
     return 'suspended';
   }
-  const posting = await repository.query<{ transaction_id: string; created: boolean }>(
-      `SELECT transaction_id, created FROM earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','SYSTEM_SETTLEMENT',$3,'technology-license-v1',$4::JSONB)`,
-      [`license:${contract.id}:${gameDay}`, gameDay, contract.id, JSON.stringify([
-        { account_id: payerAccountId, asset_id: 1, delta_units: (-amount).toString(), reason_code: 'technology_license_fee' },
-        { account_id: recipientAccountId, asset_id: 1, delta_units: amount.toString(), reason_code: 'technology_license_fee' },
-      ])],
-  );
-  const transaction = posting.rows[0];
+  const transaction = await postSettlementTransaction(repository, {
+    correlationId: `license:${contract.id}:${gameDay}`,
+    gameDay,
+    kind: 'ASSET_TRANSFER',
+    sourceType: 'SYSTEM_SETTLEMENT',
+    sourceId: contract.id,
+    rulesVersion: 'technology-license-v1',
+    entries: [
+      { accountId: payerAccountId, assetId: 1, deltaUnits: (-amount).toString(), reasonCode: 'technology_license_fee' },
+      { accountId: recipientAccountId, assetId: 1, deltaUnits: amount.toString(), reasonCode: 'technology_license_fee' },
+    ],
+  });
   if (!transaction) throw new Error('Technology license posting returned no transaction');
   await repository.query(
       `INSERT INTO technology_license_payments (id, contract_id, payer_economic_id, recipient_economic_id, game_day, amount_units, economic_transaction_id, correlation_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (correlation_id) DO NOTHING`,
-      [`LICENSE-PAYMENT-${contract.id}-${gameDay}`, contract.id, contract.licensee_economic_id, contract.licensor_economic_id, gameDay, amount.toString(), transaction.transaction_id, `license-payment:${contract.id}:${gameDay}`],
+      [`LICENSE-PAYMENT-${contract.id}-${gameDay}`, contract.id, contract.licensee_economic_id, contract.licensor_economic_id, gameDay, amount.toString(), transaction.transactionId, `license-payment:${contract.id}:${gameDay}`],
   );
   await repository.query('UPDATE technology_license_contracts SET paid_through_game_day = $2 WHERE id = $1', [contract.id, gameDay]);
   return 'paid';

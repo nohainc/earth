@@ -22,11 +22,11 @@ test('Market V2 keeps the canonical six-asset IDs and instrument symbols', () =>
 });
 
 test('Market V2 derives instrument state from the authoritative book and fills', () => {
-  const migration = fs.readFileSync('db/migrations/201_market_instrument_state.sql', 'utf8');
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS market_instrument_state/);
-  assert.match(migration, /earth_rebuild_market_instrument_state/);
-  assert.match(migration, /FROM market_orders/);
-  assert.match(migration, /FROM market_fills/);
+  const schema = fs.readFileSync('db/baseline/01_schema.sql', 'utf8');
+  const state = fs.readFileSync('cloudflare/src/market-state.ts', 'utf8');
+  assert.match(schema, /CREATE TABLE market_instrument_state/);
+  assert.match(state, /FROM market_orders/);
+  assert.match(state, /FROM market_fills/);
   assert.match(fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8'), /rebuildMarketInstrumentState/);
   assert.match(fs.readFileSync('cloudflare/src/market-scheduler.ts', 'utf8'), /refreshMarketCandles/);
   assert.match(fs.readFileSync('cloudflare/src/market-scheduler.ts', 'utf8'), /instrument_type === 'SPOT'/);

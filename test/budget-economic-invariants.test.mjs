@@ -16,7 +16,7 @@ test('budget authorization and commitment creation are non-monetary operations',
 test('only payment paths post balanced Economy V2 transfers', () => {
   const spending = read('cloudflare/src/institution-spending.ts');
   const grants = read('cloudflare/src/institution-grants.ts');
-  assert.match(spending, /earth_post_transaction/);
+  assert.match(spending, /postEconomicTransaction/);
   assert.match(grants, /spendBudget\(tx/);
   assert.match(spending, /delta_units: \(-input\.amountUnits\)/);
   assert.match(spending, /delta_units: input\.amountUnits/);

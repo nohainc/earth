@@ -4,6 +4,7 @@ import { enqueueOutbox } from './outbox-postgres.ts';
 import { getActiveV5StandardCapacity } from './v5-capacity-postgres.ts';
 import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 
 type FoundingPolicy = { id: string; version: number; fee: bigint; reserve: bigint; rulesVersion: string };
 
@@ -38,7 +39,7 @@ export async function quoteV5CorporationFounding(repository: PostgresRepository,
 }
 
 export async function foundV5Corporation(repository: PostgresRepository, input: { humanId: string; name: string; admissionPolicy: 'OPEN' | 'APPROVAL' | 'INVITE_ONLY'; correlationId: string }) {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = (await tx.query<{ corporation_id: string }>('SELECT corporation_id FROM v5_corporation_founding_commands WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior) return { ok: true, alreadyProcessed: true, corporationId: prior.corporation_id, correlationId: input.correlationId };
     const normalized = input.name.trim();
@@ -46,7 +47,7 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
     const house = await founder(tx, input.humanId);
     const duplicate = (await tx.query('SELECT 1 FROM institutions WHERE lower(name) = lower($1) AND status = \'ACTIVE\'', [normalized])).rows[0];
     if (duplicate) throw new Error('Corporation name already exists');
-    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+    const day = clock.gameDay;
     const policy = await foundingPolicy(tx, day);
     const earthCapacityPolicy = await getActiveV5StandardCapacity(tx, day);
     const id = `CORP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
@@ -94,7 +95,14 @@ export async function foundV5Corporation(repository: PostgresRepository, input: 
       if (policy.reserve > 0n) {
         entries.push({ account_id: treasury.id, asset_id: 1, delta_units: policy.reserve.toString() });
       }
-      await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','CORPORATION_FOUNDING_FEE',$3,$4,$5::JSONB)`, [input.correlationId, day, id, earthCapacityPolicy.policyVersion, JSON.stringify(entries)]);
+      await postEconomicTransaction(tx, {
+        correlationId: input.correlationId,
+        kind: 'ASSET_TRANSFER',
+        sourceType: 'CORPORATION_FOUNDING_FEE',
+        sourceId: id,
+        rulesVersion: earthCapacityPolicy.policyVersion,
+        entries,
+      }, clock);
     }
     await tx.query(`INSERT INTO v5_corporation_founding_commands (correlation_id, corporation_id, created_game_day) VALUES ($1,$2,$3)`, [input.correlationId, id, day]);
     await createAffiliationEvent(tx, { id: `V5-FOUND-AFF-${input.correlationId}`, humanId: input.humanId, institutionType: 'CORPORATION', institutionId: id, action: 'joined', gameDay: day, reason: 'v5_foundation' });

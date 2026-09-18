@@ -16,7 +16,7 @@ test('settlement runner enforces barriers and reports explicit outcomes', () => 
   const scheduler = fs.readFileSync(path.resolve('cloudflare/src/scheduler-postgres.ts'), 'utf8');
   assert.match(scheduler, /earth_claim_settlement_day/);
   assert.match(scheduler, /status: 'busy'/);
-  assert.match(scheduler, /earth_complete_settlement_day/);
+  assert.match(scheduler, /earth_finalize_settlement_day/);
   assert.match(scheduler, /Settlement day lease lost/);
   assert.match(scheduler, /earth_fail_settlement_day/);
   assert.match(scheduler, /completeSettlementWork/);

@@ -3,7 +3,7 @@ import { currentHuman } from './auth-session.ts';
 import { withRepository, type PostgresRepository } from './repository.ts';
 import { cancelMarketOrder, submitMarketOrder } from './market-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
-import { assertEconomyCaughtUp, SettlementCatchupBarrierError } from './settlement-barrier-postgres.ts';
+import { assertEconomyCaughtUp, isSettlementBarrierError, SettlementCatchupBarrierError } from './settlement-barrier-postgres.ts';
 import { assetUnitScale, MARKET_ASSET_IDS } from './market-model.ts';
 import { calculateFeeUnits, calculateQuoteUnits, displayPriceToUnits, displayQuantityToUnits, displayRateToBps, priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
@@ -330,7 +330,7 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
   } catch (error) {
-    if (error instanceof SettlementCatchupBarrierError) {
+    if (isSettlementBarrierError(error)) {
       return error.toResponse();
     }
     const message = error instanceof Error ? error.message : 'Market request failed';

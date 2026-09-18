@@ -11,6 +11,7 @@ import {
 import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 
 async function currentDay(tx: PostgresRepository): Promise<number> {
   return (await readAuthoritativeGameTime(tx)).gameDay;
@@ -190,10 +191,10 @@ async function quoteCorporationBuildingUpgrade(repository: PostgresRepository, i
 }
 
 async function upgradeCorporationBuilding(repository: PostgresRepository, input: { buildingId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: prior.source_id, correlationId: input.correlationId };
-    const day = await currentDay(tx);
+    const day = clock.gameDay;
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     if (building.tier >= 5) throw new Error('Building is already at the maximum tier');
     if ((await tx.query("SELECT 1 FROM construction_projects WHERE building_id = $1 AND status = 'IN_PROGRESS'", [input.buildingId])).rows[0]) throw new Error('This building already has an investment project in progress');
@@ -221,8 +222,30 @@ async function upgradeCorporationBuilding(repository: PostgresRepository, input:
       resSink: (await tx.query<{ id: string }>("SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-RESOURCE-CONSUMPTION' AND a.asset_id = $1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'", [item.asset_id])).rows[0],
     })));
     if (resourceAccounts.some((r) => !r.account || !r.resSink)) throw new Error('Upgrade resource settlement accounts are not provisioned');
-    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','PUBLIC_TIER_UPGRADE',$3,'construction-investment-v5',$4::JSONB)`, [input.correlationId, day, input.buildingId, JSON.stringify([{ account_id: treasury.id, asset_id: 1, delta_units: (-cost).toString() }, { account_id: sink.id, asset_id: 1, delta_units: cost.toString() }])]);
-    if (resourceAccounts.length) await tx.query(`SELECT earth_post_transaction($1,$2,1439,'RESOURCE_CONSUMPTION','SYSTEM_CONSUMPTION',$3,'upgrade-investment-v5',$4::JSONB)`, [`upgrade:${input.correlationId}:resources`, day, input.buildingId, JSON.stringify(resourceAccounts.flatMap((r) => [{ account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_upgrade_resource_input' }, { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_upgrade_resource_input' }]))]);
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: 'PUBLIC_TIER_UPGRADE',
+      sourceId: input.buildingId,
+      rulesVersion: 'construction-investment-v5',
+      entries: [
+        { account_id: treasury.id, asset_id: 1, delta_units: (-cost).toString() },
+        { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
+      ],
+    }, clock);
+    if (resourceAccounts.length) {
+      await postEconomicTransaction(tx, {
+        correlationId: `upgrade:${input.correlationId}:resources`,
+        kind: 'RESOURCE_CONSUMPTION',
+        sourceType: 'SYSTEM_CONSUMPTION',
+        sourceId: input.buildingId,
+        rulesVersion: 'upgrade-investment-v5',
+        entries: resourceAccounts.flatMap((r) => [
+          { account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_upgrade_resource_input' },
+          { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_upgrade_resource_input' },
+        ]),
+      }, clock);
+    }
     const resourceCostUnits = Object.fromEntries(resourceReqs.map((r) => [r.code, r.required_units]));
     const beforeProfile = await getCorporationSettlementProfileSnapshot(tx, building.corporation_id);
     const projectId = `PROJECT-UPGRADE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
@@ -253,8 +276,8 @@ async function upgradeCorporationBuilding(repository: PostgresRepository, input:
 }
 
 async function quoteCorporationBuildingDemolition(repository: PostgresRepository, input: { buildingId: string; humanId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const day = await currentDay(tx);
+  return runEconomicMutation(repository, async (tx, clock) => {
+    const day = clock.gameDay;
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const capacity = await quoteV5CorporationCapacityChange(tx, building.corporation_id, -BigInt(building.slot_footprint), day);
     return { ok: true, eligible: true, buildingId: building.id, ownerType: 'CORPORATION', footprintReleased: building.slot_footprint, capacity, status: 'ACTIVE_OR_UNDER_CONSTRUCTION', generatedFrom: 'postgres-canonical-corporation-demolition-quote-v5' };
@@ -262,10 +285,10 @@ async function quoteCorporationBuildingDemolition(repository: PostgresRepository
 }
 
 async function decommissionCorporationBuilding(repository: PostgresRepository, input: { buildingId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: input.buildingId, status: 'INACTIVE', correlationId: input.correlationId };
-    const day = await currentDay(tx);
+    const day = clock.gameDay;
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const capacity = await quoteV5CorporationCapacityChange(tx, building.corporation_id, -BigInt(building.slot_footprint), day);
     const beforeProfile = await getCorporationSettlementProfileSnapshot(tx, building.corporation_id);
@@ -303,10 +326,10 @@ async function quoteCorporationBuildingOperatingMode(repository: PostgresReposit
 }
 
 async function setCorporationBuildingOperatingMode(repository: PostgresRepository, input: { buildingId: string; humanId: string; mode: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const building = await getCorporationBuildingActionContext(tx, input.buildingId, input.humanId);
     const result = await tx.query<{ id: string; operating_mode: string }>('UPDATE buildings SET operating_mode = $1 WHERE id = $2 RETURNING id, operating_mode', [input.mode, input.buildingId]);
-    await createGameEvent(tx, { id: `BUILDING-POLICY-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_OPERATING_POLICY_CHANGED', gameDay: await currentDay(tx), actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: 'Corporation building operating policy changed', details: { buildingId: building.id, ownerType: 'CORPORATION', operatingMode: result.rows[0].operating_mode, capacityModel: 'V5_POOLED' }, correlationId: input.correlationId });
+    await createGameEvent(tx, { id: `BUILDING-POLICY-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_OPERATING_POLICY_CHANGED', gameDay: clock.gameDay, actorHumanId: input.humanId, subjectType: 'BUILDING', subjectId: building.id, title: 'Corporation building operating policy changed', details: { buildingId: building.id, ownerType: 'CORPORATION', operatingMode: result.rows[0].operating_mode, capacityModel: 'V5_POOLED' }, correlationId: input.correlationId });
     return { ok: true, ownerType: 'CORPORATION', building: result.rows[0], correlationId: input.correlationId };
   });
 }
@@ -403,8 +426,8 @@ export async function upgradeBuilding(repository: PostgresRepository, input: { b
       WHERE b.id = $1`, [input.buildingId],
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return upgradeCorporationBuilding(repository, input);
-  return repository.transaction(async (tx) => {
-    const day = await currentDay(tx);
+  return runEconomicMutation(repository, async (tx, clock) => {
+    const day = clock.gameDay;
     const building = (await tx.query<{ id: string; owner_economic_id: string; family_code: string; tier: number; catalog_id: string; slot_footprint: string; construction_credit_units: string; construction_minutes: number }>(`SELECT b.id, b.owner_economic_id, c.family_code, c.tier, c.id AS catalog_id, c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id JOIN humans h ON h.id = $2 AND h.house_id = (SELECT id FROM owner_registry WHERE economic_id = b.owner_economic_id AND owner_type = 'HOUSE') AND h.status = 'ACTIVE' WHERE b.id = $1 AND b.status = 'ACTIVE' FOR UPDATE`, [input.buildingId, input.humanId])).rows[0];
     if (!building) throw new Error('Building not found or not owned by the active House');
     await refreshV5SettlementProfilesForHouse(tx, (await tx.query<{ house_id: string }>('SELECT house_id FROM humans WHERE id = $1', [input.humanId])).rows[0].house_id, day);
@@ -444,15 +467,37 @@ export async function upgradeBuilding(repository: PostgresRepository, input: { b
       resSink: (await tx.query<{ id: string }>("SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-RESOURCE-CONSUMPTION' AND a.asset_id = $1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'", [item.asset_id])).rows[0],
     })));
     if (resourceAccounts.some((r) => !r.account || !r.resSink)) throw new Error('Upgrade resource settlement accounts are not provisioned');
-    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','PRIVATE_TIER_UPGRADE',$3,'construction-investment-v5',$4::JSONB)`, [input.correlationId, day, input.buildingId, JSON.stringify([{ account_id: wallet.id, asset_id: 1, delta_units: (-cost).toString() }, { account_id: sink.id, asset_id: 1, delta_units: cost.toString() }])]);
-    if (resourceAccounts.length) await tx.query(`SELECT earth_post_transaction($1,$2,1439,'RESOURCE_CONSUMPTION','SYSTEM_CONSUMPTION',$3,'upgrade-investment-v5',$4::JSONB)`, [`upgrade:${input.correlationId}:resources`, day, input.buildingId, JSON.stringify(resourceAccounts.flatMap((r) => [{ account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_upgrade_resource_input' }, { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_upgrade_resource_input' }]))]);
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: 'PRIVATE_TIER_UPGRADE',
+      sourceId: input.buildingId,
+      rulesVersion: 'construction-investment-v5',
+      entries: [
+        { account_id: wallet.id, asset_id: 1, delta_units: (-cost).toString() },
+        { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
+      ],
+    }, clock);
+    if (resourceAccounts.length) {
+      await postEconomicTransaction(tx, {
+        correlationId: `upgrade:${input.correlationId}:resources`,
+        kind: 'RESOURCE_CONSUMPTION',
+        sourceType: 'SYSTEM_CONSUMPTION',
+        sourceId: input.buildingId,
+        rulesVersion: 'upgrade-investment-v5',
+        entries: resourceAccounts.flatMap((r) => [
+          { account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_upgrade_resource_input' },
+          { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_upgrade_resource_input' },
+        ]),
+      }, clock);
+    }
     const resourceCostUnits = Object.fromEntries(resourceReqs.map((r) => [r.code, r.required_units]));
     const beforeProfile = houseId ? await getHouseSettlementProfileSnapshot(tx, houseId) : null;
     const projectId = `PROJECT-UPGRADE-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const completion = day + Math.max(1, Math.ceil(Number(next.construction_minutes) / 1440));
-    await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,$11,'TIER_UPGRADE')`, [projectId, building.id, building.owner_economic_id, null, next.id, cost.toString(), JSON.stringify(resourceCostUnits), day, completion, input.correlationId, null]);
+    await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind) VALUES ($1,$2,$3,NULL,$4,$5,$6::JSONB,$7,$8,'IN_PROGRESS',$9,NULL,'TIER_UPGRADE')`, [projectId, building.id, building.owner_economic_id, next.id, cost.toString(), JSON.stringify(resourceCostUnits), day, completion, input.correlationId]);
     await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION' WHERE id = $1", [building.id]);
-    await refreshV5SettlementProfilesForHouse(tx, houseId!, day);
+    if (houseId) await refreshV5SettlementProfilesForHouse(tx, houseId, day);
     const afterProfile = houseId ? await getHouseSettlementProfileSnapshot(tx, houseId) : null;
 
     if (houseId) {
@@ -484,7 +529,7 @@ export async function setBuildingOperatingMode(repository: PostgresRepository, i
     `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return setCorporationBuildingOperatingMode(repository, { ...input, mode });
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const building = await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
     const result = await tx.query<{ id: string; operating_mode: string }>(
       'UPDATE buildings SET operating_mode = $1 WHERE id = $2 RETURNING id, operating_mode',
@@ -494,7 +539,7 @@ export async function setBuildingOperatingMode(repository: PostgresRepository, i
       id: `BUILDING-POLICY-${input.correlationId}`,
       category: 'BUILDING',
       eventType: 'BUILDING_OPERATING_POLICY_CHANGED',
-      gameDay: await currentDay(tx),
+      gameDay: clock.gameDay,
       actorHumanId: input.humanId,
       subjectType: 'BUILDING',
       subjectId: building.id,
@@ -526,8 +571,8 @@ export async function decommissionBuilding(repository: PostgresRepository, input
     `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return decommissionCorporationBuilding(repository, input);
-  return repository.transaction(async (tx) => {
-    const day = await currentDay(tx);
+  return runEconomicMutation(repository, async (tx, clock) => {
+    const day = clock.gameDay;
     const building = (await tx.query<{ id: string; territory_id: string | null; house_id: string; slot_footprint: string }>(`SELECT b.id, b.territory_id, h.house_id, c.slot_footprint::TEXT FROM buildings b JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'HOUSE' JOIN humans h ON h.house_id = o.id AND h.id = $2 AND h.status = 'ACTIVE' JOIN building_catalog c ON c.id = b.catalog_id WHERE b.id = $1 AND b.status IN ('ACTIVE','UNDER_CONSTRUCTION') FOR UPDATE`, [input.buildingId, input.humanId])).rows[0];
     if (!building) throw new Error('Building not found, inactive, or not owned by the active House');
     const v5CapacityQuote = await quoteV5HouseCapacityChange(tx, building.house_id, -BigInt(building.slot_footprint), day);
@@ -673,11 +718,11 @@ export async function retrofitBuilding(
   repository: PostgresRepository,
   input: { buildingId: string; humanId: string; targetGeneration?: number; correlationId: string },
 ): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: prior.source_id, correlationId: input.correlationId };
 
-    const day = await currentDay(tx);
+    const day = clock.gameDay;
     const owner = (await tx.query<{ owner_type: 'HOUSE' | 'CORPORATION' }>(
       `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
     )).rows[0];
@@ -757,23 +802,31 @@ export async function retrofitBuilding(
     if (resourceAccounts.some((r) => !r.account || !r.resSink)) throw new Error('Retrofit resource settlement accounts are not provisioned');
 
     // Post CREDIT transfer
-    await tx.query(
-      `SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER',$3,$4,'retrofit-investment-v5',$5::JSONB)`,
-      [input.correlationId, day, isPublic ? 'PUBLIC_RETROFIT' : 'PRIVATE_RETROFIT', input.buildingId, JSON.stringify([
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: isPublic ? 'PUBLIC_RETROFIT' : 'PRIVATE_RETROFIT',
+      sourceId: input.buildingId,
+      rulesVersion: 'retrofit-investment-v5',
+      entries: [
         { account_id: payerAccount.id, asset_id: 1, delta_units: (-cost).toString() },
         { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
-      ])],
-    );
+      ],
+    }, clock);
 
     // Post RESOURCE CONSUMPTION transfer
     if (resourceAccounts.length) {
-      await tx.query(
-        `SELECT earth_post_transaction($1,$2,1439,'RESOURCE_CONSUMPTION','SYSTEM_CONSUMPTION',$3,'retrofit-investment-v5',$4::JSONB)`,
-        [`retrofit:${input.correlationId}:resources`, day, input.buildingId, JSON.stringify(resourceAccounts.flatMap((r) => [
+      await postEconomicTransaction(tx, {
+        correlationId: `retrofit:${input.correlationId}:resources`,
+        kind: 'RESOURCE_CONSUMPTION',
+        sourceType: 'SYSTEM_CONSUMPTION',
+        sourceId: input.buildingId,
+        rulesVersion: 'retrofit-investment-v5',
+        entries: resourceAccounts.flatMap((r) => [
           { account_id: r.account!.id, asset_id: r.asset_id, delta_units: (-BigInt(r.required_units)).toString(), reason_code: 'v5_retrofit_resource_input' },
           { account_id: r.resSink!.id, asset_id: r.asset_id, delta_units: BigInt(r.required_units).toString(), reason_code: 'v5_retrofit_resource_input' },
-        ]))],
-      );
+        ]),
+      }, clock);
     }
 
     const resourceCostUnits = Object.fromEntries(resourceReqs.map((r) => [r.code, r.required_units]));

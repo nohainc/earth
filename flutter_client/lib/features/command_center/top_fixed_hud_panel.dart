@@ -74,15 +74,17 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onNotifications,
     this.onOpenNotifications,
     this.onReconnect,
-    this.onDayRecalculateTrigger,
-    this.onDayPrefetch,
-    this.onDayRollover,
+    this.onPreRolloverRefresh,
+    this.onRolloverPrefetch,
+    this.onDisplayedDayChanged,
+    this.onClockResync,
     this.elapsedDurationProvider,
   });
 
-  final VoidCallback? onDayRecalculateTrigger;
-  final VoidCallback? onDayPrefetch;
-  final VoidCallback? onDayRollover;
+  final VoidCallback? onPreRolloverRefresh;
+  final VoidCallback? onRolloverPrefetch;
+  final VoidCallback? onDisplayedDayChanged;
+  final Future<void> Function()? onClockResync;
   final Duration Function()? elapsedDurationProvider;
 
   @override
@@ -95,7 +97,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
   final Stopwatch _stopwatch = Stopwatch();
   int _baseElapsedRealSeconds = 0;
   int? _lastSeenDay;
-  int? _lastRecalculateDay;
+  int? _lastPreRolloverRefreshDay;
   int? _lastPrefetchDay;
 
   int get _currentTotalRealSeconds {
@@ -124,21 +126,21 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
     // Stage 1: Recalculation Trigger at 23:50 (Minute 1430)
     if (inDayMinute >= 1430 &&
         inDayMinute < 1439 &&
-        _lastRecalculateDay != currentDay) {
-      _lastRecalculateDay = currentDay;
-      widget.onDayRecalculateTrigger?.call();
+        _lastPreRolloverRefreshDay != currentDay) {
+      _lastPreRolloverRefreshDay = currentDay;
+      widget.onPreRolloverRefresh?.call();
     }
 
     // Stage 2: Prefetch updated data at 23:59 (Minute 1439)
     if (inDayMinute == 1439 && _lastPrefetchDay != currentDay) {
       _lastPrefetchDay = currentDay;
-      widget.onDayPrefetch?.call();
+      widget.onRolloverPrefetch?.call();
     }
 
     // Stage 3: Rollover at 00:00 (Midnight / New Day)
     if (_lastSeenDay != null && currentDay > _lastSeenDay!) {
       _lastSeenDay = currentDay;
-      widget.onDayRollover?.call();
+      widget.onDisplayedDayChanged?.call();
     } else {
       _lastSeenDay ??= currentDay;
     }
@@ -149,6 +151,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(widget.onClockResync?.call());
       _evaluateClockTick(forceRepaint: true);
     }
   }
@@ -231,8 +234,10 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
           flowMap[key] ?? (key == 'material' ? flowMap['materials'] : null);
       if (raw is! Map) return 0.0;
       if (raw['net'] != null) return asDoubleOr(raw['net'], 0.0);
-      if (raw['netPerGameDay'] != null) return asDoubleOr(raw['netPerGameDay'], 0.0);
-      if (raw['netPerSecond'] != null) return asDoubleOr(raw['netPerSecond'], 0.0) * 1440.0;
+      if (raw['netPerGameDay'] != null)
+        return asDoubleOr(raw['netPerGameDay'], 0.0);
+      if (raw['netPerSecond'] != null)
+        return asDoubleOr(raw['netPerSecond'], 0.0) * 1440.0;
       return 0.0;
     }
 
@@ -345,9 +350,11 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
               ],
 
               // 2. BRAND LOGO & (OPTIONAL) TITLE
-              _buildBrandHeader(context, isMobile, isTablet, hideTitle: widget.showDrawerButton),
+              _buildBrandHeader(context, isMobile, isTablet,
+                  hideTitle: widget.showDrawerButton),
 
-              if (!isMobile && !widget.showDrawerButton) const SizedBox(width: 12),
+              if (!isMobile && !widget.showDrawerButton)
+                const SizedBox(width: 12),
 
               // 3. CENTER: GAME CLOCK & RESOURCE BAR
               Expanded(
@@ -455,11 +462,14 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
     final failedPhase = settlement['failedPhase'];
     final failedError = settlement['failedError'];
 
-    String tooltipMessage = 'Game Clock (1s real = 1m game) · Click for Daily Summary';
+    String tooltipMessage =
+        'Game Clock (1s real = 1m game) · Click for Daily Summary';
     if (isFailed) {
-      tooltipMessage = 'SETTLEMENT FAILED on Day $failedDay (Phase: ${failedPhase ?? 'unknown'})\nError: ${failedError ?? 'Terminal failure'}\nClick for details';
+      tooltipMessage =
+          'SETTLEMENT FAILED on Day $failedDay (Phase: ${failedPhase ?? 'unknown'})\nError: ${failedError ?? 'Terminal failure'}\nClick for details';
     } else if (isCatchingUp) {
-      tooltipMessage = 'Settlement Catching Up ($backlog days backlog) · Click for Daily Summary';
+      tooltipMessage =
+          'Settlement Catching Up ($backlog days backlog) · Click for Daily Summary';
     }
 
     return Tooltip(
@@ -497,7 +507,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (isFailed) ...[
-                Icon(Icons.error_outline, size: isMobile ? 11 : 13, color: context.errorColor),
+                Icon(Icons.error_outline,
+                    size: isMobile ? 11 : 13, color: context.errorColor),
                 const SizedBox(width: 4),
               ] else if (isCatchingUp) ...[
                 Icon(Icons.sync, size: isMobile ? 11 : 13, color: Colors.amber),
@@ -523,7 +534,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
               if (isFailed && !isMobile) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: context.errorColor.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(3),
@@ -540,7 +552,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
               ] else if (isCatchingUp && !isMobile && backlog > 0) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: Colors.amber.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(3),
@@ -777,9 +790,12 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
 
     final alerts = validAlerts.where((n) {
       final readAt = n['read_at'] ?? n['readAt'];
-      if (readAt != null && readAt.toString().isNotEmpty && readAt.toString() != 'null') return false;
+      if (readAt != null &&
+          readAt.toString().isNotEmpty &&
+          readAt.toString() != 'null') return false;
       final read = n['read'];
-      if (read == true || read == 'true' || read == 1 || read == '1') return false;
+      if (read == true || read == 'true' || read == 1 || read == '1')
+        return false;
       final status = n['status']?.toString().toLowerCase();
       if (status == 'read') return false;
       return true;
@@ -837,11 +853,13 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
                 ),
                 if (unread > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                     decoration: BoxDecoration(
                       color: context.primaryColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: context.primaryColor.withValues(alpha: 0.4)),
+                      border: Border.all(
+                          color: context.primaryColor.withValues(alpha: 0.4)),
                     ),
                     child: Text(
                       '$unread NEW',
@@ -880,15 +898,18 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
           for (final alert in previewAlerts) {
             final title = alert['title']?.toString() ?? 'Alert';
             final body = (alert['body'] ?? alert['details'] ?? '').toString();
-            final rawDate = alert['created_at'] ?? alert['createdAt'] ?? alert['timestamp'];
-            final gameTime = rawDate != null ? formatRealToGameDateTime(rawDate) : null;
+            final rawDate =
+                alert['created_at'] ?? alert['createdAt'] ?? alert['timestamp'];
+            final gameTime =
+                rawDate != null ? formatRealToGameDateTime(rawDate) : null;
             final isItemUnread = alerts.contains(alert);
 
             items.add(
               PopupMenuItem<String>(
                 value: 'view_all',
                 height: 52,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -902,7 +923,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: context.primaryColor.withValues(alpha: 0.8),
+                              color:
+                                  context.primaryColor.withValues(alpha: 0.8),
                               blurRadius: 4,
                             ),
                           ],
@@ -920,7 +942,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
                             overflow: TextOverflow.ellipsis,
                             style: context.bodyStyle.copyWith(
                               color: context.inkColor,
-                              fontWeight: isItemUnread ? FontWeight.w700 : FontWeight.w600,
+                              fontWeight: isItemUnread
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
                               fontSize: 12.5,
                             ),
                           ),
@@ -943,7 +967,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: context.widgetFooterStyle.copyWith(
-                                color: context.primaryColor.withValues(alpha: 0.75),
+                                color: context.primaryColor
+                                    .withValues(alpha: 0.75),
                                 fontSize: 9.5,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -1064,8 +1089,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
               Icon(
                 Icons.forum_outlined,
                 size: 21,
-                color:
-                    unread > 0 ? context.primaryColor : context.mutedColor,
+                color: unread > 0 ? context.primaryColor : context.mutedColor,
               ),
               if (unread > 0)
                 Positioned(

@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
-import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { resolveOrganizationAuthority } from './organization-authority.ts';
+import { runEconomicMutation, postSettlementTransaction } from './settlement-barrier-postgres.ts';
 
 export type CommonsEligibleHolder = { houseId: string; slotQuantity: bigint };
 
@@ -18,10 +18,6 @@ export function allocateCommonsDividend(totalUnits: bigint, holders: readonly Co
     allocated += amountUnits;
     return { ...holder, amountUnits, remainderUnits: index === ordered.length - 1 ? amountUnits - base : 0n };
   });
-}
-
-async function currentDay(tx: PostgresRepository) {
-  return (await readAuthoritativeGameTime(tx)).gameDay;
 }
 
 async function houseForHuman(tx: PostgresRepository, humanId: string) {
@@ -61,8 +57,8 @@ export async function getCommonsStatement(repository: PostgresRepository, territ
   return { territoryId, policy: policy.rows[0] ?? null, declarations: declarations.rows, leaseRevenue: revenue.rows, generatedFrom: 'postgres-canonical-facts' };
 }
 
-export async function declareCommonsDividend(repository: PostgresRepository, input: { humanId: string; territoryId: string; gameDay?: number; correlationId: string }) {
-  return repository.transaction(async (tx) => {
+export async function declareCommonsDividend(repository: PostgresRepository, input: { humanId: string; territoryId: string; correlationId: string }) {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const house = await houseForHuman(tx, input.humanId);
     if (!house) throw new Error('Active House is required');
     const territory = (await tx.query<{ corporation_id: string }>("SELECT corporation_id FROM territories WHERE id = $1 AND status = 'ACTIVE' FOR UPDATE", [input.territoryId])).rows[0];
@@ -70,8 +66,7 @@ export async function declareCommonsDividend(repository: PostgresRepository, inp
     const authority = await beneficiary(tx, input.territoryId);
     if (!authority) throw new Error('Territory commons beneficiary is not configured');
     await requireAuthority(tx, authority.institution_id, input.humanId, house.house_id);
-    const day = input.gameDay ?? await currentDay(tx);
-    if (!Number.isInteger(day) || day < 1) throw new Error('gameDay must be a positive integer');
+    const day = clock.gameDay;
     const policy = (await tx.query<{ reserve_bps: number; dividend_bps: number; effective_from_game_day: number; rules_version: string }>(`SELECT reserve_bps, dividend_bps, effective_from_game_day, rules_version FROM commons_dividend_policies WHERE territory_id = $1 AND status = 'ACTIVE' AND effective_from_game_day <= $2 ORDER BY effective_from_game_day DESC LIMIT 1 FOR UPDATE`, [input.territoryId, day])).rows[0];
     if (!policy) throw new Error('No active commons dividend policy is available');
     const existing = (await tx.query('SELECT * FROM commons_dividend_declarations WHERE territory_id = $1 AND game_day = $2', [input.territoryId, day])).rows[0];
@@ -111,7 +106,18 @@ export async function settleCommonsDividends(repository: PostgresRepository, day
         const wallet = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = 1 AND a.account_type = 'WALLET' AND a.status = 'ACTIVE' FOR UPDATE`, [holder.house_id])).rows[0];
         if (!wallet) continue;
         const paymentCorrelation = `commons-payment:${declaration.id}:${holder.house_id}`;
-        await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER','COMMONS_DIVIDEND',$3,'commons-dividend-v1',$4::JSONB)`, [paymentCorrelation, day, declaration.id, JSON.stringify([{ account_id: source.id, asset_id: 1, delta_units: (-amount).toString() }, { account_id: wallet.id, asset_id: 1, delta_units: amount.toString() }])]);
+        await postSettlementTransaction(tx, {
+          correlationId: paymentCorrelation,
+          gameDay: day,
+          kind: 'ASSET_TRANSFER',
+          sourceType: 'COMMONS_DIVIDEND',
+          sourceId: declaration.id,
+          rulesVersion: 'commons-dividend-v1',
+          entries: [
+            { account_id: source.id, asset_id: 1, delta_units: (-amount).toString() },
+            { account_id: wallet.id, asset_id: 1, delta_units: amount.toString() },
+          ],
+        });
         await tx.query(`INSERT INTO commons_dividend_payments (id,declaration_id,territory_id,house_id,eligible_slot_quantity,amount_units,remainder_units,economic_transaction_id,correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,(SELECT id FROM economic_transactions WHERE correlation_id=$8),$8) ON CONFLICT (correlation_id) DO NOTHING`, [`COMMONS-PAYMENT-${declaration.id}-${holder.house_id}`, declaration.id, declaration.territory_id, holder.house_id, holder.slot_quantity, amount.toString(), allocation.remainderUnits.toString(), paymentCorrelation, paymentCorrelation]);
       }
       await tx.query("UPDATE commons_dividend_declarations SET status = 'SETTLED' WHERE id = $1", [declaration.id]);

@@ -7,7 +7,7 @@ const read = (path) => fs.readFileSync(path, 'utf8');
 test('Economy V2 certification: postings are atomic, balanced and idempotent', () => {
   const escrow = read('cloudflare/src/market-escrow.ts');
   const schema = read('db/baseline/01_schema.sql');
-  assert.match(escrow, /earth_post_transaction/);
+  assert.match(escrow, /postEconomicTransaction/);
   assert.match(escrow, /earth_post_settlement_batch/);
   assert.match(schema, /economic_entries/);
   assert.match(schema, /correlation_id.*UNIQUE|UNIQUE.*correlation_id/i);

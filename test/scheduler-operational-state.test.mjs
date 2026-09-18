@@ -16,7 +16,7 @@ test('scheduler keeps completion and retry work behind database leases', () => {
   const source = fs.readFileSync('cloudflare/src/scheduler-postgres.ts', 'utf8');
   assert.match(source, /earth_claim_settlement_day/);
   assert.match(source, /earth_heartbeat_settlement_day/);
-  assert.match(source, /earth_complete_settlement_day/);
+  assert.match(source, /earth_finalize_settlement_day/);
   assert.match(source, /earth_fail_settlement_day/);
   assert.match(source, /Settlement day lease lost/);
 });

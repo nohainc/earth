@@ -4,6 +4,7 @@ import { moneyToCents, centsToMoney } from './money.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { getActiveV5StandardCapacity, getV5CorporationCapacity } from './v5-capacity-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 
 function toJsonSafe<T>(value: T): T {
   if (typeof value === 'bigint') return value.toString() as T;
@@ -95,14 +96,13 @@ export async function spendCorporationBudget(
   repository: PostgresRepository,
   input: { actorId: string; corporationId: string; category: string; amount: number; correlationId: string },
 ): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const authority = await tx.query(`SELECT 1 FROM institution_governance_roles
       WHERE institution_id = $1 AND human_id = $2 AND status = 'ACTIVE'
         AND role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER')`, [input.corporationId, input.actorId]);
     if (!authority.rows[0]) throw new Error('Corporation spending permission is required');
     const amountUnits = moneyToCents(input.amount);
     if (amountUnits <= 0n) throw new Error('Public spending amount must be positive');
-    const clock = await readAuthoritativeGameTime(tx);
     const gameDay = clock.gameDay;
     const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [input.corporationId])).rows[0]?.status;
     const spendingCategory = budgetCategory(input.category);
@@ -129,16 +129,20 @@ export async function spendCorporationBudget(
     const operations = accounts.find((account) => account.account_type === 'OPERATIONS');
     if (!treasury || !operations) throw new Error('Corporation treasury or operations account is unavailable');
     if (BigInt(treasury.balance_units) < amountUnits) throw new Error('Corporation treasury cannot fund this spending');
-    const transaction = (await tx.query<{ id: string }>(
-      `SELECT earth_post_transaction($1, $2, $3, 'ASSET_TRANSFER', 'CORPORATION_INTERNAL', $4, 'corporation-fiscal-v2', $5::JSONB) AS id`,
-      [input.correlationId, gameDay, Number(world?.game_minute ?? 0), input.corporationId, JSON.stringify([
+    const transaction = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: 'CORPORATION_INTERNAL',
+      sourceId: input.corporationId,
+      rulesVersion: 'corporation-fiscal-v2',
+      entries: [
         { account_id: treasury.account_id, delta_units: (-amountUnits).toString(), asset_id: 1 },
         { account_id: operations.account_id, delta_units: amountUnits.toString(), asset_id: 1 },
-      ])],
-    )).rows[0];
+      ],
+    }, clock);
     // Treasury -> Operations is an internal allocation. It reserves no budget
     // authority and is not external spending; external settlement uses the
     // institution-spending service and is the only path that increments spent_units.
-    return { ok: true, amount: Number(centsToMoney(amountUnits)), corporationId: input.corporationId, category: input.category, gameDay, transactionId: transaction.id, internalAllocation: true, committed: budget.committed_units, spent: budget.spent_units, correlationId: input.correlationId };
+    return { ok: true, amount: Number(centsToMoney(amountUnits)), corporationId: input.corporationId, category: input.category, gameDay, transactionId: transaction.transactionId, internalAllocation: true, committed: budget.committed_units, spent: budget.spent_units, correlationId: input.correlationId };
   });
 }

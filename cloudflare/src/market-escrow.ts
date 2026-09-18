@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { postEconomicTransaction } from './economic-transaction-postgres.ts';
 
 export type EscrowEntry = { accountId: string; delta: bigint; assetId: number; reason: string };
 export type MarketReservation = { id: string; order_id: string; escrow_account_id: string; asset_id: number; reserved_units: string; remaining_units: string; status: string };
@@ -52,12 +53,21 @@ export async function ensureMarketEscrow(tx: PostgresRepository, ownerId: string
 
 export async function postEscrowTransaction(tx: PostgresRepository, day: number, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<boolean> {
   if (entries.length < 2) throw new Error('Escrow movement requires at least two entries');
-  const result = await tx.query<{ transaction_id: string }>(
-    `SELECT earth_post_transaction($1, $2, 0, 'MARKET_TRADE', 'MARKET', $3, 'market-v4', $4::jsonb) AS transaction_id`,
-    [correlationId, day, sourceId, JSON.stringify(entries.map((entry) => ({ account_id: entry.accountId, asset_id: entry.assetId, delta_units: entry.delta.toString(), reason_code: entry.reason })))],
-  );
-  if (!result.rows[0]) throw new Error('Market escrow transaction returned no result');
-  return Boolean(result.rows[0].transaction_id);
+  const result = await postEconomicTransaction(tx, {
+    correlationId,
+    gameDay: day,
+    kind: 'MARKET_TRADE',
+    sourceType: 'MARKET',
+    sourceId,
+    rulesVersion: 'market-v4',
+    entries: entries.map((entry) => ({
+      accountId: entry.accountId,
+      assetId: entry.assetId,
+      deltaUnits: entry.delta.toString(),
+      reasonCode: entry.reason,
+    })),
+  });
+  return Boolean(result.transactionId);
 }
 
 export async function postSettlementBatch(tx: PostgresRepository, day: number, correlationId: string, sourceId: string, entries: EscrowEntry[]): Promise<{ transactionId: string; created: boolean }> {

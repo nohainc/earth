@@ -73,7 +73,12 @@ export function toEarthError(error: unknown, fallbackCode: EarthErrorCode = 'INT
   return mapPostgresError(error) ?? earthError(fallbackCode, fallbackMessage);
 }
 
+import { isSettlementBarrierError, SettlementCatchupBarrierError } from './settlement-barrier-postgres.ts';
+
 export function errorResponse(error: unknown, correlationId?: string, fallbackMessage = 'The request could not be completed.', context: { requestId?: string | null; endpoint?: string | null } = {}): Response {
+  if (isSettlementBarrierError(error)) {
+    return error.toResponse();
+  }
   if (!(error instanceof EarthDomainError)) logBackendDiagnostic(error, { ...context, correlationId });
   const mapped = toEarthError(error, 'INTERNAL_ERROR', fallbackMessage);
   const body: Record<string, unknown> = { ok: false, code: mapped.code, error: mapped.publicMessage };

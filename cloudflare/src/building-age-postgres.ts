@@ -4,15 +4,16 @@ import { assessBuildingAge } from './building-age.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { rebuildV5CorporationSettlementProfile, refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-postgres.ts';
 import { assertEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 
 async function startCorporationCapitalProject(
   repository: PostgresRepository,
   input: { buildingId: string; humanId: string; projectKind: 'OVERHAUL' | 'GENERATION_RETROFIT'; targetGenerationId?: string; correlationId: string },
 ): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, buildingId: input.buildingId, correlationId: input.correlationId };
-    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+    const day = clock.gameDay;
     const building = (await tx.query<{ id: string; corporation_id: string; owner_economic_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string }>(
       `SELECT b.id, owner.id AS corporation_id, b.owner_economic_id, b.catalog_id, c.construction_credit_units::TEXT,
               c.definition_version, b.status
@@ -46,7 +47,17 @@ async function startCorporationCapitalProject(
     const treasury = (await tx.query<{ id: string; balance_units: string }>(`SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY' AND status = 'ACTIVE' FOR UPDATE`, [building.owner_economic_id])).rows[0];
     const sink = (await tx.query<{ id: string }>(`SELECT a.id::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND o.owner_type = 'SYSTEM' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`)).rows[0];
     if (!treasury || !sink || BigInt(treasury.balance_units) < cost) throw new Error('Insufficient Corporation Treasury for capital project');
-    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER',$3,$4,'capital-project-v5',$5::JSONB)`, [input.correlationId, day, input.projectKind, input.buildingId, JSON.stringify([{ account_id: treasury.id, asset_id: 1, delta_units: (-cost).toString() }, { account_id: sink.id, asset_id: 1, delta_units: cost.toString() }])]);
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: input.projectKind,
+      sourceId: input.buildingId,
+      rulesVersion: 'capital-project-v5',
+      entries: [
+        { account_id: treasury.id, asset_id: 1, delta_units: (-cost).toString() },
+        { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
+      ],
+    }, clock);
     const projectId = `PROJECT-CAPITAL-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,NULL,$4,$5,'{}'::JSONB,$6,$7,'IN_PROGRESS',$8,NULL,$9,$10)`, [projectId, building.id, building.owner_economic_id, building.catalog_id, cost.toString(), day, day + 1, input.correlationId, input.projectKind, input.targetGenerationId ?? null]);
     await tx.query("UPDATE buildings SET status = 'UNDER_CONSTRUCTION' WHERE id = $1", [building.id]);
@@ -112,8 +123,8 @@ export async function startBuildingCapitalProject(
     `SELECT owner.owner_type FROM buildings b JOIN owner_registry owner ON owner.economic_id = b.owner_economic_id WHERE b.id = $1`, [input.buildingId],
   )).rows[0];
   if (owner?.owner_type === 'CORPORATION') return startCorporationCapitalProject(repository, input);
-  return repository.transaction(async (tx) => {
-    const day = (await readAuthoritativeGameTime(tx)).gameDay;
+  return runEconomicMutation(repository, async (tx, clock) => {
+    const day = clock.gameDay;
     const building = (await tx.query<{ id: string; owner_economic_id: string; catalog_id: string; construction_credit_units: string; definition_version: number; status: string; house_id: string }>(
       `SELECT b.id, b.owner_economic_id, b.catalog_id, c.construction_credit_units::TEXT,
               c.definition_version, b.status, h.house_id
@@ -155,10 +166,17 @@ export async function startBuildingCapitalProject(
          AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`,
     )).rows[0];
     if (!wallet || !sink || BigInt(wallet.balance_units) < cost) throw new Error('Insufficient CREDIT for capital project');
-    await tx.query(`SELECT earth_post_transaction($1,$2,1439,'ASSET_TRANSFER',$3,$4,'capital-project-v5',$5::JSONB)`, [input.correlationId, day, input.projectKind, input.buildingId, JSON.stringify([
-      { account_id: wallet.id, asset_id: 1, delta_units: (-cost).toString() },
-      { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
-    ])]);
+    await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'ASSET_TRANSFER',
+      sourceType: input.projectKind,
+      sourceId: input.buildingId,
+      rulesVersion: 'capital-project-v5',
+      entries: [
+        { account_id: wallet.id, asset_id: 1, delta_units: (-cost).toString() },
+        { account_id: sink.id, asset_id: 1, delta_units: cost.toString() },
+      ],
+    }, clock);
     const projectId = `PROJECT-CAPITAL-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     await tx.query(`INSERT INTO construction_projects
       (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units,

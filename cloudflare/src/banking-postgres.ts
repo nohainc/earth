@@ -1,6 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { quoteLoan } from './banking.ts';
-import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { runEconomicMutation, postEconomicTransaction, postSettlementTransaction } from './settlement-barrier-postgres.ts';
 
 type CreditFacts = { borrowerEconomicId: string; walletId: string; walletBalance: bigint; reserveId: string; reserveBalance: bigint; operationsId: string; cashflow: bigint; policy: any; day: number };
 
@@ -40,7 +40,7 @@ export async function getBankLoanQuote(repository: PostgresRepository, input: { 
 }
 
 export async function originateBankLoan(repository: PostgresRepository, input: { humanId: string; requestedUnits: bigint; termDays: number; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const existing = (await tx.query<{ id: string }>('SELECT id FROM bank_loans WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (existing) return { ok: true, alreadyProcessed: true, loanId: existing.id, correlationId: input.correlationId };
     const facts = await creditFacts(tx, input.humanId);
@@ -52,10 +52,22 @@ export async function originateBankLoan(repository: PostgresRepository, input: {
     if (BigInt(locked.rows[0]?.balance_units ?? 0) < input.requestedUnits || BigInt(reserve.rows[0]?.balance_units ?? 0) < input.requestedUnits) throw new Error('Loan facts changed; retry the quote');
     const day = facts.day;
     const loanId = `LOAN-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
-    const posted = await tx.query<{ transaction_id: string }>('SELECT transaction_id FROM earth_post_transaction($1,$2,0,\'BANK_LOAN_ORIGINATION\',\'BANK\',\'GLOBAL-BANK\',\'bank-credit-v1\',$3::JSONB)', [input.correlationId, day, JSON.stringify([{ account_id: facts.walletId, asset_id: 1, delta_units: (-input.requestedUnits).toString() }, { account_id: facts.operationsId, asset_id: 1, delta_units: input.requestedUnits.toString() }, { account_id: facts.reserveId, asset_id: 1, delta_units: (-input.requestedUnits).toString() }, { account_id: facts.walletId, asset_id: 1, delta_units: input.requestedUnits.toString() }])]);
+    const posted = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'BANK_LOAN_ORIGINATION',
+      sourceType: 'BANK',
+      sourceId: 'GLOBAL-BANK',
+      rulesVersion: 'bank-credit-v1',
+      entries: [
+        { account_id: facts.walletId, asset_id: 1, delta_units: (-input.requestedUnits).toString() },
+        { account_id: facts.operationsId, asset_id: 1, delta_units: input.requestedUnits.toString() },
+        { account_id: facts.reserveId, asset_id: 1, delta_units: (-input.requestedUnits).toString() },
+        { account_id: facts.walletId, asset_id: 1, delta_units: input.requestedUnits.toString() },
+      ],
+    }, clock);
     const maturity = day + input.termDays;
     const interest = (input.requestedUnits * BigInt(quote.rateBps) * BigInt(input.termDays)) / 36500n;
-    await tx.query(`INSERT INTO bank_loans (id, borrower_economic_id, bank_economic_id, original_principal_units, outstanding_principal_units, accrued_interest_units, rate_bps, credit_limit_units, term_days, origination_game_day, maturity_game_day, next_payment_game_day, status, origination_transaction_id, correlation_id) VALUES ($1,$2,'ECON-GLOBAL-BANK-001',$3,$3,0,$4,$3,$5,$6,$7,$7,'PERFORMING',$8,$9)`, [loanId, facts.borrowerEconomicId, input.requestedUnits.toString(), quote.rateBps.toString(), input.termDays, day, maturity, posted.rows[0].transaction_id, input.correlationId]);
+    await tx.query(`INSERT INTO bank_loans (id, borrower_economic_id, bank_economic_id, original_principal_units, outstanding_principal_units, accrued_interest_units, rate_bps, credit_limit_units, term_days, origination_game_day, maturity_game_day, next_payment_game_day, status, origination_transaction_id, correlation_id) VALUES ($1,$2,'ECON-GLOBAL-BANK-001',$3,$3,0,$4,$3,$5,$6,$7,$7,'PERFORMING',$8,$9)`, [loanId, facts.borrowerEconomicId, input.requestedUnits.toString(), quote.rateBps.toString(), input.termDays, day, maturity, posted.transactionId, input.correlationId]);
     await tx.query(`INSERT INTO bank_loan_collateral (id, loan_id, owner_economic_id, collateral_type, reference_id, valuation_units, haircut_bps, pledged_game_day, correlation_id) VALUES ($1,$2,$3,'CASH',$4,$5,0,$6,$7)`, [`COLLATERAL-${loanId}`, loanId, facts.borrowerEconomicId, facts.walletId, input.requestedUnits.toString(), day, `collateral:${input.correlationId}`]);
     await tx.query(`INSERT INTO bank_loan_schedules (id, loan_id, installment_no, due_game_day, principal_due_units, interest_due_units, correlation_id) VALUES ($1,$2,1,$3,$4,$5,$6)`, [`SCHEDULE-${loanId}`, loanId, maturity, input.requestedUnits.toString(), interest.toString(), `schedule:${input.correlationId}`]);
     return { ok: true, loanId, principalUnits: input.requestedUnits.toString(), interestUnits: interest.toString(), rateBps: quote.rateBps.toString(), maturityGameDay: maturity, correlationId: input.correlationId };
@@ -63,7 +75,7 @@ export async function originateBankLoan(repository: PostgresRepository, input: {
 }
 
 export async function repayBankLoan(repository: PostgresRepository, input: { humanId: string; loanId: string; amountUnits?: bigint; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const existing = (await tx.query<{ id: string }>('SELECT id FROM bank_loan_payments WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (existing) return { ok: true, alreadyProcessed: true, paymentId: existing.id, correlationId: input.correlationId };
     const facts = await creditFacts(tx, input.humanId);
@@ -84,11 +96,18 @@ export async function repayBankLoan(repository: PostgresRepository, input: { hum
       entries.push({ account_id: facts.operationsId, asset_id: 1, delta_units: (-collateral).toString() });
       entries.push({ account_id: facts.walletId, asset_id: 1, delta_units: collateral.toString() });
     }
-    const posted = await tx.query<{ transaction_id: string }>('SELECT transaction_id FROM earth_post_transaction($1,$2,0,\'BANK_LOAN_REPAYMENT\',\'HOUSE\',$3,\'bank-credit-v1\',$4::JSONB)', [input.correlationId, facts.day, input.humanId, JSON.stringify(entries)]);
+    const posted = await postEconomicTransaction(tx, {
+      correlationId: input.correlationId,
+      kind: 'BANK_LOAN_REPAYMENT',
+      sourceType: 'HOUSE',
+      sourceId: input.humanId,
+      rulesVersion: 'bank-credit-v1',
+      entries,
+    }, clock);
     const paymentId = `PAYMENT-${input.correlationId}`;
-    await tx.query(`INSERT INTO bank_loan_payments (id, loan_id, amount_units, principal_units, interest_units, payment_transaction_id, game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [paymentId, input.loanId, payment.toString(), principalPayment.toString(), interest.toString(), posted.rows[0].transaction_id, facts.day, input.correlationId]);
+    await tx.query(`INSERT INTO bank_loan_payments (id, loan_id, amount_units, principal_units, interest_units, payment_transaction_id, game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [paymentId, input.loanId, payment.toString(), principalPayment.toString(), interest.toString(), posted.transactionId, facts.day, input.correlationId]);
     const remainingClaim = total - payment;
-    await tx.query("UPDATE bank_loan_schedules SET paid_units = LEAST(principal_due_units + interest_due_units, paid_units + $1), status = CASE WHEN paid_units + $1 >= principal_due_units + interest_due_units THEN 'PAID' ELSE 'PARTIAL' END, payment_transaction_id = $2 WHERE loan_id = $3 AND status IN ('DUE','PARTIAL','ARREARS')", [payment.toString(), posted.rows[0].transaction_id, input.loanId]);
+    await tx.query("UPDATE bank_loan_schedules SET paid_units = LEAST(principal_due_units + interest_due_units, paid_units + $1), status = CASE WHEN paid_units + $1 >= principal_due_units + interest_due_units THEN 'PAID' ELSE 'PARTIAL' END, payment_transaction_id = $2 WHERE loan_id = $3 AND status IN ('DUE','PARTIAL','ARREARS')", [payment.toString(), posted.transactionId, input.loanId]);
     if (remainingClaim === 0n) await tx.query("UPDATE bank_loan_collateral SET status = 'RELEASED', released_game_day = $1 WHERE loan_id = $2 AND status = 'PLEDGED'", [facts.day, input.loanId]);
     await tx.query("UPDATE bank_loans SET outstanding_principal_units = outstanding_principal_units - $1, accrued_interest_units = GREATEST(0, accrued_interest_units - $2), status = CASE WHEN outstanding_principal_units - $1 = 0 AND accrued_interest_units - $2 <= 0 THEN 'PAID' WHEN status = 'DELINQUENT' THEN 'DELINQUENT' ELSE 'PERFORMING' END WHERE id = $3", [principalPayment.toString(), interest.toString(), input.loanId]);
     return { ok: true, paymentId, loanId: input.loanId, principalUnits: principalPayment.toString(), interestUnits: interest.toString(), totalUnits: payment.toString(), remainingUnits: remainingClaim.toString(), correlationId: input.correlationId };
@@ -96,7 +115,7 @@ export async function repayBankLoan(repository: PostgresRepository, input: { hum
 }
 
 export async function addBankLoanGuarantee(repository: PostgresRepository, input: { humanId: string; loanId: string; guaranteedUnits: bigint; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  return runEconomicMutation(repository, async (tx, clock) => {
     const existing = (await tx.query<{ id: string }>('SELECT id FROM bank_loan_guarantees WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (existing) return { ok: true, alreadyProcessed: true, guaranteeId: existing.id, correlationId: input.correlationId };
     const facts = await creditFacts(tx, input.humanId);
@@ -133,7 +152,18 @@ export async function settleBankLoanRisk(tx: PostgresRepository, gameDay: number
         const bankAccounts = await tx.query<{ operations_id: string; reserve_id: string }>("SELECT o.id::TEXT AS operations_id, r.id::TEXT AS reserve_id FROM economic_accounts o JOIN economic_accounts r ON r.owner_economic_id = o.owner_economic_id AND r.asset_id = 1 AND r.account_type = 'RESERVE' AND r.status = 'ACTIVE' WHERE o.owner_economic_id = 'ECON-GLOBAL-BANK-001' AND o.asset_id = 1 AND o.account_type = 'OPERATIONS' AND o.status = 'ACTIVE'");
         const bank = bankAccounts.rows[0];
         if (!bank) throw new Error('Bank reserve accounts are unavailable for liquidation');
-        await tx.query('SELECT earth_post_transaction($1,$2,0,\'BANK_COLLATERAL_LIQUIDATION\',\'BANK\',\'GLOBAL-BANK\',\'bank-credit-v1\',$3::JSONB)', [`liquidation:${loan.id}:${gameDay}`, gameDay, JSON.stringify([{ account_id: bank.operations_id, asset_id: 1, delta_units: (-recovered).toString() }, { account_id: bank.reserve_id, asset_id: 1, delta_units: recovered.toString() }])]);
+        await postSettlementTransaction(tx, {
+          correlationId: `liquidation:${loan.id}:${gameDay}`,
+          gameDay,
+          kind: 'BANK_COLLATERAL_LIQUIDATION',
+          sourceType: 'BANK',
+          sourceId: 'GLOBAL-BANK',
+          rulesVersion: 'bank-credit-v1',
+          entries: [
+            { account_id: bank.operations_id, asset_id: 1, delta_units: (-recovered).toString() },
+            { account_id: bank.reserve_id, asset_id: 1, delta_units: recovered.toString() },
+          ],
+        });
         await tx.query("UPDATE bank_loan_collateral SET status = 'LIQUIDATED', released_game_day = $1 WHERE loan_id = $2 AND status = 'PLEDGED'", [gameDay, loan.id]);
       }
       await tx.query(`INSERT INTO bank_loan_resolutions (id, loan_id, resolution_type, claim_units, recovered_units, priority_rank, game_day, details, correlation_id) VALUES ($1,$2,'LIQUIDATION',$3,$4,1,$5,$6::JSONB,$7) ON CONFLICT (correlation_id) DO NOTHING`, [`RESOLVE-LIQUIDATION-${loan.id}-${gameDay}`, loan.id, (BigInt(loan.outstanding_principal_units) + BigInt(loan.accrued_interest_units) + dailyInterest).toString(), recovered.toString(), gameDay, JSON.stringify({ defaultAgeDays: 7, collateralLiquidated: recovered.toString() }), `liquidation:${loan.id}:${gameDay}`]);

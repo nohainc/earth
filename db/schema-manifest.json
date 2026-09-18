@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 131,
+  "migrationVersion": 134,
   "baseline": "db/baseline/001_baseline.sql",
   "requiredTables": {
     "auth_accounts": [
@@ -306,6 +306,16 @@
       "status",
       "correlation_id",
       "completed_transaction_id"
+    ],
+    "market_processing_control": [
+      "id",
+      "processed_through_market_batch",
+      "status",
+      "current_market_batch",
+      "lease_owner",
+      "lease_expires_at",
+      "error_message",
+      "updated_at"
     ],
     "market_orders": [
       "id",
@@ -868,6 +878,7 @@
     "auth_email_deliveries_account_idx",
     "market_orders_open_idx",
     "market_fills_orders_idx",
+    "market_processing_control_lease_idx",
     "tax_obligations_taxpayer_idx",
     "financial_obligations_debtor_status_idx",
     "financial_obligations_creditor_idx",
@@ -894,7 +905,6 @@
     "earth_get_current_game_time",
     "earth_absolute_game_minute",
     "earth_advance_settlement_cursor",
-    "earth_advance_world_clock",
     "earth_post_settlement_batch",
     "earth_refresh_territory_capacity",
     "earth_validate_building_ownership",

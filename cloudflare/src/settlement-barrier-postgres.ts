@@ -51,13 +51,23 @@ export class SettlementCatchupBarrierError extends Error {
   }
 }
 
+export type EconomicMutationContext = SettlementCursorState & {
+  gameDay: number;
+  gameMinute: number;
+  totalGameMinutes: number;
+};
+
+export function isSettlementBarrierError(error: unknown): error is SettlementCatchupBarrierError {
+  return error instanceof SettlementCatchupBarrierError || (Boolean(error) && typeof error === 'object' && (error as { name?: unknown }).name === 'SettlementCatchupBarrierError');
+}
+
 /**
  * Asserts that economic daily settlement is completely caught up through lastClosedGameDay.
  * Throws SettlementCatchupBarrierError if settlement is behind or failed.
  */
 export async function assertEconomyCaughtUp(
   repository: PostgresRepository | { query: PostgresRepository['query'] },
-): Promise<SettlementCursorState & { gameDay: number; gameMinute: number; totalGameMinutes: number }> {
+): Promise<EconomicMutationContext> {
   const clock = await readAuthoritativeGameTime(repository);
   const cursor = await getSettlementCursor(repository, clock.gameDay);
 
@@ -72,4 +82,31 @@ export async function assertEconomyCaughtUp(
     totalGameMinutes: clock.totalGameMinutes,
   };
 }
+
+/**
+ * Runs an economic mutation inside a PostgreSQL transaction, asserting that
+ * economic daily settlement is completely caught up before executing the mutation.
+ * If settlement is behind or failed, SettlementCatchupBarrierError is thrown (HTTP 409).
+ */
+export async function runEconomicMutation<T>(
+  repository: PostgresRepository,
+  mutation: (tx: PostgresRepository, context: EconomicMutationContext) => Promise<T>,
+): Promise<T> {
+  return repository.transaction(async (tx) => {
+    const context = await assertEconomyCaughtUp(tx);
+    return mutation(tx, context);
+  });
+}
+
+export const withSettledEconomy = runEconomicMutation;
+
+export {
+  postEconomicTransaction,
+  postSettlementTransaction,
+  type EconomicEntry,
+  type EconomicTransactionInput,
+  type EconomicTransactionResult,
+  type SettlementTransactionInput,
+  type GameTimeContext,
+} from './economic-transaction-postgres.ts';
 

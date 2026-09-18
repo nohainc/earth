@@ -12,6 +12,8 @@ export type SchedulerHeartbeatResult = {
   settledDays: number;
   settlementStatus?: string;
   marketSettlements: number;
+  marketProcessedThroughBatch?: number;
+  marketEligibleBatch?: number;
   newDay?: boolean;
   productionEvents?: number;
 };
@@ -19,7 +21,6 @@ export type SchedulerHeartbeatResult = {
 export type SchedulerHeartbeatOptions = {
   maxCatchupDays?: number;
   workBudgetMs?: number;
-  minutesPerTick?: number;
   features?: FeatureConfig;
 };
 
@@ -57,7 +58,6 @@ export async function runSchedulerHeartbeat(
 ): Promise<SchedulerHeartbeatResult> {
   const maxCatchupDays = positiveInteger(options.maxCatchupDays ?? 3, 3);
   const workBudgetMs = positiveInteger(options.workBudgetMs ?? 20_000, 20_000);
-  const minutesPerTick = positiveInteger(options.minutesPerTick ?? 60, 60);
   const features = options.features ?? featureConfig(undefined);
   const correlationId = `cron:${String(scheduledTime)}`;
   const prior = await repository.query<{ id: string; status: string }>('SELECT id, status FROM scheduler_runs WHERE correlation_id = $1', [correlationId]);
@@ -92,7 +92,6 @@ export async function runSchedulerHeartbeat(
       repository,
       String(scheduledTime),
       features,
-      minutesPerTick,
       runId,
       { maxCatchupDays, workBudgetMs },
     );
@@ -115,6 +114,8 @@ export async function runSchedulerHeartbeat(
       settledDays: tick.settledDays,
       settlementStatus: tick.settlementStatus,
       marketSettlements: tick.marketSettlements,
+      marketProcessedThroughBatch: tick.marketProcessedThroughBatch,
+      marketEligibleBatch: tick.marketEligibleBatch,
       newDay: tick.newDay,
       productionEvents: tick.productionEvents,
     };
