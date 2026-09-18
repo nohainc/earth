@@ -41,7 +41,8 @@ class CommandCenter extends StatefulWidget {
   State<CommandCenter> createState() => _CommandCenterState();
 }
 
-class _CommandCenterState extends State<CommandCenter> {
+class _CommandCenterState extends State<CommandCenter>
+    with WidgetsBindingObserver {
   final api = const EarthApi();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _sectionKeys = <String, Key>{
@@ -101,6 +102,7 @@ class _CommandCenterState extends State<CommandCenter> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final initialSec = NavigationDeepLink.getInitialSection();
     if (initialSec != null && initialSec.isNotEmpty) {
       selectedSection = initialSec;
@@ -614,7 +616,16 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncWorldSilently();
+      _refreshEvents();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     eventTimer?.cancel();
     liveReconnectTimer?.cancel();
     pollingFallbackTimer?.cancel();

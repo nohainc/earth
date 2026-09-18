@@ -77,60 +77,80 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onDayRecalculateTrigger,
     this.onDayPrefetch,
     this.onDayRollover,
+    this.elapsedDurationProvider,
   });
 
   final VoidCallback? onDayRecalculateTrigger;
   final VoidCallback? onDayPrefetch;
   final VoidCallback? onDayRollover;
+  final Duration Function()? elapsedDurationProvider;
 
   @override
   State<TopFixedHudPanel> createState() => _TopFixedHudPanelState();
 }
 
-class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
+class _TopFixedHudPanelState extends State<TopFixedHudPanel>
+    with WidgetsBindingObserver {
   Timer? _ticker;
-  int _localElapsedSeconds = 0;
+  final Stopwatch _stopwatch = Stopwatch();
   int _baseElapsedRealSeconds = 0;
   int? _lastSeenDay;
   int? _lastRecalculateDay;
   int? _lastPrefetchDay;
 
+  int get _currentTotalRealSeconds {
+    final elapsedSec = widget.elapsedDurationProvider != null
+        ? widget.elapsedDurationProvider!().inSeconds
+        : (_stopwatch.elapsedMilliseconds ~/ 1000);
+    return _baseElapsedRealSeconds + elapsedSec;
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _syncClockWithServer();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {
-          _localElapsedSeconds++;
-        });
-        final totalRealSeconds = _baseElapsedRealSeconds + _localElapsedSeconds;
-        final currentDay = (totalRealSeconds ~/ 1440) + 1;
-        final inDayMinute = totalRealSeconds % 1440;
-
-        // Stage 1: Recalculation Trigger at 23:50 (Minute 1430)
-        if (inDayMinute >= 1430 &&
-            inDayMinute < 1439 &&
-            _lastRecalculateDay != currentDay) {
-          _lastRecalculateDay = currentDay;
-          widget.onDayRecalculateTrigger?.call();
-        }
-
-        // Stage 2: Prefetch updated data at 23:59 (Minute 1439)
-        if (inDayMinute == 1439 && _lastPrefetchDay != currentDay) {
-          _lastPrefetchDay = currentDay;
-          widget.onDayPrefetch?.call();
-        }
-
-        // Stage 3: Rollover at 00:00 (Midnight / New Day)
-        if (_lastSeenDay != null && currentDay > _lastSeenDay!) {
-          _lastSeenDay = currentDay;
-          widget.onDayRollover?.call();
-        } else {
-          _lastSeenDay ??= currentDay;
-        }
-      }
+      _evaluateClockTick();
     });
+  }
+
+  void _evaluateClockTick({bool forceRepaint = false}) {
+    if (!mounted) return;
+    final totalRealSeconds = _currentTotalRealSeconds;
+    final currentDay = (totalRealSeconds ~/ 1440) + 1;
+    final inDayMinute = totalRealSeconds % 1440;
+
+    // Stage 1: Recalculation Trigger at 23:50 (Minute 1430)
+    if (inDayMinute >= 1430 &&
+        inDayMinute < 1439 &&
+        _lastRecalculateDay != currentDay) {
+      _lastRecalculateDay = currentDay;
+      widget.onDayRecalculateTrigger?.call();
+    }
+
+    // Stage 2: Prefetch updated data at 23:59 (Minute 1439)
+    if (inDayMinute == 1439 && _lastPrefetchDay != currentDay) {
+      _lastPrefetchDay = currentDay;
+      widget.onDayPrefetch?.call();
+    }
+
+    // Stage 3: Rollover at 00:00 (Midnight / New Day)
+    if (_lastSeenDay != null && currentDay > _lastSeenDay!) {
+      _lastSeenDay = currentDay;
+      widget.onDayRollover?.call();
+    } else {
+      _lastSeenDay ??= currentDay;
+    }
+
+    setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _evaluateClockTick(forceRepaint: true);
+    }
   }
 
   @override
@@ -156,12 +176,15 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     } catch (_) {
       _baseElapsedRealSeconds = 0;
     }
-    _localElapsedSeconds = 0;
+    _stopwatch.reset();
+    _stopwatch.start();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
+    _stopwatch.stop();
     super.dispose();
   }
 
@@ -181,7 +204,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
   (YearAndDay, String) _getLiveClockData() {
     try {
-      final totalRealSeconds = _baseElapsedRealSeconds + _localElapsedSeconds;
+      final totalRealSeconds = _currentTotalRealSeconds;
       final totalGameMinutes = totalRealSeconds;
       final inDayMinute = totalGameMinutes % 1440;
       final totalDays = (totalGameMinutes ~/ 1440) + 1;

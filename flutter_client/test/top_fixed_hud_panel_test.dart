@@ -148,6 +148,7 @@ void main() {
     bool recalculateTriggered = false;
     bool prefetchTriggered = false;
     bool rolloverTriggered = false;
+    int simulatedSeconds = 0;
 
     // Set clock at 23:49:59 (total minute 1429) so 1 second advance hits 23:50:00 (minute 1430)
     final epochStartMs =
@@ -169,6 +170,7 @@ void main() {
         home: Scaffold(
           body: TopFixedHudPanel(
             state: stateAt2349,
+            elapsedDurationProvider: () => Duration(seconds: simulatedSeconds),
             onDayRecalculateTrigger: () => recalculateTriggered = true,
             onDayPrefetch: () => prefetchTriggered = true,
             onDayRollover: () => rolloverTriggered = true,
@@ -178,17 +180,20 @@ void main() {
     );
 
     // Advance 1 real second -> hits 23:50:00 (minute 1430)
+    simulatedSeconds += 1;
     await tester.pump(const Duration(seconds: 1));
     expect(recalculateTriggered, isTrue);
     expect(prefetchTriggered, isFalse);
     expect(rolloverTriggered, isFalse);
 
     // Advance 9 real seconds -> hits 23:59:00 (minute 1439)
+    simulatedSeconds += 9;
     await tester.pump(const Duration(seconds: 9));
     expect(prefetchTriggered, isTrue);
     expect(rolloverTriggered, isFalse);
 
     // Advance 1 real second -> hits 00:00:00 of Day 2 (minute 0)
+    simulatedSeconds += 1;
     await tester.pump(const Duration(seconds: 1));
     expect(rolloverTriggered, isTrue);
   });
@@ -254,4 +259,37 @@ void main() {
     expect(find.text('CATCHING UP (-2d)'), findsOneWidget);
     expect(find.byIcon(Icons.sync), findsOneWidget);
   });
+
+  testWidgets('TopFixedHudPanel handles AppLifecycleState.resumed with monotonic anchor',
+      (tester) async {
+    final state = EarthState({
+      'clock': {
+        'day': 10,
+        'minute': 300,
+        'serverCurrentTime': 1771412400000,
+      },
+      'human': {'id': 'H-1', 'name': 'Tester'},
+      'world': {'health': 100},
+      'resources': {},
+      'institutions': {'city': {'name': 'Neo Tokyo'}},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TopFixedHudPanel(
+            state: state,
+          ),
+        ),
+      ),
+    );
+
+    // Simulate app resuming
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    // Verify clock is displayed
+    expect(find.byType(TopFixedHudPanel), findsOneWidget);
+  });
 }
+
