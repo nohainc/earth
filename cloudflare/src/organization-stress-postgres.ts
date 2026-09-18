@@ -56,6 +56,8 @@ export async function openOrganizationResolutionCase(repository: PostgresReposit
   });
 }
 
+export const createOrganizationResolutionCase = openOrganizationResolutionCase;
+
 async function executeOrganizationResolutionInTransaction(tx: PostgresRepository, caseId: string, gameDay: number): Promise<Record<string, unknown>> {
   const resolution = (await tx.query<any>("SELECT * FROM organization_resolution_cases WHERE id = $1 AND status = 'APPROVED' AND effective_game_day <= $2 FOR UPDATE", [caseId, gameDay])).rows[0];
   if (!resolution) return { ok: true, alreadyProcessed: true, caseId };
