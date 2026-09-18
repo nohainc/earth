@@ -1901,6 +1901,7 @@ class _ProposalCard extends StatelessWidget {
       final closesDay =
           asInt(proposal['closes_game_day'] ?? proposal['closesGameDay']);
       if (closesDay == null) return null;
+      final ruleId = proposal['rule_version_id'] ?? proposal['ruleVersionId'];
       final rawRules = state.governance['legacyRules'] is List
           ? (state.governance['legacyRules'] as List)
           : (state.governance['rules'] is List
