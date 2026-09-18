@@ -49,8 +49,36 @@ test('getSettlementCursor calculates backlog correctly against lastClosedGameDay
     },
   };
 
-  const cursorPaused = await getSettlementCursor(repoPaused, 5);
-  assert.equal(cursorPaused.status, 'PAUSED');
+  // Terminal failure detection on settledThrough + 1
+  const repoFailed = {
+    query: async (sql, params = []) => {
+      if (sql.includes('daily_settlement_control')) {
+        return { rows: [{ status: 'active', settled_through_game_day: '2' }] };
+      }
+      if (sql.includes('daily_settlement_runs') && sql.includes("status = 'failed'")) {
+        const day = Number(params[0]);
+        if (day === 3) {
+          return {
+            rows: [{
+              status: 'failed',
+              current_phase: 'building_settlement',
+              error_message: 'Deadlock in shard 4',
+            }],
+          };
+        }
+      }
+      return { rows: [] };
+    },
+  };
+
+  const cursorFailed = await getSettlementCursor(repoFailed, 5);
+  assert.equal(cursorFailed.settledThroughGameDay, 2);
+  assert.equal(cursorFailed.lastClosedGameDay, 4);
+  assert.equal(cursorFailed.backlogDays, 2);
+  assert.equal(cursorFailed.status, 'FAILED');
+  assert.equal(cursorFailed.failedGameDay, 3);
+  assert.equal(cursorFailed.failedPhase, 'building_settlement');
+  assert.equal(cursorFailed.failedError, 'Deadlock in shard 4');
 });
 
 test('assertEconomyCaughtUp enforces settlement barrier for economic mutations', async () => {
@@ -114,6 +142,62 @@ test('assertEconomyCaughtUp enforces settlement barrier for economic mutations',
       assert.equal(err.currentGameDay, 5);
       assert.equal(err.settledThroughGameDay, 2);
       assert.equal(err.lastClosedGameDay, 4);
+      return true;
+    },
+  );
+
+  // Failed: currentGameDay 5, day 3 failed -> throws WORLD_SETTLEMENT_FAILED
+  const failedRepo = {
+    query: async (sql, params = []) => {
+      if (sql.includes('earth_get_current_game_time()')) {
+        return {
+          rows: [{
+            game_day: '5',
+            game_minute: 0,
+            total_game_minutes: '5760',
+            genesis_at: new Date('2026-01-01T00:00:00Z'),
+            server_now: new Date('2026-01-01T01:36:00Z'),
+            elapsed_real_seconds: '5760',
+            real_seconds_per_game_minute: 1,
+          }],
+        };
+      }
+      if (sql.includes('daily_settlement_control')) {
+        return { rows: [{ status: 'active', settled_through_game_day: '2' }] };
+      }
+      if (sql.includes('daily_settlement_runs') && sql.includes("status = 'failed'")) {
+        const day = Number(params[0]);
+        if (day === 3) {
+          return {
+            rows: [{
+              status: 'failed',
+              current_phase: 'tax_reconciliation',
+              error_message: 'Tax calculation overflow',
+            }],
+          };
+        }
+      }
+      return { rows: [] };
+    },
+  };
+
+  await assert.rejects(
+    async () => {
+      await assertEconomyCaughtUp(failedRepo);
+    },
+    (err) => {
+      assert.ok(err instanceof SettlementCatchupBarrierError);
+      assert.equal(err.statusCode, 409);
+      assert.equal(err.code, 'WORLD_SETTLEMENT_FAILED');
+      assert.equal(err.currentGameDay, 5);
+      assert.equal(err.settledThroughGameDay, 2);
+      assert.equal(err.lastClosedGameDay, 4);
+      assert.equal(err.failedGameDay, 3);
+      assert.equal(err.failedPhase, 'tax_reconciliation');
+      assert.equal(err.failedError, 'Tax calculation overflow');
+      assert.match(err.message, /Economic settlement failed on day 3/);
+      const res = err.toResponse();
+      assert.equal(res.status, 409);
       return true;
     },
   );

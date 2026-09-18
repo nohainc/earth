@@ -15,6 +15,9 @@ export type SettlementCursorState = {
   lastClosedGameDay: number;
   backlogDays: number;
   status: 'CURRENT' | 'CATCHING_UP' | 'FAILED' | 'PAUSED';
+  failedGameDay?: number | null;
+  failedPhase?: string | null;
+  failedError?: string | null;
 };
 
 /**
@@ -83,6 +86,7 @@ export async function readAuthoritativeGameTime(
 
 /**
  * Reads the O(1) contiguous settlement cursor and derives backlog relative to lastClosedGameDay.
+ * Detects terminal failures on the next settlement day (settledThroughGameDay + 1).
  */
 export async function getSettlementCursor(
   repository: PostgresRepository | { query: PostgresRepository['query'] },
@@ -107,10 +111,31 @@ export async function getSettlementCursor(
   const backlogDays = Math.max(0, lastClosed - settledThroughGameDay);
 
   let status: SettlementCursorState['status'] = 'CURRENT';
+  let failedGameDay: number | null = null;
+  let failedPhase: string | null = null;
+  let failedError: string | null = null;
+
   if (controlStatus === 'paused') {
     status = 'PAUSED';
   } else if (backlogDays > 0) {
-    status = 'CATCHING_UP';
+    const nextDay = settledThroughGameDay + 1;
+    const failureRun = await repository.query<{
+      status: string;
+      current_phase: string | null;
+      error_message: string | null;
+    }>(
+      "SELECT status, current_phase, error_message FROM daily_settlement_runs WHERE game_day = $1 AND status = 'failed'",
+      [nextDay],
+    ).catch(() => ({ rows: [] }));
+
+    if (failureRun.rows.length > 0 && failureRun.rows[0]?.status === 'failed') {
+      status = 'FAILED';
+      failedGameDay = nextDay;
+      failedPhase = failureRun.rows[0].current_phase ?? null;
+      failedError = failureRun.rows[0].error_message ?? null;
+    } else {
+      status = 'CATCHING_UP';
+    }
   }
 
   return {
@@ -118,5 +143,6 @@ export async function getSettlementCursor(
     lastClosedGameDay: lastClosed,
     backlogDays,
     status,
+    ...(failedGameDay != null ? { failedGameDay, failedPhase, failedError } : {}),
   };
 }

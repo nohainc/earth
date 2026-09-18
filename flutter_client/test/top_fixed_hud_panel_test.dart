@@ -192,4 +192,66 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(rolloverTriggered, isTrue);
   });
+
+  testWidgets('TopFixedHudPanel renders FAILED and CATCHING_UP settlement badges',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    // 1. FAILED settlement state
+    final failedState = EarthState({
+      'clock': {'day': 5, 'minute': 100},
+      'human': {'id': 'H-1', 'name': 'Tester', 'credits': 1000},
+      'settlement': {
+        'settledThroughGameDay': 2,
+        'lastClosedGameDay': 4,
+        'backlogDays': 2,
+        'status': 'FAILED',
+        'failedGameDay': 3,
+        'failedPhase': 'tax_reconciliation',
+        'failedError': 'Tax calculation overflow',
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TopFixedHudPanel(
+            state: failedState,
+            isLiveConnected: true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('FAILED D3'), findsOneWidget);
+    expect(find.byIcon(Icons.error_outline), findsOneWidget);
+
+    // 2. CATCHING_UP settlement state
+    final catchingUpState = EarthState({
+      'clock': {'day': 5, 'minute': 100},
+      'human': {'id': 'H-1', 'name': 'Tester', 'credits': 1000},
+      'settlement': {
+        'settledThroughGameDay': 2,
+        'lastClosedGameDay': 4,
+        'backlogDays': 2,
+        'status': 'CATCHING_UP',
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TopFixedHudPanel(
+            state: catchingUpState,
+            isLiveConnected: true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('CATCHING UP (-2d)'), findsOneWidget);
+    expect(find.byIcon(Icons.sync), findsOneWidget);
+  });
 }

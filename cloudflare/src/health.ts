@@ -97,6 +97,9 @@ export async function healthResponse(request: Request, env: Env, options: { read
         phase_completed: string;
         phase_total: string;
         failed_runs: string;
+        failed_game_day: string | null;
+        failed_phase: string | null;
+        failed_error: string | null;
         retry_count: string;
       }>(`
         WITH clock AS (
@@ -110,6 +113,14 @@ export async function healthResponse(request: Request, env: Env, options: { read
                      AND r.status IN ('completed', 'baseline')) AS completed_at
             FROM daily_settlement_control control
            WHERE control.id = 'WORLD'
+        ), failed AS (
+          SELECT r.game_day AS failed_game_day,
+                 r.current_phase AS failed_phase,
+                 r.error_message AS failed_error
+            FROM daily_settlement_runs r
+           WHERE r.status = 'failed'
+           ORDER BY r.game_day ASC
+           LIMIT 1
         )
         SELECT control.status,
                clock.current_game_day::text,
@@ -122,9 +133,13 @@ export async function healthResponse(request: Request, env: Env, options: { read
                COALESCE(work.completed, 0)::text AS phase_completed,
                COALESCE(work.total, 0)::text AS phase_total,
                (SELECT COUNT(*) FROM daily_settlement_runs r WHERE r.status = 'failed')::text AS failed_runs,
+               failed.failed_game_day::text AS failed_game_day,
+               failed.failed_phase,
+               failed.failed_error,
                (SELECT COALESCE(SUM(attempt_count), 0) FROM daily_settlement_runs)::text AS retry_count
         FROM daily_settlement_control control CROSS JOIN clock
         LEFT JOIN completed ON TRUE
+        LEFT JOIN failed ON TRUE
         LEFT JOIN LATERAL (SELECT r.game_day, r.current_phase, r.lease_owner, r.lease_heartbeat_at
                              FROM daily_settlement_runs r
                             WHERE r.status = 'running'
@@ -164,6 +179,14 @@ export async function healthResponse(request: Request, env: Env, options: { read
     const [connectionRow, errorRow, slowQueryRow, buildingRow, marketRow] = observability;
     const settlementBacklog = Number(settlementRow?.backlog_game_days ?? Number.POSITIVE_INFINITY);
     const settlementStatus = settlementRow?.status ?? 'unavailable';
+    const failedRunsCount = Number(settlementRow?.failed_runs ?? 0);
+    const cursorStatus = settlementStatus === 'paused'
+      ? 'PAUSED'
+      : failedRunsCount > 0
+        ? 'FAILED'
+        : settlementBacklog > 0
+          ? 'CATCHING_UP'
+          : 'CURRENT';
     return {
       checks: {
         database: true,
@@ -175,11 +198,11 @@ export async function healthResponse(request: Request, env: Env, options: { read
         buildingAssetSchema: Number(assets.rows[0]?.count ?? 0) === 1,
         businessTaxSchema: Number(taxed.rows[0]?.count ?? 0) === 2,
         balancesNonNegative: Number(invariants.rows[0]?.invalid ?? 0) === 0,
-        criticalInvariants: Number(invariants.rows[0]?.invalid ?? 0) === 0,
+        criticalInvariants: Number(invariants.rows[0]?.invalid ?? 0) === 0 && failedRunsCount === 0,
         schedulerFresh: !schedulerIsEnabled || schedulerState !== 'critical',
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
-        dailySettlementBacklog: settlementStatus !== 'active' || settlementBacklog <= 1,
+        dailySettlementBacklog: settlementStatus !== 'active' || (settlementBacklog <= 1 && failedRunsCount === 0),
         migrationManifest: Number(migrations.rows[0]?.version ?? 0) === EARTH_SCHEMA_VERSION,
       },
       readiness: {
@@ -200,6 +223,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
         schemaMissingObjects: postgres.missingObjects ?? [],
         dailySettlement: {
           status: settlementStatus,
+          cursorStatus,
           currentGameDay: settlementRow?.current_game_day != null ? Number(settlementRow.current_game_day) : null,
           lastCompletedGameDay: settlementRow?.last_completed_game_day != null ? Number(settlementRow.last_completed_game_day) : null,
           backlogGameDays: Number.isFinite(settlementBacklog) ? settlementBacklog : null,
@@ -211,7 +235,10 @@ export async function healthResponse(request: Request, env: Env, options: { read
             completed: Number(settlementRow?.phase_completed ?? 0),
             total: Number(settlementRow?.phase_total ?? 0),
           },
-          failedRuns: Number(settlementRow?.failed_runs ?? 0),
+          failedRuns: failedRunsCount,
+          failedGameDay: settlementRow?.failed_game_day != null ? Number(settlementRow.failed_game_day) : null,
+          failedPhase: settlementRow?.failed_phase ?? null,
+          failedError: settlementRow?.failed_error ?? null,
           retryCount: Number(settlementRow?.retry_count ?? 0),
         },
         worldHealth: {

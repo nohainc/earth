@@ -423,8 +423,24 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   // --- GAME CLOCK TICKER ---
   Widget _buildGameClockPill(BuildContext context, YearAndDay clockRes,
       String timeStr, bool isMobile) {
+    final settlement = widget.state.settlement;
+    final settlementStatus = settlement['status']?.toString();
+    final isFailed = settlementStatus == 'FAILED';
+    final isCatchingUp = settlementStatus == 'CATCHING_UP';
+    final backlog = asIntOr(settlement['backlogDays'], 0);
+    final failedDay = settlement['failedGameDay'];
+    final failedPhase = settlement['failedPhase'];
+    final failedError = settlement['failedError'];
+
+    String tooltipMessage = 'Game Clock (1s real = 1m game) · Click for Daily Summary';
+    if (isFailed) {
+      tooltipMessage = 'SETTLEMENT FAILED on Day $failedDay (Phase: ${failedPhase ?? 'unknown'})\nError: ${failedError ?? 'Terminal failure'}\nClick for details';
+    } else if (isCatchingUp) {
+      tooltipMessage = 'Settlement Catching Up ($backlog days backlog) · Click for Daily Summary';
+    }
+
     return Tooltip(
-      message: 'Game Clock (1s real = 1m game) · Click for Daily Summary',
+      message: tooltipMessage,
       waitDuration: const Duration(milliseconds: 350),
       child: InkWell(
         onTap: () {
@@ -439,25 +455,84 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: context.surfaceColor.withValues(alpha: 0.6),
+            color: isFailed
+                ? context.errorColor.withValues(alpha: 0.15)
+                : isCatchingUp
+                    ? Colors.amber.withValues(alpha: 0.12)
+                    : context.surfaceColor.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: context.primaryColor.withValues(alpha: 0.22),
+              color: isFailed
+                  ? context.errorColor.withValues(alpha: 0.6)
+                  : isCatchingUp
+                      ? Colors.amber.withValues(alpha: 0.5)
+                      : context.primaryColor.withValues(alpha: 0.22),
               width: 0.8,
             ),
           ),
-          child: Text(
-            isMobile
-                ? 'Y${clockRes.year} · D${clockRes.dayOfYear} · $timeStr'
-                : 'YEAR ${clockRes.year}   DAY ${clockRes.dayOfYear}   $timeStr',
-            style: TextStyle(
-              fontSize: isMobile ? 9.5 : 10.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.3,
-              color: context.mutedColor,
-              fontFamily: 'monospace',
-            ),
-            overflow: TextOverflow.ellipsis,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isFailed) ...[
+                Icon(Icons.error_outline, size: isMobile ? 11 : 13, color: context.errorColor),
+                const SizedBox(width: 4),
+              ] else if (isCatchingUp) ...[
+                Icon(Icons.sync, size: isMobile ? 11 : 13, color: Colors.amber),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                isMobile
+                    ? 'Y${clockRes.year} · D${clockRes.dayOfYear} · $timeStr'
+                    : 'YEAR ${clockRes.year}   DAY ${clockRes.dayOfYear}   $timeStr',
+                style: TextStyle(
+                  fontSize: isMobile ? 9.5 : 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.3,
+                  color: isFailed
+                      ? context.errorColor
+                      : isCatchingUp
+                          ? Colors.amber
+                          : context.mutedColor,
+                  fontFamily: 'monospace',
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (isFailed && !isMobile) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: context.errorColor.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    'FAILED D$failedDay',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                      color: context.errorColor,
+                    ),
+                  ),
+                ),
+              ] else if (isCatchingUp && !isMobile && backlog > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    'CATCHING UP (-${backlog}d)',
+                    style: const TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.amber,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
