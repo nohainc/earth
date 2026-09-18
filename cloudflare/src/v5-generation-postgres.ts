@@ -147,17 +147,22 @@ export async function grantEarthBaselineTechnologyGeneration(
   domainCodeOrId: string,
   generationNumber: number,
   gameDay = 1,
+  governanceProposalId?: string,
 ): Promise<void> {
+  if (generationNumber > 1 && !governanceProposalId) {
+    throw new Error('Earth frontier advancement requires an Earth governance proposal');
+  }
   const domain = await resolveTechnologyDomain(tx, domainCodeOrId);
   const id = `EARTH-FRONTIER-${domain.id}-${generationNumber}`;
   const effectiveDay = generationNumber === 1 ? 1 : Math.max(2, Number(gameDay));
   await tx.query(
     `INSERT INTO earth_technology_frontier_versions
-       (id, domain_id, generation_number, effective_from_game_day, correlation_id)
-     VALUES ($1, $2, $3, $4, $5)
+       (id, domain_id, generation_number, effective_from_game_day, correlation_id, authorization_proposal_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (domain_id, generation_number) DO UPDATE SET
-       effective_from_game_day = LEAST(earth_technology_frontier_versions.effective_from_game_day, EXCLUDED.effective_from_game_day)`,
-    [id, domain.id, generationNumber, effectiveDay, `earth-frontier-grant:${domain.id}:${generationNumber}`],
+       effective_from_game_day = LEAST(earth_technology_frontier_versions.effective_from_game_day, EXCLUDED.effective_from_game_day),
+       authorization_proposal_id = COALESCE(EXCLUDED.authorization_proposal_id, earth_technology_frontier_versions.authorization_proposal_id)`,
+    [id, domain.id, generationNumber, effectiveDay, `earth-frontier-grant:${domain.id}:${generationNumber}`, governanceProposalId ?? null],
   );
   await tx.query(
     `INSERT INTO earth_technology_frontier (domain_id, max_generation_number, updated_game_day)

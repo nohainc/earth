@@ -101,7 +101,7 @@ export async function advanceEarthTechnologyFrontier(
     input.proposalId, input.humanId ?? null, input.correlationId,
   ]);
   await tx.query(`UPDATE earth_technology_frontier
-                     SET max_generation_number = $2, updated_game_day = $3, updated_at = CURRENT_TIMESTAMP
-                   WHERE domain_id = $1 AND $3 >= $4`, [input.domainId, input.generationNumber, executionGameDay, input.effectiveFromGameDay]);
+                     SET max_generation_number = $2, updated_game_day = $3::BIGINT, updated_at = CURRENT_TIMESTAMP
+                   WHERE domain_id = $1 AND $3::BIGINT >= $4::BIGINT`, [input.domainId, input.generationNumber, executionGameDay, input.effectiveFromGameDay]);
   return { ok: true, frontierVersionId: id, domainId: input.domainId, generationNumber: input.generationNumber, effectiveFromGameDay: input.effectiveFromGameDay, correlationId: input.correlationId };
 }

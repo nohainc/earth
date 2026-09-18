@@ -3,11 +3,13 @@ import { getConstitutionalRuleDefinition, validateConstitutionalRuleValue, type 
 
 export type V5GovernanceActionType =
   | 'CONSTITUTION_AMENDMENT'
+  | 'CORPORATION_PUBLIC_CONSTRUCTION'
+  | 'CORPORATION_SCALE_RESEARCH'
+  | 'EARTH_TECHNOLOGY_FRONTIER'
   | 'EARTH_CAPACITY_POLICY'
   | 'CORPORATION_HOUSE_RATE'
   | 'PROGRESSIVE_SCHEDULE'
-  | 'CORPORATION_ADMISSION_POLICY'
-  | 'EARTH_TECHNOLOGY_FRONTIER';
+  | 'CORPORATION_ADMISSION_POLICY';
 
 export type V5GovernanceAction = {
   actionType: V5GovernanceActionType;
@@ -27,6 +29,11 @@ export type V5GovernanceAction = {
   generationNumber?: number;
   researchCreditCostUnits?: bigint;
   researchResourceCosts?: Record<string, string>;
+  buildingType?: string;
+  territoryId?: string;
+  name?: string;
+  generation?: number;
+  scaleCapability?: 'SCALE_COMMERCIAL' | 'SCALE_INDUSTRIAL' | 'SCALE_STRATEGIC';
 };
 
 export type ProgressivePolicyPreview = {
@@ -70,6 +77,25 @@ export function validateV5GovernanceAction(action: V5GovernanceAction, currentGa
       codes.add(change.ruleCode);
       if (change.clearOverride) continue;
       validateConstitutionalRuleValue(change.ruleCode, change.value);
+    }
+    return;
+  }
+  if (action.actionType === 'CORPORATION_PUBLIC_CONSTRUCTION') {
+    if (!action.corporationId?.trim()) throw new Error('Corporation is required');
+    if (!action.buildingType?.trim()) throw new Error('Building type is required');
+    if (action.generation != null && (!Number.isInteger(action.generation) || action.generation < 1)) {
+      throw new Error('Generation must be a positive integer');
+    }
+    return;
+  }
+  if (action.actionType === 'CORPORATION_SCALE_RESEARCH') {
+    if (!action.corporationId?.trim()) throw new Error('Corporation is required');
+    if (!action.scaleCapability || !['SCALE_COMMERCIAL', 'SCALE_INDUSTRIAL', 'SCALE_STRATEGIC'].includes(action.scaleCapability)) {
+      throw new Error('Valid scale capability is required (SCALE_COMMERCIAL, SCALE_INDUSTRIAL, or SCALE_STRATEGIC)');
+    }
+    positiveInteger(action.researchCreditCostUnits ?? 0n, 'Research CREDIT cost');
+    if (action.researchResourceCosts && Object.values(action.researchResourceCosts).some((value) => { try { return BigInt(value) < 0n; } catch (_error) { return true; } })) {
+      throw new Error('Research resource costs must be non-negative integers');
     }
     return;
   }

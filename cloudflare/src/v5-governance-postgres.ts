@@ -7,6 +7,9 @@ import { evaluateOneHouseVote } from './governance-decision.ts';
 import { validateProposalActionSnapshot } from './proposal-actions.ts';
 import { toJsonSafe } from './json-safe.ts';
 import { advanceEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
+import { purchaseV5Building } from './v5-building-postgres.ts';
+import { assertScaleCapabilityAuthorized, grantCorporationScaleCapability } from './v5-scale-postgres.ts';
+import { assertGenerationAuthorized } from './v5-generation-postgres.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -43,6 +46,11 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
     generationNumber: payload.generationNumber == null ? undefined : Number(payload.generationNumber),
     researchCreditCostUnits: payload.researchCreditCostUnits == null ? undefined : bigintPayload(payload.researchCreditCostUnits, 'Research CREDIT cost'),
     researchResourceCosts: payload.researchResourceCosts && typeof payload.researchResourceCosts === 'object' ? Object.fromEntries(Object.entries(payload.researchResourceCosts as Record<string, unknown>).map(([key, value]) => [key, String(value)])) : undefined,
+    buildingType: payload.buildingType == null ? undefined : String(payload.buildingType),
+    territoryId: payload.territoryId == null ? undefined : String(payload.territoryId),
+    name: payload.name == null ? undefined : String(payload.name),
+    generation: payload.generation == null ? undefined : Number(payload.generation),
+    scaleCapability: payload.scaleCapability as ProposalAction['scaleCapability'],
   };
   return action;
 }
@@ -132,14 +140,21 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
   return repository.transaction(async (tx) => {
     const prior = (await tx.query('SELECT * FROM v5_governance_proposals WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior) return { ok: true, alreadyProcessed: true, proposal: toJsonSafe(prior), correlationId: input.correlationId };
-    // Specialized V5 actions were the bootstrap bridge for capacity and
-    // admission. New gameplay proposals must use one typed Constitution
-    // change-set lifecycle; the legacy activation branches below remain only
-    // for replaying already-persisted migration records.
-    if (input.actionType !== 'CONSTITUTION_AMENDMENT') {
+    const ALLOWED_V5_ACTIONS = [
+      'CONSTITUTION_AMENDMENT',
+      'CORPORATION_PUBLIC_CONSTRUCTION',
+      'CORPORATION_SCALE_RESEARCH',
+      'EARTH_TECHNOLOGY_FRONTIER',
+    ];
+    if (!ALLOWED_V5_ACTIONS.includes(input.actionType)) {
       throw new Error('Legacy V5 policy actions are retired; submit a Constitution amendment proposal.');
     }
-    if (input.subjectType === 'EARTH' && ['CORPORATION_HOUSE_RATE', 'CORPORATION_ADMISSION_POLICY'].includes(input.actionType) || input.subjectType === 'CORPORATION' && input.actionType === 'EARTH_CAPACITY_POLICY') throw new Error('Policy subject and action scope do not match');
+    if (input.subjectType === 'EARTH' && ['CORPORATION_PUBLIC_CONSTRUCTION', 'CORPORATION_SCALE_RESEARCH', 'CORPORATION_HOUSE_RATE', 'CORPORATION_ADMISSION_POLICY'].includes(input.actionType)) {
+      throw new Error('Policy subject and action scope do not match');
+    }
+    if (input.subjectType === 'CORPORATION' && ['EARTH_TECHNOLOGY_FRONTIER', 'EARTH_CAPACITY_POLICY'].includes(input.actionType)) {
+      throw new Error('Policy subject and action scope do not match');
+    }
     await canPropose(tx, input.humanId, input.subjectType, input.subjectId);
     const day = await currentDay(tx);
     const proposalInputPayload = input.actionType === 'CONSTITUTION_AMENDMENT' && Number(input.payload.effectiveFromGameDay ?? 0) <= day
@@ -149,6 +164,30 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     validateV5GovernanceAction(action, day);
     if (input.actionType === 'CONSTITUTION_AMENDMENT') {
       validateProposalActionSnapshot(action as unknown as Record<string, unknown>);
+    }
+    if (input.actionType === 'CORPORATION_PUBLIC_CONSTRUCTION') {
+      const blueprint = (await tx.query<{ id: string; ownership_scope: string; minimum_scale_capability: string; technology_domain: string }>(
+        `SELECT id, ownership_scope, minimum_scale_capability, technology_domain FROM building_catalog WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) AND active = TRUE`,
+        [action.buildingType],
+      )).rows[0];
+      if (!blueprint) throw new Error('Unknown building blueprint');
+      if (blueprint.ownership_scope !== 'PUBLIC') throw new Error('Only PUBLIC buildings can be proposed for Corporation public construction');
+      const corpEcon = (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [input.subjectId])).rows[0]?.economic_id;
+      if (!corpEcon) throw new Error('Corporation economic account not found');
+      const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, corpEcon, 'CORPORATION');
+      if (!scaleAuth.authorized) throw new Error(String(scaleAuth.reason ?? 'Missing required scale capability'));
+      const genAuth = await assertGenerationAuthorized(tx, blueprint.technology_domain, action.generation ?? 1, corpEcon, 'CORPORATION', null, day);
+      if (!genAuth.authorized) throw new Error(String(genAuth.reason ?? 'Missing required technology generation'));
+    }
+    if (input.actionType === 'CORPORATION_SCALE_RESEARCH') {
+      const corpEcon = (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [input.subjectId])).rows[0]?.economic_id;
+      if (!corpEcon) throw new Error('Corporation economic account not found');
+      const existing = (await tx.query("SELECT 1 FROM corporation_scale_capabilities WHERE corporation_economic_id = $1 AND scale_capability = $2", [corpEcon, action.scaleCapability])).rows[0];
+      if (existing) throw new Error('Corporation already has unlocked this scale capability');
+    }
+    if (input.actionType === 'EARTH_TECHNOLOGY_FRONTIER') {
+      const domain = (await tx.query<{ id: string }>("SELECT id FROM technology_domains WHERE (id = $1 OR code = $1) AND status = 'ACTIVE'", [action.domainId])).rows[0];
+      if (!domain) throw new Error('Unknown technology domain');
     }
     if (input.actionType === 'CORPORATION_HOUSE_RATE' || input.actionType === 'CORPORATION_ADMISSION_POLICY') {
       if (!input.subjectId || action.corporationId !== input.subjectId) throw new Error('Corporation action must target its proposal Corporation');
@@ -174,7 +213,10 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       : input.actionType === 'CORPORATION_HOUSE_RATE' ? `${scope}:HOUSE_CAPACITY_POLICY`
         : input.actionType === 'CORPORATION_ADMISSION_POLICY' ? `${scope}:ADMISSION_POLICY`
           : input.actionType === 'CONSTITUTION_AMENDMENT' ? `${scope}:${getConstitutionalRuleDefinition(String((action.changes ?? [])[0]?.ruleCode ?? 'CONSTITUTION')).policyGroup}`
-            : `${scope}:PROGRESSIVE_SCHEDULE`;
+            : input.actionType === 'CORPORATION_PUBLIC_CONSTRUCTION' ? `${scope}:PUBLIC_CONSTRUCTION:${action.buildingType}`
+              : input.actionType === 'CORPORATION_SCALE_RESEARCH' ? `${scope}:SCALE_RESEARCH:${action.scaleCapability}`
+                : input.actionType === 'EARTH_TECHNOLOGY_FRONTIER' ? `EARTH:TECHNOLOGY_FRONTIER:${action.domainId}`
+                  : `${scope}:PROGRESSIVE_SCHEDULE`;
     if ((await tx.query(`SELECT 1 FROM v5_governance_proposals WHERE subject_type = $1 AND subject_id IS NOT DISTINCT FROM $2 AND policy_group = $3 AND status IN ('VOTING','PASSED','SCHEDULED') LIMIT 1`, [input.subjectType, input.subjectId, policyGroup])).rows[0]) throw new Error('An active proposal already exists for this policy group');
     const governanceRuleSnapshot = await governancePolicy(tx, input.subjectType, input.subjectId, day);
     if (action.effectiveFromGameDay < day + 1 + governanceRuleSnapshot.implementationDelayDays) {
@@ -202,23 +244,24 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     }
     const proposalId = `V5-GOV-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const effective = action.effectiveFromGameDay;
+    const votingEnd = votingStart + governanceRuleSnapshot.votingPeriodDays;
     await tx.query(`INSERT INTO v5_governance_proposals (id, subject_type, subject_id, action_type, payload, status, submitted_game_day, voting_start_game_day, voting_end_game_day, effective_from_game_day, created_by_human_id, correlation_id, quorum_bps, approval_bps, electorate_snapshot_game_day, electorate_size, governance_rule_snapshot, base_version_snapshot, policy_group)
-      VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$7 + $13,$8,$9,$10,$11,$12,$7,$14,$15::JSONB,$16::JSONB,$17)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, governanceRuleSnapshot.votingPeriodDays, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
+      VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$8,$9,$10,$11,$12,$13,$7,$14,$15::JSONB,$16::JSONB,$17)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, votingEnd, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
     if (input.subjectType === 'CORPORATION') {
       await tx.query(
         `INSERT INTO v5_governance_electorate_snapshots_v5 (proposal_id, house_id, snapshot_game_day)
-         SELECT DISTINCT $1, ha.house_id, $2
+         SELECT DISTINCT $1, ha.house_id, $2::BIGINT
            FROM house_affiliations ha
           WHERE ha.corporation_id = $3
             AND ha.status = 'ACTIVE'
-            AND ha.joined_game_day <= $2
-            AND (ha.left_game_day IS NULL OR ha.left_game_day >= $2)`,
+            AND ha.joined_game_day <= $2::BIGINT
+            AND (ha.left_game_day IS NULL OR ha.left_game_day >= $2::BIGINT)`,
         [proposalId, votingStart, input.subjectId],
       );
     } else {
       await tx.query(
         `INSERT INTO v5_governance_electorate_snapshots_v5 (proposal_id, house_id, snapshot_game_day)
-         SELECT $1, h.id, $2
+         SELECT $1, h.id, $2::BIGINT
            FROM houses h
           WHERE h.status = 'ACTIVE'`,
         [proposalId, votingStart],
@@ -350,6 +393,89 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
         await tx.query('UPDATE corporations SET admission_policy = $1 WHERE id = $2', [String(change.value), authorityId]);
       }
     }
+  } else if (row.action_type === 'CORPORATION_PUBLIC_CONSTRUCTION') {
+    const corpId = String(action.corporationId ?? payload.corporationId ?? payload.subjectId);
+    await purchaseV5Building(tx, {
+      buildingType: String(action.buildingType ?? payload.buildingType),
+      name: action.name ? String(action.name) : String(action.buildingType ?? payload.buildingType),
+      generation: action.generation ?? (payload.generation == null ? undefined : Number(payload.generation)),
+      corporationId: corpId,
+      governanceProposalId: row.proposal_id,
+      correlationId: `gov-construct:${row.proposal_id}`,
+      ownerId: payload.createdByHumanId == null ? undefined : String(payload.createdByHumanId),
+    });
+  } else if (row.action_type === 'CORPORATION_SCALE_RESEARCH') {
+    const corpId = String(action.corporationId ?? payload.corporationId ?? payload.subjectId);
+    const corpEcon = (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [corpId])).rows[0]?.economic_id;
+    if (!corpEcon) throw new Error('Corporation economic account not found');
+    const creditCost = BigInt(action.researchCreditCostUnits ?? (payload.researchCreditCostUnits ? String(payload.researchCreditCostUnits) : '0'));
+    if (creditCost > 0n) {
+      const wallet = (await tx.query<{ id: string; balance_units: string }>(
+        `SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 'TREASURY' AND status = 'ACTIVE' FOR UPDATE`,
+        [corpEcon],
+      )).rows[0];
+      const destination = (await tx.query<{ id: string }>(
+        `SELECT a.id::TEXT AS id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-CONSTRUCTION-SETTLEMENT' AND a.asset_id = 1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE' LIMIT 1`,
+      )).rows[0];
+      if (!wallet || BigInt(wallet.balance_units) < creditCost) throw new Error('Insufficient Credits in Corporation Treasury for scale research');
+      if (!destination) throw new Error('Research settlement destination is not configured');
+      await tx.query(`SELECT earth_post_transaction($1,$2,$3,'ASSET_TRANSFER',$4,$5,'scale-research-v5',$6::JSONB)`, [
+        `scale-research-funding:${row.proposal_id}`,
+        day,
+        0,
+        'RESEARCH_FUNDING',
+        corpId,
+        JSON.stringify([
+          { account_id: wallet.id, delta_units: (-creditCost).toString(), asset_id: 1 },
+          { account_id: destination.id, delta_units: creditCost.toString(), asset_id: 1 },
+        ]),
+      ]);
+    }
+    const resourceCosts = action.researchResourceCosts ?? (payload.researchResourceCosts as Record<string, string> | undefined);
+    if (resourceCosts && typeof resourceCosts === 'object') {
+      for (const [code, amountStr] of Object.entries(resourceCosts)) {
+        const units = BigInt(amountStr);
+        if (units <= 0n) continue;
+        const asset = (await tx.query<{ id: number }>("SELECT id FROM economic_assets WHERE code = $1", [code])).rows[0];
+        if (!asset) throw new Error(`Unknown economic asset: ${code}`);
+        const invAccount = (await tx.query<{ id: string; balance_units: string }>(
+          `SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = $2 AND account_type = 'INVENTORY' AND status = 'ACTIVE' FOR UPDATE`,
+          [corpEcon, asset.id],
+        )).rows[0];
+        const sink = (await tx.query<{ id: string }>(
+          `SELECT a.id::TEXT AS id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id = 'ECON-RESOURCE-CONSUMPTION' AND a.asset_id = $1 AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'`,
+          [asset.id],
+        )).rows[0];
+        if (!invAccount || BigInt(invAccount.balance_units) < units) {
+          throw new Error(`Insufficient ${code} in Corporation inventory for scale research`);
+        }
+        if (!sink) throw new Error(`Resource consumption sink not found for asset ${code}`);
+        await tx.query(`SELECT earth_post_transaction($1,$2,$3,'ASSET_TRANSFER',$4,$5,'scale-research-v5',$6::JSONB)`, [
+          `scale-resource-${code}:${row.proposal_id}`,
+          day,
+          0,
+          'RESEARCH_CONSUMPTION',
+          corpId,
+          JSON.stringify([
+            { account_id: invAccount.id, delta_units: (-units).toString(), asset_id: asset.id },
+            { account_id: sink.id, delta_units: units.toString(), asset_id: asset.id },
+          ]),
+        ]);
+      }
+    }
+    await grantCorporationScaleCapability(tx, corpEcon, (action.scaleCapability ?? payload.scaleCapability) as 'SCALE_COMMERCIAL' | 'SCALE_INDUSTRIAL' | 'SCALE_STRATEGIC', day);
+    await createGameEvent(tx, {
+      id: `SCALE-UNLOCKED-${row.proposal_id}`,
+      category: 'GOVERNANCE',
+      eventType: 'CORPORATION_SCALE_UNLOCKED',
+      gameDay: day,
+      actorHumanId: payload.createdByHumanId == null ? undefined : String(payload.createdByHumanId),
+      subjectType: 'CORPORATION',
+      subjectId: corpId,
+      title: `${action.scaleCapability ?? payload.scaleCapability} unlocked via governance proposal`,
+      details: { proposalId: row.proposal_id, scaleCapability: action.scaleCapability ?? payload.scaleCapability },
+      correlationId: `scale-unlock:${row.proposal_id}`,
+    });
   } else if (row.action_type === 'CORPORATION_ADMISSION_POLICY') {
     const corporationId = String(action.corporationId);
     await tx.query("UPDATE corporations SET admission_policy = $1 WHERE id = $2", [action.admissionPolicy, corporationId]);

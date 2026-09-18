@@ -135,29 +135,66 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
 }
 
 /** V5 construction command using pooled Corporation capacity, without placement. */
-export async function purchaseV5Building(repository: PostgresRepository, input: { ownerId: string; buildingType: string; name: string; generation?: number; correlationId: string }): Promise<Record<string, unknown>> {
+export async function purchaseV5Building(
+  repository: PostgresRepository,
+  input: {
+    ownerId?: string;
+    buildingType: string;
+    name?: string;
+    generation?: number;
+    correlationId: string;
+    governanceProposalId?: string;
+    corporationId?: string;
+  },
+): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = (await tx.query<{ source_id: string }>('SELECT source_id FROM economic_transactions WHERE correlation_id = $1', [input.correlationId])).rows[0];
     if (prior?.source_id) return { ok: true, alreadyProcessed: true, building: toJsonSafe((await tx.query('SELECT * FROM buildings WHERE id = $1', [prior.source_id])).rows[0]), correlationId: input.correlationId };
-    const owner = await ownerContext(tx, input.ownerId);
     const blueprint = await catalog(tx, input.buildingType);
     const isPublic = blueprint.ownership_scope === 'PUBLIC';
-    if (isPublic && (!owner.corporationId || !owner.corporationEconomicId)) throw new Error('Public V5 construction requires an active Corporation affiliation');
-    if (isPublic) await requirePublicCorporationAuthorization(tx, owner.corporationId!, input.ownerId);
-    const ownerEconomicId = isPublic ? owner.corporationEconomicId : owner.houseEconomicId;
-    const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId);
+    if (isPublic && !input.governanceProposalId) {
+      throw new Error('Public Corporation construction requires governance proposal authorization');
+    }
+
+    let ownerEconomicId: string;
+    let ownerHouseId: string | null = null;
+    let ownerCorpId: string | null = null;
+    let ownerCorpEconomicId: string | null = null;
+    let territoryId: string | null = null;
+
+    if (isPublic) {
+      const corpId = input.corporationId ?? (input.ownerId ? (await ownerContext(tx, input.ownerId)).corporationId : null);
+      if (!corpId) throw new Error('Public V5 construction requires an active Corporation affiliation');
+      const corpEcon = (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [corpId])).rows[0]?.economic_id;
+      if (!corpEcon) throw new Error('Corporation economic account not found');
+      ownerCorpId = corpId;
+      ownerCorpEconomicId = corpEcon;
+      ownerEconomicId = corpEcon;
+      territoryId = (await tx.query<{ id: string }>("SELECT id FROM territories WHERE corporation_id = $1 AND status = 'ACTIVE' ORDER BY is_primary DESC, id ASC LIMIT 1", [corpId])).rows[0]?.id ?? null;
+      if (!territoryId) throw new Error('Corporation territory not found for public construction');
+    } else {
+      if (!input.ownerId) throw new Error('Active Human owner is required for private construction');
+      const owner = await ownerContext(tx, input.ownerId);
+      ownerHouseId = owner.houseId;
+      ownerEconomicId = owner.houseEconomicId;
+      ownerCorpId = owner.corporationId;
+      ownerCorpEconomicId = owner.corporationEconomicId;
+      territoryId = owner.territoryId;
+    }
+
+    const scaleAuth = await assertScaleCapabilityAuthorized(tx, blueprint.minimum_scale_capability, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId);
     if (!scaleAuth.authorized) throw new Error(String(scaleAuth.reason ?? 'Missing required scale capability'));
     const currentWorld = (await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'")).rows[0];
     const gameDay = Number(currentWorld?.game_day ?? 1);
-    const genInfo = await getAvailableGenerations(tx, blueprint.technology_domain, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId, gameDay);
+    const genInfo = await getAvailableGenerations(tx, blueprint.technology_domain, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId, gameDay);
     const targetGen = input.generation ? Number(input.generation) : genInfo.maxAccessibleGeneration;
-    const genAuth = await assertGenerationAuthorized(tx, blueprint.technology_domain, targetGen, ownerEconomicId!, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : owner.corporationEconomicId, gameDay);
+    const genAuth = await assertGenerationAuthorized(tx, blueprint.technology_domain, targetGen, ownerEconomicId, isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? null : ownerCorpEconomicId, gameDay);
     if (!genAuth.authorized) throw new Error(String(genAuth.reason ?? 'Missing required technology generation'));
-    const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = $1 AND subject_id = $2`, [isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? owner.corporationId : owner.houseId])).rows[0];
+    const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = $1 AND subject_id = $2`, [isPublic ? 'CORPORATION' : 'HOUSE', isPublic ? ownerCorpId : ownerHouseId])).rows[0];
     if (['EXPANSION_BLOCKED', 'PRODUCTIVE_CAPACITY_SUSPENDED', 'EXPANSION_SPENDING_RESTRICTED', 'EARTH_RECEIVERSHIP'].includes(delinquency?.status ?? '')) throw new Error('V5 capacity delinquency blocks construction expansion');
     const capacity = isPublic
-      ? await quoteV5CorporationCapacityChange(tx, owner.corporationId, BigInt(blueprint.slot_footprint), gameDay)
-      : await quoteV5HouseCapacityChange(tx, owner.houseId, BigInt(blueprint.slot_footprint), gameDay);
+      ? await quoteV5CorporationCapacityChange(tx, ownerCorpId!, BigInt(blueprint.slot_footprint), gameDay)
+      : await quoteV5HouseCapacityChange(tx, ownerHouseId!, BigInt(blueprint.slot_footprint), gameDay);
     if (capacity && capacity.available === false) throw new Error(String(capacity.reason ?? 'V5 capacity quote unavailable'));
     const duration = await effectiveConstructionMinutes(tx, gameDay, null, blueprint.code, blueprint.construction_minutes);
     const wallet = (await tx.query<{ id: string; balance_units: string }>(`SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = $2 AND status = 'ACTIVE' FOR UPDATE`, [ownerEconomicId, isPublic ? 'TREASURY' : 'WALLET'])).rows[0];
@@ -182,38 +219,39 @@ export async function purchaseV5Building(repository: PostgresRepository, input: 
 
     // Capture before profile snapshot
     const beforeProfile = isPublic
-      ? await getCorporationSettlementProfileSnapshot(tx, owner.corporationId!)
-      : await getHouseSettlementProfileSnapshot(tx, owner.houseId);
+      ? await getCorporationSettlementProfileSnapshot(tx, ownerCorpId!)
+      : await getHouseSettlementProfileSnapshot(tx, ownerHouseId!);
 
     await tx.query(`SELECT earth_post_transaction($1,$2,$3,'ASSET_TRANSFER',$4,$5,'construction-v5',$6::JSONB)`, [input.correlationId, gameDay, Number(currentWorld?.game_minute ?? 0), isPublic ? 'PUBLIC_INFRASTRUCTURE_CONSTRUCTION' : 'PRIVATE_CONSTRUCTION', buildingId, JSON.stringify([{ account_id: wallet.id, delta_units: (-cost).toString(), asset_id: 1 }, { account_id: destination.id, delta_units: cost.toString(), asset_id: 1 }])]);
-    await tx.query(`INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, construction_state, installed_generation, technology_definition_version, started_game_day, commissioned_game_day, territory_right_id) VALUES ($1,$2,$3,$4,'UNDER_CONSTRUCTION','UNDER_CONSTRUCTION',$5,$6,$7,NULL,NULL)`, [buildingId, ownerEconomicId, owner.territoryId, blueprint.id, targetGen, `tech-gen-v${targetGen}`, gameDay]);
+    await tx.query(`INSERT INTO buildings (id, owner_economic_id, territory_id, catalog_id, status, construction_state, installed_generation, technology_definition_version, started_game_day, commissioned_game_day, territory_right_id) VALUES ($1,$2,$3,$4,'UNDER_CONSTRUCTION','UNDER_CONSTRUCTION',$5,$6,$7,NULL,NULL)`, [buildingId, ownerEconomicId, territoryId, blueprint.id, targetGen, `tech-gen-v${targetGen}`, gameDay]);
     const completionDay = gameDay + Math.max(1, Math.ceil(duration.minutes / 1440));
-    await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,NULL,'V5_POOLED_CONSTRUCTION',$11)`, [`PROJECT-${buildingId.slice(4)}`, buildingId, ownerEconomicId, owner.territoryId, blueprint.id, cost.toString(), JSON.stringify(Object.fromEntries(requirements.map((item) => [item.code, item.required_units]))), gameDay, completionDay, input.correlationId, targetGenRow?.id ?? null]);
-    if (isPublic) await rebuildV5CorporationSettlementProfile(tx, owner.corporationId!, gameDay);
-    else await refreshV5SettlementProfilesForHouse(tx, owner.houseId, gameDay);
+    await tx.query(`INSERT INTO construction_projects (id, building_id, owner_economic_id, territory_id, target_catalog_id, credit_cost_units, resource_cost_units, started_game_day, expected_completion_game_day, status, correlation_id, territory_right_id, project_kind, target_generation_id) VALUES ($1,$2,$3,$4,$5,$6,$7::JSONB,$8,$9,'IN_PROGRESS',$10,NULL,'V5_POOLED_CONSTRUCTION',$11)`, [`PROJECT-${buildingId.slice(4)}`, buildingId, ownerEconomicId, territoryId, blueprint.id, cost.toString(), JSON.stringify(Object.fromEntries(requirements.map((item) => [item.code, item.required_units]))), gameDay, completionDay, input.correlationId, targetGenRow?.id ?? null]);
+    if (isPublic) await rebuildV5CorporationSettlementProfile(tx, ownerCorpId!, gameDay);
+    else await refreshV5SettlementProfilesForHouse(tx, ownerHouseId!, gameDay);
 
     // Capture after profile snapshot and record delta
     const afterProfile = isPublic
-      ? await getCorporationSettlementProfileSnapshot(tx, owner.corporationId!)
-      : await getHouseSettlementProfileSnapshot(tx, owner.houseId);
+      ? await getCorporationSettlementProfileSnapshot(tx, ownerCorpId!)
+      : await getHouseSettlementProfileSnapshot(tx, ownerHouseId!);
 
     await recordStructuralDelta(tx, {
       actionType: isPublic ? 'PUBLIC_BUILDING_CHANGE' : 'CONSTRUCTION',
       entityType: isPublic ? 'CORPORATION' : 'HOUSE',
-      entityId: isPublic ? owner.corporationId! : owner.houseId,
-      houseId: isPublic ? null : owner.houseId,
-      corporationId: isPublic ? owner.corporationId! : owner.corporationId,
+      entityId: isPublic ? ownerCorpId! : ownerHouseId!,
+      houseId: isPublic ? null : ownerHouseId,
+      corporationId: isPublic ? ownerCorpId! : ownerCorpId,
       buildingId,
       deltaFootprintUnits: BigInt(blueprint.slot_footprint),
       beforeProfileSnapshot: beforeProfile,
       afterProfileSnapshot: afterProfile,
-      provenanceSource: 'purchaseV5Building',
-      actorHumanId: input.ownerId,
+      provenanceSource: input.governanceProposalId ? 'v5_governance_activation' : 'purchaseV5Building',
+      provenanceJson: input.governanceProposalId ? { proposalId: input.governanceProposalId, actionType: 'CORPORATION_PUBLIC_CONSTRUCTION' } : null,
+      actorHumanId: input.ownerId ?? null,
       correlationId: input.correlationId,
       gameDay,
     });
 
-    await createGameEvent(tx, { id: `BUILDING-V5-ACQUIRED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_ACQUIRED', gameDay, actorHumanId: input.ownerId, subjectType: 'BUILDING', subjectId: buildingId, title: `${blueprint.code} acquired under pooled Corporation capacity`, details: { buildingId, catalogId: blueprint.id, ownerEconomicId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE', installedGeneration: targetGen, capacityModel: 'V5_POOLED', territoryPlacement: null, effectiveConstructionMinutes: duration.minutes }, correlationId: input.correlationId });
+    await createGameEvent(tx, { id: `BUILDING-V5-ACQUIRED-${input.correlationId}`, category: 'BUILDING', eventType: 'BUILDING_ACQUIRED', gameDay, actorHumanId: input.ownerId ?? null, subjectType: 'BUILDING', subjectId: buildingId, title: `${blueprint.code} acquired under pooled Corporation capacity`, details: { buildingId, catalogId: blueprint.id, ownerEconomicId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE', installedGeneration: targetGen, capacityModel: 'V5_POOLED', territoryPlacement: null, effectiveConstructionMinutes: duration.minutes }, correlationId: input.correlationId });
     return { ok: true, status: 'UNDER_CONSTRUCTION', buildingId, ownerType: isPublic ? 'CORPORATION' : 'HOUSE', installedGeneration: targetGen, capacity, project: toJsonSafe((await tx.query('SELECT * FROM construction_projects WHERE id = $1', [`PROJECT-${buildingId.slice(4)}`])).rows[0]), correlationId: input.correlationId };
   });
 }

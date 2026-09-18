@@ -45,6 +45,7 @@ function bindPlaceholders(sql: string): string {
 
 export class PostgresRepository {
   private readonly client: Client;
+  private transactionDepth = 0;
   // A repository owns one PostgreSQL client.  PostgreSQL clients do not
   // support concurrent in-flight queries, while read models commonly use
   // Promise.all for composition.  Serialize repository queries here so a
@@ -73,9 +74,18 @@ export class PostgresRepository {
   }
 
   async transaction<T>(work: (repository: PostgresRepository) => Promise<T>): Promise<T> {
+    if (this.transactionDepth > 0) {
+      this.transactionDepth += 1;
+      try {
+        return await work(this);
+      } finally {
+        this.transactionDepth -= 1;
+      }
+    }
     for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
       let transactionStarted = false;
       try {
+        this.transactionDepth = 1;
         await this.client.query('BEGIN');
         transactionStarted = true;
         const result = await work(this);
@@ -85,6 +95,8 @@ export class PostgresRepository {
         if (transactionStarted) await this.client.query('ROLLBACK').catch(() => undefined);
         if (!isRetryablePostgresError(error) || attempt === MAX_TRANSACTION_ATTEMPTS) throw error;
         await waitForRetry(attempt);
+      } finally {
+        this.transactionDepth = 0;
       }
     }
     throw new Error('PostgreSQL transaction retry budget exhausted');

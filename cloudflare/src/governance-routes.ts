@@ -129,7 +129,7 @@ export async function handleGovernanceRoutes(
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/governance/v5/proposals' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ subjectType?: 'EARTH' | 'CORPORATION'; subjectId?: string | null; actionType?: 'CONSTITUTION_AMENDMENT'; payload?: Record<string, unknown>; title?: string; body?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ subjectType?: 'EARTH' | 'CORPORATION'; subjectId?: string | null; actionType?: 'CONSTITUTION_AMENDMENT' | 'CORPORATION_PUBLIC_CONSTRUCTION' | 'CORPORATION_SCALE_RESEARCH' | 'EARTH_TECHNOLOGY_FRONTIER'; payload?: Record<string, unknown>; title?: string; body?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId || !parsed.value.subjectType || !parsed.value.actionType || !parsed.value.payload || !parsed.value.title?.trim()) return Response.json({ ok: false, error: 'Subject, action, payload, title, and idempotency key are required' }, { status: 400 });
