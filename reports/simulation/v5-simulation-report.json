@@ -1,0 +1,1988 @@
+{
+  "timestamp": "2026-09-18T12:05:31.973Z",
+  "version": "V5-Economic-Core-Simulation-v1",
+  "scaleBenchmarks": [
+    {
+      "scenario": "baseline",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1647100,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.05046080941281095,
+        "meanWealth": 105154.49158521375,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.361147599969115
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 105946.3754370627,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0459889571470973
+      },
+      "durationMs": 12
+    },
+    {
+      "scenario": "baseline",
+      "houses": 1000,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 1000,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 1630219.5,
+        "COMPONENTS": 257013,
+        "ENERGY": 613534.5,
+        "COMPUTE": 375228.6000001554,
+        "FOOD": 732186
+      },
+      "consumption": {
+        "MATERIAL": 209316,
+        "COMPONENTS": 5450,
+        "ENERGY": 633951,
+        "COMPUTE": 3600,
+        "FOOD": 86490
+      },
+      "shortages": {
+        "MATERIAL": 11370,
+        "COMPONENTS": 0,
+        "ENERGY": 18045,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 1489868.5,
+        "COMPONENTS": 266948,
+        "ENERGY": 19532.5,
+        "COMPUTE": 385228.5999999995,
+        "FOOD": 623033
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 5.494119117341547,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 6.382445826591549,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 247439,
+        "creditVolume": 5631338.283973498
+      },
+      "houseSolvency": {
+        "solvent": 1000,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 20,
+        "solvent": 20,
+        "insolvent": 0,
+        "averageTreasury": 4166982.5
+      },
+      "earthRevenue": 23483500,
+      "constructionFrequency": {
+        "newBuildings": 1090,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 1800,
+        "scaleUnlocks": 20
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 2090,
+        "totalCapacity": 10000,
+        "utilizationRate": 0.209
+      },
+      "concentration": {
+        "gini": 0.04321232787266149,
+        "meanWealth": 107078.77436664006,
+        "maxWealth": 128320.83720115808,
+        "maxToMean": 1.198377904119305
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 107447.44393715348,
+        "meanAutarkyWealth": 105443.80496697206,
+        "specializationAdvantageRatio": 1.0190019600564397
+      },
+      "durationMs": 51
+    },
+    {
+      "scenario": "baseline",
+      "houses": 10000,
+      "days": 30,
+      "seed": 42,
+      "survivingHouses": 10000,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 3675712.25,
+        "COMPONENTS": 945938.25,
+        "ENERGY": 2126614.5,
+        "COMPUTE": 975366.5999989685,
+        "FOOD": 1652886
+      },
+      "consumption": {
+        "MATERIAL": 758706,
+        "COMPONENTS": 20385,
+        "ENERGY": 1575385,
+        "COMPUTE": 12000,
+        "FOOD": 285060
+      },
+      "shortages": {
+        "MATERIAL": 26800,
+        "COMPONENTS": 0,
+        "ENERGY": 790,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 3495606.25,
+        "COMPONENTS": 1045453.25,
+        "ENERGY": 957945.5,
+        "COMPUTE": 1075366.6,
+        "FOOD": 1678873
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 6.25022424666658,
+        "COMPONENTS": 12.50044849333316,
+        "ENERGY": 5,
+        "COMPUTE": 7.812780308333226,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 17.624882893407428,
+        "COMPONENTS": 35.249765786814855,
+        "ENERGY": 9.100471086845172,
+        "COMPUTE": 22.03110361675929,
+        "FOOD": 6.298054674935452
+      },
+      "marketVolume": {
+        "trades": 704788,
+        "creditVolume": 21918970.99612099
+      },
+      "houseSolvency": {
+        "solvent": 10000,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 200,
+        "solvent": 200,
+        "insolvent": 0,
+        "averageTreasury": 49725778.25
+      },
+      "earthRevenue": 78712810,
+      "constructionFrequency": {
+        "newBuildings": 4077,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 6000,
+        "scaleUnlocks": 0
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 14077,
+        "totalCapacity": 100000,
+        "utilizationRate": 0.14077
+      },
+      "concentration": {
+        "gini": 0.018626702242744653,
+        "meanWealth": 103033.00824327,
+        "maxWealth": 107996.47772574183,
+        "maxToMean": 1.0481735859905463
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 103169.72120204603,
+        "meanAutarkyWealth": 102366.47232558031,
+        "specializationAdvantageRatio": 1.0078467964971085
+      },
+      "durationMs": 158
+    }
+  ],
+  "scenarios": [
+    {
+      "scenario": "all-houses-choose-energy",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 3,
+      "survivalRate": 0.03,
+      "production": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 48879.5,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "consumption": {
+        "MATERIAL": 4950,
+        "COMPONENTS": 30,
+        "ENERGY": 4365,
+        "COMPUTE": 198,
+        "FOOD": 2910
+      },
+      "shortages": {
+        "MATERIAL": 13788,
+        "COMPONENTS": 0,
+        "ENERGY": 0,
+        "COMPUTE": 0,
+        "FOOD": 1455
+      },
+      "inventories": {
+        "MATERIAL": 150,
+        "COMPONENTS": 970,
+        "ENERGY": 48514.5,
+        "COMPUTE": 1000,
+        "FOOD": 90
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 118.68558151993786,
+        "COMPONENTS": 436.95992531894234,
+        "ENERGY": 5.067052431328662,
+        "COMPUTE": 50.630527618003875,
+        "FOOD": 41.59347131545306
+      },
+      "averagePrices": {
+        "MATERIAL": 85.76776838938544,
+        "COMPONENTS": 312.88746014228485,
+        "ENERGY": 6.4059311475010725,
+        "COMPUTE": 50.220140741751294,
+        "FOOD": 30.25233593387027
+      },
+      "marketVolume": {
+        "trades": 290,
+        "creditVolume": 2888.546296299519
+      },
+      "houseSolvency": {
+        "solvent": 3,
+        "insolvent": 97,
+        "solvencyRate": 0.03
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 34662.5
+      },
+      "earthRevenue": 1006735,
+      "constructionFrequency": {
+        "newBuildings": 6,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 99,
+        "scaleUnlocks": 1
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 106,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.106
+      },
+      "concentration": {
+        "gini": 0.0058055168893396125,
+        "meanWealth": 106629.04873707141,
+        "maxWealth": 112260.6698420831,
+        "maxToMean": 1.052815074050771
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 106629.04873707141,
+        "meanAutarkyWealth": 106629.04873707141,
+        "specializationAdvantageRatio": 1
+      },
+      "durationMs": 3
+    },
+    {
+      "scenario": "all-houses-choose-food",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 3,
+      "survivalRate": 0.03,
+      "production": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 0,
+        "COMPUTE": 0,
+        "FOOD": 26298
+      },
+      "consumption": {
+        "MATERIAL": 860,
+        "COMPONENTS": 215,
+        "ENERGY": 3880,
+        "COMPUTE": 198,
+        "FOOD": 2413
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 6993,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 4140,
+        "COMPONENTS": 785,
+        "ENERGY": 120,
+        "COMPUTE": 1000,
+        "FOOD": 26885
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 8.484970645227886,
+        "COMPONENTS": 193.61904673836102,
+        "ENERGY": 49.71456693118817,
+        "COMPUTE": 49.282151097238575,
+        "FOOD": 5.0864734405469845
+      },
+      "averagePrices": {
+        "MATERIAL": 11.601131339434843,
+        "COMPONENTS": 175.7145289020982,
+        "ENERGY": 43.66620770675474,
+        "COMPUTE": 49.842062140392855,
+        "FOOD": 5.475432207229808
+      },
+      "marketVolume": {
+        "trades": 0,
+        "creditVolume": 0
+      },
+      "houseSolvency": {
+        "solvent": 3,
+        "insolvent": 97,
+        "solvencyRate": 0.03
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 34662.5
+      },
+      "earthRevenue": 1173855,
+      "constructionFrequency": {
+        "newBuildings": 43,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 99,
+        "scaleUnlocks": 1
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 143,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.143
+      },
+      "concentration": {
+        "gini": 0.01807297197741753,
+        "meanWealth": 101359.36467738949,
+        "maxWealth": 104994.43739108133,
+        "maxToMean": 1.0358632152565448
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 101359.36467738949,
+        "meanAutarkyWealth": 101359.36467738949,
+        "specializationAdvantageRatio": 1
+      },
+      "durationMs": 3
+    },
+    {
+      "scenario": "corporation-material-monopoly",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 82938.5,
+        "COMPONENTS": 14580,
+        "ENERGY": 29038.5,
+        "COMPUTE": 6022.2000000000035,
+        "FOOD": 16452
+      },
+      "consumption": {
+        "MATERIAL": 12748,
+        "COMPONENTS": 670,
+        "ENERGY": 26619,
+        "COMPUTE": 200,
+        "FOOD": 8550
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 64358,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 78594.5,
+        "COMPONENTS": 15212,
+        "ENERGY": 857.5,
+        "COMPUTE": 7022.2,
+        "FOOD": 11240
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 248.47703924384697,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 81.13056591342384,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 23777,
+        "creditVolume": 2359166.726313637
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 2,
+        "insolvent": 0,
+        "averageTreasury": 600
+      },
+      "earthRevenue": 1817270,
+      "constructionFrequency": {
+        "newBuildings": 134,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 234,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.234
+      },
+      "concentration": {
+        "gini": 0.267437097100947,
+        "meanWealth": 103973.63520861189,
+        "maxWealth": 659664.819684156,
+        "maxToMean": 6.344539347504871
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 107817.54398209947,
+        "meanAutarkyWealth": 78249.01495527217,
+        "specializationAdvantageRatio": 1.3778773323054472
+      },
+      "durationMs": 9
+    },
+    {
+      "scenario": "energy-shortage",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 3,
+      "survivalRate": 0.03,
+      "production": {
+        "MATERIAL": 13580.5,
+        "COMPONENTS": 14868,
+        "ENERGY": 6483,
+        "COMPUTE": 2306.2000000000025,
+        "FOOD": 15039
+      },
+      "consumption": {
+        "MATERIAL": 10445,
+        "COMPONENTS": 235,
+        "ENERGY": 8733,
+        "COMPUTE": 200,
+        "FOOD": 4475
+      },
+      "shortages": {
+        "MATERIAL": 6644,
+        "COMPONENTS": 0,
+        "ENERGY": 14699,
+        "COMPUTE": 0,
+        "FOOD": 273
+      },
+      "inventories": {
+        "MATERIAL": 9498.5,
+        "COMPONENTS": 15814,
+        "ENERGY": 345,
+        "COMPUTE": 3306.2000000000007,
+        "FOOD": 13776
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 21.25460385784296,
+        "COMPONENTS": 5.034443259603759,
+        "ENERGY": 259.9478263059262,
+        "COMPUTE": 5.183366357012975,
+        "FOOD": 15.922292098188034
+      },
+      "averagePrices": {
+        "MATERIAL": 14.302105548414948,
+        "COMPONENTS": 15.570062777326578,
+        "ENERGY": 112.30736248965493,
+        "COMPUTE": 10.805379406063006,
+        "FOOD": 8.633494853638622
+      },
+      "marketVolume": {
+        "trades": 9678,
+        "creditVolume": 332225.90294722345
+      },
+      "houseSolvency": {
+        "solvent": 3,
+        "insolvent": 97,
+        "solvencyRate": 0.03
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1269140,
+      "constructionFrequency": {
+        "newBuildings": 47,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 147,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.147
+      },
+      "concentration": {
+        "gini": 0.037211224679338795,
+        "meanWealth": 103361.1131423081,
+        "maxWealth": 121770.32581011154,
+        "maxToMean": 1.1781057895773388
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 103544.78778450473,
+        "meanAutarkyWealth": 102464.3487127596,
+        "specializationAdvantageRatio": 1.0105445365663128
+      },
+      "durationMs": 5
+    },
+    {
+      "scenario": "compute-shortage",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 4450.599999999944,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 5450.599999999999,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 11.84136069605529,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1647100,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.05795090024632743,
+        "meanWealth": 104311.56158521374,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.3721468806720951
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 104930.7971238097,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0359623404138822
+      },
+      "durationMs": 9
+    },
+    {
+      "scenario": "excess-material",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 151302.5,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 135094.5,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1647100,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.061154321474612416,
+        "meanWealth": 107485.35879329278,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.331630516510103
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 108848.78505731034,
+        "meanAutarkyWealth": 100828.63056308922,
+        "specializationAdvantageRatio": 1.0795424320397058
+      },
+      "durationMs": 7
+    },
+    {
+      "scenario": "excess-components",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 60750,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 61678,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1647100,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.04920812612565473,
+        "meanWealth": 106551.74158521376,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.3432983986725235
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 107629.80917200248,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0626091868583245
+      },
+      "durationMs": 8
+    },
+    {
+      "scenario": "low-rent",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 2,
+        "insolvent": 0,
+        "averageTreasury": 45425
+      },
+      "earthRevenue": 1579600,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.05046080941281095,
+        "meanWealth": 105154.49158521375,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.361147599969115
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 105946.3754370627,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0459889571470973
+      },
+      "durationMs": 8
+    },
+    {
+      "scenario": "progressive-rent",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 188,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 0,
+        "insolvent": 2,
+        "averageTreasury": 539
+      },
+      "earthRevenue": 1669372,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 94,
+        "scaleUnlocks": 0
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.05046080941281095,
+        "meanWealth": 105154.49158521375,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.361147599969115
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 105946.3754370627,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0459889571470973
+      },
+      "durationMs": 9
+    },
+    {
+      "scenario": "many-small-corporations",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 1000,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 10,
+        "solvent": 10,
+        "insolvent": 0,
+        "averageTreasury": 401255
+      },
+      "earthRevenue": 1657900,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 500,
+        "scaleUnlocks": 10
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.05046080941281095,
+        "meanWealth": 105154.49158521375,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.361147599969115
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 105946.3754370627,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0459889571470973
+      },
+      "durationMs": 4
+    },
+    {
+      "scenario": "one-mega-corporation",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 52,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 1,
+        "solvent": 0,
+        "insolvent": 1,
+        "averageTreasury": 620
+      },
+      "earthRevenue": 1169830,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 26,
+        "scaleUnlocks": 0
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.05046080941281095,
+        "meanWealth": 105154.49158521375,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.361147599969115
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 105946.3754370627,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0459889571470973
+      },
+      "durationMs": 4
+    },
+    {
+      "scenario": "inactive-players",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 76260.75,
+        "COMPONENTS": 18225,
+        "ENERGY": 28876.5,
+        "COMPUTE": 9976.199999999957,
+        "FOOD": 51597
+      },
+      "consumption": {
+        "MATERIAL": 13452,
+        "COMPONENTS": 400,
+        "ENERGY": 29526,
+        "COMPUTE": 200,
+        "FOOD": 5490
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 14600,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 69143.75,
+        "COMPONENTS": 19015,
+        "ENERGY": 2394.5,
+        "COMPUTE": 10976.200000000006,
+        "FOOD": 49612
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 19.898104053005653,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 9.648142288959525,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 15190,
+        "creditVolume": 374118.67167976487
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1466300,
+      "constructionFrequency": {
+        "newBuildings": 80,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 180,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.18
+      },
+      "concentration": {
+        "gini": 0.043056304787965516,
+        "meanWealth": 102925.99785179587,
+        "maxWealth": 150744.63110081438,
+        "maxToMean": 1.4645923697322132
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 104190.10758445843,
+        "meanAutarkyWealth": 96754.16798056141,
+        "specializationAdvantageRatio": 1.0768539460273272
+      },
+      "durationMs": 2
+    },
+    {
+      "scenario": "bankrupt-producers",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 84,
+      "survivalRate": 0.84,
+      "production": {
+        "MATERIAL": 102975.75,
+        "COMPONENTS": 20203.25,
+        "ENERGY": 47070,
+        "COMPUTE": 16993.800000000323,
+        "FOOD": 95940
+      },
+      "consumption": {
+        "MATERIAL": 16706,
+        "COMPONENTS": 520,
+        "ENERGY": 43768,
+        "COMPUTE": 200,
+        "FOOD": 7391
+      },
+      "shortages": {
+        "MATERIAL": 1004,
+        "COMPONENTS": 0,
+        "ENERGY": 14814,
+        "COMPUTE": 0,
+        "FOOD": 85
+      },
+      "inventories": {
+        "MATERIAL": 91053.75,
+        "COMPONENTS": 19999.25,
+        "ENERGY": 1351,
+        "COMPUTE": 16201.800000000021,
+        "FOOD": 90546
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 118.20697688327449,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 16.410792284965552,
+        "ENERGY": 50.542883500112445,
+        "COMPUTE": 13.441097319505479,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 21644,
+        "creditVolume": 2625522.542640935
+      },
+      "houseSolvency": {
+        "solvent": 84,
+        "insolvent": 16,
+        "solvencyRate": 0.84
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1619820,
+      "constructionFrequency": {
+        "newBuildings": 104,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 204,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.204
+      },
+      "concentration": {
+        "gini": 0.3996870421695464,
+        "meanWealth": 89303.49648376567,
+        "maxWealth": 446367.2060148428,
+        "maxToMean": 4.998317239415
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 96255.44985822258,
+        "meanAutarkyWealth": 55361.606479064205,
+        "specializationAdvantageRatio": 1.7386679321638359
+      },
+      "durationMs": 4
+    },
+    {
+      "scenario": "construction-boom",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 139991.5,
+        "COMPONENTS": 32825.25,
+        "ENERGY": 61236,
+        "COMPUTE": 25265.40000000067,
+        "FOOD": 137880
+      },
+      "consumption": {
+        "MATERIAL": 28058,
+        "COMPONENTS": 1450,
+        "ENERGY": 60628,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 3520,
+        "COMPONENTS": 0,
+        "ENERGY": 54683,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 118371.5,
+        "COMPONENTS": 33121.25,
+        "ENERGY": 1561,
+        "COMPUTE": 26265.40000000004,
+        "FOOD": 133053
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 21.66067480992848,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 10.749710679498554,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 23547,
+        "creditVolume": 855915.9738442475
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 2662100,
+      "constructionFrequency": {
+        "newBuildings": 290,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 390,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.39
+      },
+      "concentration": {
+        "gini": 0.12133465516011355,
+        "meanWealth": 99027.44830903399,
+        "maxWealth": 160832.83605662524,
+        "maxToMean": 1.6241238040862749
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 103912.52433728415,
+        "meanAutarkyWealth": 75176.78299463599,
+        "specializationAdvantageRatio": 1.3822422322154768
+      },
+      "durationMs": 5
+    },
+    {
+      "scenario": "stalled-construction",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 83812.5,
+        "COMPONENTS": 32805,
+        "ENERGY": 40095,
+        "COMPUTE": 18954.00000000042,
+        "FOOD": 55890
+      },
+      "consumption": {
+        "MATERIAL": 20160,
+        "COMPONENTS": 0,
+        "ENERGY": 38700,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 0,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 71594.5,
+        "COMPONENTS": 33805,
+        "ENERGY": 5537,
+        "COMPUTE": 19954.000000000033,
+        "FOOD": 50535
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 5,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 6.366823695615057,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 23887,
+        "creditVolume": 405196.6529476724
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1063950,
+      "constructionFrequency": {
+        "newBuildings": 0,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 100,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.1
+      },
+      "concentration": {
+        "gini": 0.029212772679747312,
+        "meanWealth": 107917.70922966128,
+        "maxWealth": 118404.92092594705,
+        "maxToMean": 1.097177856823923
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 107778.54655975061,
+        "meanAutarkyWealth": 108597.15050040185,
+        "specializationAdvantageRatio": 0.9924620127058655
+      },
+      "durationMs": 4
+    },
+    {
+      "scenario": "independent-heavy",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 130007,
+        "COMPONENTS": 32805,
+        "ENERGY": 61681.5,
+        "COMPUTE": 38678.399999999965,
+        "FOOD": 66798
+      },
+      "consumption": {
+        "MATERIAL": 24232,
+        "COMPONENTS": 485,
+        "ENERGY": 56310,
+        "COMPUTE": 200,
+        "FOOD": 8190
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 519,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 112323,
+        "COMPONENTS": 33697,
+        "ENERGY": 9802.5,
+        "COMPUTE": 39678.39999999998,
+        "FOOD": 62197
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 5,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 6.366823695615057,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 22909,
+        "creditVolume": 516061.8812774455
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 2,
+        "insolvent": 0,
+        "averageTreasury": 403525
+      },
+      "earthRevenue": 801370,
+      "constructionFrequency": {
+        "newBuildings": 97,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 197,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.197
+      },
+      "concentration": {
+        "gini": 0.04274749783474796,
+        "meanWealth": 106521.59055998822,
+        "maxWealth": 125605.45886569258,
+        "maxToMean": 1.1791549319286325
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 106749.3224942084,
+        "meanAutarkyWealth": 104851.55637570734,
+        "specializationAdvantageRatio": 1.0180995512522573
+      },
+      "durationMs": 3
+    },
+    {
+      "scenario": "baseline",
+      "houses": 100,
+      "days": 90,
+      "seed": 42,
+      "survivingHouses": 100,
+      "survivalRate": 1,
+      "production": {
+        "MATERIAL": 104869.75,
+        "COMPONENTS": 32805,
+        "ENERGY": 47223,
+        "COMPUTE": 21309.200000000255,
+        "FOOD": 96291
+      },
+      "consumption": {
+        "MATERIAL": 23004,
+        "COMPONENTS": 535,
+        "ENERGY": 48181,
+        "COMPUTE": 200,
+        "FOOD": 8730
+      },
+      "shortages": {
+        "MATERIAL": 0,
+        "COMPONENTS": 0,
+        "ENERGY": 16832,
+        "COMPUTE": 0,
+        "FOOD": 0
+      },
+      "inventories": {
+        "MATERIAL": 88786.75,
+        "COMPONENTS": 33733,
+        "ENERGY": 1456,
+        "COMPUTE": 22309.200000000023,
+        "FOOD": 91412
+      },
+      "openingPrices": {
+        "MATERIAL": 40,
+        "COMPONENTS": 80,
+        "ENERGY": 20,
+        "COMPUTE": 50,
+        "FOOD": 12
+      },
+      "closingPrices": {
+        "MATERIAL": 5,
+        "COMPONENTS": 5,
+        "ENERGY": 15.255598156474033,
+        "COMPUTE": 5,
+        "FOOD": 5
+      },
+      "averagePrices": {
+        "MATERIAL": 9.225952577712636,
+        "COMPONENTS": 15.56642133884583,
+        "ENERGY": 8.325506194842637,
+        "COMPUTE": 10.766217000073073,
+        "FOOD": 5.432684891645151
+      },
+      "marketVolume": {
+        "trades": 24226,
+        "creditVolume": 562217.8455106814
+      },
+      "houseSolvency": {
+        "solvent": 100,
+        "insolvent": 0,
+        "solvencyRate": 1
+      },
+      "corporationSolvency": {
+        "total": 2,
+        "solvent": 1,
+        "insolvent": 1,
+        "averageTreasury": 11675
+      },
+      "earthRevenue": 1647100,
+      "constructionFrequency": {
+        "newBuildings": 107,
+        "tierUpgrades": 0,
+        "retrofits": 0
+      },
+      "technologyPace": {
+        "researchPoints": 100,
+        "scaleUnlocks": 2
+      },
+      "territoryUtilization": {
+        "occupiedSlots": 207,
+        "totalCapacity": 1000,
+        "utilizationRate": 0.207
+      },
+      "concentration": {
+        "gini": 0.05046080941281095,
+        "meanWealth": 105154.49158521375,
+        "maxWealth": 143130.7838471862,
+        "maxToMean": 1.361147599969115
+      },
+      "specializationComparison": {
+        "meanSpecializedWealth": 105946.3754370627,
+        "meanAutarkyWealth": 101288.23513206888,
+        "specializationAdvantageRatio": 1.0459889571470973
+      },
+      "durationMs": 4
+    }
+  ]
+}
