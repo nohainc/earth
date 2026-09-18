@@ -36,6 +36,13 @@ const approvedHistoricalChecksums = new Map([
   ['053_tax_authority_and_statement_traceability.sql', new Set([
     '2d67d9995d01017155532227ee03db34b04aadc48f4e75ce3b3220f370d94a34',
   ])],
+  // Migration 136 originally attempted to set plpgsql.variable_conflict at
+  // function scope. PostgreSQL application roles cannot set that parameter;
+  // the corrected migration is privilege-free and keeps this historical
+  // fingerprint readable for environments that recorded the old migration.
+  ['136_fix_economic_transaction_result_binding.sql', new Set([
+    'bb1762e0d4bc0ca123bc4364775aabd330308f25d30847828bb009e0ad8f2397',
+  ])],
 ]);
 const names = (await readdir(migrationDirectory))
   .filter((name) => /^\d+_.+\.sql$/.test(name))

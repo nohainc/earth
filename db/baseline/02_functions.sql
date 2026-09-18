@@ -278,10 +278,9 @@ CREATE OR REPLACE FUNCTION earth_post_transaction(
   p_correlation_id TEXT, p_game_day BIGINT, p_game_minute INTEGER,
   p_transaction_kind TEXT, p_source_type TEXT, p_source_id TEXT,
   p_rules_version TEXT, p_entries JSONB
-) RETURNS TABLE(transaction_id BIGINT, created BOOLEAN) LANGUAGE plpgsql AS $$
+) RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE
   v_id BIGINT;
-  v_created BOOLEAN;
   v_entry JSONB;
   v_account_asset_id INTEGER;
   v_entry_asset_kind TEXT;
@@ -290,19 +289,8 @@ DECLARE
   v_asset_id INTEGER;
   v_asset_total BIGINT;
 BEGIN
-  INSERT INTO economic_transactions(correlation_id, game_day, game_minute, transaction_kind, source_type, source_id, rules_version)
-  VALUES (p_correlation_id, p_game_day, p_game_minute, p_transaction_kind, p_source_type, p_source_id, p_rules_version)
-  ON CONFLICT (correlation_id) DO NOTHING
-  RETURNING id INTO v_id;
-  v_created := v_id IS NOT NULL;
-  IF NOT v_created THEN
-    SELECT id INTO v_id FROM economic_transactions WHERE correlation_id = p_correlation_id;
-    IF v_id IS NULL THEN RAISE EXCEPTION 'economic transaction correlation could not be recovered: %', p_correlation_id; END IF;
-    IF EXISTS (SELECT 1 FROM economic_entries WHERE economic_entries.transaction_id = v_id) THEN
-      RETURN QUERY SELECT v_id, FALSE;
-      RETURN;
-    END IF;
-  END IF;
+  v_id := earth_begin_economic_transaction(p_correlation_id, p_game_day, p_game_minute, p_transaction_kind, p_source_type, p_source_id, p_rules_version);
+  IF EXISTS (SELECT 1 FROM economic_entries WHERE transaction_id = v_id) THEN RETURN v_id; END IF;
   IF COALESCE(jsonb_array_length(p_entries), 0) = 0 THEN RAISE EXCEPTION 'economic transaction must contain entries'; END IF;
 
   SELECT COALESCE(k.semantic_class, 'ASSET_TRANSFER'), COALESCE(k.asset_kind, 'ANY')
@@ -358,7 +346,7 @@ BEGIN
     UPDATE economic_accounts SET balance_units = balance_units + (v_entry->>'delta_units')::BIGINT WHERE id = (v_entry->>'account_id')::BIGINT;
     IF EXISTS (SELECT 1 FROM economic_accounts WHERE id = (v_entry->>'account_id')::BIGINT AND balance_units < 0 AND account_type <> 'SYSTEM_ACCOUNT') THEN RAISE EXCEPTION 'economic account would become negative'; END IF;
   END LOOP;
-  RETURN QUERY SELECT v_id, v_created;
+  RETURN v_id;
 END;
 $$;
 
@@ -377,14 +365,13 @@ BEGIN
      AND status = 'ACTIVE' FOR UPDATE;
   IF v_target_account IS NULL THEN RAISE EXCEPTION 'starter account is not provisioned'; END IF;
   IF p_asset_id = 1 THEN
-    SELECT posted.transaction_id INTO v_tx
-      FROM earth_post_transaction(
-        p_correlation_id, p_game_day, 0, 'CREDIT_ISSUANCE', 'SYSTEM_ISSUANCE',
-        p_house_economic_id, 'starter-package-v1',
-        jsonb_build_array(jsonb_build_object(
-          'account_id', v_target_account, 'asset_id', p_asset_id, 'delta_units', p_amount_units
-        ))
-      ) AS posted;
+    v_tx := earth_post_transaction(
+      p_correlation_id, p_game_day, 0, 'CREDIT_ISSUANCE', 'SYSTEM_ISSUANCE',
+      p_house_economic_id, 'starter-package-v1',
+      jsonb_build_array(jsonb_build_object(
+        'account_id', v_target_account, 'asset_id', p_asset_id, 'delta_units', p_amount_units
+      ))
+    );
   ELSE
     SELECT a.id INTO v_source_account
       FROM economic_accounts a
@@ -393,15 +380,14 @@ BEGIN
        AND a.asset_id = p_asset_id AND a.account_type = 'SYSTEM_ACCOUNT' AND a.status = 'ACTIVE'
      FOR UPDATE;
     IF v_source_account IS NULL THEN RAISE EXCEPTION 'resource production account is not provisioned'; END IF;
-    SELECT posted.transaction_id INTO v_tx
-      FROM earth_post_transaction(
-        p_correlation_id, p_game_day, 0, 'RESOURCE_PRODUCTION', 'SYSTEM_PRODUCTION',
-        p_house_economic_id, 'starter-package-v1',
-        jsonb_build_array(
-          jsonb_build_object('account_id', v_source_account, 'asset_id', p_asset_id, 'delta_units', -p_amount_units),
-          jsonb_build_object('account_id', v_target_account, 'asset_id', p_asset_id, 'delta_units', p_amount_units)
-        )
-      ) AS posted;
+    v_tx := earth_post_transaction(
+      p_correlation_id, p_game_day, 0, 'RESOURCE_PRODUCTION', 'SYSTEM_PRODUCTION',
+      p_house_economic_id, 'starter-package-v1',
+      jsonb_build_array(
+        jsonb_build_object('account_id', v_source_account, 'asset_id', p_asset_id, 'delta_units', -p_amount_units),
+        jsonb_build_object('account_id', v_target_account, 'asset_id', p_asset_id, 'delta_units', p_amount_units)
+      )
+    );
   END IF;
   RETURN v_tx;
 END;
@@ -508,13 +494,10 @@ CREATE OR REPLACE FUNCTION earth_post_settlement_batch(
   p_source_type TEXT, p_source_id TEXT, p_rules_version TEXT, p_effects JSONB
 ) RETURNS TABLE(transaction_id BIGINT, created BOOLEAN)
 LANGUAGE plpgsql AS $$
+DECLARE v_id BIGINT;
 BEGIN
-  RETURN QUERY
-    SELECT posted.transaction_id, posted.created
-      FROM earth_post_transaction(
-        p_correlation_id, p_game_day, p_game_minute, 'SETTLEMENT',
-        p_source_type, p_source_id, p_rules_version, p_effects
-      ) AS posted;
+  v_id := earth_post_transaction(p_correlation_id, p_game_day, p_game_minute, 'SETTLEMENT', p_source_type, p_source_id, p_rules_version, p_effects);
+  RETURN QUERY SELECT v_id, TRUE;
 END;
 $$;
 

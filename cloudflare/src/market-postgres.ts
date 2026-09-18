@@ -142,15 +142,22 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
   });
 }
 
-export async function settleMarketBatch(repository: PostgresRepository, product: string, batchId: number, instrumentId?: string): Promise<Record<string, unknown>> {
+export async function settleMarketBatch(repository: PostgresRepository, product: string, batchRowId: number, instrumentId?: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const instrument = instrumentId ? await getActiveMarketInstrument(tx, instrumentId) : await getActiveSpotInstrument(tx, product);
     if (!instrument) throw new Error('Unknown or inactive market instrument');
     const currentBatch = (await tx.query<{ game_day: number; game_minute: number }>(
       'SELECT game_day, game_minute FROM market_batches WHERE id = $1',
-      [batchId],
+      [batchRowId],
     )).rows[0];
-    if (!currentBatch) throw new Error(`Market batch ${batchId} does not exist`);
+    if (!currentBatch) throw new Error(`Market batch row ${batchRowId} does not exist`);
+    // market_batches.id is only a database row identity. The timestamp and
+    // absolute batch range must come from the persisted game coordinates.
+    const absoluteBatchNumber = marketBatchId(
+      currentBatch.game_day,
+      currentBatch.game_minute,
+      MARKET_BATCH_GAME_MINUTES,
+    );
     const orders = await tx.query<Record<string, unknown>>(
       `SELECT o.*
          FROM market_orders o
@@ -171,7 +178,7 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
       sellOrders: sells.map((row, sequenceNo) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.quantity_units)) - BigInt(String(row.remaining_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(sequenceNo) })),
     });
     if (!auction.fills.length) return { ok: true, filled: false, fillCount: 0 };
-    const batchRange = marketBatchRange(batchId, MARKET_BATCH_GAME_MINUTES);
+    const batchRange = marketBatchRange(absoluteBatchNumber, MARKET_BATCH_GAME_MINUTES);
     const batchClosedAt = gamePosition(batchRange.endMinute - 1);
     const day = batchClosedAt.gameDay;
     const effects = new Map<string, EscrowEffect>();
@@ -228,7 +235,7 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
       }
       move.finalStatus = 'RELEASED';
     }
-    const posted = await postSettlementBatch(tx, batchClosedAt.gameDay, batchClosedAt.gameMinute, `market-batch:${batchId}:${instrument.id}`, `${batchId}:${instrument.id}`, [...effects.values()].filter((entry) => entry.delta !== 0n));
+    const posted = await postSettlementBatch(tx, batchClosedAt.gameDay, batchClosedAt.gameMinute, `market-batch:${batchRowId}:${instrument.id}`, `${batchRowId}:${instrument.id}`, [...effects.values()].filter((entry) => entry.delta !== 0n));
     if (!posted.created) return { ok: true, filled: false, alreadyProcessed: true, fillCount: auction.fills.length };
     for (const move of reservationMoves.values()) await updateReservationRemaining(tx, move.orderId, move.assetId, move.amount, move.finalStatus);
     for (const [orderId, filled] of updates) await tx.query(`UPDATE market_orders SET remaining_units = remaining_units - $1, status = CASE WHEN remaining_units - $1 = 0 THEN 'FILLED' ELSE 'PARTIAL' END WHERE id = $2`, [filled.toString(), orderId]);
@@ -237,12 +244,11 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
       const sell = sells.find((row) => String(row.id) === fill.sellOrderId)!;
       await tx.query(
         `INSERT INTO market_fills (batch_id, instrument_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id, quantity_units, price_units, gross_quote_units, buyer_fee_units, seller_fee_units, economic_transaction_id, sequence_no)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12) ON CONFLICT (batch_id, sequence_no) DO NOTHING`,
-        [batchId, instrument.id, buy.id, sell.id, buy.owner_economic_id, sell.owner_economic_id, fill.quantityUnits.toString(), fill.priceUnits.toString(), calculateQuoteUnits(fill.quantityUnits, fill.priceUnits).toString(), '0', posted.transactionId, sequenceNo + 1],
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12) ON CONFLICT (batch_id, instrument_id, sequence_no) DO NOTHING`,
+        [batchRowId, instrument.id, buy.id, sell.id, buy.owner_economic_id, sell.owner_economic_id, fill.quantityUnits.toString(), fill.priceUnits.toString(), calculateQuoteUnits(fill.quantityUnits, fill.priceUnits).toString(), '0', posted.transactionId, sequenceNo + 1],
       );
-      await createGameEvent(tx, { id: `MARKET-TRADE-${batchId}-${instrument.id}-${sequenceNo + 1}`, category: 'MARKET', eventType: 'MARKET_TRADE', gameDay: day, subjectType: 'MARKET_INSTRUMENT', subjectId: instrument.id, title: `${instrument.symbol} market trade cleared`, details: { batchId, instrumentId: instrument.id, buyOrderId: buy.id, sellOrderId: sell.id, quantityUnits: fill.quantityUnits.toString(), priceUnits: fill.priceUnits.toString(), economicTransactionId: posted.transactionId }, correlationId: `market-trade:${batchId}:${instrument.id}:${sequenceNo + 1}` });
+      await createGameEvent(tx, { id: `MARKET-TRADE-${batchRowId}-${instrument.id}-${sequenceNo + 1}`, category: 'MARKET', eventType: 'MARKET_TRADE', gameDay: day, subjectType: 'MARKET_INSTRUMENT', subjectId: instrument.id, title: `${instrument.symbol} market trade cleared`, details: { batchId: batchRowId, instrumentId: instrument.id, buyOrderId: buy.id, sellOrderId: sell.id, quantityUnits: fill.quantityUnits.toString(), priceUnits: fill.priceUnits.toString(), economicTransactionId: posted.transactionId }, correlationId: `market-trade:${batchRowId}:${instrument.id}:${sequenceNo + 1}` });
     }
-    await refreshMarketPriceProjection(tx, instrument, await rebuildMarketInstrumentState(tx, instrument.id), day);
     return { ok: true, filled: true, fillCount: auction.fills.length, quantityUnits: auction.fills.reduce((sum, fill) => sum + fill.quantityUnits, 0n).toString(), economicTransactionId: posted.transactionId };
   });
 }

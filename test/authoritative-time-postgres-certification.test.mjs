@@ -104,6 +104,69 @@ test('two real PostgreSQL connections serialize duplicate economic correlations'
   }
 });
 
+test('Market fill sequences are scoped by instrument within one batch', options, async (t) => {
+  const client = await connect('earth-market-fill-sequence-certification');
+  try {
+    await client.query('BEGIN');
+
+    const instruments = await client.query(
+      `SELECT id FROM market_instruments
+       WHERE symbol IN ('ENERGY', 'FOOD')
+       ORDER BY symbol`,
+    );
+    const owners = await client.query('SELECT economic_id FROM owner_registry ORDER BY economic_id LIMIT 1');
+    const transaction = await client.query('SELECT id FROM economic_transactions ORDER BY id LIMIT 1');
+    if (instruments.rows.length < 2 || owners.rows.length < 1 || transaction.rows.length < 1) {
+      t.skip('seeded market instruments, owner, and transaction are required');
+      await client.query('ROLLBACK');
+      return;
+    }
+
+    const batch = await client.query(
+      `INSERT INTO market_batches (game_day, game_minute, status, correlation_id)
+       VALUES (1, 0, 'OPEN', $1)
+       RETURNING id`,
+      [`certification:market-fill-sequence:${crypto.randomUUID()}`],
+    );
+    const batchId = batch.rows[0].id;
+    const instrumentIds = instruments.rows.map((row) => row.id);
+    const ownerId = owners.rows[0].economic_id;
+    const transactionId = transaction.rows[0].id;
+
+    const orderIds = instrumentIds.slice(0, 2).map((instrumentId, index) => `CERT-MARKET-FILL-${crypto.randomUUID()}-${index}`);
+    for (const [index, instrumentId] of instrumentIds.slice(0, 2).entries()) {
+      await client.query(
+        `INSERT INTO market_orders
+          (id, batch_id, instrument_id, owner_economic_id, side, quantity_units, remaining_units,
+           limit_price_units, rules_version, correlation_id)
+         VALUES ($1, $2, $3, $4, 'BUY', 1, 1, 1, 'certification-v1', $5)`,
+        [orderIds[index], batchId, instrumentId, ownerId, `${orderIds[index]}:correlation`],
+      );
+    }
+
+    const insertFill = async (instrumentId, orderId) => client.query(
+      `INSERT INTO market_fills
+        (batch_id, instrument_id, buy_order_id, sell_order_id, buyer_economic_id, seller_economic_id,
+         quantity_units, price_units, gross_quote_units, buyer_fee_units, seller_fee_units,
+         economic_transaction_id, sequence_no)
+       VALUES ($1, $2, $3, $3, $4, $4, 1, 1, 1, 0, 0, $5, 1)`,
+      [batchId, instrumentId, orderId, ownerId, transactionId],
+    );
+
+    await insertFill(instrumentIds[0], orderIds[0]);
+    await insertFill(instrumentIds[1], orderIds[1]);
+    const count = await client.query(
+      'SELECT COUNT(*)::INTEGER AS count FROM market_fills WHERE batch_id = $1 AND sequence_no = 1',
+      [batchId],
+    );
+    assert.equal(count.rows[0].count, 2);
+    await client.query('ROLLBACK');
+  } finally {
+    await client.query('ROLLBACK').catch(() => {});
+    await client.end();
+  }
+});
+
 test('real PostgreSQL settlement posting returns a true idempotency result', options, async () => {
   const client = await connect('earth-settlement-time-certification');
   const correlation = `certification:settlement:${crypto.randomUUID()}`;

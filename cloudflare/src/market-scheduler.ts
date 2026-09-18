@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { expireMarketOrders, settleMarketBatch } from './market-postgres.ts';
 import { listActiveMarketInstruments, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { refreshMarketCandles } from './market-candles.ts';
+import { rebuildMarketInstrumentState } from './market-state.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import type { FeatureConfig } from './feature-config.ts';
 
@@ -139,9 +140,15 @@ export async function processDueMarketBatches(
         for (const instrument of instruments) {
           const result = await settleMarketBatch(repository, instrument.product, Number(batch.id), instrument.id);
           tradesCreated += Number(result.fillCount ?? 0);
-          if (Number(result.fillCount ?? 0) > 0) await refreshMarketCandles(repository, instrument.id, Number(batch.id));
         }
         await repository.query(`UPDATE market_batches SET status = 'COMPLETED' WHERE id = $1 AND status IN ('CLEARING','OPEN')`, [batch.id]);
+        // Projection queries intentionally read only COMPLETED batches. Refresh
+        // them after the batch status is durable so the just-settled fills are
+        // visible to both instrument state and OHLCV materialization.
+        for (const instrument of instruments) {
+          await rebuildMarketInstrumentState(repository, instrument.id);
+          await refreshMarketCandles(repository, instrument.id, Number(batch.id));
+        }
       }
       await completeMarketBatch(repository, batchNumber, leaseOwner);
       batchesProcessed += 1;

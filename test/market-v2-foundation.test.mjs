@@ -47,8 +47,39 @@ test('Market V2 does not expose manual settlement endpoints', () => {
 test('Market settlement timestamps use the closed batch boundary', () => {
   const source = fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8');
   const escrow = fs.readFileSync('cloudflare/src/market-escrow.ts', 'utf8');
-  assert.match(source, /marketBatchRange\(batchId, MARKET_BATCH_GAME_MINUTES\)/);
+  assert.match(source, /settleMarketBatch\([^)]*batchRowId/);
+  assert.match(source, /marketBatchId\(\s*currentBatch\.game_day,\s*currentBatch\.game_minute,\s*MARKET_BATCH_GAME_MINUTES/);
+  assert.match(source, /marketBatchRange\(absoluteBatchNumber, MARKET_BATCH_GAME_MINUTES\)/);
   assert.match(source, /gamePosition\(batchRange\.endMinute - 1\)/);
   assert.match(source, /postSettlementBatch\(tx, batchClosedAt\.gameDay, batchClosedAt\.gameMinute/);
   assert.doesNotMatch(escrow, /earth_post_settlement_batch\([^\n]*, 0,/);
+});
+
+test('Market settlement derives absolute batch time from coordinates, not row identity', () => {
+  const rowId = 500;
+  const absoluteBatch = marketBatchId(1, 60, MARKET_BATCH_GAME_MINUTES);
+  const range = marketBatchRange(absoluteBatch, MARKET_BATCH_GAME_MINUTES);
+  assert.equal(rowId === absoluteBatch, false);
+  assert.deepEqual(gamePosition(range.endMinute - 1), { gameDay: 1, gameMinute: 119 });
+});
+
+test('Market fill sequence numbers are unique per instrument, not only per batch', () => {
+  const migration = fs.readFileSync('db/migrations/137_market_fill_sequence_scope.sql', 'utf8');
+  const source = fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8');
+  assert.match(migration, /DROP CONSTRAINT IF EXISTS market_fills_batch_id_sequence_no_key/);
+  assert.match(migration, /UNIQUE \(batch_id, instrument_id, sequence_no\)/);
+  assert.match(source, /ON CONFLICT \(batch_id, instrument_id, sequence_no\) DO NOTHING/);
+});
+
+test('Market projections refresh only after the batch is completed', () => {
+  const settlement = fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8');
+  const scheduler = fs.readFileSync('cloudflare/src/market-scheduler.ts', 'utf8');
+  const settlementBody = settlement.slice(settlement.indexOf('export async function settleMarketBatch'), settlement.indexOf('type EscrowEffect'));
+  const completedAt = scheduler.indexOf("UPDATE market_batches SET status = 'COMPLETED'");
+  const stateRefreshAt = scheduler.indexOf('rebuildMarketInstrumentState(repository');
+  const candleRefreshAt = scheduler.indexOf('refreshMarketCandles(repository');
+  assert.doesNotMatch(settlementBody, /refreshMarketPriceProjection|rebuildMarketInstrumentState/);
+  assert.ok(completedAt >= 0);
+  assert.ok(stateRefreshAt > completedAt);
+  assert.ok(candleRefreshAt > completedAt);
 });

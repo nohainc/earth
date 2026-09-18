@@ -127,6 +127,9 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
 
 test('executeProposal blocks execution when under challenge', async () => {
   const repo = createMockRepository((sql, params) => {
+    if (sql.includes('daily_settlement_control')) {
+      return { rows: [{ status: 'active', settled_through_game_day: '99' }] };
+    }
     if (sql.includes('earth_get_current_game_time')) {
       return { rows: [{ game_day: 100, game_minute: 0, total_game_minutes: 100 * 1440, genesis_at: '2026-01-01T00:00:00Z', server_now: '2026-01-01T00:00:00Z', real_seconds_per_game_minute: 1 }] };
     }
