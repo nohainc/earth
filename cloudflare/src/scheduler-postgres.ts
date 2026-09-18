@@ -161,6 +161,8 @@ export async function runWorldSchedulerTick(
   policyActions?: number;
   policyExceptions?: number;
   alreadyProcessed?: boolean;
+  settledDays: number;
+  backlogDays: number;
 }> {
   // 1. Authoritative game clock is derived from real-world time (genesis_at).
   // Time advances continuously regardless of scheduler executions.
@@ -169,17 +171,15 @@ export async function runWorldSchedulerTick(
   const cursor = await getSettlementCursor(repository, clock.gameDay);
 
   const workBudgetMs = options.workBudgetMs ?? 20_000;
-  const maxCatchupDays = options.maxCatchupDays ?? 10;
+  const maxCatchupDays = options.maxCatchupDays ?? 3;
   const startedAt = Date.now();
 
   let currentSettled = cursor.settledThroughGameDay;
+  let settledDays = 0;
   let lastStatus: SettlementResult['status'] = currentSettled >= targetDay ? 'already_processed' : 'completed';
 
-  // 2. Strict sequential catch-up for all uncompleted closed days
-  while (currentSettled < targetDay) {
-    if (Date.now() - startedAt >= workBudgetMs) {
-      break;
-    }
+  // 2. Strict sequential catch-up for all uncompleted closed days (single orchestrator)
+  while (currentSettled < targetDay && settledDays < maxCatchupDays && Date.now() - startedAt < workBudgetMs) {
     const nextDay = currentSettled + 1;
     const workerId = `scheduler:${idempotencyKey}:${nextDay}`;
     const remainingBudget = Math.max(1000, workBudgetMs - (Date.now() - startedAt));
@@ -196,11 +196,10 @@ export async function runWorldSchedulerTick(
       break;
     }
 
-    currentSettled = nextDay;
-
-    if (currentSettled - cursor.settledThroughGameDay >= maxCatchupDays) {
-      break;
+    if (settlement.status === 'completed') {
+      settledDays += 1;
     }
+    currentSettled = nextDay;
   }
 
   let totalPolicyActions = 0;
@@ -224,6 +223,8 @@ export async function runWorldSchedulerTick(
     ).catch(() => {});
   }
 
+  const backlogDays = Math.max(0, targetDay - currentSettled);
+
   return {
     day: clock.gameDay,
     minute: clock.gameMinute,
@@ -235,6 +236,8 @@ export async function runWorldSchedulerTick(
     policyActions: totalPolicyActions,
     policyExceptions: totalPolicyExceptions,
     alreadyProcessed: cursor.settledThroughGameDay >= targetDay,
+    settledDays,
+    backlogDays,
   };
 }
 

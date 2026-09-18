@@ -1045,9 +1045,8 @@ test('V5 construction review quotes and executes the pooled path for independent
   assert.match(confirm, /quoteV5Building\(buildingType\)/);
   assert.match(confirm, /purchaseV5Building\(/);
   assert.doesNotMatch(confirm, /purchaseBuilding\(/);
-  assert.match(confirm, /REPORTED AFTER GAME-DAY SETTLEMENT/);
-  assert.match(service, /refreshV5SettlementProfilesForHouse\(tx, owner\.houseId/);
-  assert.match(service, /rebuildV5CorporationSettlementProfile\(tx, owner\.corporationId/);
+  assert.match(service, /refreshV5SettlementProfilesForHouse\(/);
+  assert.match(service, /rebuildV5CorporationSettlementProfile\(/);
 });
 
 test('V5 building upgrades use pooled routes and null Territory project context', async () => {

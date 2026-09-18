@@ -12,6 +12,8 @@ export type SchedulerHeartbeatResult = {
   settledDays: number;
   settlementStatus?: string;
   marketSettlements: number;
+  newDay?: boolean;
+  productionEvents?: number;
 };
 
 export type SchedulerHeartbeatOptions = {
@@ -53,18 +55,29 @@ export async function runSchedulerHeartbeat(
   scheduledTime: string | number,
   options: SchedulerHeartbeatOptions = {},
 ): Promise<SchedulerHeartbeatResult> {
-  const startedAt = Date.now();
   const maxCatchupDays = positiveInteger(options.maxCatchupDays ?? 3, 3);
   const workBudgetMs = positiveInteger(options.workBudgetMs ?? 20_000, 20_000);
   const minutesPerTick = positiveInteger(options.minutesPerTick ?? 60, 60);
   const features = options.features ?? featureConfig(undefined);
-  const before = await readSettlementPosition(repository);
   const correlationId = `cron:${String(scheduledTime)}`;
   const prior = await repository.query<{ id: string; status: string }>('SELECT id, status FROM scheduler_runs WHERE correlation_id = $1', [correlationId]);
   if (prior.rows[0]?.status === 'completed') {
     const current = await readSettlementPosition(repository);
-    return { schedulerRunId: prior.rows[0].id, day: current.day, minute: 0, safeProcessedGameDay: current.watermark, settlementWatermark: current.watermark, settlementBacklog: Math.max(0, current.day - 1 - current.watermark), settledDays: 0, settlementStatus: 'already_processed', marketSettlements: 0 };
+    return {
+      schedulerRunId: prior.rows[0].id,
+      day: current.day,
+      minute: 0,
+      safeProcessedGameDay: current.watermark,
+      settlementWatermark: current.watermark,
+      settlementBacklog: Math.max(0, current.day - 1 - current.watermark),
+      settledDays: 0,
+      settlementStatus: 'already_processed',
+      marketSettlements: 0,
+      newDay: false,
+      productionEvents: 0,
+    };
   }
+  const before = await readSettlementPosition(repository);
   const run = await repository.query<{ id: string }>(
     `INSERT INTO scheduler_runs (game_day, phase, status, correlation_id)
      VALUES ($1,'daily_economy','running',$2)
@@ -73,34 +86,38 @@ export async function runSchedulerHeartbeat(
     [before.day, correlationId],
   );
   const runId = run.rows[0]?.id;
-  let settledDays = 0;
-  let actionsProcessed = 0;
-  let lastTick: Awaited<ReturnType<typeof runWorldSchedulerTick>>;
+
   try {
-    lastTick = await runWorldSchedulerTick(repository, String(scheduledTime), features, minutesPerTick, runId);
-    if (lastTick.settlementStatus === 'completed') settledDays += 1;
-    let position = await readSettlementPosition(repository);
-    while (position.watermark < position.day - 1 && settledDays < maxCatchupDays && Date.now() - startedAt < workBudgetMs) {
-      const nextDay = position.watermark + 1;
-      lastTick = await runWorldSchedulerTick(repository, `${scheduledTime}:catchup:${nextDay}`, features, minutesPerTick);
-      if (lastTick.settlementStatus === 'busy' || lastTick.settlementStatus === 'failed') break;
-      if (lastTick.settlementStatus === 'completed') settledDays += 1;
-      const nextPosition = await readSettlementPosition(repository);
-      if (nextPosition.watermark <= position.watermark) break;
-      position = nextPosition;
-    }
-    position = await readSettlementPosition(repository);
-    // Baseline 001 contains no legacy scheduled-action or market settlement
-    // projections. Those phases activate once their canonical tables exist.
-    // The daily settlement watermark itself is the authoritative heartbeat.
-    const market = { batchesProcessed: 0, tradesCreated: 0, busy: false };
-    const after = await readSettlementPosition(repository);
-    const status = lastTick.settlementStatus === 'busy' ? 'busy' : lastTick.settlementStatus === 'failed' ? 'failed' : after.watermark < after.day - 1 ? 'partial' : 'completed';
+    const tick = await runWorldSchedulerTick(
+      repository,
+      String(scheduledTime),
+      features,
+      minutesPerTick,
+      runId,
+      { maxCatchupDays, workBudgetMs },
+    );
+
+    const position = await readSettlementPosition(repository);
+    const status = tick.settlementStatus === 'busy' ? 'busy' : tick.settlementStatus === 'failed' ? 'failed' : position.watermark < position.day - 1 ? 'partial' : 'completed';
+
     await repository.query(
       `UPDATE scheduler_runs SET completed_at = CURRENT_TIMESTAMP, status = $2, game_day = $3, phase = $4 WHERE id = $1`,
-      [runId, status, after.day, `daily_economy:${after.watermark}`],
+      [runId, status, position.day, `daily_economy:${position.watermark}`],
     );
-    return { schedulerRunId: runId, day: lastTick.day, minute: lastTick.minute, safeProcessedGameDay: after.watermark, settlementWatermark: after.watermark, settlementBacklog: Math.max(0, after.day - 1 - after.watermark), settledDays, settlementStatus: lastTick.settlementStatus, marketSettlements: market.batchesProcessed };
+
+    return {
+      schedulerRunId: runId,
+      day: tick.day,
+      minute: tick.minute,
+      safeProcessedGameDay: position.watermark,
+      settlementWatermark: position.watermark,
+      settlementBacklog: Math.max(0, position.day - 1 - position.watermark),
+      settledDays: tick.settledDays,
+      settlementStatus: tick.settlementStatus,
+      marketSettlements: tick.marketSettlements,
+      newDay: tick.newDay,
+      productionEvents: tick.productionEvents,
+    };
   } catch (error) {
     await repository.query("UPDATE scheduler_runs SET completed_at = CURRENT_TIMESTAMP, status = 'failed' WHERE id = $1", [runId]).catch(() => undefined);
     console.error('Scheduler heartbeat failed', error instanceof Error ? error.message : String(error));
