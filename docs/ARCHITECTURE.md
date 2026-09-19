@@ -64,7 +64,7 @@ Keep these responsibilities in TypeScript:
 - game-clock decisions;
 - scheduler orchestration;
 - event names, notification text, and external side effects;
-- Nano Markup serialization and deserialization (`nanomarkup` package by `nohainc`) for internal structured data strings, event details, contract terms, governance rules, and municipal charters;
+- Nano Markup serialization and deserialization (`nanomarkup` package by `nohainc`) for internal structured data strings, event details, contract terms, governance rules, and governance/constitutional rule payloads;
 - domain tests that should run without a database or Cloudflare runtime.
 
 Domain code must not import Cloudflare APIs or depend on wall-clock time. Pass a
@@ -105,7 +105,7 @@ are separate idempotent transfers within the market transaction. The escrow
 account is deleted after a fully settled or cancelled order; open legacy buy
 orders are backfilled by a reviewed migration.
 
-Cities, corporations, and communities also have explicit credit accounts. Their
+Corporations and other supported economic institutions have explicit credit accounts where the current V5 owner/account policy permits them. Their
 existing treasury/shared-credit columns are synchronized read projections for
 API compatibility; contributions, public spending, recovery, and inter-
 institution funding move credits through those accounts first.
@@ -120,10 +120,7 @@ the OUC treasury funds the protected minimum and business shortfall, while the
 machine registry funds machine recovery value when available. No insolvency
 command may create credits by overwriting a Human balance.
 
-City budget amounts are earmarks held in budget credit accounts. Increasing a
-budget transfers credits from the city account into the budget account;
-reducing it reverses that transfer. The city treasury column remains an API
-projection of available city credits.
+Corporation/public budget authority is represented by canonical budget lines and commitments. Budget authorization does not itself create CREDIT; actual spending moves CREDIT through canonical economic accounts and transactions.
 
 Such a function must have explicit parameters, deterministic lock ordering,
 idempotency behavior, a small result shape, migration coverage, and a focused
