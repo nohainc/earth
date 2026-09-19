@@ -18,7 +18,7 @@ more meaningful:
 - manage people, machines, or organizations;
 - improve a capability through technology;
 - choose where and how to live;
-- influence a city, corporation, or law;
+- influence a Corporation, Community, or EARTH/Corporation law;
 - create long-term security and legacy.
 
 Features that only add another dashboard, metric, chart, or event feed require
@@ -31,7 +31,7 @@ explicit justification and should normally be progressive disclosure.
 | Life | cash, housing, health, family, succession, personal choices | business fleet operations |
 | Business | staff, machines, production, customers, contracts, revenue, costs, expansion | research/IP strategy |
 | Technology | research, breakthroughs, patents, licenses, capability upgrades | physical machine inventory |
-| Society | city services, laws, taxes, corporations, membership, civic influence | private order-book trading |
+| Society | Corporation governance, laws, taxes, Communities, membership, civic influence | private order-book trading |
 | Trade | buying inputs, selling output, supply conditions, optional advanced trading | the player's core identity |
 
 ## UI rules for AI-generated work
