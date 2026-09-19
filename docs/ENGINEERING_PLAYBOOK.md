@@ -142,7 +142,7 @@ Deterministic day-close projections and settlement retries must additionally
 carry `@mutation-boundary deterministic-settlement`. These annotations are
 reviewable design contracts, not bypasses for ordinary request mutations.
 
-The authority flag is `postgres` after the completed cutover. Never switch only
+The authority flag is `postgres` under current V5 authority. Never switch only
 one side of a multi-command domain without recording the boundary.
 
 ## Change and release procedure
@@ -179,7 +179,7 @@ vertical slice when possible.
 ### Database changes
 
 1. Read `db/schema.sql` and `db/schema-manifest.json` for the canonical schema.
-   Add the next available numbered SQL migration under `db/migrations/` (e.g. `081_...`).
+   Add the next available numbered SQL migration under `db/migrations/`.
 2. Update `db/schema.sql` and `db/schema-manifest.json` when tables, columns, or indexes change.
 3. Run `npm run db:migrate:postgres` and `npm run db:verify:manifest`.
 4. Confirm `/api/health` reports PostgreSQL authority, schema readiness, data
@@ -261,8 +261,7 @@ Cloudflare Cron is a scheduler heartbeat and invokes the Worker periodically.
 The Worker reads the authoritative PostgreSQL world-clock snapshot, runs
 bounded catch-up orchestration, and opens the required PostgreSQL transactions.
 At a game-day boundary, PostgreSQL function
-`apply_prepared_daily_resource_profiles(game_day)` applies clean human and city
-resource profiles set-wise. Source-table triggers only mark affected profiles
+`apply_prepared_daily_resource_profiles(game_day)` applies eligible owner resource profiles set-wise. Source-table triggers only mark affected profiles
 dirty; they never run a world settlement themselves. The Worker rebuilds dirty
 profiles before the next daily application.
 
