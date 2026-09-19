@@ -151,11 +151,18 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
       [batchRowId],
     )).rows[0];
     if (!currentBatch) throw new Error(`Market batch row ${batchRowId} does not exist`);
-    // market_batches.id is only a database row identity. The timestamp and
-    // absolute batch range must come from the persisted game coordinates.
+    // node-postgres returns BIGINT/INTEGER values as strings by default. Normalize
+    // the persisted coordinates before passing them to the strict time helpers.
+    // market_batches.id is only a database row identity; the absolute batch
+    // range must always come from the persisted game coordinates.
+    const batchGameDay = Number(currentBatch.game_day);
+    const batchGameMinute = Number(currentBatch.game_minute);
+    if (!Number.isInteger(batchGameDay) || batchGameDay < 1 || !Number.isInteger(batchGameMinute) || batchGameMinute < 0 || batchGameMinute >= 1_440) {
+      throw new Error(`Market batch row ${batchRowId} has invalid game coordinates`);
+    }
     const absoluteBatchNumber = marketBatchId(
-      currentBatch.game_day,
-      currentBatch.game_minute,
+      batchGameDay,
+      batchGameMinute,
       MARKET_BATCH_GAME_MINUTES,
     );
     const orders = await tx.query<Record<string, unknown>>(
@@ -168,7 +175,7 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
           AND (origin.game_day < $2 OR (origin.game_day = $2 AND origin.game_minute <= $3))
         ORDER BY o.created_at, o.id
         FOR UPDATE OF o`,
-      [instrument.id, currentBatch.game_day, currentBatch.game_minute],
+      [instrument.id, batchGameDay, batchGameMinute],
     );
     const buys = orders.rows.filter((row) => row.side === 'BUY');
     const sells = orders.rows.filter((row) => row.side === 'SELL');

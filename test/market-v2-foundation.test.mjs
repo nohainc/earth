@@ -48,7 +48,9 @@ test('Market settlement timestamps use the closed batch boundary', () => {
   const source = fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8');
   const escrow = fs.readFileSync('cloudflare/src/market-escrow.ts', 'utf8');
   assert.match(source, /settleMarketBatch\([^)]*batchRowId/);
-  assert.match(source, /marketBatchId\(\s*currentBatch\.game_day,\s*currentBatch\.game_minute,\s*MARKET_BATCH_GAME_MINUTES/);
+  assert.match(source, /const batchGameDay = Number\(currentBatch\.game_day\)/);
+  assert.match(source, /const batchGameMinute = Number\(currentBatch\.game_minute\)/);
+  assert.match(source, /marketBatchId\(\s*batchGameDay,\s*batchGameMinute,\s*MARKET_BATCH_GAME_MINUTES/);
   assert.match(source, /marketBatchRange\(absoluteBatchNumber, MARKET_BATCH_GAME_MINUTES\)/);
   assert.match(source, /gamePosition\(batchRange\.endMinute - 1\)/);
   assert.match(source, /postSettlementBatch\(tx, batchClosedAt\.gameDay, batchClosedAt\.gameMinute/);
