@@ -160,7 +160,7 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
         ) maintenance ON maintenance.human_id = human.id
         LEFT JOIN house_succession_plans plan
           ON plan.house_id = house.id AND plan.status = 'ACTIVE'
-       WHERE human.status = 'ACTIVE' AND human.age_years >= 65 AND world.id = 'WORLD'
+       WHERE human.status = 'ACTIVE' AND human.age_years >= 65
        FOR UPDATE OF human`, [day]);
   let processed = 0;
   for (const human of candidates.rows) {

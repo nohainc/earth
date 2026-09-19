@@ -12,6 +12,20 @@ import '../nano_markup_helper.dart';
 const _apiVersion = '2026-08';
 final http.Client _sharedClient = createEarthHttpClient();
 
+dynamic _jsonSafe(dynamic value) {
+  if (value == null || value is String || value is num || value is bool) {
+    return value;
+  }
+  if (value is Map) {
+    return <String, dynamic>{
+      for (final entry in value.entries)
+        entry.key.toString(): _jsonSafe(entry.value),
+    };
+  }
+  if (value is Iterable) return value.map(_jsonSafe).toList();
+  return value.toString();
+}
+
 class EarthApiTransport {
   final String baseUrl;
   final http.Client? _clientOverride;
@@ -64,7 +78,7 @@ class EarthApiTransport {
         if (endpoint != null) 'endpoint': endpoint,
         if (errorCode != null) 'errorCode': errorCode,
         if (statusCode != null) 'statusCode': statusCode,
-        if (context != null) 'context': context,
+        if (context != null) 'context': _jsonSafe(context),
       });
       await client.post(uri, headers: headers, body: payload);
     } catch (error) {

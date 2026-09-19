@@ -23,6 +23,14 @@ test('V5 migration defines additive policy, obligation, admission, and container
   assert.match(migration, /UPDATE corporations SET admission_policy = 'APPROVAL'/);
 });
 
+test('fresh installs seed a canonical Earth capacity policy before settlement', async () => {
+  const migration = await readFile('db/migrations/140_seed_v5_capacity_policy.sql', 'utf8');
+  assert.match(migration, /V5-EARTH-POLICY-1/);
+  assert.match(migration, /EARTH-CORP-CAPACITY-DEFAULT/);
+  assert.match(migration, /EARTH-HOUSE-CAPACITY-DEFAULT/);
+  assert.match(migration, /UPDATE resolved_constitution_snapshots_v5/);
+});
+
 test('V5 structural settlement profiles are rebuildable and independent Houses route directly to Earth', async () => {
   const migration = await readFile(new URL('../db/migrations/093_v5_settlement_profiles.sql', import.meta.url), 'utf8');
   const profiles = await readFile(new URL('../cloudflare/src/v5-settlement-profiles-postgres.ts', import.meta.url), 'utf8');

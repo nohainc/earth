@@ -292,7 +292,10 @@ class _CommandCenterState extends State<CommandCenter>
       final pending = Set<String>.from(_pendingRefreshTopics);
       _pendingRefreshTopics.clear();
       if (pending.any((topic) => topic != 'notifications')) {
-        unawaited(_resyncAuthoritativeClock());
+        // Scheduler world ticks carry settlement cursor changes as well as
+        // clock data. Bypass the periodic resync throttle so the HUD's
+        // catching-up/backlog badge reflects the completed heartbeat.
+        unawaited(_resyncAuthoritativeClock(force: pending.contains('world')));
       }
       unawaited(_refreshEvents());
     });

@@ -16,3 +16,12 @@ test('mortality and succession use deterministic idempotency keys', () => {
   assert.match(lifecycle, /NOTIFICATION-\$\{successionCorrelation\}/);
   assert.match(migration, /house_lineage_records_house_generation_idx/);
 });
+
+test('mortality candidate query does not reference an unjoined world alias', () => {
+  const lifecycle = read('cloudflare/src/lifecycle-postgres.ts');
+  const mortality = lifecycle.slice(
+    lifecycle.indexOf('export async function processHouseMortality'),
+    lifecycle.indexOf('export async function activatePendingHouseSuccessors'),
+  );
+  assert.doesNotMatch(mortality, /world\.id\s*=\s*['"]WORLD['"]/);
+});

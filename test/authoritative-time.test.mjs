@@ -198,6 +198,7 @@ test('21-23. Flutter resync and monotonic presentation contracts remain explicit
   assert.match(hud, /AppLifecycleState\.resumed/);
   assert.match(hud, /onClockResync/);
   assert.match(screen, /_resyncAuthoritativeClock/);
+  assert.match(screen, /_resyncAuthoritativeClock\(force: pending\.contains\('world'\)\)/);
   assert.match(screen, /Duration\(minutes: 3\)/);
   assert.match(hud, /Stopwatch/);
   assert.match(hud, /onDisplayedDayChanged/);
