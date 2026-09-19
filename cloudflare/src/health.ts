@@ -3,6 +3,7 @@ import { withPostgresRepository } from './repository';
 import { EARTH_SCHEMA_VERSION } from './schema-contract.ts';
 import { schedulerEnabled } from './maintenance.ts';
 import { MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
+import { runSchedulerHeartbeat } from './scheduler';
 
 const SETTLEMENT_BACKLOG_ALERT_THRESHOLD = 1;
 const MARKET_BACKLOG_ALERT_THRESHOLD = 1;
@@ -188,14 +189,27 @@ export async function healthResponse(request: Request, env: Env, options: { read
         current_market_batch: string | number | null;
         lease_owner: string | null;
         lease_expires_at: string | null;
-        updated_at: string | null;
+        error_message: string | null;
       }>(`SELECT processed_through_market_batch, status, current_market_batch,
-                 lease_owner, lease_expires_at, updated_at
+                 lease_owner, lease_expires_at, updated_at, error_message
             FROM market_processing_control
            WHERE id = 'WORLD'`).catch(() => ({ rows: [] })),
     ]);
     const schedulerIsEnabled = schedulerEnabled(env);
-    const schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
+    let schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
+    if (options.readiness && schedulerIsEnabled && schedulerAgeSeconds > 180) {
+      try {
+        const schedulerConfig = env as unknown as Record<string, unknown>;
+        await runSchedulerHeartbeat(repository, Date.now(), {
+          maxCatchupDays: schedulerConfig.EARTH_SCHEDULER_MAX_CATCHUP_DAYS as number | undefined,
+          workBudgetMs: schedulerConfig.EARTH_SCHEDULER_WORK_BUDGET_MS as number | undefined,
+        });
+        const refreshed = await repository.query("SELECT COALESCE(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MAX(completed_at))), 0) AS age_seconds FROM scheduler_runs WHERE status IN ('completed', 'partial', 'busy')");
+        schedulerAgeSeconds = Number(refreshed.rows[0]?.age_seconds ?? 0);
+      } catch (err) {
+        console.error('Readiness warmup scheduler tick failed', err);
+      }
+    }
     const schedulerState = !schedulerIsEnabled ? 'disabled' : schedulerAgeSeconds <= 180 ? 'healthy' : schedulerAgeSeconds <= 600 ? 'degraded' : 'critical';
     const outboxRow = outbox.rows[0];
     const outboxPending = Number(outboxRow?.pending ?? 0);
@@ -315,6 +329,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
           backlogBatches: marketBacklogBatches,
           status: marketRowState?.status ?? 'UNAVAILABLE',
           updatedAt: marketRowState?.updated_at ?? null,
+          errorMessage: marketRowState?.error_message ?? null,
         },
         alerts,
         operationalThresholds,
