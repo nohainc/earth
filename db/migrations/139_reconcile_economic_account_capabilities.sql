@@ -45,4 +45,6 @@ DELETE FROM economic_accounts a
  AND a.balance_units = 0
  AND NOT EXISTS (SELECT 1 FROM economic_entries e WHERE e.account_id = a.id)
  AND NOT EXISTS (SELECT 1 FROM market_order_reservations r WHERE r.escrow_account_id = a.id)
- AND NOT EXISTS (SELECT 1 FROM global_program_fundings g WHERE g.recipient_account_id = a.id);
+ AND NOT EXISTS (SELECT 1 FROM global_programs g WHERE g.recipient_account_id = a.id)
+ AND NOT EXISTS (SELECT 1 FROM public_projects pp WHERE pp.recipient_account_id = a.id)
+ AND NOT EXISTS (SELECT 1 FROM public_project_contributions pc WHERE pc.escrow_account_id = a.id);
