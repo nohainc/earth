@@ -72,10 +72,10 @@ export async function getHouseProfile(
             AND rule_code = ANY($1::TEXT[])
             AND status IN ('ACTIVE', 'RETIRED')
             AND effective_from_game_day <= (
-              SELECT COALESCE(MAX(game_day), 1) FROM world_state
+              SELECT game_day FROM earth_get_current_game_time()
             )
             AND (effective_to_game_day IS NULL OR effective_to_game_day >= (
-              SELECT COALESCE(MAX(game_day), 1) FROM world_state
+              SELECT game_day FROM earth_get_current_game_time()
             ))
           ORDER BY rule_code, effective_from_game_day DESC, version DESC`,
         [['EARTH.SUCCESSION.COST_UNITS', 'EARTH.SUCCESSION.COST_BPS', 'EARTH.SUCCESSION.TRANSITION_DAYS']],

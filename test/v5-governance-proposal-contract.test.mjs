@@ -73,6 +73,13 @@ test('V5 proposal history and filters remain available', () => {
   assert.match(panel, /Executed day/);
 });
 
+test('V5 proposal subject names use the canonical Corporation institution record', () => {
+  const service = fs.readFileSync('cloudflare/src/v5-governance-postgres.ts', 'utf8');
+  assert.doesNotMatch(service, /\bc\.name\b/);
+  assert.match(service, /COALESCE\(i\.name, CASE WHEN p\.subject_type = 'EARTH' THEN 'EARTH' ELSE p\.subject_id END\)/);
+  assert.match(service, /LEFT JOIN institutions i[\s\S]*?i\.kind = 'CORPORATION'/);
+});
+
 test('V5 proposals expose server-authored impact before voting', () => {
   const service = fs.readFileSync('cloudflare/src/v5-governance-postgres.ts', 'utf8');
   const model = fs.readFileSync('flutter_client/lib/core/models/governance_proposal.dart', 'utf8');

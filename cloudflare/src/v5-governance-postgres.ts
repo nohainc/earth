@@ -173,7 +173,7 @@ export async function listV5GovernanceProposals(
            p.quorum_bps, p.approval_bps, p.electorate_snapshot_game_day,
            p.electorate_size, p.governance_rule_snapshot, p.base_version_snapshot,
            GREATEST(1, CEIL(p.electorate_size * p.quorum_bps / 10000.0))::INTEGER AS quorum_required,
-           COALESCE(i.name, c.name, CASE WHEN p.subject_type = 'EARTH' THEN 'EARTH' ELSE p.subject_id END) AS subject_name,
+           COALESCE(i.name, CASE WHEN p.subject_type = 'EARTH' THEN 'EARTH' ELSE p.subject_id END) AS subject_name,
            (EXISTS (SELECT 1 FROM v5_governance_electorate_snapshots_v5 es
              WHERE es.proposal_id = p.id
                AND es.house_id = (SELECT house_id FROM humans WHERE id = $1))) AS viewer_eligible,
@@ -186,8 +186,9 @@ export async function listV5GovernanceProposals(
            (b.proposal_id IS NOT NULL) AS viewer_voted,
            b.choice AS viewer_choice
       FROM v5_governance_proposals p
-      LEFT JOIN institutions i ON i.id = p.subject_id
-      LEFT JOIN corporations c ON c.id = p.subject_id
+      LEFT JOIN institutions i
+        ON i.id = p.subject_id
+       AND i.kind = 'CORPORATION'
       LEFT JOIN v5_governance_ballots b
         ON b.proposal_id = p.id
        AND b.house_id = (SELECT house_id FROM humans WHERE id = $1)

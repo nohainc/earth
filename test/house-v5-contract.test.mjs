@@ -47,6 +47,11 @@ test('House succession publishes successor and authoritative cost rules', () => 
   assert.match(lifecycle, /successionCostRuleVersion/);
 });
 
+test('House succession rules use the authoritative clock after mutable world time was removed', () => {
+  assert.match(housePostgres, /FROM earth_get_current_game_time\(\)/);
+  assert.doesNotMatch(housePostgres, /MAX\(game_day\).*FROM world_state/);
+});
+
 test('House lineage is reconstructed from Humans and succession events', () => {
   assert.match(housePostgres, /FROM humans WHERE house_id = \$1/);
   assert.match(housePostgres, /FROM succession_events WHERE house_id = \$1/);
