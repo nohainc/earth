@@ -1,22 +1,60 @@
-# Core schema ERD (V3)
+# EARTH Core Schema Map — V5
 
-```mermaid
-erDiagram
-  houses ||--o{ humans : represents
-  houses ||--o{ house_affiliations : joins
-  corporations ||--o{ house_affiliations : admits
-  corporations ||--o{ territories : governs
-  territories ||--o{ buildings : locates
-  owner_registry ||--o{ buildings : owns
-  market_orders ||--o{ market_fills : fills
-  proposals ||--o{ ballots : receives
+Status: **CURRENT HIGH-LEVEL REFERENCE**
+Updated: 2026-09-19
+
+This file is intentionally conceptual. The authoritative schema is
+`db/schema.sql`, `db/schema-manifest.json`, and the active forward migration
+chain.
+
+```text
+accounts / sessions
+        |
+        v
+      houses  <----> humans
+        |
+        +---- house_affiliations ----> corporations
+        |
+        +---- buildings
+        |
+        +---- economic owner/accounts
+                   |
+                   +---- economic_transactions
+                   +---- economic_entries
+                   +---- resource/credit assets
+
+corporations
+   |
+   +---- governance / proposals / roles
+   +---- budgets / commitments / fiscal state
+   +---- public buildings / technology / programs
+   +---- pooled V5 physical-capacity state
+
+territories
+   |
+   +---- standardized physical/geographic capacity context
+   +---- audit/history/container records
+   |
+   X no independent government/treasury/player hierarchy in V5
+
+communities
+   |
+   +---- voluntary social associations
+
+EARTH
+   |
+   +---- Constitution / global governance
+   +---- global programs / technology frontier
+   +---- global capacity policy
 ```
 
-The clean-break foundation is the V3 baseline under `db/baseline/`, applied by
-`db/migrations/001_baseline.sql` (schema head `3`). During pre-production
-reconciliation, active forward migrations such as
-`db/migrations/002_communities_v2.sql` and
-`db/migrations/003_community_v2_hardening.sql` are applied afterward. These temporary
-migrations will be folded into the final baseline only after all retained
-features pass fresh-database certification; future permanent changes then begin
-at `002_...`.
+## Rules
+
+- City is not a current schema/domain authority.
+- Territory is not an economic principal or a political layer.
+- House and Corporation are the primary private/institutional economic owners.
+- PostgreSQL is authoritative.
+- Historical migrations may contain removed tables, columns, and vocabulary;
+  they are append-only history and are not current schema documentation.
+- Do not copy table lists or migration-head numbers into this document unless
+  they are generated/verified from the current schema.
