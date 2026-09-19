@@ -12,14 +12,29 @@ extension EarthApiWorld on EarthApi {
     return (response['events'] as List<dynamic>?) ?? const [];
   }
 
-  Future<Map<String, dynamic>> news({int limit = 25, String? before}) async {
+  Future<Map<String, dynamic>> news({
+    int limit = 25,
+    String? before,
+    String? scope,
+    String? topic,
+    String? importance,
+  }) async {
     final params = <String, String>{
       'limit': limit.toString(),
       if (before != null && before.isNotEmpty) 'before': before,
+      if (scope != null && scope.isNotEmpty) 'scope': scope,
+      if (topic != null && topic.isNotEmpty) 'topic': topic,
+      if (importance != null && importance.isNotEmpty) 'importance': importance,
     };
     final response = await _request(
         Uri(path: '/api/news', queryParameters: params).toString());
     return response as Map<String, dynamic>;
+  }
+
+  Future<void> markNewsSeen(String publicationKey) async {
+    await _request('/api/news/seen', method: 'POST', body: {
+      'publicationKey': publicationKey,
+    });
   }
 
   Future<Map<String, dynamic>> notifications() async =>

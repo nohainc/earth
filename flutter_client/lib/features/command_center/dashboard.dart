@@ -34,6 +34,7 @@ import '../../core/navigation_registry.dart';
 import '../world/initiatives_panel.dart';
 import '../institutions/mutual_credit_panel.dart';
 import '../house/house_policy_panel.dart';
+import '../../core/models/news_story.dart';
 
 String dashboardSectionTitle(String section, [EarthState? state]) =>
     NavigationRegistry.pageTitle(section, state);
@@ -51,9 +52,11 @@ class Dashboard extends StatelessWidget {
   final Map<String, dynamic>? businessProfile;
   final bool busy;
   final List<dynamic> events;
-  final List<dynamic> news;
+  final List<NewsStory> news;
   final bool newsHasMore;
   final VoidCallback? onLoadEarlierNews;
+  final String newsScope;
+  final ValueChanged<String>? onNewsScopeChanged;
   final List<dynamic> notifications;
   final List<dynamic> decisionQueue;
   final List<dynamic> ownershipEvents;
@@ -88,6 +91,8 @@ class Dashboard extends StatelessWidget {
     this.news = const [],
     this.newsHasMore = false,
     this.onLoadEarlierNews,
+    this.newsScope = 'all',
+    this.onNewsScopeChanged,
     required this.notifications,
     this.decisionQueue = const [],
     required this.ownershipEvents,
@@ -403,9 +408,9 @@ class Dashboard extends StatelessWidget {
               news: news,
               hasMore: newsHasMore,
               onLoadEarlier: onLoadEarlierNews,
+              selectedScope: newsScope,
+              onScopeChanged: onNewsScopeChanged,
               onNavigate: onNavigate,
-              events: events,
-              notifications: notifications,
               onRefresh: onRefreshEvents)
         ];
       case 'constitution':

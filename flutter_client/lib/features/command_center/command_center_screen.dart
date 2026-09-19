@@ -20,6 +20,7 @@ import 'top_fixed_hud_panel.dart';
 import '../communications/comm_link_dialog.dart';
 import '../../core/models/live_connection_status.dart';
 import '../../core/models/command_overview.dart';
+import '../../core/models/news_story.dart';
 import '../../core/auth_storage.dart';
 import '../../core/realtime_socket.dart';
 import '../../earth_http_client.dart';
@@ -63,8 +64,9 @@ class _CommandCenterState extends State<CommandCenter>
   String? error;
   bool busy = false;
   List<dynamic> events = const [];
-  List<dynamic> news = const [];
+  List<NewsStory> news = const [];
   String? newsNextCursor;
+  String newsScope = 'all';
   List<dynamic> notifications = const [];
   List<dynamic> decisionQueue = const [];
   CommandOverview? commandOverview;
@@ -447,7 +449,7 @@ class _CommandCenterState extends State<CommandCenter>
     try {
       final results = await Future.wait<dynamic>([
         api.events(),
-        api.news().catchError((_) => <String, dynamic>{}),
+        api.news(scope: _newsScopeQuery()).catchError((_) => <String, dynamic>{}),
         api.notifications(),
         api.commandCenter().catchError((_) => <String, dynamic>{}),
         api.v5Overview().catchError((_) => <String, dynamic>{}),
@@ -476,7 +478,11 @@ class _CommandCenterState extends State<CommandCenter>
       if (mounted) {
         setState(() {
           events = latest;
-          news = (newsData['news'] as List<dynamic>?) ?? const [];
+          news = (newsData['news'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map((item) => NewsStory.fromJson(
+                  Map<String, dynamic>.from(item)))
+              .toList();
           newsNextCursor = newsData['nextCursor']?.toString();
           ownershipEvents = ownership;
           membershipEvents = memberships;
@@ -499,6 +505,10 @@ class _CommandCenterState extends State<CommandCenter>
                 : LiveConnectionStatus.polling;
           }
         });
+        final newest = news.isEmpty ? null : news.first.publicationKey;
+        if (newest != null && newest.isNotEmpty) {
+          unawaited(api.markNewsSeen(newest));
+        }
       }
     } catch (exception) {
       // Protected feeds are allowed to reject a request while the session is
@@ -519,14 +529,48 @@ class _CommandCenterState extends State<CommandCenter>
     final cursor = newsNextCursor;
     if (cursor == null || cursor.isEmpty) return;
     try {
-      final response = await api.news(before: cursor);
+      final response = await api.news(before: cursor, scope: _newsScopeQuery());
       if (!mounted) return;
       setState(() {
-        news = [...news, ...((response['news'] as List<dynamic>?) ?? const [])];
+        news = [
+          ...news,
+          ...((response['news'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map((item) => NewsStory.fromJson(
+                  Map<String, dynamic>.from(item)))),
+        ];
+        newsNextCursor = response['nextCursor']?.toString();
+      });
+      final newest = news.isEmpty ? null : news.first.publicationKey;
+      if (newest != null && newest.isNotEmpty) {
+        unawaited(api.markNewsSeen(newest));
+      }
+    } catch (_) {
+      // The existing feed remains usable; the next refresh can retry.
+    }
+  }
+
+  String? _newsScopeQuery() => newsScope == 'all' ? null : newsScope.toUpperCase();
+
+  Future<void> _changeNewsScope(String scope) async {
+    if (scope == newsScope) return;
+    setState(() {
+      newsScope = scope;
+      news = const [];
+      newsNextCursor = null;
+    });
+    try {
+      final response = await api.news(scope: _newsScopeQuery());
+      if (!mounted || scope != newsScope) return;
+      setState(() {
+        news = (response['news'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => NewsStory.fromJson(Map<String, dynamic>.from(item)))
+            .toList();
         newsNextCursor = response['nextCursor']?.toString();
       });
     } catch (_) {
-      // The existing feed remains usable; the next refresh can retry.
+      // The selected feed can recover on the next periodic refresh.
     }
   }
 
@@ -925,6 +969,10 @@ class _CommandCenterState extends State<CommandCenter>
                                                 newsNextCursor != null &&
                                                     newsNextCursor!.isNotEmpty,
                                             onLoadEarlierNews: _loadEarlierNews,
+                                            newsScope: newsScope,
+                                            onNewsScopeChanged: (scope) {
+                                              unawaited(_changeNewsScope(scope));
+                                            },
                                             notifications: notifications,
                                             decisionQueue: decisionQueue,
                                             commandOverview: commandOverview,

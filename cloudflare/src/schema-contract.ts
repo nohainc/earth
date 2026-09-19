@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 141;
+export const EARTH_SCHEMA_VERSION = 144;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_accounts": [
     "id",
@@ -393,6 +393,27 @@ export const REQUIRED_SCHEMA_TABLES = {
     "game_minute",
     "correlation_id",
     "read_at",
+    "created_at"
+  ],
+  "news_publications": [
+    "id",
+    "publication_key",
+    "scope_type",
+    "scope_id",
+    "scope_name",
+    "topic",
+    "importance",
+    "headline",
+    "summary",
+    "game_day",
+    "game_minute",
+    "related_entity_type",
+    "related_entity_id",
+    "related_entity_name",
+    "action_route",
+    "action_entity_id",
+    "action_label",
+    "published_at",
     "created_at"
   ],
   "game_events": [
@@ -843,6 +864,10 @@ export const REQUIRED_UNIQUE_CONSTRAINTS = [
   [
     "economic_transactions",
     "correlation_id"
+  ],
+  [
+    "news_publications",
+    "publication_key"
   ]
 ] as const;
 export const REQUIRED_INDEXES = [
@@ -851,6 +876,8 @@ export const REQUIRED_INDEXES = [
   "territory_capacity_state_game_day_idx",
   "notifications_house_created_idx",
   "notifications_house_unread_idx",
+  "news_publications_chronology_idx",
+  "news_publications_scope_idx",
   "game_events_category_day_idx",
   "game_events_subject_idx",
   "game_events_actor_house_idx",

@@ -11,7 +11,7 @@ import {
   listRankings as listRankingsPostgres,
 } from './read-postgres.ts';
 import { listEvents as listEventsPostgres, listHistory as listHistoryPostgres } from './read-models/events-read.ts';
-import { listNews as listNewsPostgres } from './read-models/news-read.ts';
+import { listNews as listNewsPostgres, markNewsSeen as markNewsSeenPostgres } from './read-models/news-read.ts';
 import { backfillV5CapacityBatch, getV5CapacityBackfillRun } from './v5-capacity-backfill-postgres.ts';
 import { getV5CutoverReadiness } from './v5-cutover-readiness-postgres.ts';
 import { getV5TaxReconciliation } from './v5-tax-reconciliation-postgres.ts';
@@ -377,12 +377,37 @@ export async function handleReadModelRoutes(
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const rawLimit = Number(url.searchParams.get('limit') ?? 25);
     if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 50) return Response.json({ ok: false, error: 'limit must be an integer between 1 and 50' }, { status: 400 });
+    const scope = url.searchParams.get('scope')?.trim().toUpperCase() || undefined;
+    const topic = url.searchParams.get('topic')?.trim().toUpperCase() || undefined;
+    const importance = url.searchParams.get('importance')?.trim().toUpperCase() || undefined;
+    if (scope && !['EARTH', 'CORPORATION', 'COMMUNITY'].includes(scope)) return Response.json({ ok: false, error: 'Unknown news scope' }, { status: 400 });
+    if (topic && !['GOVERNANCE', 'TECHNOLOGY', 'ECONOMY', 'INFRASTRUCTURE', 'SOCIETY', 'LIFECYCLE'].includes(topic)) return Response.json({ ok: false, error: 'Unknown news topic' }, { status: 400 });
+    if (importance && !['MAJOR', 'NOTABLE', 'ROUTINE'].includes(importance)) return Response.json({ ok: false, error: 'Unknown news importance' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => listNewsPostgres(repository, viewer.house_id, rawLimit, url.searchParams.get('before') ?? undefined));
+      const result = await withRepository(env, (repository) => listNewsPostgres(repository, viewer.house_id, rawLimit, url.searchParams.get('before') ?? undefined, {
+        scope: scope as 'EARTH' | 'CORPORATION' | 'COMMUNITY' | undefined,
+        topic: topic as 'GOVERNANCE' | 'TECHNOLOGY' | 'ECONOMY' | 'INFRASTRUCTURE' | 'SOCIETY' | 'LIFECYCLE' | undefined,
+        importance: importance as 'MAJOR' | 'NOTABLE' | 'ROUTINE' | undefined,
+      }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'News feed unavailable' }, { status: 400 });
+    }
+  }
+
+  if (url.pathname === '/api/news/seen' && request.method === 'POST') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ publicationKey?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const publicationKey = parsed.value.publicationKey?.trim();
+    if (!publicationKey) return Response.json({ ok: false, error: 'publicationKey is required' }, { status: 400 });
+    try {
+      await withRepository(env, (repository) => markNewsSeenPostgres(repository, viewer.house_id, publicationKey));
+      return Response.json({ ok: true });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'News read state unavailable' }, { status: 400 });
     }
   }
 

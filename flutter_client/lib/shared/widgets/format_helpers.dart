@@ -196,6 +196,14 @@ String formatGameDateTime(int gameDay, int gameMinute) {
       '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 }
 
+/// Formats a minute within a game day as the player-facing 24-hour clock.
+String formatGameMinute(int gameMinute) {
+  final minuteOfDay = gameMinute.clamp(0, 1439);
+  final hour = minuteOfDay ~/ 60;
+  final minute = minuteOfDay % 60;
+  return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+}
+
 /// Converts a real-world UTC/ISO date into an in-game simulated timestamp:
 /// Epoch start: 2026-01-01 00:00:00 UTC (1 real second = 1 game minute).
 String formatRealToGameDateTime(dynamic value) {
