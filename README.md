@@ -1,87 +1,72 @@
 # EARTH
 
-EARTH is a web-first prototype of a persistent economic and civic simulation based on the accompanying game specification and technical architecture documents.
+EARTH is a persistent web-first economic, civic, and generational simulation.
 
-## Run
+Gameplay V5 is the active gameplay model. PostgreSQL is the canonical state
+authority; the Cloudflare Worker validates and executes commands; Flutter is the
+production client.
 
-For the visual prototype, open `index.html` in this folder. It launches the current Prototype 3 experience from the project root.
+## Canonical gameplay model
 
-For the local reference API simulator:
+- **EARTH** — global authority and constitutional framework.
+- **Corporation** — local political/economic institution.
+- **House** — persistent player identity and private economic principal.
+- **Human** — mortal representative of a House.
+- **Community** — voluntary social association.
+- **Territory** — physical/geographic capacity context, not a government.
+- **City** — obsolete domain concept; do not add City gameplay or APIs.
 
-```bash
-cd earth
-npm install
-npm start
-```
+See `docs/DOCUMENT_STATUS.md` and `docs/v5/README.md` before gameplay changes.
 
-The server listens on `http://localhost:8787` and exposes the compatibility
-API. It is non-production and never a fallback for the Cloudflare Worker. Set
-`DATABASE_URL` when hydrating the simulator from PostgreSQL; production
-gameplay uses the PostgreSQL-backed Worker API.
+## Repository map
 
-EARTH uses a real local PostgreSQL server for local development. Start the
-PostgreSQL service using the installation's normal service manager, then create
-the database if needed:
+- `cloudflare/` — production Cloudflare Worker API and settlement engine
+- `flutter_client/` — production Flutter client
+- `db/migrations/` — append-only forward PostgreSQL migration history
+- `db/schema.sql` — current canonical schema artifact
+- `db/schema-manifest.json` — schema contract/manifest
+- `db/seed/` — development and test fixtures
+- `docs/` — current architecture, gameplay, engineering, and operations docs
+- `test/` — Node/TypeScript automated tests
+- `server.js` — non-production compatibility/reference harness
+
+## Local PostgreSQL
 
 ```bash
 brew install postgresql@18
 brew services start postgresql@18
 createdb earth
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
-```
-
-Fresh installations use one canonical path: `db/migrations/001_baseline.sql`
-followed, in order, by every active forward migration through the current
-schema head. The files under `db/baseline/` are the frozen source sections used
-to build migration 001; they are not a complete current-schema installation.
-For future changes, create active migrations starting at the next version;
-`npm run db:migrate:postgres` applies the complete active chain.
-
-For the local database, apply the complete migration chain and then load
-development fixtures only when interactive testing requires them:
-
-```bash
-DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:seed:dev
-DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:verify:manifest
 ```
 
-For manual local PostgreSQL testing, use the same database for migrations and
-the local Worker API:
+For the production-like local Worker path:
 
 ```bash
 ./scripts/migrate-local-db.sh --seed
-DATABASE_READ_ONLY=false DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm run start:wrangler
+DATABASE_READ_ONLY=false \
+DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth \
+npm run start:wrangler
 ```
 
-The Flutter client should then use `http://localhost:8788`. The legacy
-`server.js` reference simulator is intended for automated tests and is not the
-manual PostgreSQL-backed application path.
+The Flutter client should use the local Worker URL (normally
+`http://localhost:8788`).
 
-To exercise the same scheduled settlement path as production, start the local
-app through `./scripts/run-local-ui-test.sh`. The launcher starts Wrangler with
-its scheduled-event test endpoint and invokes `/__scheduled` once every 60
-seconds. Each invocation enters the Worker `scheduled()` handler, advances one
-game hour, rebuilds dirty settlement profiles, and applies prepared normal
-resource deltas through PostgreSQL.
+## World time and settlement
 
-The local scheduler is enabled by default. Disable it for a static session with
-`EARTH_LOCAL_SCHEDULER=false ./scripts/run-local-ui-test.sh`. To trigger one
-manual tick while Wrangler is running, use:
+The authoritative world clock is PostgreSQL-backed.
 
-```bash
-curl --fail --show-error http://127.0.0.1:8788/__scheduled
-```
+At the canonical 1:60 time ratio:
 
-Local daily settlement activation is also enabled by default. If a local
-database is still in `awaiting_baseline`, the launcher initializes it from the
-last completed game day before starting the Worker. Disable this with
-`EARTH_LOCAL_SETTLEMENT=false ./scripts/run-local-ui-test.sh`.
+- 1 real second = 1 game minute
+- 1 real minute = 1 game hour
+- 24 real minutes = 1 game day
 
+The Worker scheduled handler performs bounded catch-up and ordered settlement.
+Local scheduled-event testing is supported by the repository launcher and
+`/__scheduled` test endpoint.
 
-The Flutter client in `flutter_client/` is the production web application. It reads canonical state from the Cloudflare Worker API backed by PlanetScale PostgreSQL through Hyperdrive. The public landing page is served at `/landing`; the authenticated application is served at `/app`.
-
-To run Flutter against the deployed Worker and PostgreSQL-backed API:
+## Production client
 
 ```bash
 cd flutter_client
@@ -89,72 +74,55 @@ flutter pub get
 flutter run -d chrome --dart-define=EARTH_API_URL=https://earthuc.com
 ```
 
-For a release build served by Workers Static Assets:
+Release build:
 
 ```bash
 flutter build web --release --base-href /
 cd ..
-npx wrangler deploy --domains earthuc.com
+npx wrangler deploy --config wrangler.api.jsonc
 ```
 
-## API contract and data formats
+## Current V5 gameplay pillars
 
-The versioned REST error and authority contract is documented in
-[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md). The current response version is
-`2026-08`. Internal serialized state strings, world event details, negotiated contract terms, governance rule values, and municipal charters are serialized using **Nano Markup** (`nanomarkup` by `nohainc`).
+- House/Human continuity, mortality, succession, and inheritance
+- Corporation membership, governance, public finance, and capacity economics
+- Buildings, production, resources, construction, upgrades, and persistence
+- Global Spot Market and auditable CREDIT/resource accounting
+- Technology generations, research, adoption, patents/licenses where active
+- Communities and communications
+- EARTH/Corporation governance and constitutional rules
+- Progressive physical-capacity economics
+- Persistent daily settlement and world conditions
 
-Product and architecture guardrails for future AI-assisted development are in
-[`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md).
-The implementation checklist for the management-first redesign is maintained
-in the canonical architecture documentation.
-
-## Repository map
-
-- `cloudflare/` — authoritative production Cloudflare Worker API & settlement engine
-- `flutter_client/` — multiplatform production client (Web, macOS, iOS, Android, Linux, Windows)
-- `db/baseline/` — frozen source sections for immutable migration 001
-- `db/migrations/001_baseline.sql` — immutable migration version 1
-- `db/migrations/002_...` onward — canonical forward schema evolution
-- `db/seed/` — development and test data only
-- `server.js` — non-production local reference API
-- `test/` — comprehensive automated test suites (Node.js test runner)
+Territory is intentionally not a third political layer. Standardized Territory
+containers are implementation/world-capacity context and should not be exposed
+as routine management gameplay merely because records exist.
 
 ## Verification
 
+Use current scripts from `package.json`.
+
+Core checks include:
+
 ```bash
-npm run check
+npm run db:verify:migrations
+npm run db:verify:canonical
+npm run test:certification
 npm test
-npm run qa
+npm run cf:check
 ```
 
-## Current playable systems
-
-- **Building-Centric Urban Economy**: Self-contained private estates, civic infrastructure, and public investment megaprojects with multi-day construction pipelines, daily operating expenses, and 70/30 weighted citizen dividends.
-- **Corporate Technology & Patent Licensing**: Foundational open technology + corporate patent IP licensing (private, city-wide civic, permanent).
-- **Industrial Machine Operations**: Independent tradable manufacturing assets for specialized commodity fabrication, research facilities, and logistics.
-- **Civic Governance & Quadratic Ballots**: Sovereign city charters, taxation policies, municipal megaproject procurement, and public channels.
-- **Central Commodity Market**: Live liquidity corridors, order books, and OHLC data tracking for spot resources.
-- **Persistent World Simulation**: Atomic financial ledger transfers and deterministic daily settlements.
-
-## PostgreSQL and Flutter verification
-
-The authoritative production schema is the fully migrated PostgreSQL schema
-through the current migration head and runs through the Hyperdrive binding.
-Verify the database before deploying:
+Flutter:
 
 ```bash
-DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres
-DATABASE_URL="$DATABASE_URL" npm run db:verify:manifest
-npm run cf:smoke
+cd flutter_client
+flutter analyze
+flutter test
+flutter build web --release --base-href /
 ```
 
-The production smoke suite also verifies that `/app` serves the compiled Flutter shell, protected API and event endpoints reject unauthenticated access, and the remote PostgreSQL feature schema is present.
+## Documentation rule
 
-The Flutter client is the primary production/test client. Local PostgreSQL is the
-same authoritative persistence model used for manual production-like testing;
-the local Node server and `simulate:scenarios` command are compatibility and
-balance-verification tools only, not a separate player-facing game mode.
-
-## Architectural direction
-
-The implementation follows the specification's decision-first, server-authoritative model: the player submits intent, while settlement, governance outcomes, ledger changes, and persistent world-engine results remain canonical PostgreSQL/Worker outcomes. Durable Objects coordinate market commands and live events; PostgreSQL remains the authoritative economic state.
+Do not use deleted V2/V3/V4 gameplay documents as design authority. Git history
+is available for archaeology, but current implementation must follow V5 plus
+current schema/source/tests.
