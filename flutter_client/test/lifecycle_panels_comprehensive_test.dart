@@ -4,7 +4,8 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/lifecycle/lifecycle_panels.dart';
 
 void main() {
-  testWidgets('Lifecycle panels render health, liquidity, pantheon, history and rankings',
+  testWidgets(
+      'Lifecycle panels render V5 profile-adjacent world panels, liquidity, pantheon, history and rankings',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -12,11 +13,29 @@ void main() {
         'id': 'H-0044',
         'display_name': 'Amara Kline',
         'credits': 18420,
+      },
+      'humanProfile': {
+        'id': 'H-0044',
+        'displayName': 'Amara Kline',
+        'houseId': 'HOUSE-KLINE',
+        'houseName': 'Kline',
+        'birthGameDay': 10,
+        'ageYears': 48,
+        'status': 'ACTIVE',
         'standing': 742,
-        'health': 94,
-        'vitality': 88,
-        'lifespan_days': 1080,
-        'age_years': 48,
+        'finalLegacy': 742,
+        'corporationId': 'CORP-APEX',
+        'corporationName': 'Apex Dynamics',
+      },
+      'humanDailyNeeds': {
+        'gameDay': 184,
+        'foodRequiredUnits': '1',
+        'foodConsumedUnits': '1',
+        'foodShortfallUnits': '0',
+        'energyRequiredUnits': '1',
+        'energyConsumedUnits': '1',
+        'energyShortfallUnits': '0',
+        'status': 'MET',
       },
       'world': {
         'health': 100,
@@ -60,16 +79,6 @@ void main() {
       'life': {
         'birth_day': 10,
         'aging_stage': 'SENIOR',
-        'vitality': 88,
-        'health': 94,
-        'ageYears': 48,
-        'successor': {
-          'successor_name': 'Kaelen Kline',
-          'successor_human_id': 'H-0099',
-          'heir_pct': 70,
-          'trust_pct': 20,
-          'family_pct': 10,
-        },
       },
       'governance': {},
       'market': {'orders': []},
@@ -85,7 +94,12 @@ void main() {
       ],
       'rankings': {
         'cities': [
-          {'name': 'Neo Olympia', 'score': 98.4, 'population': 42000, 'gdp': 1500000},
+          {
+            'name': 'Neo Olympia',
+            'score': 98.4,
+            'population': 42000,
+            'gdp': 1500000
+          },
         ],
         'corporations': [
           {'name': 'Apex Dynamics Corp', 'valuation': 850000, 'standing': 94},
@@ -158,8 +172,12 @@ void main() {
           'lifespanYears': 82,
           'houseName': 'House of Vance',
           'final_legacy': 942,
-          'bio': 'Pioneered zero-loss geothermal conversion grids across District 4.',
-          'majorAchievements': ['Architect of the Geothermal Charter', 'Philanthropic Trust Founder'],
+          'bio':
+              'Pioneered zero-loss geothermal conversion grids across District 4.',
+          'majorAchievements': [
+            'Architect of the Geothermal Charter',
+            'Philanthropic Trust Founder'
+          ],
         },
       ],
       'livingLeaders': [
@@ -185,15 +203,21 @@ void main() {
           body: SingleChildScrollView(
             child: Column(
               children: [
-                SuccessionPanel(state: state, busy: false, action: (cb) async {}),
-                LegacyPersonalFinancePanel(state: state, busy: false, action: (cb) async {}),
-                InstitutionSolvencyPanel(state: state, busy: false, action: (cb) async {}),
+                LegacyPersonalFinancePanel(
+                    state: state, busy: false, action: (cb) async {}),
+                InstitutionSolvencyPanel(
+                    state: state, busy: false, action: (cb) async {}),
                 const WorldIntegrityPanel(state: state),
                 const MacroLiquidityPanel(state: state),
                 const HumanServicesPanel(state: state),
                 const LedgerPanel(state: state),
                 WorldFeedPanel(events: feedEvents),
-                NotificationsPanel(state: state, notifications: notifications, unreadNotifications: 1, busy: false, action: (cb) async {}),
+                NotificationsPanel(
+                    state: state,
+                    notifications: notifications,
+                    unreadNotifications: 1,
+                    busy: false,
+                    action: (cb) async {}),
                 OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
                 CivicMembershipHistoryPanel(membershipEvents: membershipEvents),
                 const WorldRankingsPanel(state: state),
@@ -206,10 +230,6 @@ void main() {
       ),
     );
 
-    // SuccessionPanel
-    expect(find.text('SUCCESSION PLAN'), findsOneWidget);
-    expect(find.textContaining('Kaelen Kline'), findsOneWidget);
-
     // LegacyPersonalFinancePanel
     expect(find.text('PERSONAL FINANCE / PROTECTED MINIMUM'), findsOneWidget);
 
@@ -221,7 +241,8 @@ void main() {
     expect(find.textContaining('m0_conservation: OK'), findsOneWidget);
 
     // MacroLiquidityPanel
-    expect(find.text('UC MONETARY STABILITY BOARD / MACRO BASE'), findsOneWidget);
+    expect(
+        find.text('UC MONETARY STABILITY BOARD / MACRO BASE'), findsOneWidget);
     expect(find.text('100% Reserve Conserved'), findsOneWidget);
 
     // HumanServicesPanel

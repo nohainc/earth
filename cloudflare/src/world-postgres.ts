@@ -15,6 +15,8 @@ import { getAvailableScaleCapabilities } from './v5-scale-postgres.ts';
 import { readAuthoritativeGameTime, getSettlementCursor } from './world-clock-postgres.ts';
 import { corporationPoliciesFromConstitution, corporationProfileFromSource } from './corporation-profile.ts';
 import { getInstitutionFinancialProjection } from './financial-projections.ts';
+import type { HumanProfile } from './human-profile.ts';
+import type { HumanAuthoritySummary } from './human-authority-summary.ts';
 
 /** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -28,7 +30,7 @@ function toJsonSafe<T>(value: T): T {
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId?: string, viewerHouseId?: string): Promise<Record<string, unknown>> {
   const clock = await readAuthoritativeGameTime(repository);
-  const [cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
+  const [cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, dailyMaintenance, personalRoles, lifeEvents, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
     getSettlementCursor(repository, clock.gameDay),
     repository.query("SELECT id, world_seed, status, genesis_at FROM world_state WHERE id = 'WORLD'"),
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
@@ -37,10 +39,37 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     listCommunities(repository, viewerHouseId),
     viewerHouseId ? repository.query<{ need_code: string; risk_level: string; game_day: number }>(`SELECT need_code, risk_level, game_day FROM house_need_assessments WHERE house_id = $1 ORDER BY game_day DESC, need_code`, [viewerHouseId]) : Promise.resolve({ rows: [] as { need_code: string; risk_level: string; game_day: number }[] }),
     listWorldConditions(repository, clock.gameDay),
-    viewerId ? repository.query(`SELECT h.id, h.house_id, h.display_name, h.age_years, h.standing, h.final_legacy, h.status,
+    viewerId ? repository.query(`SELECT h.id, h.house_id, h.display_name, h.birth_game_day, h.age_years, h.standing, h.final_legacy, h.status,
                                         hs.house_name, hs.motto, hs.generation, hs.dynasty_legacy
                                    FROM humans h JOIN houses hs ON hs.id = h.house_id
                                   WHERE h.id = $1`, [viewerId]) : Promise.resolve({ rows: [] }),
+    viewerId ? repository.query(`SELECT game_day, food_required_units::TEXT, food_consumed_units::TEXT,
+                                        food_shortfall_units::TEXT, energy_required_units::TEXT,
+                                        energy_consumed_units::TEXT, energy_shortfall_units::TEXT, status
+                                   FROM personal_life_maintenance
+                                  WHERE human_id = $1
+                                  ORDER BY game_day DESC
+                                  LIMIT 1`, [viewerId]) : Promise.resolve({ rows: [] }),
+    viewerId ? repository.query(`SELECT i.kind AS institution_type, r.institution_id,
+                                        r.role_code AS code,
+                                        CASE r.role_code
+                                          WHEN 'CORPORATION_EXECUTIVE' THEN 'Corporation Executive'
+                                          WHEN 'CORPORATION_TREASURER' THEN 'Corporation Treasurer'
+                                          WHEN 'CORPORATION_OPERATOR' THEN 'Corporation Operator'
+                                          ELSE r.role_code END AS name,
+                                        i.name AS institution_name,
+                                        r.effective_from_game_day
+                                   FROM institution_governance_roles r
+                                   JOIN institutions i ON i.id = r.institution_id
+                                  WHERE r.human_id = $1
+                                    AND r.status = 'ACTIVE'
+                                    AND i.kind IN ('EARTH', 'CORPORATION')
+                                  ORDER BY r.role_code`, [viewerId]) : Promise.resolve({ rows: [] }),
+    viewerId ? repository.query(`SELECT game_day, title, event_type, details
+                                   FROM game_events
+                                  WHERE actor_human_id = $1 AND category = 'LIFECYCLE'
+                                  ORDER BY game_day DESC, game_minute DESC NULLS LAST
+                                  LIMIT 8`, [viewerId]) : Promise.resolve({ rows: [] }),
     repository.query(`SELECT c.id, c.code, c.code AS building_type, c.family_code, c.tier, c.tier_formula_version,
                              c.economic_role, c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                              c.construction_credit_units, c.construction_minutes,
@@ -241,6 +270,43 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
       };
     });
   const house = viewer.rows[0] ?? null;
+  const affiliatedCorporation = corporation.rows[0] ?? null;
+  const humanProfile: HumanProfile | null = house
+    ? {
+        id: String(house.id),
+        displayName: String(house.display_name ?? ''),
+        houseId: String(house.house_id),
+        houseName: String(house.house_name ?? ''),
+        birthGameDay: house.birth_game_day == null ? null : Number(house.birth_game_day),
+        ageYears: house.age_years == null ? null : Number(house.age_years),
+        status: String(house.status ?? 'UNKNOWN'),
+        standing: house.standing == null ? null : Number(house.standing),
+        finalLegacy: house.final_legacy == null ? null : Number(house.final_legacy),
+        corporationId: affiliatedCorporation?.id == null ? null : String(affiliatedCorporation.id),
+        corporationName: affiliatedCorporation?.name == null ? null : String(affiliatedCorporation.name),
+      }
+    : null;
+  const maintenance = dailyMaintenance.rows[0] ?? null;
+  const humanAuthoritySummary: HumanAuthoritySummary[] = personalRoles.rows.map((row: any) => ({
+    institutionType: String(row.institution_type),
+    institutionId: String(row.institution_id),
+    institutionName: String(row.institution_name),
+    roleCode: String(row.code),
+    roleName: String(row.name),
+    effectiveFromDay: Number(row.effective_from_game_day),
+  }));
+  const humanDailyNeeds = maintenance
+    ? {
+        gameDay: Number(maintenance.game_day),
+        foodRequiredUnits: String(maintenance.food_required_units),
+        foodConsumedUnits: String(maintenance.food_consumed_units),
+        foodShortfallUnits: String(maintenance.food_shortfall_units),
+        energyRequiredUnits: String(maintenance.energy_required_units),
+        energyConsumedUnits: String(maintenance.energy_consumed_units),
+        energyShortfallUnits: String(maintenance.energy_shortfall_units),
+        status: String(maintenance.status),
+      }
+    : null;
   const resources = Object.fromEntries(accounts.rows
     .filter((row: any) => row.code !== 'CREDIT')
     .filter((row: any) => row.account_type === 'INVENTORY')
@@ -450,6 +516,11 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
       failedError: cursor.failedError ?? null,
     },
     human: house,
+    humanProfile,
+    humanDailyNeeds,
+    roles: personalRoles.rows,
+    humanAuthoritySummary,
+    recentLifeEvents: lifeEvents.rows,
     resources,
     resourceFlows: {},
     institutions: institutions.rows,

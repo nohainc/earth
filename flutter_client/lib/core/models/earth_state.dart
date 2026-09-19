@@ -1,4 +1,7 @@
 import '../../shared/widgets/format_helpers.dart';
+import 'human_profile.dart';
+import 'human_daily_needs.dart';
+import 'human_authority_summary.dart';
 
 class EarthState {
   final Map<String, dynamic> json;
@@ -17,6 +20,21 @@ class EarthState {
 
   Map<String, dynamic> get clock => _toMap(json['clock']);
   Map<String, dynamic> get human => _toMap(json['human']);
+  HumanProfile? get humanProfile {
+    final value = json['humanProfile'];
+    return value is Map ? HumanProfile.fromJson(_toMap(value)) : null;
+  }
+  HumanDailyNeeds? get humanDailyNeeds {
+    final value = json['humanDailyNeeds'];
+    return value is Map ? HumanDailyNeeds.fromJson(_toMap(value)) : null;
+  }
+  List<dynamic> get roles => _toList(json['roles']);
+  List<HumanAuthoritySummary> get humanAuthoritySummary => _toList(
+        json['humanAuthoritySummary'],
+      ).whereType<Map>().map((row) => HumanAuthoritySummary.fromJson(
+            Map<String, dynamic>.from(row),
+          )).toList(growable: false);
+  List<dynamic> get recentLifeEvents => _toList(json['recentLifeEvents']);
   Map<String, dynamic> get house => _toMap(json['house']);
   Map<String, dynamic> get residency => _toMap(json['residency']);
   Map<String, dynamic> get world => _toMap(json['world']);

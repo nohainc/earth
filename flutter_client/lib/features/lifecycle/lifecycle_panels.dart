@@ -39,165 +39,36 @@ class LifeTodayPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function())? action;
+  final ValueChanged<String>? onNavigate;
 
   const LifeTodayPanel(
-      {super.key, required this.state, this.busy = false, this.action});
-
-  Future<void> _editName(BuildContext context) async {
-    final rawName = (state.human['display_name'] ?? state.human['name'] ?? '')
-        .toString()
-        .trim();
-    final initialName =
-        rawName.contains(' ') ? rawName.split(' ').first : rawName;
-    final controller = TextEditingController(text: initialName);
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: context.panelColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(context.radiusPanel),
-          side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-        ),
-        title: Text('Edit name',
-            style:
-                context.topicTitleStyle.copyWith(color: context.primaryColor)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 80,
-          style: context.bodyStyle.copyWith(color: context.inkColor),
-          decoration: InputDecoration(
-            labelText: 'Name',
-            labelStyle: context.widgetFooterStyle,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('CANCEL',
-                style:
-                    context.controlStyle.copyWith(color: context.mutedColor)),
-          ),
-          EarthButton(
-            label: 'SAVE',
-            onPressed: busy || action == null
-                ? null
-                : () async {
-                    final name = controller.text.trim();
-                    if (name.length < 2) return;
-                    Navigator.pop(dialogContext);
-                    await action!(
-                        () => const EarthApi().updateDisplayName(name));
-                  },
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-  }
-
-  Future<void> _editEpitaph(BuildContext context, String currentEpitaph) async {
-    final controller = TextEditingController(text: currentEpitaph);
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: context.panelColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(context.radiusPanel),
-          side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-        ),
-        title: Text('Edit citizen epitaph',
-            style:
-                context.topicTitleStyle.copyWith(color: context.primaryColor)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 160,
-          maxLines: 2,
-          style: context.bodyStyle.copyWith(color: context.inkColor),
-          decoration: InputDecoration(
-            labelText: 'Epitaph / Memorial Inscription',
-            labelStyle: context.widgetFooterStyle,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('CANCEL',
-                style:
-                    context.controlStyle.copyWith(color: context.mutedColor)),
-          ),
-          EarthButton(
-            label: 'SAVE',
-            onPressed: busy || action == null
-                ? null
-                : () async {
-                    final text = controller.text.trim();
-                    if (text.isEmpty) return;
-                    Navigator.pop(dialogContext);
-                    await action!(() => const EarthApi().updateEpitaph(text));
-                  },
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-  }
+      {super.key,
+      required this.state,
+      this.busy = false,
+      this.action,
+      this.onNavigate});
 
   @override
   Widget build(BuildContext context) {
-    final human = state.human;
-    final life = state.life;
-    final health = asDouble(human['health'] ??
-        human['vitality'] ??
-        life['health'] ??
-        life['vitality']);
-    final energy = asDouble(human['energy'] ??
-        human['stamina'] ??
-        life['energy'] ??
-        life['stamina']);
-    final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
-    final standing = asIntOr(human['standing'], 0);
-
-    final houseName = (life['houseName'] ??
-            life['house_name'] ??
-            human['house_name'] ??
-            'Founding Lineage')
-        .toString();
-    final generation = asIntOr(life['generation'] ?? human['generation'], 1);
-    final birthGameDay = asInt(
-      human['birth_game_day'] ??
-          human['birth_day'] ??
-          human['birthDay'] ??
-          life['birth_game_day'],
-    );
+    final profile = state.humanProfile;
+    final dailyNeeds = state.humanDailyNeeds;
+    final age = profile?.ageYears;
+    final standing = profile?.standing;
+    final birthGameDay = profile?.birthGameDay;
 
     final birthDayFormatted = birthGameDay == null
         ? '—'
         : 'Year ${((birthGameDay - 1) ~/ 365) + 1}, Day ${((birthGameDay - 1) % 365) + 1}';
 
-    final territoryName =
-        state.residency['territory_name']?.toString().toUpperCase();
-    final organizationName = (state.institutions['corporation'] is Map
-            ? (state.institutions['corporation'] as Map)['name']
-                ?.toString()
-                .toUpperCase()
-            : null) ??
-        (state.membership?['corporation_name']?.toString().toUpperCase()) ??
-        (state.membership?['organization_name']?.toString().toUpperCase()) ??
-        (state.membership?['name']?.toString().toUpperCase());
-
-    final healthColor = health != null && health < 40
-        ? context.warningColor
-        : context.successColor;
+    final corporationName = profile?.corporationName?.toUpperCase();
 
     return EarthSection(
-      title: 'MY LIFE TODAY',
+      title: 'CITIZEN',
       showSurface: false,
       showHeader: false,
       infoBulletPoints: const [
-        'Your active citizen situation: biometric vitality, labor energy, territorial jurisdiction, and legal standing.',
-        'Health represents physical vitality (100% base). Life energy measures daily operational capacity.',
+        'Your active citizen identity, House representation, civic standing, and Corporation relationship.',
+        'Food and energy maintenance are economic House obligations; they are not biometric percentages.',
         'All economic balances and productive assets remain synchronized with Finance and Operations.',
       ],
       child: Container(
@@ -218,43 +89,14 @@ class LifeTodayPanel extends StatelessWidget {
                 value: age?.toString() ?? '—',
                 accentColor: context.primaryColor,
               ),
-              _buildAttributeRow(
-                context,
-                icon: Icons.cake_outlined,
-                label: 'BIRTH DAY',
-                value: birthDayFormatted,
-                accentColor: context.primaryColor,
-              ),
-              _buildAttributeRow(
-                context,
-                icon: Icons.map_outlined,
-                label: 'RESIDENCE',
-                value: territoryName ?? 'NO REGISTERED RESIDENCE',
-                accentColor: context.secondaryColor,
-              ),
             ];
 
             final rightColumn = [
               _buildAttributeRow(
                 context,
-                icon: Icons.favorite_outline,
-                label: 'BIOMETRIC HEALTH',
-                value: health == null ? '—' : '${health.toStringAsFixed(0)}%',
-                accentColor: health == null ? context.mutedColor : healthColor,
-              ),
-              _buildAttributeRow(
-                context,
-                icon: Icons.bolt_outlined,
-                label: 'LIFE ENERGY',
-                value: energy == null ? '—' : '${energy.toStringAsFixed(0)}%',
-                accentColor:
-                    energy == null ? context.mutedColor : context.warningColor,
-              ),
-              _buildAttributeRow(
-                context,
                 icon: Icons.verified_user_outlined,
                 label: 'CIVIC STANDING',
-                value: formatWholeNumber(standing.toDouble()),
+                value: standing == null ? 'UNAVAILABLE' : standing.toString(),
                 accentColor: context.primaryColor,
               ),
             ];
@@ -278,25 +120,150 @@ class LifeTodayPanel extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  profile?.displayName.isNotEmpty == true
+                      ? profile!.displayName.toUpperCase()
+                      : 'CITIZEN',
+                  style: context.pageTitleStyle,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${profile?.status ?? 'UNAVAILABLE'} HUMAN · HOUSE ${profile?.houseName.isNotEmpty == true ? profile!.houseName.toUpperCase() : 'UNAVAILABLE'}',
+                  style: context.widgetFooterStyle,
+                ),
+                const SizedBox(height: 16),
                 attributesBlock,
                 const SizedBox(height: 16),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
-                _lifecycleTopicHeading(context, 'AFFILIATIONS',
+                _lifecycleTopicHeading(context, 'LIFECYCLE',
                     description:
-                        'Your current House, Territory, Corporation, and other active memberships. Only server-confirmed relationships are shown.'),
-                if (state.residency['territory_name'] != null)
-                  _buildAttributeRow(context,
-                      icon: Icons.map_outlined,
-                      label: 'TERRITORY',
-                      value: state.residency['territory_name'].toString(),
-                      accentColor: context.secondaryColor),
-                if (organizationName != null)
+                        'Canonical lifecycle facts for the current Human and latest completed maintenance settlement.'),
+                _buildAttributeRow(
+                  context,
+                  icon: Icons.cake_outlined,
+                  label: 'BORN',
+                  value: birthDayFormatted,
+                  accentColor: context.primaryColor,
+                ),
+                _buildAttributeRow(
+                  context,
+                  icon: Icons.person_outline,
+                  label: 'STATUS',
+                  value: profile?.status ?? 'UNAVAILABLE',
+                  accentColor: context.primaryColor,
+                ),
+                _buildAttributeRow(
+                  context,
+                  icon: Icons.restaurant_outlined,
+                  label: 'DAILY NEEDS',
+                  value: dailyNeeds == null
+                      ? 'UNAVAILABLE'
+                      : dailyNeeds.foodMet && dailyNeeds.energyMet
+                          ? 'MET'
+                          : 'SHORTFALL',
+                  accentColor: context.primaryColor,
+                ),
+                const SizedBox(height: 12),
+                _lifecycleTopicHeading(context, 'RELATIONSHIPS',
+                    description:
+                        'Your current House representation and active Corporation affiliation. Only server-confirmed relationships are shown.'),
+                _buildAttributeRow(context,
+                    icon: Icons.home_outlined,
+                    label: 'HOUSE',
+                    value: profile?.houseName.isNotEmpty == true
+                        ? profile!.houseName
+                        : 'UNAVAILABLE',
+                    accentColor: context.primaryColor),
+                if (onNavigate != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => onNavigate!('house'),
+                      child: const Text('VIEW HOUSE'),
+                    ),
+                  ),
+                if (corporationName != null && corporationName.isNotEmpty)
                   _buildAttributeRow(context,
                       icon: Icons.domain_outlined,
                       label: 'CORPORATION',
-                      value: organizationName,
+                      value: corporationName,
                       accentColor: context.primaryColor),
+                if (corporationName != null &&
+                    corporationName.isNotEmpty &&
+                    onNavigate != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => onNavigate!('my-corporation'),
+                      child: const Text('VIEW CORPORATION'),
+                    ),
+                  ),
+                if (state.humanAuthoritySummary.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _lifecycleTopicHeading(context, 'ROLES & OFFICES',
+                      description:
+                          'Active Earth and Corporation governance roles held by this Human.'),
+                  ...state.humanAuthoritySummary.map((role) {
+                    return _buildAttributeRow(
+                      context,
+                      icon: Icons.badge_outlined,
+                      label: role.roleName,
+                      value:
+                          '${role.institutionName} · DAY ${role.effectiveFromDay}',
+                      accentColor: context.primaryColor,
+                    );
+                  }),
+                ],
+                if (state.recentLifeEvents.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _lifecycleTopicHeading(context, 'RECENT LIFE EVENTS',
+                      description:
+                          'Recent lifecycle events recorded for this Human.'),
+                  ...state.recentLifeEvents.whereType<Map>().map((raw) {
+                    final event = Map<String, dynamic>.from(raw);
+                    return _buildAttributeRow(
+                      context,
+                      icon: Icons.history_outlined,
+                      label: 'DAY ${event['game_day'] ?? '—'}',
+                      value: event['title']?.toString() ??
+                          event['event_type']?.toString() ??
+                          'LIFE EVENT',
+                      accentColor: context.primaryColor,
+                    );
+                  }),
+                ],
+                if (dailyNeeds != null) ...[
+                  const SizedBox(height: 12),
+                  _lifecycleTopicHeading(context, 'DAILY NEEDS',
+                      description:
+                          'Authoritative food and energy maintenance recorded by the latest completed life-maintenance settlement.'),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.restaurant_outlined,
+                    label: 'FOOD',
+                    value: dailyNeeds.foodMet ? 'MET' : 'SHORTFALL',
+                    accentColor: dailyNeeds.foodMet
+                        ? context.successColor
+                        : context.warningColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.bolt_outlined,
+                    label: 'ENERGY',
+                    value: dailyNeeds.energyMet ? 'MET' : 'SHORTFALL',
+                    accentColor: dailyNeeds.energyMet
+                        ? context.successColor
+                        : context.warningColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.event_available_outlined,
+                    label: 'LAST SETTLEMENT',
+                    value: 'DAY ${dailyNeeds.gameDay}',
+                    accentColor: context.primaryColor,
+                  ),
+                ],
               ],
             );
           },
@@ -332,7 +299,7 @@ class LifeTodayPanel extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: context.bodyStyle.copyWith(
-                color: Colors.white,
+                color: context.inkColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -345,12 +312,15 @@ class LifeTodayPanel extends StatelessWidget {
   }
 }
 
-class SuccessionPanel extends StatelessWidget {
+/// Legacy compatibility shell. House succession management is provided by the
+/// dedicated successor composer; this presentation is no longer mounted.
+@Deprecated('Use the House succession composer instead.')
+class HouseSuccessionPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
 
-  const SuccessionPanel({
+  const HouseSuccessionPanel({
     super.key,
     required this.state,
     required this.busy,
@@ -387,10 +357,6 @@ class SuccessionPanel extends StatelessWidget {
         successor?['registered_game_day'] ?? successor?['registeredOnDay'];
     final estatePeriodDays =
         asInt(successor?['estate_period_days'] ?? life['estatePeriodDays']);
-
-    final heirPct = asInt(successor?['heir_pct']);
-    final trustPct = asInt(successor?['trust_pct']);
-    final reservePct = asInt(successor?['reserve_pct']);
 
     final isEstatePeriod = lifeStatus == 'estate';
     final isDeceased = lifeStatus == 'deceased';
@@ -531,18 +497,6 @@ class SuccessionPanel extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     EarthStatusPill(
-                        label: 'PRIMARY HEIR',
-                        value: heirPct == null ? 'N/A' : '$heirPct%',
-                        color: context.primaryColor),
-                    EarthStatusPill(
-                        label: 'COMMONS TRUST',
-                        value: trustPct == null ? 'N/A' : '$trustPct%',
-                        color: context.successColor),
-                    EarthStatusPill(
-                        label: 'HOUSE VAULT',
-                        value: reservePct == null ? 'N/A' : '$reservePct%',
-                        color: context.secondaryColor),
-                    EarthStatusPill(
                         label: 'ESTATE BUFFER',
                         value: estatePeriodDays == null
                             ? 'N/A'
@@ -552,12 +506,7 @@ class SuccessionPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '• Primary Heir allocation: ${heirPct == null ? 'unavailable' : '$heirPct%'} of liquid credits; asset treatment follows the active lifecycle rules.',
-                  style: context.widgetFooterStyle,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '• Territory Commons Trust: ${trustPct == null ? 'unavailable' : '$trustPct%'}; House Vault: ${reservePct == null ? 'unavailable' : '$reservePct%'} according to the active lifecycle rules.',
+                  '• Registered successor: ${successorName ?? 'unavailable'}; asset treatment follows the active House succession rules.',
                   style: context.widgetFooterStyle,
                 ),
                 const SizedBox(height: 3),

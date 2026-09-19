@@ -108,14 +108,14 @@ export async function appointCorporationRole(repository: PostgresRepository, inp
     );
     if (vacant.rows[0]) {
       await tx.query(
-        `UPDATE institution_governance_roles SET human_id = $1, status = 'ACTIVE' WHERE id = $2`,
-        [input.targetHumanId, vacant.rows[0].id],
+        `UPDATE institution_governance_roles SET human_id = $1, status = 'ACTIVE', effective_from_game_day = $3 WHERE id = $2`,
+        [input.targetHumanId, vacant.rows[0].id, clock.gameDay],
       );
     } else {
       await tx.query(
-        `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status)
-         VALUES ($1, $2, $3, 'ACTIVE')`,
-        [input.corporationId, input.targetHumanId, input.roleCode],
+        `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status, effective_from_game_day)
+         VALUES ($1, $2, $3, 'ACTIVE', $4)`,
+        [input.corporationId, input.targetHumanId, input.roleCode, clock.gameDay],
       );
     }
     return { ok: true, corporationId: input.corporationId, roleCode: input.roleCode, targetHumanId: input.targetHumanId, gameDay: clock.gameDay };

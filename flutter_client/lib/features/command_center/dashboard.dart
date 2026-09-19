@@ -470,8 +470,12 @@ class Dashboard extends StatelessWidget {
         return [
           LayoutBuilder(
             builder: (context, constraints) {
-              final lifeToday =
-                  LifeTodayPanel(state: state, busy: busy, action: action);
+              final lifeToday = LifeTodayPanel(
+                state: state,
+                busy: busy,
+                action: action,
+                onNavigate: onNavigate,
+              );
               final rawStatus =
                   (life['status'] ?? human['life_status'] ?? 'ACTIVE')
                       .toString()

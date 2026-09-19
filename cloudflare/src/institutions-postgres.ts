@@ -213,9 +213,9 @@ export async function createCorporation(
     );
     await provisionCorporationEconomy(tx, corporationId);
     await tx.query(
-      `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status)
-       VALUES ($1, $2, 'CORPORATION_EXECUTIVE', 'ACTIVE'), ($1, $2, 'CORPORATION_TREASURER', 'ACTIVE')`,
-      [corporationId, input.founderId],
+      `INSERT INTO institution_governance_roles (institution_id, human_id, role_code, status, effective_from_game_day)
+       VALUES ($1, $2, 'CORPORATION_EXECUTIVE', 'ACTIVE', $3), ($1, $2, 'CORPORATION_TREASURER', 'ACTIVE', $3)`,
+      [corporationId, input.founderId, gameDay],
     );
     await tx.query(
       `INSERT INTO governance_rules
