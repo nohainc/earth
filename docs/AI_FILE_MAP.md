@@ -58,7 +58,7 @@ matching PostgreSQL service.
 |---|---|
 | Authentication | `auth-public-routes.ts`, `auth-routes.ts`, `auth-session.ts` |
 | Businesses | `business-routes.ts` |
-| Cities and corporations | `institutions-routes.ts` |
+| Corporations and institutions | `institutions-routes.ts` |
 | Communities | `community-routes.ts` |
 | Contracts | `contract-routes.ts` |
 | Dynasty | `dynasty-routes.ts` |
@@ -76,7 +76,7 @@ matching PostgreSQL service.
 |---|---|
 | Authentication and email actions | `auth-postgres.ts`, `auth-crypto.ts`, `admin-deliveries-postgres.ts` |
 | Businesses and finance | `business-postgres.ts`, `business-finance.ts`, `financial-postgres.ts`, `finance-postgres.ts` |
-| Cities and corporations | `institutions-postgres.ts`, `roles-postgres.ts` |
+| Corporations and institutions | `institutions-postgres.ts`, `roles-postgres.ts` |
 | Communities | `communities-postgres.ts` |
 | Dynasty and lineage | `dynasty-postgres.ts` |
 | Governance | `governance-postgres.ts` |
@@ -97,7 +97,7 @@ subsystems. Start with the named engine before changing scheduler orchestration.
 | File | Responsibility |
 |---|---|
 | `engines/financial-engine.ts` | Financial settlement |
-| `engines/institutions-engine.ts` | City and corporation effects |
+| `engines/institutions-engine.ts` | Institution/Corporation effects |
 | `engines/lifecycle-engine.ts` | Human lifecycle and succession |
 | `engines/production-engine.ts` | Production and machine output |
 | `engines/resource-flow-engine.ts` | Resource movement and balances |
@@ -128,7 +128,7 @@ subsystems. Start with the named engine before changing scheduler orchestration.
 | Authentication | `earth_api_auth.dart` | `features/auth/` |
 | Command center | `earth_api_world.dart`, `earth_api_daily_summary.dart` | `features/command_center/` |
 | Communities | `earth_api_comm.dart` | `features/institutions/institutions_panels.dart`, `features/institutions/institutions_dialogs.dart`, and `features/communications/` where the surface is social/communication-oriented |
-| Corporations and cities | `earth_api_institutions.dart` | `features/institutions/` |
+| Corporations and institutions | `earth_api_institutions.dart` | `features/institutions/` |
 | Dynasty | `earth_api_dynasty.dart` | `features/dynasty/` |
 | Finance | `earth_api_personal_finance.dart`, `earth_api_net_worth.dart` | `features/finance/` |
 | Governance | `earth_api_governance.dart` | `features/governance/` |
