@@ -2,11 +2,6 @@ name: Deploy EARTH API
 
 on:
   workflow_dispatch:
-    inputs:
-      source_sha:
-        description: 'Exact commit whose successful EARTH tests run should be deployed'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -24,11 +19,11 @@ jobs:
       DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
       DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://earthuc.com' }}
       CANARY_TARGET_URL: ${{ vars.DEPLOY_URL || 'https://earthuc.com' }}
-      SOURCE_SHA: ${{ inputs.source_sha }}
+      SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.source_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
       - uses: actions/setup-node@v7
         with:
@@ -56,14 +51,13 @@ jobs:
           npm run cf:assert-postgres
           npm run db:verify:schema-contract
       - name: Verify production database connectivity
-        run: |
-          node -e "import('pg').then(async ({Client}) => { const c = new Client({connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000}); await c.connect(); await c.query('SELECT 1'); await c.end(); console.log('PostgreSQL reachable'); })"
+        run: node scripts/verify-postgres-connectivity.mjs
       - name: Capture production restore point
         run: EARTH_BACKUP_DIR=backups npm run db:backup:postgres
       - name: Upload restore point metadata
         uses: actions/upload-artifact@v4
         with:
-          name: earth-production-restore-point-${{ inputs.source_sha }}
+          name: earth-production-restore-point-${{ github.sha }}
           path: backups/
           retention-days: 30
       - name: Apply forward-only production migrations
