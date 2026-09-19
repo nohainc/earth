@@ -16,6 +16,9 @@ export type SchedulerHeartbeatResult = {
   marketEligibleBatch?: number;
   newDay?: boolean;
   productionEvents?: number;
+  failedGameDay?: number | null;
+  failedPhase?: string | null;
+  failedError?: string | null;
 };
 
 export type SchedulerHeartbeatOptions = {
@@ -31,12 +34,21 @@ function positiveInteger(value: unknown, fallback: number): number {
 
 import { readAuthoritativeGameTime, getSettlementCursor } from './world-clock-postgres.ts';
 
-async function readSettlementPosition(repository: PostgresRepository): Promise<{ day: number; watermark: number }> {
+async function readSettlementPosition(repository: PostgresRepository): Promise<{
+  day: number;
+  watermark: number;
+  failedGameDay?: number | null;
+  failedPhase?: string | null;
+  failedError?: string | null;
+}> {
   const clock = await readAuthoritativeGameTime(repository);
   const cursor = await getSettlementCursor(repository, clock.gameDay);
   return {
     day: clock.gameDay,
     watermark: cursor.settledThroughGameDay,
+    failedGameDay: cursor.failedGameDay,
+    failedPhase: cursor.failedPhase,
+    failedError: cursor.failedError,
   };
 }
 
@@ -75,6 +87,9 @@ export async function runSchedulerHeartbeat(
       marketSettlements: 0,
       newDay: false,
       productionEvents: 0,
+      failedGameDay: current.failedGameDay,
+      failedPhase: current.failedPhase,
+      failedError: current.failedError,
     };
   }
   const before = await readSettlementPosition(repository);
@@ -118,6 +133,9 @@ export async function runSchedulerHeartbeat(
       marketEligibleBatch: tick.marketEligibleBatch,
       newDay: tick.newDay,
       productionEvents: tick.productionEvents,
+      failedGameDay: position.failedGameDay,
+      failedPhase: position.failedPhase,
+      failedError: position.failedError,
     };
   } catch (error) {
     await repository.query("UPDATE scheduler_runs SET completed_at = CURRENT_TIMESTAMP, status = 'failed' WHERE id = $1", [runId]).catch(() => undefined);

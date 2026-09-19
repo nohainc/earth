@@ -8,6 +8,9 @@ test('production deployment is database-gated and fail-closed', () => {
   for (const step of ['db:verify:ci-provenance', 'db:backup:postgres', 'db:migrate:postgres', 'db:verify:manifest', 'db:verify:invariants', 'cf:check', 'db:verify:readiness', 'deploy:canary:verify', 'Post-deploy']) {
     assert.match(workflow, new RegExp(step.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `deployment gate includes ${step}`);
   }
+  assert.doesNotMatch(workflow, /inputs\.source_sha/);
+  assert.match(workflow, /SOURCE_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /scripts\/verify-postgres-connectivity\.mjs/);
 });
 
 test('readiness verification rejects non-200, unhealthy, or stale-schema deployments', () => {

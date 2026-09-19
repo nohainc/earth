@@ -427,6 +427,9 @@ const worker = {
       backlogDays: result.settlementBacklog,
       settledDays: result.settledDays,
       settlementStatus: result.settlementStatus,
+      failedGameDay: result.failedGameDay,
+      failedPhase: result.failedPhase,
+      error: result.failedError,
       marketProcessedThroughBatch: result.marketProcessedThroughBatch,
       marketEligibleBatch: result.marketEligibleBatch,
     }));

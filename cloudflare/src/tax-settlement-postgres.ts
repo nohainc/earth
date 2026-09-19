@@ -116,7 +116,7 @@ export async function settlePublicTaxesInTransaction(repository: PostgresReposit
       JOIN owner_registry o ON o.id = c.id AND o.owner_type = 'CORPORATION'
       JOIN resolved_constitution_snapshots_v5 s
         ON s.authority_type = 'CORPORATION' AND s.authority_id = c.id AND s.game_day = $1
-     WHERE c.status = 'ACTIVE' AND s.rules_json ? 'CORPORATION.HOUSE_INCOME_TAX'`, [assessedDay]),
+     WHERE c.status = 'ACTIVE' AND jsonb_exists(s.rules_json, 'CORPORATION.HOUSE_INCOME_TAX')`, [assessedDay]),
     repository.query<{ house_id: string; corporation_id: string }>(`SELECT house_id, corporation_id
       FROM house_affiliations
      WHERE status = 'ACTIVE' AND joined_game_day <= $1

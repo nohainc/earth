@@ -27,8 +27,8 @@ export async function settleCorporationIncomeTax(
           WHERE snap.authority_type = 'CORPORATION'
             AND snap.authority_id = c.id
             AND snap.game_day = $1
-            AND snap.rules_json ? 'CORPORATION.TAX.CORPORATE_RATE'
-            AND snap.version_ids ? 'CORPORATION.TAX.CORPORATE_RATE'
+            AND jsonb_exists(snap.rules_json, 'CORPORATION.TAX.CORPORATE_RATE')
+            AND jsonb_exists(snap.version_ids, 'CORPORATION.TAX.CORPORATE_RATE')
        )
   `, [assessedDay])).rows[0];
   if (Number(missingSnapshots?.count ?? 0) > 0) {
@@ -43,7 +43,7 @@ export async function settleCorporationIncomeTax(
       JOIN owner_registry oe ON oe.id = c.id AND oe.owner_type = 'CORPORATION'
       JOIN resolved_constitution_snapshots_v5 snap ON snap.authority_type = 'CORPORATION' AND snap.authority_id = c.id AND snap.game_day = $1
      WHERE c.status = 'ACTIVE'
-       AND snap.rules_json ? 'CORPORATION.TAX.CORPORATE_RATE'
+       AND jsonb_exists(snap.rules_json, 'CORPORATION.TAX.CORPORATE_RATE')
        AND (snap.rules_json->>'CORPORATION.TAX.CORPORATE_RATE')::INTEGER > 0
      ORDER BY c.id
   `, [assessedDay])).rows;
