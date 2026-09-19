@@ -18,8 +18,7 @@ For every V5 task, the AI must first read:
 6. the relevant phase in `docs/v5/V5_IMPLEMENTATION_ROADMAP.md`
 7. current source/tests/migrations for the touched domain.
 
-The AI must explicitly state whether the task modifies **current runtime**, adds
-**shadow V5 capability**, or completes a **V5 cutover**.
+The AI must treat V5 as current. Explicitly state whether a task changes current V5 runtime behavior or only removes/migrates compatibility code.
 
 ---
 
@@ -507,9 +506,9 @@ For V5 economy/capacity work additionally require:
 - settlement replay test;
 - ledger balance assertion;
 - migration from production-shaped fixture;
-- shadow/cutover comparison where applicable.
+- compatibility/removal comparison where applicable.
 
-Before V5 production cutover, also require one monitored complete game-day tick.
+Before production promotion of settlement changes, require one monitored complete game-day tick.
 
 ---
 
