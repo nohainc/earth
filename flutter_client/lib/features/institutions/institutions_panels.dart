@@ -13,7 +13,7 @@ import '../../shared/widgets/credit_income_summary_card.dart';
 import '../communications/comm_link_dialog.dart';
 import '../house/house_lineage_dialog.dart';
 import 'institutions_dialogs.dart';
-import 'organization_people_roles_panel.dart';
+import 'corporation_roles_panel.dart';
 
 Widget _institutionBudgetCard(
   BuildContext context, {
@@ -64,59 +64,23 @@ Widget _institutionFinanceClarityCard(
   required Map<String, dynamic> institution,
   Map<String, dynamic> projection = const <String, dynamic>{},
 }) {
-  final treasury = asDouble(projection['treasury'] ??
-          projection['cash_treasury'] ??
-          institution['treasury']) ??
-      0;
-  final budget = asDouble(projection['budget_authorized'] ??
-          projection['authorized_units'] ??
-          projection['budget']) ??
-      0;
-  final committed = asDouble(projection['budget_committed'] ??
-          projection['committed_units'] ??
-          projection['committed']) ??
-      0;
-  final available = asDouble(projection['budget_available'] ??
-          projection['available_authority'] ??
-          (budget - committed)) ??
-      math.max(0, budget - committed);
-  final revenue = asDouble(projection['period_revenue'] ??
-          projection['daily_revenue'] ??
-          projection['revenue']) ??
-      0;
-  final expenses = asDouble(projection['period_spending'] ??
-          projection['daily_expenses'] ??
-          projection['expenses']) ??
-      0;
+  dynamic pick(List<String> keys) {
+    for (final key in keys) {
+      if (projection[key] != null) return projection[key];
+      if (institution[key] != null) return institution[key];
+    }
+    return null;
+  }
 
-  String money(double value) => '${formatWholeNumber(value)} C';
-  final values = [
-    ('Treasury', money(treasury), Icons.account_balance_wallet_outlined),
-    ('Budget', money(budget), Icons.fact_check_outlined),
-    ('Committed', money(committed), Icons.assignment_outlined),
-    ('Available', money(available), Icons.check_circle_outline),
-    ('Revenue', money(revenue), Icons.trending_up_outlined),
-    ('Expenses', money(expenses), Icons.trending_down_outlined),
-  ];
+  String money(List<String> keys) => formatCreditUnits(pick(keys));
 
-  return Container(
-    width: double.infinity,
-    padding: EdgeInsets.all(context.cardPadding),
-    decoration: BoxDecoration(
-      color: context.surfaceColor,
-      borderRadius: BorderRadius.circular(context.radiusCard),
-      border: Border.all(color: context.subtleBorderColor),
-    ),
-    child: Column(
+  Widget group(String title, List<(String, String, IconData)> values) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('FINANCIAL POSITION', style: context.topicTitleStyle),
-        const SizedBox(height: 4),
-        Text(
-          'Cash, spending permission, commitments, and activity are shown separately.',
-          style: context.widgetFooterStyle,
-        ),
-        const SizedBox(height: 12),
+        Text(title,
+            style: context.captionStyle.copyWith(color: context.mutedColor)),
+        const SizedBox(height: 8),
         LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth < 430
@@ -152,7 +116,189 @@ Widget _institutionFinanceClarityCard(
           },
         ),
       ],
+    );
+  }
+
+  return Container(
+    width: double.infinity,
+    padding: EdgeInsets.all(context.cardPadding),
+    decoration: BoxDecoration(
+      color: context.surfaceColor,
+      borderRadius: BorderRadius.circular(context.radiusCard),
+      border: Border.all(color: context.subtleBorderColor),
     ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('FINANCE', style: context.topicTitleStyle),
+        const SizedBox(height: 4),
+        Text(
+          'Cash, spending permission, commitments, and activity are shown separately.',
+          style: context.widgetFooterStyle,
+        ),
+        const SizedBox(height: 12),
+        group('CASH', [
+          (
+            'Treasury',
+            money(['treasury_units', 'cash_treasury_units']),
+            Icons.account_balance_wallet_outlined
+          ),
+          (
+            'Operations',
+            money(['operations_units', 'cash_operations_units']),
+            Icons.settings_suggest_outlined
+          ),
+          (
+            'Reserve',
+            money(['reserve_units', 'cash_reserve_units']),
+            Icons.shield_outlined
+          ),
+        ]),
+        const SizedBox(height: 16),
+        group('BUDGET AUTHORITY', [
+          (
+            'Authorized',
+            money(['budget_authorized_units', 'authorized_units']),
+            Icons.fact_check_outlined
+          ),
+          (
+            'Committed',
+            money(['budget_committed_units', 'committed_units']),
+            Icons.assignment_outlined
+          ),
+          (
+            'Available',
+            money([
+              'budget_authority_available_units',
+              'available_authority',
+              'available_units'
+            ]),
+            Icons.check_circle_outline
+          ),
+        ]),
+        const SizedBox(height: 16),
+        group('DAILY FLOWS', [
+          (
+            'Taxes & fees',
+            money(['tax_revenue_units']),
+            Icons.receipt_long_outlined
+          ),
+          (
+            'Capacity revenue',
+            money(['capacity_revenue_units']),
+            Icons.south_west_outlined
+          ),
+          (
+            'EARTH capacity cost',
+            money(['earth_capacity_expense_units']),
+            Icons.north_east_outlined
+          ),
+          (
+            'Public spending',
+            money(['public_spending_units']),
+            Icons.account_balance_outlined
+          ),
+          (
+            'R&D spending',
+            money(['research_spending_units']),
+            Icons.science_outlined
+          ),
+        ]),
+      ],
+    ),
+  );
+}
+
+Widget _corporationFinanceProfileCard(
+    BuildContext context, Map<String, dynamic> profile) {
+  Map<String, dynamic> section(String key) => profile[key] is Map
+      ? Map<String, dynamic>.from(profile[key] as Map)
+      : const <String, dynamic>{};
+  final accounts = section('accounts');
+  final fiscal = section('fiscal');
+  final capacityFinance = section('capacityFinance');
+  return _institutionFinanceClarityCard(
+    context,
+    institution: const <String, dynamic>{},
+    projection: {
+      'treasury_units': accounts['treasuryUnits'],
+      'operations_units': accounts['operationsUnits'],
+      'reserve_units': accounts['reserveUnits'],
+      'budget_authorized_units': fiscal['authorizedUnits'],
+      'budget_committed_units': fiscal['committedUnits'],
+      'budget_authority_available_units': fiscal['availableUnits'],
+      'capacity_revenue_units': capacityFinance['houseRevenueUnits'],
+      'earth_capacity_expense_units': capacityFinance['earthExpenseUnits'],
+    },
+  );
+}
+
+Widget _corporationPolicyList(
+    BuildContext context, Map<String, dynamic> profile) {
+  final constitution = profile['constitution'] is Map
+      ? Map<String, dynamic>.from(profile['constitution'] as Map)
+      : const <String, dynamic>{};
+  final policies = (constitution['policies'] is List
+          ? constitution['policies'] as List
+          : const [])
+      .whereType<Map>()
+      .map((row) => Map<String, dynamic>.from(row))
+      .toList();
+
+  String label(String code) => code
+      .split('.')
+      .map((part) => part
+          .toLowerCase()
+          .split('_')
+          .map((word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}')
+          .join(' '))
+      .join(' · ');
+  String value(Map<String, dynamic> policy) {
+    final raw = policy['value'];
+    final type = policy['valueType']?.toString();
+    if (raw == null) return 'UNAVAILABLE';
+    if (type == 'RATE_BPS') {
+      final bps = int.tryParse(raw.toString());
+      return bps == null ? 'UNAVAILABLE' : '${(bps / 100).toStringAsFixed(1)}%';
+    }
+    if (type == 'CREDIT_UNITS') return formatCreditUnits(raw);
+    if (raw is Map || raw is List) return raw.toString();
+    return raw.toString().toUpperCase();
+  }
+
+  if (policies.isEmpty) {
+    return Text('No effective constitutional policies are available.',
+        style: context.widgetFooterStyle);
+  }
+  return EarthDataList(
+    children: policies.asMap().entries.map((entry) {
+      final policy = entry.value;
+      final source = policy['source']?.toString().toUpperCase() == 'CORPORATION'
+          ? 'CORPORATION OVERRIDE'
+          : 'EARTH DEFAULT';
+      final effective = policy['effectiveFromGameDay'] == null
+          ? 'Effective day unavailable'
+          : 'Effective Day ${policy['effectiveFromGameDay']}';
+      final version = policy['version'] == null
+          ? 'Version unavailable'
+          : 'Version ${policy['version']}';
+      return EarthDataRow(
+        title: label(policy['ruleCode']?.toString() ?? 'UNKNOWN_RULE'),
+        subtitle: '${value(policy)}\n$effective · $version',
+        leading: Icon(Icons.policy_outlined,
+            size: context.iconSize, color: context.secondaryColor),
+        badges: [
+          EarthBadge(
+              label: source,
+              variant: source == 'CORPORATION OVERRIDE'
+                  ? EarthBadgeVariant.primary
+                  : EarthBadgeVariant.neutral),
+        ],
+        showDivider: entry.key < policies.length - 1,
+      );
+    }).toList(),
   );
 }
 
@@ -391,7 +537,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
   bool _canJoin(Map<String, dynamic> row, bool isAffiliated) {
     if (_isMember || isAffiliated) return false;
-    if ((row['membership_state']?.toString() ?? '').toUpperCase() == 'PENDING') {
+    if ((row['membership_state']?.toString() ?? '').toUpperCase() ==
+        'PENDING') {
       return false;
     }
     final policy =
@@ -428,9 +575,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         Text('After joining  ${units('afterJoiningDailyRentUnits')}'),
         Text('Change  ${units('dailyRentDeltaUnits')} / day'),
         const SizedBox(height: 8),
-        Text('Corporation status  ${corporation['capacity_status'] ?? 'UNAVAILABLE'}'),
+        Text(
+            'Corporation status  ${corporation['capacity_status'] ?? 'UNAVAILABLE'}'),
         Text('Income tax  ${_rate(corporation['income_tax_bps'])}'),
-        Text('Technology access  ${corporation['technology_count'] ?? 'UNAVAILABLE'} adopted'),
+        Text(
+            'Technology access  ${corporation['technology_count'] ?? 'UNAVAILABLE'} adopted'),
         const SizedBox(height: 8),
         Text('Capacity and pricing are calculated by the server.'),
       ],
@@ -466,7 +615,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'This will remove you from $name and its current Corporation affiliation. Your businesses and personal assets remain yours.',
+                'Leaving $name ends your House\'s Corporation affiliation. Your House assets remain yours. Capacity pricing and institutional rights will change according to the resulting independent state.',
                 style: context.widgetFooterStyle,
               ),
               const SizedBox(height: 12),
@@ -580,7 +729,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   Widget _buildExpandedCorporationDetails(
       BuildContext context, Map<String, dynamic> row, bool isAffiliated) {
     final members = asIntOr(row['member_house_count'], 0);
-    final treasury = asDouble(row['treasury_units']);
+    final treasuryUnits = row['treasury_units'];
     final v5Occupied = row['occupied_capacity_units']?.toString();
     final v5Containers = row['required_standard_units']?.toString();
     final v5Standard = row['standard_capacity_units']?.toString();
@@ -621,7 +770,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         context,
         icon: Icons.account_balance_wallet_outlined,
         label: 'TREASURY',
-        value: treasury == null ? 'UNAVAILABLE' : formatCreditsAmount(treasury),
+        value: formatCreditUnits(treasuryUnits),
         accentColor: context.warningColor,
       ),
     ];
@@ -820,7 +969,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _nodeMiniStat(context, 'Houses', '$members'),
-                        _nodeMiniStat(context, 'Capacity', row['capacity_status']?.toString() ?? 'UNAVAILABLE'),
+                        _nodeMiniStat(
+                            context,
+                            'Capacity',
+                            row['capacity_status']?.toString() ??
+                                'UNAVAILABLE'),
                         _nodeMiniStat(
                             context, 'Income Tax', _rate(incomeTaxBps)),
                         _nodeMiniStat(context, 'Sales Fee', _rate(salesTaxBps)),
@@ -896,16 +1049,20 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             widget.state.institutions['corporation'] as Map)
         : const <String, dynamic>{};
 
-    final currentCorpName = current['name']?.toString();
+    final profile = widget.state.corporationProfile;
+    final identity = profile['identity'] is Map
+        ? Map<String, dynamic>.from(profile['identity'] as Map)
+        : const <String, dynamic>{};
+    final currentCorpName = identity['name']?.toString();
     final cockpit = EarthPageCockpit(
       status: 'WORLD · CORPORATIONS',
       statusColor: context.primaryColor,
       infoTitle: 'HOW CORPORATIONS WORK',
       infoDescription:
-        'Corporations are chartered economic organizations. They coordinate enterprise equity, physical capacity, adopted technology, and governance policy across Earth.',
+          'Corporations are chartered economic organizations. They coordinate enterprise equity, physical capacity, adopted technology, and governance policy across Earth.',
       title: 'CORPORATION DIRECTORY',
       subtitle:
-        'Compare live corporate policies, capacity, technology, and membership conditions.',
+          'Compare live corporate policies, capacity, technology, and membership conditions.',
       metrics: [
         CockpitMetric(
           label: 'Corporations',
@@ -940,7 +1097,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.showMemberSummary && _isMember) ...[
-              _memberView(current),
+              _memberView(profile, current),
               const SizedBox(height: 32),
               Text(
                 'ALL CORPORATIONS',
@@ -956,20 +1113,30 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     );
   }
 
-  Widget _memberView(Map<String, dynamic> current) {
-    final name = current['name']?.toString() ?? 'your corporation';
-    final members = current['member_house_count'] ?? 0;
-    final treasury = asDouble(current['treasury_units']);
-    final occupied = current['v5_occupied_capacity']?.toString();
+  Widget _memberView(
+      Map<String, dynamic> profile, Map<String, dynamic> dialogData) {
+    final identity = profile['identity'] is Map
+        ? Map<String, dynamic>.from(profile['identity'] as Map)
+        : const <String, dynamic>{};
+    final membership = profile['membership'] is Map
+        ? Map<String, dynamic>.from(profile['membership'] as Map)
+        : const <String, dynamic>{};
+    final capacity = profile['capacity'] is Map
+        ? Map<String, dynamic>.from(profile['capacity'] as Map)
+        : const <String, dynamic>{};
+    final accounts = profile['accounts'] is Map
+        ? Map<String, dynamic>.from(profile['accounts'] as Map)
+        : const <String, dynamic>{};
+    final name = identity['name']?.toString() ?? 'your corporation';
+    final members = membership['memberHouseCount'] ?? 0;
+    final treasuryLabel = formatCreditUnits(accounts['treasuryUnits']);
+    final occupied = capacity['occupiedUnits']?.toString() ?? 'UNAVAILABLE';
     final requiredContainers =
-        current['v5_required_territory_units']?.toString();
+        capacity['requiredBlocks']?.toString() ?? 'UNAVAILABLE';
     final standardCapacity =
-        current['v5_standard_territory_capacity']?.toString();
-    final treasuryLabel =
-        treasury == null ? 'UNAVAILABLE' : formatCreditsAmount(treasury);
-    final affiliationSummary = occupied != null
-        ? 'Your House is affiliated with $name. The Corporation uses $occupied occupied capacity units across $requiredContainers standardized capacity blocks of $standardCapacity units ($members Houses · $treasuryLabel treasury reserves).'
-        : 'Your House belongs to $name ($members Houses · $treasuryLabel treasury reserves).';
+        capacity['standardBlockUnits']?.toString() ?? 'UNAVAILABLE';
+    final affiliationSummary =
+        'Your House is affiliated with $name. The Corporation uses $occupied occupied capacity units across $requiredContainers standardized capacity blocks of $standardCapacity units ($members Houses · $treasuryLabel treasury reserves).';
 
     return Container(
       padding: EdgeInsets.all(context.cardPadding),
@@ -1017,6 +1184,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             ],
           ),
           const SizedBox(height: 14),
+          _memberCapacitySection(context, profile),
+          const SizedBox(height: 14),
           Wrap(
             spacing: 8,
             runSpacing: 6,
@@ -1027,7 +1196,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                 variant: EarthButtonVariant.primary,
                 onPressed: () => showCorporationCharterDialog(
                   context,
-                  current,
+                  dialogData,
                   widget.state,
                   isMember: true,
                 ),
@@ -1045,6 +1214,109 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     );
   }
 
+  Widget _memberCapacitySection(
+      BuildContext context, Map<String, dynamic> profile) {
+    final capacity = profile['capacity'] is Map
+        ? Map<String, dynamic>.from(profile['capacity'] as Map)
+        : const <String, dynamic>{};
+    final finance = profile['capacityFinance'] is Map
+        ? Map<String, dynamic>.from(profile['capacityFinance'] as Map)
+        : const <String, dynamic>{};
+    final utilization = capacity['utilizationBps'] is num
+        ? '${((capacity['utilizationBps'] as num) / 100).toStringAsFixed(1)}%'
+        : 'UNAVAILABLE';
+    String units(String key) => capacity[key]?.toString() ?? 'UNAVAILABLE';
+    String money(String key) => formatCreditUnits(finance[key]);
+    final baseRate = formatCreditUnits(capacity['houseBaseRateUnits']);
+
+    return Container(
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('LAND & CAPACITY',
+              style:
+                  context.widgetTitleStyle.copyWith(color: context.mutedColor)),
+          const SizedBox(height: 10),
+          EarthMetricGrid(metrics: [
+            EarthMetricTile(
+                label: 'OCCUPIED CAPACITY',
+                value: units('occupiedUnits'),
+                subtitle: 'Physical units',
+                icon: Icons.stacked_bar_chart_outlined),
+            EarthMetricTile(
+                label: 'AVAILABLE IN BLOCKS',
+                value: units('availableUnits'),
+                subtitle: 'Standard capacity',
+                icon: Icons.layers_outlined),
+            EarthMetricTile(
+                label: 'UTILIZATION',
+                value: utilization,
+                subtitle: 'Occupied / required blocks',
+                icon: Icons.percent_outlined),
+            EarthMetricTile(
+                label: 'MEMBER RESIDENTIAL',
+                value: units('residentialUnits'),
+                subtitle: 'Capacity units',
+                icon: Icons.home_outlined),
+            EarthMetricTile(
+                label: 'PRIVATE PRODUCTIVE',
+                value: units('privateProductiveUnits'),
+                subtitle: 'Capacity units',
+                icon: Icons.factory_outlined),
+            EarthMetricTile(
+                label: 'PUBLIC INFRASTRUCTURE',
+                value: units('publicUnits'),
+                subtitle: 'Capacity units',
+                icon: Icons.account_balance_outlined),
+            EarthMetricTile(
+                label: 'REQUIRED BLOCKS',
+                value: units('requiredBlocks'),
+                subtitle: 'Standard blocks',
+                icon: Icons.grid_view_outlined),
+            EarthMetricTile(
+                label: 'STANDARD BLOCK',
+                value: units('standardBlockUnits'),
+                subtitle: 'Capacity units',
+                icon: Icons.view_module_outlined),
+            EarthMetricTile(
+                label: 'HOUSE BASE RATE',
+                value: baseRate == 'UNAVAILABLE'
+                    ? baseRate
+                    : '$baseRate / unit / day',
+                subtitle: 'Canonical capacity price',
+                icon: Icons.payments_outlined),
+            EarthMetricTile(
+                label: 'HOUSE CAPACITY REVENUE',
+                value: money('houseRevenueUnits'),
+                subtitle: 'Per day',
+                icon: Icons.south_west_outlined),
+            EarthMetricTile(
+                label: 'EARTH CAPACITY EXPENSE',
+                value: money('earthExpenseUnits'),
+                subtitle: 'Per day',
+                icon: Icons.north_east_outlined),
+            EarthMetricTile(
+                label: 'CAPACITY MARGIN',
+                value: money('marginUnits'),
+                subtitle: 'Per day',
+                icon: Icons.balance_outlined),
+            EarthMetricTile(
+                label: 'STATUS',
+                value: capacity['status']?.toString() ?? 'UNAVAILABLE',
+                subtitle: 'Capacity assessment',
+                icon: Icons.health_and_safety_outlined),
+          ]),
+        ],
+      ),
+    );
+  }
+
   Widget _directoryView() {
     final currentCorpId =
         widget.state.membership?['corporation_id']?.toString();
@@ -1053,19 +1325,22 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         LayoutBuilder(builder: (context, constraints) {
-          final action = EarthButton(
-            label: 'FOUND CORPORATION',
-            icon: Icons.add_business_outlined,
-            onPressed: _isMember || widget.busy
-                ? null
-                : () => showFormationComposer(context, widget.action),
-          );
+          final action = _isMember
+              ? null
+              : EarthButton(
+                  label: 'FOUND CORPORATION',
+                  icon: Icons.add_business_outlined,
+                  onPressed: widget.busy
+                      ? null
+                      : () => showFormationComposer(context, widget.action),
+                );
           final search = EarthSearchInput(
             controller: _search,
             hintText: 'Search corporations by name...',
             onChanged: (_) => _scheduleSearch(),
             onClear: _load,
           );
+          if (action == null) return search;
           if (constraints.maxWidth < 460) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2980,7 +3255,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                     .copyWith(color: context.warningColor)),
             const SizedBox(height: 5),
             Text(
-        'Join a corporation to access adopted technology, contracts, and civic influence. Select any corporation in the directory to inspect its details.',
+              'Join a corporation to access adopted technology, contracts, and civic influence. Select any corporation in the directory to inspect its details.',
               style: context.widgetFooterStyle,
             ),
           ],
@@ -2994,21 +3269,13 @@ class CorporationOverviewPanel extends StatelessWidget {
     final memberCount = asIntOr(corporation['member_house_count'], 0);
     final pooledCapacity = corporation['occupied_capacity_units']?.toString();
     final standardUnits = corporation['required_standard_units']?.toString();
-    final treasury = asDouble(corporation['treasury_units']);
-    final operatingBudget = asDouble(corporation['operations_units']);
-    final reserve = asDouble(corporation['reserve_units']);
+    final treasuryUnits = corporation['treasury_units'];
+    final operatingBudgetUnits = corporation['operations_units'];
+    final reserveUnits = corporation['reserve_units'];
 
     final technologyCount = asIntOr(corporation['technology_count'], 0);
 
     final isAffiliated = myCorpId != null && myCorpId == id;
-
-    final incomeTaxBps = asInt(corporation['income_tax_bps']);
-    final salesTaxBps = asInt(corporation['sales_tax_bps']);
-    final corporateTaxBps = asInt(corporation['corporate_tax_bps']);
-
-    String formatRate(int? bps) => bps == null || bps < 0
-        ? 'UNAVAILABLE'
-        : '${(bps / 100).toStringAsFixed(1)}%';
 
     final rawGovProposals = state.governance['proposals'];
     final corpProposalsCount =
@@ -3026,7 +3293,7 @@ class CorporationOverviewPanel extends StatelessWidget {
           '• Chartered Governance: Corporations establish versioned bylaws, taxation rates, and future-effective governance changes.\n\n• Pooled Capacity: Affiliated Houses and public infrastructure consume physical capacity, with standardized units calculated automatically.\n\n• Corporate Finance & Technology: Distinct institutional CREDIT accounts fund operations, research, adopted technology, and collective expansion.',
       title: name.toUpperCase(),
       subtitle:
-        'Chartered corporate governance, physical capacity, and enterprise services across Earth',
+          'Chartered corporate governance, physical capacity, and enterprise services across Earth',
       metrics: [
         CockpitMetric(
           label: 'Members',
@@ -3077,7 +3344,7 @@ class CorporationOverviewPanel extends StatelessWidget {
           cockpit,
           const SizedBox(height: 18),
           const SizedBox(height: 28),
-          OrganizationPeopleRolesPanel(organizationId: 'ORG-CORP-$id'),
+          CorporationRolesPanel(corporationId: id),
           const SizedBox(height: 28),
           Container(
             width: double.infinity,
@@ -3139,27 +3406,21 @@ class CorporationOverviewPanel extends StatelessWidget {
                         context,
                         icon: Icons.account_balance_wallet_outlined,
                         label: 'CORPORATE BUDGET',
-                        value: treasury == null
-                            ? 'UNAVAILABLE'
-                            : formatCreditsAmount(treasury),
+                        value: formatCreditUnits(treasuryUnits),
                         accentColor: context.warningColor,
                       ),
                       _buildAttributeRow(
                         context,
                         icon: Icons.settings_suggest_outlined,
                         label: 'OPERATING BUDGET',
-                        value: operatingBudget == null
-                            ? 'UNAVAILABLE'
-                            : formatCreditsAmount(operatingBudget),
+                        value: formatCreditUnits(operatingBudgetUnits),
                         accentColor: context.secondaryColor,
                       ),
                       _buildAttributeRow(
                         context,
                         icon: Icons.shield_outlined,
                         label: 'RESERVE',
-                        value: reserve == null
-                            ? 'UNAVAILABLE'
-                            : formatCreditsAmount(reserve),
+                        value: formatCreditUnits(reserveUnits),
                         accentColor: context.successColor,
                       ),
                     ];
@@ -3191,26 +3452,28 @@ class CorporationOverviewPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _institutionBudgetCard(
-            context,
-            title: 'CORPORATE BUDGET',
-            amount: treasury == null
-                ? 'UNAVAILABLE'
-                : formatCreditsAmount(treasury),
-            icon: Icons.account_balance_wallet_outlined,
-            description:
-                'Corporation CREDIT accounts are separated into treasury, operating budget, and reserve. Corporations do not hold player resources.',
-            accent: context.warningColor,
-          ),
-          const SizedBox(height: 12),
-          _institutionFinanceClarityCard(
-            context,
-            institution: corporation,
-            projection: corporation['financial_projection'] is Map
-                ? Map<String, dynamic>.from(
-                    corporation['financial_projection'] as Map)
-                : const <String, dynamic>{},
-          ),
+          if (isAffiliated && state.corporationProfile.isNotEmpty)
+            _corporationFinanceProfileCard(context, state.corporationProfile)
+          else ...[
+            _institutionBudgetCard(
+              context,
+              title: 'CORPORATE BUDGET',
+              amount: formatCreditUnits(treasuryUnits),
+              icon: Icons.account_balance_wallet_outlined,
+              description:
+                  'Corporation CREDIT accounts are separated into treasury, operating budget, and reserve. Corporations do not hold player resources.',
+              accent: context.warningColor,
+            ),
+            const SizedBox(height: 12),
+            _institutionFinanceClarityCard(
+              context,
+              institution: corporation,
+              projection: corporation['financial_projection'] is Map
+                  ? Map<String, dynamic>.from(
+                      corporation['financial_projection'] as Map)
+                  : const <String, dynamic>{},
+            ),
+          ],
           SizedBox(height: context.spacingTopic),
           Container(
             width: double.infinity,
@@ -3252,90 +3515,11 @@ class CorporationOverviewPanel extends StatelessWidget {
           Text('POLICY & ECONOMY', style: context.widgetTitleStyle),
           const SizedBox(height: 4),
           Text(
-            'Operational policies governed by this corporation. Overrides Earth baseline within constitutional boundaries.',
+            'Effective constitutional policies and their authoritative provenance.',
             style: context.widgetFooterStyle,
           ),
           SizedBox(height: context.spacingControl),
-          EarthDataList(
-            children: [
-              EarthDataRow(
-                title: 'Internal Corporate Tax Levy',
-                subtitle:
-                    '${formatRate(corporateTaxBps)} on affiliated business revenues\nAllocated directly to the corporate treasury to fund public goods and research. Parent Earth ceiling: governed by the active Earth tax rule.',
-                leading: Icon(Icons.receipt_long_outlined,
-                    size: context.iconSize, color: context.secondaryColor),
-                badges: const [
-                  EarthBadge(
-                      label: 'CUSTOM OVERRIDE',
-                      variant: EarthBadgeVariant.primary),
-                ],
-                showDivider: true,
-              ),
-              EarthDataRow(
-                title: 'Market Sales Tax & Exchange Fee',
-                subtitle:
-                    '${formatRate(salesTaxBps)} transaction fee on local commodity and machine trades.',
-                leading: Icon(Icons.storefront_outlined,
-                    size: context.iconSize, color: context.secondaryColor),
-                badges: const [
-                  EarthBadge(
-                      label: 'CUSTOM OVERRIDE',
-                      variant: EarthBadgeVariant.primary),
-                ],
-                showDivider: true,
-              ),
-              EarthDataRow(
-                title: 'Citizen Income Tax Rate',
-                subtitle:
-                    '${formatRate(incomeTaxBps)} income levy on worker wages and personal distributions.',
-                leading: Icon(Icons.person_pin_outlined,
-                    size: context.iconSize, color: context.secondaryColor),
-                badges: const [
-                  EarthBadge(
-                      label: 'CUSTOM OVERRIDE',
-                      variant: EarthBadgeVariant.primary),
-                ],
-                showDivider: true,
-              ),
-              EarthDataRow(
-                title: 'Membership Admission Standards',
-                subtitle:
-                    'Current policy: ${(corporation['admission_policy'] ?? 'UNKNOWN').toString().toUpperCase()}. Admission consequences are determined by the corporation charter.',
-                leading: Icon(Icons.how_to_reg_outlined,
-                    size: context.iconSize, color: context.secondaryColor),
-                badges: [
-                  EarthBadge(
-                    label: (corporation['admission_policy'] ?? 'UNKNOWN')
-                                .toString()
-                                .toLowerCase() ==
-                            'open'
-                        ? 'EARTH DEFAULT'
-                        : 'CUSTOM OVERRIDE',
-                    variant: (corporation['admission_policy'] ?? 'UNKNOWN')
-                                .toString()
-                                .toLowerCase() ==
-                            'open'
-                        ? EarthBadgeVariant.neutral
-                        : EarthBadgeVariant.primary,
-                  ),
-                ],
-                showDivider: true,
-              ),
-              EarthDataRow(
-                title: 'Executive Role & Adoption Powers',
-                subtitle:
-                    'Active Corporation Executives hold statutory authority to manage Corporation operations and introduce governance proposals.',
-                leading: Icon(Icons.manage_accounts_outlined,
-                    size: context.iconSize, color: context.secondaryColor),
-                badges: const [
-                  EarthBadge(
-                      label: 'EARTH DEFAULT',
-                      variant: EarthBadgeVariant.neutral),
-                ],
-                showDivider: false,
-              ),
-            ],
-          ),
+          _corporationPolicyList(context, state.corporationProfile),
           SizedBox(height: context.spacingTopic),
           Text('CORPORATION DECISIONS', style: context.widgetTitleStyle),
           const SizedBox(height: 5),
@@ -3351,18 +3535,7 @@ class CorporationOverviewPanel extends StatelessWidget {
               children: [
                 if (isAffiliated) ...[
                   EarthButton(
-                    label: 'FORM CORPORATION',
-                    icon: Icons.add_business_outlined,
-                    variant: EarthButtonVariant.primary,
-                    onPressed: busy
-                        ? null
-                        : () => showFormationComposer(
-                              context,
-                              action ?? ((_) async {}),
-                            ),
-                  ),
-                  EarthButton(
-                    label: 'CORPORATION RULES',
+                    label: 'VIEW GOVERNANCE',
                     icon: Icons.gavel_outlined,
                     variant: EarthButtonVariant.secondary,
                     onPressed: busy
@@ -3421,7 +3594,7 @@ class CorporationOverviewPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Leaving $corporationName removes your corporation and city affiliation. Your personal assets remain yours.',
+                'Leaving $corporationName ends your House\'s Corporation affiliation. Your House assets remain yours. Capacity pricing and institutional rights will change according to the resulting independent state.',
                 style: context.widgetFooterStyle,
               ),
               const SizedBox(height: 12),

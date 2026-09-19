@@ -1683,8 +1683,7 @@ Future<void> showCorporationCharterDialog(
 
   String rate(int? bps) =>
       bps == null ? 'UNAVAILABLE' : '${(bps / 100).toStringAsFixed(1)}%';
-  String money(dynamic value) =>
-      value == null ? 'UNAVAILABLE' : formatCreditsAmount(value);
+  String money(dynamic value) => formatCreditUnits(value);
   String value(dynamic raw) => raw?.toString() ?? 'UNAVAILABLE';
   final occupied = value(corporation['occupied_capacity_units']);
   final standard = value(corporation['standard_capacity_units']);
@@ -1777,7 +1776,7 @@ Future<void> showCorporationCharterDialog(
                       value: corporation['house_capacity_base_rate_units'] ==
                               null
                           ? 'UNAVAILABLE'
-                          : '${formatCreditsAmount(corporation['house_capacity_base_rate_units'])} / unit / day',
+                          : '${formatCreditUnits(corporation['house_capacity_base_rate_units'])} / unit / day',
                       subtitle: 'Canonical capacity price',
                       icon: Icons.payments_outlined),
                   EarthMetricTile(

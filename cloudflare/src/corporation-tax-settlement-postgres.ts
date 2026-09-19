@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { postSettlementTransaction } from './economic-transaction-postgres.ts';
+import { materializeResolvedConstitutionSnapshot } from './constitutional-kernel-postgres.ts';
 
 type CorporationTaxRow = {
   id: string;
@@ -17,10 +18,58 @@ export async function settleCorporationIncomeTax(
   const assessedDay = day - 1;
   if (assessedDay < 1) return { ok: true, day, assessedDay, assessed: 0, paid: 0, arrears: 0 };
 
-  const missingSnapshots = (await tx.query<{ count: string }>(`
-    SELECT COUNT(*)::TEXT AS count
-      FROM corporations c
+  const missingSnapshots = (await tx.query<{ id: string }>(`
+    SELECT c.id
+     FROM corporations c
      WHERE c.status = 'ACTIVE'
+       AND c.created_game_day <= $1
+       AND EXISTS (
+         SELECT 1
+           FROM constitutional_rule_versions_v5 rule
+          WHERE rule.authority_type = 'CORPORATION'
+            AND rule.authority_id = c.id
+            AND rule.rule_code = 'CORPORATION.TAX.CORPORATE_RATE'
+            AND rule.status IN ('ACTIVE', 'RETIRED')
+            AND rule.effective_from_game_day <= $1
+            AND (rule.effective_to_game_day IS NULL OR rule.effective_to_game_day >= $1)
+       )
+       AND NOT EXISTS (
+         SELECT 1
+           FROM resolved_constitution_snapshots_v5 snap
+          WHERE snap.authority_type = 'CORPORATION'
+            AND snap.authority_id = c.id
+            AND snap.game_day = $1
+            AND jsonb_exists(snap.rules_json, 'CORPORATION.TAX.CORPORATE_RATE')
+            AND jsonb_exists(snap.version_ids, 'CORPORATION.TAX.CORPORATE_RATE')
+       )
+  `, [assessedDay])).rows;
+  // A Corporation can be founded after the assessed day has already been
+  // settled. Materialize its immutable historical rule snapshot here so a
+  // retry of an already-partially-completed settlement can repair that
+  // prerequisite without replaying earlier phases or changing the rules.
+  for (const corporation of missingSnapshots) {
+    await materializeResolvedConstitutionSnapshot(tx, {
+      authorityType: 'CORPORATION',
+      authorityId: corporation.id,
+      gameDay: assessedDay,
+    });
+  }
+
+  const unresolvedSnapshots = (await tx.query<{ count: string }>(`
+    SELECT COUNT(*)::TEXT AS count
+     FROM corporations c
+     WHERE c.status = 'ACTIVE'
+       AND c.created_game_day <= $1
+       AND EXISTS (
+         SELECT 1
+           FROM constitutional_rule_versions_v5 rule
+          WHERE rule.authority_type = 'CORPORATION'
+            AND rule.authority_id = c.id
+            AND rule.rule_code = 'CORPORATION.TAX.CORPORATE_RATE'
+            AND rule.status IN ('ACTIVE', 'RETIRED')
+            AND rule.effective_from_game_day <= $1
+            AND (rule.effective_to_game_day IS NULL OR rule.effective_to_game_day >= $1)
+       )
        AND NOT EXISTS (
          SELECT 1
            FROM resolved_constitution_snapshots_v5 snap
@@ -31,7 +80,7 @@ export async function settleCorporationIncomeTax(
             AND jsonb_exists(snap.version_ids, 'CORPORATION.TAX.CORPORATE_RATE')
        )
   `, [assessedDay])).rows[0];
-  if (Number(missingSnapshots?.count ?? 0) > 0) {
+  if (Number(unresolvedSnapshots?.count ?? 0) > 0) {
     throw new Error(`Canonical Corporation tax snapshots are unavailable for assessed game day ${assessedDay}`);
   }
 

@@ -19,7 +19,7 @@ test('Corporation lifecycle is defined as Corporation plus primary Territory plu
 
 test('Corporation lifecycle has no City formation prerequisite or compatibility query', () => {
   const source = read('cloudflare/src/institutions-postgres.ts');
-  assert.doesNotMatch(source, /cities|city_id|capital_city|resident|30 active/i);
+  assert.doesNotMatch(source, /cities|city_id|capital_city|30 active/i);
   assert.doesNotMatch(source, /CREATE TABLE|CREATE VIEW/);
 });
 

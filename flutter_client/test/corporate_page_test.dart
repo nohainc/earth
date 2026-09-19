@@ -95,6 +95,6 @@ void main() {
     // Verify Corporate Header & Budget
     expect(find.text('Solaris Conglomerate'), findsOneWidget);
     expect(find.text('CORPORATE BUDGET'), findsWidgets);
-    expect(find.textContaining('8500000 C'), findsWidgets);
+    expect(find.textContaining('85000.00 C'), findsWidgets);
   });
 }

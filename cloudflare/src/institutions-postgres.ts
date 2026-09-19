@@ -7,6 +7,15 @@ import { refreshV5SettlementProfilesForHouse } from './v5-settlement-profiles-po
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { runEconomicMutation } from './settlement-barrier-postgres.ts';
 import { postEconomicTransaction } from './economic-transaction-postgres.ts';
+import {
+  corporationDirectoryEntryFromProfile,
+  corporationPoliciesFromConstitution,
+  corporationProfileFromSource,
+  type CorporationDirectoryEntry,
+  type CorporationProfile,
+} from './corporation-profile.ts';
+import { getInstitutionFinancialProjection } from './financial-projections.ts';
+import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 
 async function day(repository: PostgresRepository): Promise<number> {
   const clock = await readAuthoritativeGameTime(repository);
@@ -37,69 +46,19 @@ async function provisionCorporationEconomy(tx: PostgresRepository, corporationId
   return economicId;
 }
 
-export type CorporationDirectoryEntry = {
-  id: string;
-  name: string;
-  admissionPolicy: string;
-  memberHouseCount: number;
-  incomeTaxBps: number | null;
-  salesTaxBps: number | null;
-  corporateTaxBps: number | null;
-  propertyTaxBps: number | null;
-  houseCapacityBaseRateUnits: string | null;
-  occupiedCapacityUnits: string;
-  standardCapacityUnits: string;
-  requiredStandardUnits: string;
-  capacityUtilizationBps: number;
-  houseCapacityRevenueUnits: string;
-  earthCapacityExpenseUnits: string;
-  capacityMarginUnits: string;
-  capacityStatus: string;
-  treasuryUnits: string;
-  operationsUnits: string;
-  reserveUnits: string;
-  technologyCount: number;
-  activeResearchCount: number;
-  canJoin: boolean;
-  membershipState: 'MEMBER' | 'PENDING' | 'ELIGIBLE' | 'INELIGIBLE';
-};
-
 type CorporationDirectoryRow = Record<string, unknown>;
 
 function corporationDirectoryEntry(row: CorporationDirectoryRow): CorporationDirectoryEntry {
-  return {
-    id: String(row.id),
-    name: String(row.name),
-    admissionPolicy: String(row.admission_policy ?? 'UNKNOWN'),
-    memberHouseCount: Number(row.member_house_count ?? 0),
-    incomeTaxBps: row.income_tax_bps == null ? null : Number(row.income_tax_bps),
-    salesTaxBps: row.sales_tax_bps == null ? null : Number(row.sales_tax_bps),
-    corporateTaxBps: row.corporate_tax_bps == null ? null : Number(row.corporate_tax_bps),
-    propertyTaxBps: row.property_tax_bps == null ? null : Number(row.property_tax_bps),
-    houseCapacityBaseRateUnits: row.house_capacity_base_rate_units == null ? null : String(row.house_capacity_base_rate_units),
-    occupiedCapacityUnits: String(row.occupied_capacity_units ?? '0'),
-    standardCapacityUnits: String(row.standard_capacity_units ?? '0'),
-    requiredStandardUnits: String(row.required_standard_units ?? '0'),
-    capacityUtilizationBps: Number(row.capacity_utilization_bps ?? 0),
-    houseCapacityRevenueUnits: String(row.house_capacity_revenue_units ?? '0'),
-    earthCapacityExpenseUnits: String(row.earth_capacity_expense_units ?? '0'),
-    capacityMarginUnits: String(row.capacity_margin_units ?? '0'),
-    capacityStatus: String(row.capacity_status ?? 'CURRENT'),
-    treasuryUnits: String(row.treasury_units ?? '0'),
-    operationsUnits: String(row.operations_units ?? '0'),
-    reserveUnits: String(row.reserve_units ?? '0'),
-    technologyCount: Number(row.technology_count ?? 0),
-    activeResearchCount: Number(row.active_research_count ?? 0),
-    canJoin: Boolean(row.can_join),
-    membershipState: String(row.membership_state ?? 'INELIGIBLE') as CorporationDirectoryEntry['membershipState'],
-  };
+  const profile = corporationProfileFromSource(row);
+  return corporationDirectoryEntryFromProfile(profile, row);
 }
 
-export async function listCorporations(repository: PostgresRepository, search = '', viewerHumanId?: string): Promise<{ corporations: CorporationDirectoryEntry[] }> {
+export async function listCorporations(repository: PostgresRepository, search = '', viewerHumanId?: string, corporationId?: string): Promise<{ corporations: CorporationDirectoryEntry[] }> {
   const term = `%${search.trim().replace(/[%_]/g, '')}%`;
   const result = await repository.query(`
     SELECT c.id, i.name, i.status, c.status AS corporation_status,
            c.charter_version, c.admission_policy,
+           corp_rules.rules AS constitution_rules,
            NULLIF(corp_rules.rules->>'CORPORATION.TAX.INCOME_RATE', '')::INTEGER AS income_tax_bps,
            NULLIF(corp_rules.rules->>'CORPORATION.TAX.SALES_RATE', '')::INTEGER AS sales_tax_bps,
            NULLIF(corp_rules.rules->>'CORPORATION.TAX.PROPERTY_RATE', '')::INTEGER AS property_tax_bps,
@@ -108,7 +67,11 @@ export async function listCorporations(repository: PostgresRepository, search = 
            COALESCE((SELECT s.total_occupied_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::TEXT AS occupied_capacity_units,
            COALESCE((SELECT s.standard_territory_capacity_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::TEXT AS standard_capacity_units,
            COALESCE((SELECT s.required_territory_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::TEXT AS required_standard_units,
-           COALESCE((SELECT s.total_occupied_units * 10000 / NULLIF(s.standard_territory_capacity_units, 0) FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::INTEGER AS capacity_utilization_bps,
+           COALESCE((SELECT s.standard_territory_capacity_units * s.required_territory_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::TEXT AS available_capacity_units,
+           COALESCE((SELECT s.member_residential_capacity_units FROM v5_corporation_settlement_profiles s WHERE s.corporation_id = c.id), 0)::TEXT AS residential_units,
+           COALESCE((SELECT s.member_productive_capacity_units FROM v5_corporation_settlement_profiles s WHERE s.corporation_id = c.id), 0)::TEXT AS private_productive_units,
+           COALESCE((SELECT s.public_capacity_units FROM v5_corporation_settlement_profiles s WHERE s.corporation_id = c.id), 0)::TEXT AS public_units,
+           COALESCE((SELECT s.total_occupied_units * 10000 / NULLIF(s.standard_territory_capacity_units * s.required_territory_units, 0) FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::INTEGER AS capacity_utilization_bps,
            COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'HOUSE' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'HOUSE')), 0)::TEXT AS house_capacity_revenue_units,
            COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'CORPORATION' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'CORPORATION')), 0)::TEXT AS earth_capacity_expense_units,
            (COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'HOUSE' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'HOUSE')), 0) - COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'CORPORATION' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'CORPORATION')), 0))::TEXT AS capacity_margin_units,
@@ -150,9 +113,57 @@ export async function listCorporations(repository: PostgresRepository, search = 
           ) corporation_versions
       ) corp_rules ON TRUE
      WHERE i.status = 'ACTIVE' AND ($1 = '%%' OR i.name ILIKE $1)
+       AND ($3::TEXT IS NULL OR c.id = $3)
      ORDER BY i.name ASC
-     LIMIT 100`, [term, viewerHumanId ?? null]);
+     LIMIT 100`, [term, viewerHumanId ?? null, corporationId ?? null]);
   return { corporations: result.rows.map(corporationDirectoryEntry) };
+}
+
+/**
+ * Canonical Corporation read model used by both the profile endpoint and the
+ * world snapshot. Directory rows are deliberately converted once at this
+ * boundary; clients never need to understand the legacy SQL column names.
+ */
+export async function getCorporationProfile(
+  repository: PostgresRepository,
+  corporationId: string,
+  viewerHumanId?: string,
+): Promise<CorporationProfile | null> {
+  const directory = await listCorporations(repository, '', viewerHumanId, corporationId);
+  const entry = directory.corporations[0];
+  if (!entry) return null;
+
+  const result = await repository.query(
+    `SELECT c.charter_version,
+            COALESCE((
+              SELECT jsonb_object_agg(v.rule_code, v.value_json->'value')
+                FROM constitutional_rule_versions_v5 v
+               WHERE v.authority_type = 'CORPORATION'
+                 AND v.authority_id = c.id
+                 AND v.status IN ('ACTIVE', 'RETIRED')
+                 AND v.effective_from_game_day <= (SELECT game_day FROM earth_get_current_game_time())
+                 AND (v.effective_to_game_day IS NULL OR v.effective_to_game_day >= (SELECT game_day FROM earth_get_current_game_time()))
+            ), '{}'::jsonb) AS rules
+       FROM corporations c
+      WHERE c.id = $1 AND c.status = 'ACTIVE'`,
+    [corporationId],
+  );
+  if (!result.rows[0]) return null;
+  const gameDay = (await readAuthoritativeGameTime(repository)).gameDay;
+  const constitution = await getConstitutionReadModel(repository, { gameDay, corporationId });
+  const financial = await getInstitutionFinancialProjection(repository, corporationId).catch(() => null);
+  return corporationProfileFromSource({
+    ...entry,
+    charterVersion: result.rows[0].charter_version,
+    rules: constitution.rules,
+    provenance: constitution.provenance,
+    policies: corporationPoliciesFromConstitution(constitution),
+    authorizedUnits: financial?.authorizedUnits,
+    committedUnits: financial?.committedUnits,
+    availableUnits: financial?.availableUnits,
+    dailyRevenueUnits: financial?.revenueUnits,
+    dailyExpenseUnits: financial?.expenseUnits,
+  });
 }
 
 export async function listCorporationTerritories(repository: PostgresRepository, corporationId: string): Promise<Record<string, unknown>> {

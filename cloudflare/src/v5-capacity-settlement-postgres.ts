@@ -165,7 +165,9 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
     JOIN houses h ON h.id = hsp.house_id AND h.status = 'ACTIVE'
     JOIN owner_registry ho ON ho.id = hsp.house_id AND ho.owner_type = 'HOUSE'
     LEFT JOIN owner_registry co ON co.id = hsp.corporation_id AND co.owner_type = 'CORPORATION'
-    ORDER BY hsp.house_id`, [])).rows.map((row) => ({ ...row, buildingUnits: BigInt(String(row.buildingUnits)) }));
+    LEFT JOIN corporations corp ON corp.id = hsp.corporation_id
+   WHERE hsp.corporation_id IS NULL OR corp.created_game_day <= $1
+    ORDER BY hsp.house_id`, [assessedDay])).rows.map((row) => ({ ...row, buildingUnits: BigInt(String(row.buildingUnits)) }));
   const corporationUnits = new Map<string, { economicId: string; residential: bigint; privateBuildings: bigint; publicBuildings: bigint }>();
   let paid = 0; let partial = 0; let arrears = 0; let houseAssessments = 0;
   for (const member of members) {
@@ -211,7 +213,8 @@ export async function settleV5CapacityInTransaction(tx: PostgresRepository, day:
     FROM v5_corporation_settlement_profiles p
     JOIN corporations c ON c.id = p.corporation_id AND c.status = 'ACTIVE'
     JOIN owner_registry o ON o.id = p.corporation_id AND o.owner_type = 'CORPORATION'
-    ORDER BY p.corporation_id`, [])).rows;
+   WHERE c.created_game_day <= $1
+    ORDER BY p.corporation_id`, [assessedDay])).rows;
   for (const row of corporationProfiles) {
     corporationUnits.set(row.corporation_id, {
       economicId: row.economic_id,

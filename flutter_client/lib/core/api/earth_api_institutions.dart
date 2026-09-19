@@ -1,6 +1,44 @@
 part of 'earth_api.dart';
 
 extension EarthApiInstitutions on EarthApi {
+  Future<CorporationProfile> getCorporationProfile(String corporationId) async {
+    final response =
+        await _request('/api/v5/corporations/$corporationId/profile') as Map;
+    return CorporationProfile.fromJson(
+        Map<String, dynamic>.from(response['profile'] as Map));
+  }
+
+  Future<Map<String, dynamic>> getCorporationRoles(String corporationId) async {
+    final response =
+        await _request('/api/v5/corporations/$corporationId/roles');
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> appointCorporationRole({
+    required String corporationId,
+    required String roleCode,
+    required String targetHumanId,
+  }) async {
+    final response = await _request(
+      '/api/v5/corporations/$corporationId/roles/appoint',
+      method: 'POST',
+      body: {'roleCode': roleCode, 'targetHumanId': targetHumanId},
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> removeCorporationRole({
+    required String corporationId,
+    required String roleCode,
+  }) async {
+    final response = await _request(
+      '/api/v5/corporations/$corporationId/roles/remove',
+      method: 'POST',
+      body: {'roleCode': roleCode},
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<Map<String, dynamic>> getV5EarthCapacity() async {
     final response = await _request('/api/v5/capacity');
     return Map<String, dynamic>.from(response as Map);

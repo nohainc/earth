@@ -4,6 +4,7 @@ import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   listCorporations,
+  getCorporationProfile,
   listCorporationTerritories,
   createCorporation,
   corporationQualification,
@@ -15,6 +16,7 @@ import {
 import { getInstitutionBudget, listInstitutionBudgetLines, listInstitutionCommitments, createInstitutionCommitment, payInstitutionCommitment, cancelInstitutionCommitment } from './institution-budget-api.ts';
 import { applyV5CorporationMembership, decideV5MembershipApplication, issueV5CorporationInvite, leaveV5Corporation, listV5MembershipApplications, quoteV5CorporationMembership } from './v5-membership-postgres.ts';
 import { foundV5Corporation, quoteV5CorporationFounding } from './v5-founding-postgres.ts';
+import { appointCorporationRole, getCorporationRoles, removeCorporationRole } from './corporation-roles-postgres.ts';
 
 export async function handleInstitutionRoutes(
   request: Request,
@@ -190,6 +192,35 @@ export async function handleInstitutionRoutes(
     const result = await withRepository(env, (repository) => listCorporations(repository, url.searchParams.get('search') ?? '', viewer.id));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
+  const v5Profile = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/profile$/);
+  if (v5Profile && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => getCorporationProfile(repository, v5Profile[1], viewer.id));
+    if (!result) return Response.json({ ok: false, error: 'Corporation profile not found' }, { status: 404 });
+    return Response.json({ profile: result, persistence: 'planetscale-postgres' });
+  }
+
+  const v5Roles = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/roles$/);
+  if (v5Roles && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => getCorporationRoles(repository, v5Roles[1], viewer.id));
+    if (!result) return Response.json({ ok: false, error: 'Corporation roles not found' }, { status: 404 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+  const v5RoleAction = url.pathname.match(/^\/api\/v5\/corporations\/([^/]+)\/roles\/(appoint|remove)$/);
+  if (v5RoleAction && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ roleCode?: string; targetHumanId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    if (!parsed.value.roleCode || (v5RoleAction[2] === 'appoint' && !parsed.value.targetHumanId)) {
+      return Response.json({ ok: false, error: 'Role and target member are required' }, { status: 400 });
+    }
+    try {
+      const result = await withRepository(env, (repository) => v5RoleAction[2] === 'appoint'
+        ? appointCorporationRole(repository, { corporationId: v5RoleAction[1], actorHumanId: viewer.id, roleCode: parsed.value.roleCode!, targetHumanId: parsed.value.targetHumanId! })
+        : removeCorporationRole(repository, { corporationId: v5RoleAction[1], actorHumanId: viewer.id, roleCode: parsed.value.roleCode! }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation role action failed' }, { status: 403 }); }
   }
 
   if (url.pathname === '/api/corporations' && request.method === 'GET') {

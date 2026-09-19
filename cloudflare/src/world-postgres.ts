@@ -13,6 +13,8 @@ import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 import { getHouseSettlementProfileSnapshot, getCorporationSettlementProfileSnapshot } from './v5-settlement-profiles-postgres.ts';
 import { getAvailableScaleCapabilities } from './v5-scale-postgres.ts';
 import { readAuthoritativeGameTime, getSettlementCursor } from './world-clock-postgres.ts';
+import { corporationPoliciesFromConstitution, corporationProfileFromSource } from './corporation-profile.ts';
+import { getInstitutionFinancialProjection } from './financial-projections.ts';
 
 /** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -184,6 +186,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                  (SELECT s.total_occupied_units::TEXT FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_occupied_capacity,
                                  (SELECT s.required_territory_units::TEXT FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_required_territory_units,
                                  (SELECT s.standard_territory_capacity_units::TEXT FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_standard_territory_capacity,
+                                 COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'HOUSE' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'HOUSE')), 0)::TEXT AS house_capacity_revenue_units,
+                                 COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'CORPORATION' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'CORPORATION')), 0)::TEXT AS earth_capacity_expense_units,
+                                 COALESCE((SELECT status FROM v5_capacity_delinquency_state d WHERE d.subject_type = 'CORPORATION' AND d.subject_id = c.id), 'CURRENT') AS capacity_status,
                                  (SELECT t.name FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_name
                             FROM house_affiliations ha
                             JOIN corporations c ON c.id = ha.corporation_id
@@ -265,6 +270,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     houseProfile,
     corpProfile,
     corpAccounts,
+    corpFinancialProjection,
     houseOwnerEcon,
     corpOwnerEcon,
   ] = await Promise.all([
@@ -298,6 +304,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                 JOIN economic_assets asset ON asset.id = a.asset_id
                                WHERE owner.id = $1 AND a.status = 'ACTIVE'
                                ORDER BY asset.id, a.account_type`, [corpId]) : Promise.resolve({ rows: [] }),
+    corporation.rows[0]?.id
+      ? getInstitutionFinancialProjection(repository, corporation.rows[0].id).catch(() => null)
+      : Promise.resolve(null),
     viewerHouseId ? repository.query<{ economic_id: string }>(`SELECT economic_id FROM owner_registry WHERE id = $1`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     corpId ? repository.query<{ economic_id: string }>(`SELECT economic_id FROM owner_registry WHERE id = $1`, [corpId]) : Promise.resolve({ rows: [] }),
   ]);
@@ -332,6 +341,38 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     v5_standard_territory_capacity: corporation.rows[0].v5_standard_territory_capacity ?? null,
     scaleCapabilities: corpScaleCaps,
   } : null;
+  const corporationProfile = corporationSnapshot
+    ? corporationProfileFromSource({
+        ...corporationSnapshot,
+        memberHouseCount: corporationSnapshot.member_house_count,
+        occupiedCapacityUnits: corporationSnapshot.v5_occupied_capacity ?? '0',
+        availableCapacityUnits: corpProfile
+          ? String(BigInt(String(corporationSnapshot.v5_standard_territory_capacity ?? '0')) * BigInt(String(corporationSnapshot.v5_required_territory_units ?? '0')))
+          : '0',
+        residentialUnits: corpProfile?.member_residential_capacity_units ?? '0',
+        privateProductiveUnits: corpProfile?.member_productive_capacity_units ?? '0',
+        publicUnits: corpProfile?.public_capacity_units ?? '0',
+        houseCapacityRevenueUnits: corporationSnapshot.house_capacity_revenue_units,
+        earthCapacityExpenseUnits: corporationSnapshot.earth_capacity_expense_units,
+        capacityMarginUnits: String(BigInt(String(corporationSnapshot.house_capacity_revenue_units ?? '0')) - BigInt(String(corporationSnapshot.earth_capacity_expense_units ?? '0'))),
+        capacityStatus: corporationSnapshot.capacity_status,
+        authorizedUnits: corpFinancialProjection?.authorizedUnits,
+        committedUnits: corpFinancialProjection?.committedUnits,
+        availableUnits: corpFinancialProjection?.availableUnits,
+        dailyRevenueUnits: corpFinancialProjection?.revenueUnits,
+        dailyExpenseUnits: corpFinancialProjection?.expenseUnits,
+        requiredStandardUnits: corporationSnapshot.v5_required_territory_units ?? '0',
+        standardCapacityUnits: corporationSnapshot.v5_standard_territory_capacity ?? '0',
+        houseCapacityBaseRateUnits: corporationSnapshot.house_capacity_base_rate_units,
+        treasuryUnits: corporationSnapshot.treasury_units,
+        operationsUnits: corporationSnapshot.operations_units,
+        reserveUnits: corporationSnapshot.reserve_units,
+        technologyCount: corporationSnapshot.technology_count,
+        rules: constitutionRules,
+        provenance: constitutionProvenance,
+        policies: corporationPoliciesFromConstitution(constitution),
+      })
+    : null;
   const marketProducts = Object.fromEntries(marketInstruments.rows.map((row: any) => {
     const product = String(row.symbol).replace(/^SPOT-/, '').toLowerCase();
     const priceUnits = row.last_clearing_price_units ?? row.genesis_reference_price_units;
@@ -415,6 +456,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     territories: territories.rows,
     organizations: organizations['organizations'] ?? [],
     corporation: corporationSnapshot,
+    corporationProfile,
     settlementProfile: houseProfile,
     scaleCapabilities: houseScaleCaps,
     humans: humans.rows,

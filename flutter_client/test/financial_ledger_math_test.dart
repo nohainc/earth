@@ -4,11 +4,14 @@ import 'package:earth_client/core/models/earth_state.dart';
 
 void main() {
   group('Tier 1: Financial Ledger & Economic Calculus', () {
-    test('formatWholeNumber and formatCreditsAmount properly formats values without float drift', () {
+    test(
+        'formatWholeNumber and formatCreditsAmount properly formats values without float drift',
+        () {
       expect(formatWholeNumber(0.0), '0');
       expect(formatWholeNumber(1234.567), '1234');
       expect(formatWholeNumber(-450.2), '-450');
       expect(formatCreditsAmount(15000), '15000 C');
+      expect(formatCreditUnits('12500'), '125.00 C');
       expect(formatPercent(0.125), '13%');
       expect(formatPercent(0.50), '50%');
       expect(formatPercent(1.0), '100%');
@@ -16,7 +19,9 @@ void main() {
       expect(asInt('128'), 128);
     });
 
-    test('Economic ledger double-entry conservation of credits on share transactions', () {
+    test(
+        'Economic ledger double-entry conservation of credits on share transactions',
+        () {
       double corporateTreasury = 50000.0;
       double playerCredits = 10000.0;
       int totalShares = 1000;
@@ -48,7 +53,9 @@ void main() {
       expect(dividendPerShare, 10.0);
     });
 
-    test('EarthState evaluates financial net worth, liquidity ratio, and solvency checks', () {
+    test(
+        'EarthState evaluates financial net worth, liquidity ratio, and solvency checks',
+        () {
       final rawState = {
         'clock': {'day': 120, 'minute': 720},
         'human': {
@@ -83,8 +90,20 @@ void main() {
           }
         },
         'machines': [
-          {'id': 'm-1', 'name': 'Smelter', 'condition': 92.0, 'utilization': 75.0, 'value': 25000.0},
-          {'id': 'm-2', 'name': 'Assembler', 'condition': 64.0, 'utilization': 88.0, 'value': 18000.0},
+          {
+            'id': 'm-1',
+            'name': 'Smelter',
+            'condition': 92.0,
+            'utilization': 75.0,
+            'value': 25000.0
+          },
+          {
+            'id': 'm-2',
+            'name': 'Assembler',
+            'condition': 64.0,
+            'utilization': 88.0,
+            'value': 18000.0
+          },
         ],
       };
 
@@ -98,7 +117,8 @@ void main() {
       final materialsVal = 120.0 * 3.50; // 420.0
       final componentsVal = 45.0 * 8.00; // 360.0
       final computeVal = 80.0 * 5.20; // 416.0
-      final totalCommodityValue = energyVal + foodVal + materialsVal + componentsVal + computeVal;
+      final totalCommodityValue =
+          energyVal + foodVal + materialsVal + componentsVal + computeVal;
       expect(totalCommodityValue, 1763.5);
 
       final totalLiquid = (state.human['credits'] as num) + totalCommodityValue;

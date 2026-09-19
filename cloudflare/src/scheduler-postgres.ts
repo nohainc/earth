@@ -69,10 +69,15 @@ const OWNER_SHARD_COUNT = 16;
 const settlementPhases = createDailySettlementPhaseRegistry({
   v5PolicyActivation: async ({ tx, day }) => activateDueV5GovernancePoliciesInTransaction(tx, day),
   constitutionSnapshots: async ({ tx, day }) => {
-    await materializeResolvedConstitutionSnapshot(tx, { authorityType: 'EARTH', authorityId: 'EARTH', gameDay: day });
+    const snapshotDays = [...new Set([day - 1, day].filter((snapshotDay) => snapshotDay > 0))];
+    for (const snapshotDay of snapshotDays) {
+      await materializeResolvedConstitutionSnapshot(tx, { authorityType: 'EARTH', authorityId: 'EARTH', gameDay: snapshotDay });
+    }
     const corporations = (await tx.query<{ id: string }>("SELECT id FROM corporations WHERE status = 'ACTIVE' ORDER BY id")).rows;
-    for (const corporation of corporations) await materializeResolvedConstitutionSnapshot(tx, { authorityType: 'CORPORATION', authorityId: corporation.id, gameDay: day });
-    return { earth: 1, corporations: corporations.length };
+    for (const snapshotDay of snapshotDays) {
+      for (const corporation of corporations) await materializeResolvedConstitutionSnapshot(tx, { authorityType: 'CORPORATION', authorityId: corporation.id, gameDay: snapshotDay });
+    }
+    return { earth: snapshotDays.length, corporations: corporations.length * snapshotDays.length };
   },
   activateSuccessors: async ({ tx, day }) => ({ activated: await activatePendingHouseSuccessors(tx, day) }),
   preparePartitions: noOpPhase,

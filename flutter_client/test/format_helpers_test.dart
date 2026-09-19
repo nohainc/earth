@@ -18,13 +18,18 @@ void main() {
     expect(formatted.contains('2026-08-16'), true);
   });
 
-  test('formatProposalDeadline formats game day, minute, and real-time durations', () {
+  test(
+      'formatProposalDeadline formats game day, minute, and real-time durations',
+      () {
     final deadlineDays = {
       'gameDay': 185,
       'gameMinute': 720,
       'realSecondsRemaining': 90000,
     };
-    expect(formatProposalDeadline(deadlineDays).contains('Closes YEAR 1   DAY 185   12:00'), true);
+    expect(
+        formatProposalDeadline(deadlineDays)
+            .contains('Closes YEAR 1   DAY 185   12:00'),
+        true);
     expect(formatProposalDeadline(deadlineDays).contains('1d 1h'), true);
 
     final deadlineHours = {
@@ -32,7 +37,10 @@ void main() {
       'game_minute': 60,
       'real_seconds_remaining': 7200,
     };
-    expect(formatProposalDeadline(deadlineHours).contains('Closes YEAR 1   DAY 186   01:00'), true);
+    expect(
+        formatProposalDeadline(deadlineHours)
+            .contains('Closes YEAR 1   DAY 186   01:00'),
+        true);
     expect(formatProposalDeadline(deadlineHours).contains('2h 0m'), true);
 
     final deadlineMinutes = {
@@ -46,5 +54,14 @@ void main() {
   test('NumberFormatHelper formats percent strings', () {
     expect(NumberFormatHelper.percent(0.25), '25.0%');
     expect(NumberFormatHelper.percent('invalid'), '0.0%');
+  });
+
+  test('formatCreditUnits formats atomic CREDIT with integer arithmetic', () {
+    expect(formatCreditUnits('12500'), '125.00 C');
+    expect(formatCreditUnits(1), '0.01 C');
+    expect(formatCreditUnits('-5'), '-0.05 C');
+    expect(formatCreditUnits('9007199254740993'), '90071992547409.93 C');
+    expect(formatCreditUnits('invalid'), 'UNAVAILABLE');
+    expect(formatCreditUnits(null), 'UNAVAILABLE');
   });
 }

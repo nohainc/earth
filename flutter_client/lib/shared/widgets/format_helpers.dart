@@ -41,6 +41,27 @@ String formatCreditsAmount(dynamic value) {
   return '${formatWholeNumber(value)} C';
 }
 
+/// Formats an atomic CREDIT balance where 100 units equal 1.00 C.
+///
+/// Monetary API values must remain integers/strings all the way to the
+/// presentation boundary. This avoids losing precision when balances exceed
+/// the exact integer range of a JavaScript number or are represented by a
+/// PostgreSQL BIGINT string.
+String formatCreditUnits(dynamic value, {String fallback = 'UNAVAILABLE'}) {
+  if (value == null) return fallback;
+  final raw = value.toString().trim();
+  if (raw.isEmpty) return fallback;
+  final negative = raw.startsWith('-');
+  final unsigned =
+      (raw.startsWith('-') || raw.startsWith('+')) ? raw.substring(1) : raw;
+  final units = BigInt.tryParse(unsigned);
+  if (units == null) return fallback;
+  final absolute = units.abs();
+  final whole = absolute ~/ BigInt.from(100);
+  final cents = (absolute % BigInt.from(100)).toString().padLeft(2, '0');
+  return '${negative ? '-' : ''}$whole.$cents C';
+}
+
 String formatPercent(dynamic value) {
   final number = value is num ? value.toDouble() : 0.0;
   return '${(number.clamp(0, 1) * 100).round()}%';
@@ -104,10 +125,10 @@ String formatRealToGameDateTime(dynamic value) {
   final parsed = DateTime.tryParse(value?.toString() ?? '');
   if (parsed == null) return 'unknown';
   final epochStart = DateTime.utc(2026, 1, 1, 0, 0, 0);
-  final diffMs = parsed.toUtc().millisecondsSinceEpoch - epochStart.millisecondsSinceEpoch;
+  final diffMs =
+      parsed.toUtc().millisecondsSinceEpoch - epochStart.millisecondsSinceEpoch;
   final totalGameMinutes = diffMs > 0 ? (diffMs ~/ 1000) : 0;
   final gameDay = (totalGameMinutes ~/ 1440) + 1;
   final gameMinute = totalGameMinutes % 1440;
   return formatGameDateTime(gameDay, gameMinute);
 }
-

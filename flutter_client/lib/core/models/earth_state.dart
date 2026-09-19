@@ -87,10 +87,14 @@ class EarthState {
   }
 
   Map<String, dynamic> get corporation => _toMap(json['corporation']);
+  Map<String, dynamic> get corporationProfile =>
+      _toMap(json['corporationProfile']);
   Map<String, dynamic> get settlement => _toMap(json['settlement']);
-  Map<String, dynamic> get settlementProfile => _toMap(json['settlementProfile']);
+  Map<String, dynamic> get settlementProfile =>
+      _toMap(json['settlementProfile']);
   List<dynamic> get scaleCapabilities => _toList(json['scaleCapabilities']);
-  Map<String, dynamic> get corporationResources => _toMap(corporation['resources']);
+  Map<String, dynamic> get corporationResources =>
+      _toMap(corporation['resources']);
   double get corporationTreasury => asDouble(corporation['treasury']) ?? 0.0;
   Map<String, dynamic> get corporationSettlementProfile =>
       _toMap(corporation['settlementProfile']);

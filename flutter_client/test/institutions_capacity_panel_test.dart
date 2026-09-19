@@ -88,7 +88,7 @@ void main() {
     expect(find.text('Corporate Dividend Distribution'), findsNothing);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
     expect(find.text('38'), findsWidgets);
-    expect(find.text('1250000 C'), findsWidgets);
+    expect(find.text('12500.00 C'), findsWidgets);
   });
 
   testWidgets(
