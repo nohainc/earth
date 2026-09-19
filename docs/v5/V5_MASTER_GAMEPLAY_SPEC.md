@@ -1,21 +1,21 @@
 # EARTH Gameplay V5 — Master Gameplay Specification
 
-Status: **TARGET-CANONICAL / NOT YET CURRENT RUNTIME**  
+Status: **CURRENT-CANONICAL V5 GAMEPLAY**  
 Version: 5.0-design  
 Date: 2026-09-16  
 Audience: product, engineering, AI development agents, QA, balancing
 
 ## 1. Purpose
 
-This document freezes the target gameplay model for EARTH V5. It defines the
+This document defines the current canonical gameplay model for EARTH V5. It defines the
 responsibility of each world layer, the long-term player loop, the ownership and
 capacity model, the relationships between EARTH, Corporations, Houses, Humans,
 Territory, Buildings, Technology, Market, Governance, and Community systems, and
 the design boundaries future work must preserve.
 
 This document defines **gameplay semantics**, not current implementation status.
-The current runtime remains governed by the repository's current V4/runtime
-documents until the V5 cutover gates are completed.
+Current V5 source, schema, migrations, tests, and this specification define the
+runtime model. Historical V4 documents are not active authority.
 
 Balance numbers in examples are illustrative. Authoritative rates, bracket
 boundaries, capacities, costs, and thresholds belong in versioned database rules
