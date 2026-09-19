@@ -1196,3 +1196,9 @@ test('V5 corporation lifecycle supports name reuse, leadership delegation, and g
   assert.match(migration, /CREATE UNIQUE INDEX institutions_active_name_idx ON institutions \(lower\(name\)\) WHERE status = 'ACTIVE'/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS v5_corporation_dissolution_schedules/);
 });
+
+test('V5 corporation departure selects successors using schema-backed deterministic ordering', async () => {
+  const membership = await readFile(new URL('../cloudflare/src/v5-membership-postgres.ts', import.meta.url), 'utf8');
+  assert.match(membership, /ORDER BY ha\.joined_game_day ASC, h\.id ASC LIMIT 1/);
+  assert.doesNotMatch(membership, /h\.created_at/);
+});

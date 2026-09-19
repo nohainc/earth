@@ -1300,20 +1300,12 @@ class _CorporateBuildingResearchPanelState
         await widget.action(
             () => const EarthApi().startCorporationBuildingResearch(type));
       } else {
-        final corpId = widget.state.membership?['corporation_id']?.toString() ??
-            widget.state.human['corporation_id']?.toString() ??
-            'CORP-0001';
-        await widget.action(() => const EarthApi().createProposal(
-              'Research $name (Tier $targetTier)',
-              'Corporation proposal to research and unlock blueprints for $name Tier $targetTier. Duration: $quotedDuration days, Estimated R&D funding: ${formatWholeNumber(quotedCost)} C from corporation treasury.',
-              institutionId: corpId,
-              targetCategory: 'technology',
-              targetValue: {
-                'buildingType': type,
-                'targetTier': targetTier,
-                'ownershipClass': ownership,
-              },
-            ));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Public research proposals are retired. Use V5 Corporation Governance to propose research.'),
+          ));
+        }
       }
     }
   }

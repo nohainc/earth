@@ -4295,26 +4295,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         _showBuildingFeedback(
             '$bName Tier $targetTier research project initiated.');
       } else {
-        final corpId = widget.state.membership?['corporation_id']?.toString() ??
-            widget.state.human['corporation_id']?.toString();
-        if (corpId == null || corpId.isEmpty) {
-          _showBuildingFeedback(
-              'A Corporation or Territory authority is required for civic research.');
-          return;
-        }
-        await widget.action(() => const EarthApi().createProposal(
-              'Research $bName (Tier $targetTier)',
-              'Corporation proposal to research and unlock blueprints for $bName Tier $targetTier. Duration: $durationDays days, Authoritative R&D funding: ${formatWholeNumber(costCredits)} C from corporation treasury.',
-              institutionId: corpId,
-              targetCategory: 'technology',
-              targetValue: {
-                'buildingType': bType,
-                'targetTier': targetTier,
-                'ownershipClass': ownership,
-              },
-            ));
         _showBuildingFeedback(
-            'Corporation proposal to research $bName Tier $targetTier submitted.');
+            'Public research proposals are retired. Use V5 Corporation Governance to propose research.');
       }
     }
   }

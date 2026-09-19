@@ -4,58 +4,34 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/governance/governance_panels.dart';
 
 void main() {
-  testWidgets(
-      'TabbedProposalPanel renders passed proposal and executes proposal',
+  testWidgets('V5 governance keeps Earth and Corporation scopes explicit',
       (tester) async {
-    const passedState = EarthState({
+    const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
-      'human': {'id': 'H-0044', 'credits': 5000},
-      'world': {'health': 100},
-      'resources': {},
-      'business': {},
-      'technology': {'research': {}},
-      'institutions': {},
-      'life': {},
-      'governance': {
-        'proposals': [
-          {
-            'id': 'PROP-042',
-            'title': 'Expand Municipal Solar Grid',
-            'institution_id': 'CORP-1',
-            'status': 'passed',
-            'outcome': 'passed',
-            'execution_status': 'executable',
-            'quorum': 0.25,
-            'approval_threshold': 0.50,
-            'votes': {'support': 450, 'oppose': 50, 'uncast': 0},
-          },
-        ],
-      },
-      'roles': [],
-      'finance': {'taxRules': []},
-      'market': {'orders': []},
+      'human': {'id': 'H-0044'},
+      'membership': {'corporation_id': 'CORP-1'},
+      'governance': {'proposals': []},
+      'corporation': {'id': 'CORP-1', 'name': 'Nova'},
     });
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: TabbedProposalPanel(
-              state: passedState,
-              busy: false,
-              action: (cb) async {
-                await cb();
-              },
-            ),
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: V5GovernancePanel(
+            state: state,
+            busy: false,
+            action: (callback) async {},
           ),
         ),
       ),
-    );
-
-    expect(find.text('CORPORATION (1)'), findsOneWidget);
-    await tester.tap(find.text('CORPORATION (1)'));
+    ));
     await tester.pumpAndSettle();
-    expect(find.text('Expand Municipal Solar Grid'), findsOneWidget);
-    expect(find.text('APPROVED'), findsOneWidget);
+
+    expect(find.text('ALL'), findsOneWidget);
+    expect(find.textContaining('MY CORPORATION'), findsOneWidget);
+    expect(find.text('EARTH (0)'), findsOneWidget);
+    expect(find.text('ACTION REQUIRED'), findsOneWidget);
+    expect(find.text('HISTORY'), findsOneWidget);
+    expect(find.textContaining('Territory'), findsNothing);
   });
 }

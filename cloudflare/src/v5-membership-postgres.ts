@@ -224,7 +224,7 @@ export async function leaveV5Corporation(repository: PostgresRepository, input: 
         `SELECT h.id FROM humans h
            JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.corporation_id = $1 AND ha.status = 'ACTIVE'
           WHERE h.status = 'ACTIVE' AND h.id <> $2
-          ORDER BY ha.joined_game_day ASC, h.created_at ASC LIMIT 1`,
+          ORDER BY ha.joined_game_day ASC, h.id ASC LIMIT 1`,
         [input.corporationId, input.humanId],
       )).rows[0];
       

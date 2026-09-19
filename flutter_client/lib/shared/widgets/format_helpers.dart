@@ -3,6 +3,68 @@ class NumberFormatHelper {
       '${(double.tryParse('$value') ?? 0) * 100}%';
 }
 
+/// Formats values from the canonical V5 Constitution read model.
+///
+/// Constitution values are typed by the server. In particular, rates are
+/// basis points and monetary values are atomic CREDIT units; neither should
+/// be passed through a generic percentage or number formatter.
+class ConstitutionValueFormatter {
+  static String format(dynamic value, dynamic valueType,
+      {String fallback = 'UNAVAILABLE'}) {
+    if (value == null) return fallback;
+    final type = valueType?.toString().trim().toUpperCase();
+    switch (type) {
+      case 'RATE_BPS':
+        return _formatBasisPoints(value, fallback);
+      case 'CREDIT_UNITS':
+        return formatCreditUnits(value, fallback: fallback);
+      case 'GAME_DAYS':
+        final days = _integer(value);
+        if (days == null) return fallback;
+        return '$days game day${days == '1' ? '' : 's'}';
+      case 'ENUM':
+        return _humanize(value.toString());
+      case 'BOOLEAN':
+        if (value is bool) return value ? 'ON' : 'OFF';
+        return value.toString().toLowerCase() == 'true' ? 'ON' : 'OFF';
+      case 'PROGRESSIVE_SCHEDULE_REF':
+        return 'SCHEDULE PUBLISHED';
+      case 'INTEGER':
+      case 'RESOURCE_UNITS':
+        return _integer(value) ?? fallback;
+      default:
+        if (value is Map || value is List) return 'SCHEDULE PUBLISHED';
+        return value.toString();
+    }
+  }
+
+  static String _formatBasisPoints(dynamic value, String fallback) {
+    final bps = _bigInt(value);
+    if (bps == null) return fallback;
+    final negative = bps.isNegative;
+    final absolute = bps.abs();
+    final whole = absolute ~/ BigInt.from(100);
+    final fraction = (absolute % BigInt.from(100)).toString().padLeft(2, '0');
+    return '${negative ? '-' : ''}$whole.$fraction%';
+  }
+
+  static BigInt? _bigInt(dynamic value) {
+    final raw = value.toString().trim();
+    if (raw.isEmpty) return null;
+    return BigInt.tryParse(raw);
+  }
+
+  static String? _integer(dynamic value) => _bigInt(value)?.toString();
+
+  static String _humanize(String value) => value
+      .replaceAll(RegExp(r'[_-]+'), ' ')
+      .split(' ')
+      .where((word) => word.isNotEmpty)
+      .map((word) =>
+          '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
+      .join(' ');
+}
+
 /// API payloads may represent PostgreSQL decimals as either JSON numbers or
 /// strings. Keep presentation code tolerant of both representations.
 double? asDouble(dynamic value) =>

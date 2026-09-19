@@ -169,22 +169,7 @@ class _OrganizationDirectoryPanelState
                                         'Technology proposal: ${proposal['title'] ?? proposal['id']}'),
                                     subtitle: Text(
                                         '${proposal['status']} · support ${proposal['support_votes'] ?? 0} / oppose ${proposal['oppose_votes'] ?? 0}'),
-                                    trailing: proposal['status'] == 'VOTING'
-                                        ? Wrap(spacing: 4, children: [
-                                            TextButton(
-                                                onPressed: () =>
-                                                    _voteTechnologyProposal(
-                                                        '${proposal['id']}',
-                                                        'SUPPORT'),
-                                                child: const Text('SUPPORT')),
-                                            TextButton(
-                                                onPressed: () =>
-                                                    _voteTechnologyProposal(
-                                                        '${proposal['id']}',
-                                                        'OPPOSE'),
-                                                child: const Text('OPPOSE'))
-                                          ])
-                                        : null,
+                                    trailing: const Text('V5 GOVERNANCE'),
                                   ))),
                           const SizedBox(height: 14),
                           OrganizationPeopleRolesPanel(organizationId: id),
@@ -390,21 +375,6 @@ class _OrganizationDirectoryPanelState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Technology adoption unavailable: $error')));
-      }
-    }
-  }
-
-  Future<void> _voteTechnologyProposal(String proposalId, String choice) async {
-    try {
-      await const EarthApi().voteGovernanceV4(proposalId, choice);
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Vote recorded: $choice')));
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Vote failed: $error')));
       }
     }
   }

@@ -841,11 +841,51 @@
     },
     {
       "method": "GET",
+      "path": "/api/v5/corporations/directory",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "listCorporations",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/corporations/{id}/profile",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getCorporationProfile",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/corporations/{id}/roles",
+      "owner": "InstitutionRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "getCorporationRoles",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/{id}/roles/appoint",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "appointCorporationRole",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v5/corporations/{id}/roles/remove",
+      "owner": "InstitutionRoutes",
+      "auth": "INSTITUTION_ROLE",
+      "service": "removeCorporationRole",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
       "path": "/api/corporations",
       "owner": "InstitutionRoutes",
       "auth": "AUTHENTICATED",
       "service": "listCorporations",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",
@@ -877,7 +917,7 @@
       "owner": "BuildingRoutes",
       "auth": "AUTHENTICATED",
       "service": "listTerritoryRights",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -885,7 +925,7 @@
       "owner": "BuildingRoutes",
       "auth": "AUTHENTICATED",
       "service": "getCommonsStatement",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -1085,7 +1125,7 @@
       "owner": "BuildingRoutes",
       "auth": "INSTITUTION_ROLE",
       "service": "declareCommonsDividend",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "GET",
@@ -1093,7 +1133,7 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "listTerritoryRights",
-      "status": "ACTIVE"
+      "status": "RETIRED"
     },
     {
       "method": "POST",

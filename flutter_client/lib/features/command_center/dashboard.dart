@@ -258,16 +258,13 @@ class Dashboard extends StatelessWidget {
       case 'civic':
       case 'governance':
         return [
-          V5GovernanceReviewPanel(state: state, action: action),
-          const SizedBox(height: 34),
-          PublicFinanceGovernancePanel(
-              state: state, busy: busy, action: action),
-          const SizedBox(height: 34),
-          TabbedProposalPanel(
+          V5GovernancePanel(
             state: state,
             busy: busy,
             action: action,
           ),
+          const SizedBox(height: 24),
+          RulesInForcePanel(state: state),
         ];
       case 'corporation':
       case 'my-corporation':
@@ -355,9 +352,7 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case 'public-finance':
-        return [
-          PublicFinanceGovernancePanel(state: state, busy: busy, action: action)
-        ];
+        return [RulesInForcePanel(state: state)];
       case 'civic-rankings':
         return [WorldRankingsPanel(state: state)];
       case 'history':
@@ -417,13 +412,16 @@ class Dashboard extends StatelessWidget {
             canonicalLoader: () => const EarthApi().getV5Constitution(
               corporationId: state.membership?['corporation_id']?.toString(),
             ),
-            onPreviewAmendment: (changes) => const EarthApi().previewV5ConstitutionAmendment(
+            onPreviewAmendment: (changes) =>
+                const EarthApi().previewV5ConstitutionAmendment(
               corporationId: state.membership?['corporation_id']?.toString(),
               changes: changes,
             ),
             onProposeAmendment: (changes) async {
-              final corporationId = state.membership?['corporation_id']?.toString();
-              final preview = await const EarthApi().previewV5ConstitutionAmendment(
+              final corporationId =
+                  state.membership?['corporation_id']?.toString();
+              final preview =
+                  await const EarthApi().previewV5ConstitutionAmendment(
                 corporationId: corporationId,
                 changes: changes,
               );
@@ -440,7 +438,8 @@ class Dashboard extends StatelessWidget {
                 subjectType: corporationId == null ? 'EARTH' : 'CORPORATION',
                 subjectId: corporationId,
                 title: 'Constitution amendment proposal',
-                body: 'Typed Constitution amendment submitted from the canonical policy editor.',
+                body:
+                    'Typed Constitution amendment submitted from the canonical policy editor.',
                 changes: changes,
                 effectiveFromGameDay: previewGameDay + 1,
               );

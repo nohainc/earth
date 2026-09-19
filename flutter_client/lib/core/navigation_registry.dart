@@ -382,6 +382,19 @@ class NavigationRegistry {
   }
 
   static String pageTitle(String section, [EarthState? state]) {
+    if (section.startsWith('my-community:')) {
+      final communityId = section.substring('my-community:'.length);
+      Map<String, dynamic>? community;
+      for (final item
+          in state?.myCommunities ?? const <Map<String, dynamic>>[]) {
+        if (item['id']?.toString() == communityId) {
+          community = item;
+          break;
+        }
+      }
+      final name = community?['name']?.toString().trim();
+      return name == null || name.isEmpty ? 'COMMUNITY' : name.toUpperCase();
+    }
     final clean = normalizeRoute(section);
     final item = findItem(clean);
     if (item != null) {
@@ -395,12 +408,38 @@ class NavigationRegistry {
   static List<NavigationItem> itemsForGroup(
       NavigationGroup group, EarthState state) {
     final isCorpMember = state.membership?['corporation_id'] != null;
-    return items.where((item) {
+    final registered = items.where((item) {
       if (item.group != group) return false;
       if (!item.isPrimary) return false;
       if (item.requiresCorporation && !isCorpMember) return false;
       return true;
     }).toList();
+
+    if (group != NavigationGroup.society) return registered;
+
+    // Each active community the House belongs to gets a contextual Society
+    // destination. The registry entry remains stable while the community
+    // profile itself is loaded by the existing MyCommunityPanel route.
+    final communityItems = <NavigationItem>[];
+    final seen = <String>{};
+    for (final community in state.myCommunities) {
+      final id = community['id']?.toString().trim() ?? '';
+      if (id.isEmpty || !seen.add(id)) continue;
+      final name = community['name']?.toString().trim();
+      communityItems.add(
+        NavigationItem(
+          id: 'my-community:$id',
+          canonicalRoute: 'my-community:$id',
+          group: NavigationGroup.society,
+          defaultLabel: name == null || name.isEmpty ? 'Community' : name,
+          defaultPageTitle:
+              name == null || name.isEmpty ? 'COMMUNITY' : name.toUpperCase(),
+          icon: Icons.groups_outlined,
+          isPrimary: true,
+        ),
+      );
+    }
+    return [...registered, ...communityItems];
   }
 
   static String _resolveHumanLabel(EarthState state) {
@@ -418,9 +457,8 @@ class NavigationRegistry {
 
   static String _resolveHumanPageTitle(EarthState? state) {
     if (state == null) return 'CITIZEN';
-    final raw = (state.human['display_name'] ?? state.human['name'])
-        ?.toString()
-        .trim();
+    final raw =
+        (state.human['display_name'] ?? state.human['name'])?.toString().trim();
     if (raw == null || raw.isEmpty) return 'CITIZEN';
     return raw.split(RegExp(r'\s+')).first.toUpperCase();
   }
@@ -439,9 +477,8 @@ class NavigationRegistry {
           RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '');
     }
 
-    final fullName = (state.human['name'] ?? state.human['display_name'])
-        ?.toString()
-        .trim();
+    final fullName =
+        (state.human['name'] ?? state.human['display_name'])?.toString().trim();
     if (fullName != null && fullName.isNotEmpty) {
       final tokens = fullName.split(RegExp(r'\s+'));
       if (tokens.length > 1 && tokens.last.isNotEmpty) {

@@ -1,6 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
-import { validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
+import { previewConstitutionAmendment, validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
 import { assertConstitutionalAmendableRule, getConstitutionalRuleDefinition } from './v5-constitution.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
@@ -12,6 +12,7 @@ import { assertScaleCapabilityAuthorized, grantCorporationScaleCapability } from
 import { assertGenerationAuthorized } from './v5-generation-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { postSettlementTransaction, END_OF_GAME_DAY_MINUTE } from './economic-transaction-postgres.ts';
+import { governanceProposalFromRow } from './governance-proposal.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -55,6 +56,38 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
     scaleCapability: payload.scaleCapability as ProposalAction['scaleCapability'],
   };
   return action;
+}
+
+function impactValue(value: unknown, ruleCode: string): string {
+  const definition = getConstitutionalRuleDefinition(ruleCode);
+  if (value == null) return 'UNAVAILABLE';
+  if (definition.valueType === 'RATE_BPS' || definition.valueType === 'CREDIT_UNITS') {
+    const units = BigInt(String(value));
+    const negative = units < 0n;
+    const absolute = negative ? -units : units;
+    const whole = absolute / 100n;
+    const fraction = (absolute % 100n).toString().padStart(2, '0');
+    return `${negative ? '-' : ''}${whole}.${fraction}${definition.valueType === 'RATE_BPS' ? '%' : ' C'}`;
+  }
+  if (definition.valueType === 'ENUM') return String(value).replaceAll('_', ' ');
+  if (typeof value === 'object') return 'SCHEDULE PUBLISHED';
+  return String(value);
+}
+
+function creditImpact(value: unknown): string {
+  const units = BigInt(String(value ?? 0));
+  const negative = units < 0n;
+  const absolute = negative ? -units : units;
+  return `${negative ? '-' : ''}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, '0')} C`;
+}
+
+function amendmentImpactSummary(preview: ReturnType<typeof previewConstitutionAmendment>): string {
+  return preview.changes.map((change) => [
+    `${change.ruleCode}:`,
+    `CURRENT ${impactValue(change.currentValue, change.ruleCode)}`,
+    `PROPOSED ${impactValue(change.proposedValue, change.ruleCode)}`,
+    change.clearedOverride ? 'SOURCE EARTH AFTER CLEARING OVERRIDE' : 'SOURCE CONSTITUTIONAL AMENDMENT',
+  ].join(' · ')).join('\n');
 }
 
 async function assertExistingProgressiveSchedule(
@@ -113,29 +146,69 @@ async function canVote(tx: PostgresRepository, humanId: string, proposal: { id: 
   return human.house_id;
 }
 
-export async function listV5GovernanceProposals(repository: PostgresRepository, humanId: string) {
+export async function listV5GovernanceProposals(
+  repository: PostgresRepository,
+  humanId: string,
+  filters: { status?: 'active' | 'history'; scope?: 'EARTH' | 'CORPORATION' } = {},
+) {
+  const params: unknown[] = [humanId];
+  const statusFilter = filters.status === 'active'
+    ? `AND p.status IN ('VOTING','PASSED','SCHEDULED')`
+    : filters.status === 'history'
+      ? `AND p.status NOT IN ('VOTING','PASSED','SCHEDULED')`
+      : '';
+  const scopeFilter = filters.scope
+    ? (() => {
+        params.push(filters.scope);
+        return `AND p.subject_type = $${params.length}`;
+      })()
+    : '';
   const result = await repository.query(`
     SELECT p.id, p.subject_type, p.subject_id, p.action_type, p.payload,
+           p.title, p.body,
            p.status, p.submitted_game_day, p.voting_start_game_day,
            p.voting_end_game_day, p.effective_from_game_day,
+           q.applied_game_day AS executed_game_day,
            p.support_votes, p.oppose_votes, p.abstain_votes, p.quorum_met,
            p.quorum_bps, p.approval_bps, p.electorate_snapshot_game_day,
            p.electorate_size, p.governance_rule_snapshot, p.base_version_snapshot,
            GREATEST(1, CEIL(p.electorate_size * p.quorum_bps / 10000.0))::INTEGER AS quorum_required,
+           COALESCE(i.name, c.name, CASE WHEN p.subject_type = 'EARTH' THEN 'EARTH' ELSE p.subject_id END) AS subject_name,
+           (EXISTS (SELECT 1 FROM v5_governance_electorate_snapshots_v5 es
+             WHERE es.proposal_id = p.id
+               AND es.house_id = (SELECT house_id FROM humans WHERE id = $1))) AS viewer_eligible,
+           (p.status = 'VOTING'
+            AND b.proposal_id IS NULL
+            AND EXISTS (SELECT 1 FROM v5_governance_electorate_snapshots_v5 es
+              WHERE es.proposal_id = p.id
+                AND es.house_id = (SELECT house_id FROM humans WHERE id = $1))) AS viewer_can_vote,
+           p.payload->>'impactSummary' AS impact_summary,
            (b.proposal_id IS NOT NULL) AS viewer_voted,
            b.choice AS viewer_choice
       FROM v5_governance_proposals p
+      LEFT JOIN institutions i ON i.id = p.subject_id
+      LEFT JOIN corporations c ON c.id = p.subject_id
       LEFT JOIN v5_governance_ballots b
         ON b.proposal_id = p.id
        AND b.house_id = (SELECT house_id FROM humans WHERE id = $1)
-     WHERE p.status IN ('VOTING','PASSED','SCHEDULED')
+      LEFT JOIN v5_governance_activation_queue q
+        ON q.proposal_id = p.id
+     WHERE 1 = 1
+       ${statusFilter}
+       ${scopeFilter}
        AND (p.subject_type = 'EARTH'
         OR (p.subject_type = 'CORPORATION' AND p.subject_id IN (
              SELECT corporation_id FROM house_affiliations
               WHERE house_id = (SELECT house_id FROM humans WHERE id = $1)
                 AND status = 'ACTIVE')))
-     ORDER BY p.status ASC, p.voting_end_game_day ASC, p.id DESC`, [humanId]);
-  return { ok: true, proposals: toJsonSafe(result.rows), generatedFrom: 'postgres-canonical-facts-v5' };
+     ORDER BY CASE p.status
+                WHEN 'VOTING' THEN 0
+                WHEN 'PASSED' THEN 1
+                WHEN 'SCHEDULED' THEN 2
+                ELSE 3
+              END,
+              p.voting_end_game_day DESC, p.id DESC`, params);
+  return { ok: true, proposals: (toJsonSafe(result.rows) as Record<string, unknown>[]).map(governanceProposalFromRow), generatedFrom: 'postgres-canonical-facts-v5' };
 }
 
 export async function createV5GovernanceProposal(repository: PostgresRepository, input: { humanId: string; subjectType: 'EARTH' | 'CORPORATION'; subjectId: string | null; actionType: ProposalAction['actionType']; payload: Record<string, unknown>; title: string; body?: string; correlationId: string }) {
@@ -164,12 +237,14 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       : input.payload;
     const action = actionFromPayload(input.actionType, proposalInputPayload);
     validateV5GovernanceAction(action, day);
+    let serverImpactSummary: string | null = null;
+    let serverImpact: Record<string, unknown> | null = null;
     if (input.actionType === 'CONSTITUTION_AMENDMENT') {
       validateProposalActionSnapshot(action as unknown as Record<string, unknown>);
     }
     if (input.actionType === 'CORPORATION_PUBLIC_CONSTRUCTION') {
-      const blueprint = (await tx.query<{ id: string; ownership_scope: string; minimum_scale_capability: string; technology_domain: string }>(
-        `SELECT id, ownership_scope, minimum_scale_capability, technology_domain FROM building_catalog WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) AND active = TRUE`,
+      const blueprint = (await tx.query<{ id: string; code: string; ownership_scope: string; minimum_scale_capability: string; technology_domain: string; construction_credit_units: string; slot_footprint: number; service_capacity_units: string }>(
+        `SELECT id, code, ownership_scope, minimum_scale_capability, technology_domain, construction_credit_units::TEXT, slot_footprint, service_capacity_units::TEXT FROM building_catalog WHERE (id = $1 OR code = $1 OR lower(code) = lower($1)) AND active = TRUE`,
         [action.buildingType],
       )).rows[0];
       if (!blueprint) throw new Error('Unknown building blueprint');
@@ -180,16 +255,53 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       if (!scaleAuth.authorized) throw new Error(String(scaleAuth.reason ?? 'Missing required scale capability'));
       const genAuth = await assertGenerationAuthorized(tx, blueprint.technology_domain, action.generation ?? 1, corpEcon, 'CORPORATION', null, day);
       if (!genAuth.authorized) throw new Error(String(genAuth.reason ?? 'Missing required technology generation'));
+      serverImpactSummary = [
+        `COST ${creditImpact(blueprint.construction_credit_units)}`,
+        `CAPACITY FOOTPRINT ${blueprint.slot_footprint} units`,
+        `EXPECTED SERVICE ${blueprint.service_capacity_units} units`,
+        `EFFECTIVE DAY ${action.effectiveFromGameDay}`,
+      ].join(' · ');
+      serverImpact = {
+        kind: 'PUBLIC_CONSTRUCTION',
+        costUnits: blueprint.construction_credit_units,
+        footprintUnits: blueprint.slot_footprint,
+        serviceCapacityUnits: blueprint.service_capacity_units,
+        effectiveFromGameDay: action.effectiveFromGameDay,
+      };
     }
     if (input.actionType === 'CORPORATION_SCALE_RESEARCH') {
       const corpEcon = (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [input.subjectId])).rows[0]?.economic_id;
       if (!corpEcon) throw new Error('Corporation economic account not found');
       const existing = (await tx.query("SELECT 1 FROM corporation_scale_capabilities WHERE corporation_economic_id = $1 AND scale_capability = $2", [corpEcon, action.scaleCapability])).rows[0];
       if (existing) throw new Error('Corporation already has unlocked this scale capability');
+      serverImpactSummary = [
+        `COST ${creditImpact(action.researchCreditCostUnits ?? 0n)}`,
+        `CAPABILITY UNLOCKED ${action.scaleCapability}`,
+        `EFFECTIVE DAY ${action.effectiveFromGameDay}`,
+      ].join(' · ');
+      serverImpact = {
+        kind: 'SCALE_RESEARCH',
+        costUnits: String(action.researchCreditCostUnits ?? 0n),
+        capability: action.scaleCapability,
+        effectiveFromGameDay: action.effectiveFromGameDay,
+      };
     }
     if (input.actionType === 'EARTH_TECHNOLOGY_FRONTIER') {
       const domain = (await tx.query<{ id: string }>("SELECT id FROM technology_domains WHERE (id = $1 OR code = $1) AND status = 'ACTIVE'", [action.domainId])).rows[0];
       if (!domain) throw new Error('Unknown technology domain');
+      serverImpactSummary = [
+        `COST ${creditImpact(action.researchCreditCostUnits ?? 0n)}`,
+        `DOMAIN ${action.domainId}`,
+        `GENERATION ${action.generationNumber}`,
+        `EFFECTIVE DAY ${action.effectiveFromGameDay}`,
+      ].join(' · ');
+      serverImpact = {
+        kind: 'EARTH_TECHNOLOGY_FRONTIER',
+        costUnits: String(action.researchCreditCostUnits ?? 0n),
+        domainId: action.domainId,
+        generationNumber: action.generationNumber,
+        effectiveFromGameDay: action.effectiveFromGameDay,
+      };
     }
     if (input.actionType === 'CORPORATION_HOUSE_RATE' || input.actionType === 'CORPORATION_ADMISSION_POLICY') {
       if (!input.subjectId || action.corporationId !== input.subjectId) throw new Error('Corporation action must target its proposal Corporation');
@@ -243,12 +355,31 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       // effective day may have been normalized above when a client supplied a
       // stale/past day; activation must never consume the pre-normalized copy.
       proposalPayload = { ...proposalInputPayload, changes };
+      const current = await resolveEffectiveConstitution(tx, {
+        gameDay: day,
+        corporationId: input.subjectType === 'CORPORATION' ? input.subjectId ?? undefined : undefined,
+      });
+      const earth = input.subjectType === 'CORPORATION'
+        ? await resolveEffectiveConstitution(tx, { gameDay: day })
+        : undefined;
+      const amendmentPreview = previewConstitutionAmendment({
+        currentRules: current.rules,
+        fallbackRules: earth?.rules,
+        changes,
+      });
+      serverImpactSummary = amendmentImpactSummary(amendmentPreview);
+      serverImpact = {
+        kind: 'CONSTITUTION_AMENDMENT',
+        changes: toJsonSafe(amendmentPreview.changes),
+        effectiveFromGameDay: action.effectiveFromGameDay,
+      };
     }
+    proposalPayload = { ...proposalPayload, impactSummary: serverImpactSummary ?? `Effective day ${action.effectiveFromGameDay}`, ...(serverImpact ? { impact: toJsonSafe(serverImpact) } : {}) };
     const proposalId = `V5-GOV-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
     const effective = action.effectiveFromGameDay;
     const votingEnd = votingStart + governanceRuleSnapshot.votingPeriodDays;
-    await tx.query(`INSERT INTO v5_governance_proposals (id, subject_type, subject_id, action_type, payload, status, submitted_game_day, voting_start_game_day, voting_end_game_day, effective_from_game_day, created_by_human_id, correlation_id, quorum_bps, approval_bps, electorate_snapshot_game_day, electorate_size, governance_rule_snapshot, base_version_snapshot, policy_group)
-      VALUES ($1,$2,$3,$4,$5::JSONB,'VOTING',$6,$7,$8,$9,$10,$11,$12,$13,$7,$14,$15::JSONB,$16::JSONB,$17)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), day, votingStart, votingEnd, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
+    await tx.query(`INSERT INTO v5_governance_proposals (id, subject_type, subject_id, action_type, payload, title, body, status, submitted_game_day, voting_start_game_day, voting_end_game_day, effective_from_game_day, created_by_human_id, correlation_id, quorum_bps, approval_bps, electorate_snapshot_game_day, electorate_size, governance_rule_snapshot, base_version_snapshot, policy_group)
+      VALUES ($1,$2,$3,$4,$5::JSONB,$6,$7,'VOTING',$8,$9,$10,$11,$12,$13,$14,$15,$9,$16,$17::JSONB,$18::JSONB,$19)`, [proposalId, input.subjectType, input.subjectId, input.actionType, JSON.stringify(proposalPayload), input.title.trim(), input.body?.trim() || null, day, votingStart, votingEnd, effective, input.humanId, input.correlationId, governanceRuleSnapshot.quorumBps, governanceRuleSnapshot.approvalBps, electorateSize, JSON.stringify(governanceRuleSnapshot), JSON.stringify(baseVersionSnapshot), policyGroup]);
     if (input.subjectType === 'CORPORATION') {
       await tx.query(
         `INSERT INTO v5_governance_electorate_snapshots_v5 (proposal_id, house_id, snapshot_game_day)

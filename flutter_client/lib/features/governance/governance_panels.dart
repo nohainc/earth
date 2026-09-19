@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/governance_proposal.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../core/nano_markup_helper.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
@@ -109,12 +110,13 @@ class V5GovernanceReviewPanel extends StatefulWidget {
   });
 
   @override
-  State<V5GovernanceReviewPanel> createState() => _V5GovernanceReviewPanelState();
+  State<V5GovernanceReviewPanel> createState() =>
+      _V5GovernanceReviewPanelState();
 }
 
 class _V5GovernanceReviewPanelState extends State<V5GovernanceReviewPanel> {
   final EarthApi _api = const EarthApi();
-  List<Map<String, dynamic>> _proposals = const [];
+  List<GovernanceProposal> _proposals = const [];
   bool _loading = true;
   String? _error;
   String _scope = 'ALL';
@@ -133,14 +135,9 @@ class _V5GovernanceReviewPanelState extends State<V5GovernanceReviewPanel> {
     });
     try {
       final response = await _api.listV5Proposals();
-      final rows = response['proposals'];
-      if (rows is! List) throw Exception('V5 proposals unavailable');
       if (!mounted) return;
       setState(() {
-        _proposals = rows
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList(growable: false);
+        _proposals = response;
         _loading = false;
       });
     } catch (error) {
@@ -168,7 +165,7 @@ class _V5GovernanceReviewPanelState extends State<V5GovernanceReviewPanel> {
   Widget build(BuildContext context) {
     final filtered = _proposals.where((proposal) {
       if (_scope == 'ALL') return true;
-      return proposal['subject_type']?.toString().toUpperCase() == _scope;
+      return proposal.subjectType == _scope;
     }).toList(growable: false);
 
     return EarthSection(
@@ -211,15 +208,15 @@ class _V5GovernanceReviewPanelState extends State<V5GovernanceReviewPanel> {
     );
   }
 
-  Widget _buildProposal(BuildContext context, Map<String, dynamic> proposal) {
-    final id = proposal['id']?.toString() ?? '';
-    final subject = proposal['subject_type']?.toString().toUpperCase() ?? 'EARTH';
-    final status = proposal['status']?.toString().toUpperCase() ?? 'OPEN';
-    final choice = proposal['viewer_choice']?.toString().toUpperCase();
-    final support = proposal['support_votes'] ?? proposal['supportVotes'] ?? 0;
-    final oppose = proposal['oppose_votes'] ?? proposal['opposeVotes'] ?? 0;
-    final quorum = proposal['quorum_required'] ?? proposal['quorumRequired'] ?? '—';
-    final effective = proposal['effective_game_day'] ?? proposal['effectiveGameDay'] ?? '—';
+  Widget _buildProposal(BuildContext context, GovernanceProposal proposal) {
+    final id = proposal.id;
+    final subject = proposal.subjectType;
+    final status = proposal.status;
+    final choice = proposal.choice?.toUpperCase();
+    final support = proposal.support;
+    final oppose = proposal.oppose;
+    final quorum = proposal.quorumRequired;
+    final effective = proposal.effectiveGameDay;
     final busy = _busyIds.contains(id);
 
     return Card(
@@ -229,16 +226,39 @@ class _V5GovernanceReviewPanelState extends State<V5GovernanceReviewPanel> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
-              child: Text(proposal['title']?.toString() ?? proposal['action_type']?.toString() ?? 'V5 proposal',
-                  style: context.widgetTitleStyle),
+              child: Text(proposal.title, style: context.widgetTitleStyle),
             ),
             Text(subject, style: context.widgetFooterStyle),
           ]),
           const SizedBox(height: 6),
-          Text(proposal['summary']?.toString() ?? proposal['description']?.toString() ?? 'Server-authored policy decision.',
+          Text(proposal.body ?? 'Server-authored policy decision.',
               style: context.widgetValueStyle),
+          if (proposal.impactSummary != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(context.cardPadding * .75),
+              decoration: BoxDecoration(
+                color: context.primaryColor.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(context.radiusControl),
+                border: Border.all(
+                    color: context.primaryColor.withValues(alpha: .25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('REVIEW IMPACT · ESTIMATED IMPACT',
+                      style: context.topicTitleStyle),
+                  const SizedBox(height: 5),
+                  Text(proposal.impactSummary!,
+                      style: context.widgetFooterStyle.copyWith(height: 1.35)),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
-          Text('Status $status · Support $support · Oppose $oppose · Quorum $quorum · Effective day $effective${choice == null ? '' : ' · Your vote: $choice'}',
+          Text(
+              'Status $status · Support $support · Oppose $oppose · Quorum $quorum · Effective day $effective${choice == null ? '' : ' · Your vote: $choice'}',
               style: context.widgetFooterStyle),
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: [
@@ -299,7 +319,7 @@ class ActiveGovernanceRulePanel extends StatelessWidget {
       child: rule == null
           ? const EarthEmptyState(
               message:
-                'No active governance rule is published for this institution scope.',
+                  'No active governance rule is published for this institution scope.',
               icon: Icons.rule_outlined)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,12 +418,12 @@ class CivicInfluencePanel extends StatelessWidget {
   }
 }
 
-class TabbedProposalPanel extends StatefulWidget {
+class V5GovernancePanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
 
-  const TabbedProposalPanel({
+  const V5GovernancePanel({
     super.key,
     required this.state,
     required this.busy,
@@ -411,23 +431,61 @@ class TabbedProposalPanel extends StatefulWidget {
   });
 
   @override
-  State<TabbedProposalPanel> createState() => _TabbedProposalPanelState();
+  State<V5GovernancePanel> createState() => _V5GovernancePanelState();
 }
 
-class _TabbedProposalPanelState extends State<TabbedProposalPanel>
+class _V5GovernancePanelState extends State<V5GovernancePanel>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   Timer? _timer;
   DateTime _now = DateTime.now();
+  final EarthApi _api = const EarthApi();
+  List<GovernanceProposal> _proposals = const [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
+    _tabController = TabController(
+      length: _hasCorporation ? 3 : 2,
+      vsync: this,
+      initialIndex: 0,
+    );
+    _load();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       final now = DateTime.now();
       if (mounted) setState(() => _now = now);
     });
+  }
+
+  bool get _hasCorporation {
+    final membershipId = widget.state.membership?['corporation_id'] ??
+        widget.state.corporation['id'];
+    return membershipId != null && membershipId.toString().trim().isNotEmpty;
+  }
+
+  Future<void> _load() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final response = await _api.listV5Proposals();
+      if (!mounted) return;
+      setState(() {
+        _proposals = response;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   @override
@@ -442,66 +500,73 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
         institutionId.isEmpty ||
         institutionId == 'OUC-001' ||
         institutionId == 'WORLD') {
-      return 'WORLD';
+      return 'EARTH';
     }
     if (institutionId.toUpperCase().startsWith('CORP-')) {
       return 'CORPORATION';
     }
     // Territory records are physical capacity containers in V5, never a
     // third political/governance scope.
-    return 'WORLD';
+    return 'EARTH';
   }
 
   List<Map<String, dynamic>> _proposalsForScope(String scope) {
-    final all = widget.state.governance['proposals'] is List
-        ? (widget.state.governance['proposals'] as List)
-        : const [];
-    final filtered = <Map<String, dynamic>>[];
-    for (final raw in all) {
-      if (raw is! Map) continue;
-      final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
-      final pScope = (raw['scope']?.toString().toUpperCase() ?? '').isNotEmpty
-          ? raw['scope'].toString().toUpperCase()
-          : _scopeFor(pInst);
-      if (pScope == scope) {
-        filtered.add(Map<String, dynamic>.from(raw));
-      }
-    }
-    // Sort by created_at / opens_at descending (newest first)
+    final filtered = _proposals
+        .where((proposal) => scope == 'ALL' || proposal.subjectType == scope)
+        .toList(growable: false);
     filtered.sort((a, b) {
-      final aTime = _createdAtMs(a);
-      final bTime = _createdAtMs(b);
-      return bTime.compareTo(aTime);
+      final rankDifference = _proposalPriority(a) - _proposalPriority(b);
+      if (rankDifference != 0) return rankDifference;
+      return b.submittedGameDay.compareTo(a.submittedGameDay);
     });
-    return filtered;
+    return filtered
+        .map((proposal) => proposal.toCardMap())
+        .toList(growable: false);
   }
 
-  int _createdAtMs(Map<String, dynamic> p) {
-    final createdAt = p['created_at'] ?? p['createdAt'];
-    if (createdAt is num) return createdAt.toInt();
-    if (createdAt != null) {
-      final parsed = int.tryParse(createdAt.toString());
-      if (parsed != null) return parsed;
-      final date = DateTime.tryParse(createdAt.toString());
-      if (date != null) return date.millisecondsSinceEpoch;
-    }
-    final opensAt = p['opens_at'] ?? p['opensAt'];
-    if (opensAt is num) return opensAt.toInt();
-    if (opensAt != null) {
-      final parsed = int.tryParse(opensAt.toString());
-      if (parsed != null) return parsed;
-      final date = DateTime.tryParse(opensAt.toString());
-      if (date != null) return date.millisecondsSinceEpoch;
-    }
-    // Fallback to game day for proposals without timestamps
-    final day = asIntOr(p['opens_game_day'] ?? p['closes_game_day'], 0);
-    return day * 86400000;
+  List<Map<String, dynamic>> _proposalsForCategory(
+      String scope, String category) {
+    final scoped = _proposals.where((proposal) {
+      if (scope != 'ALL' && proposal.subjectType != scope) return false;
+      switch (category) {
+        case 'ACTION REQUIRED':
+          return proposal.status == 'VOTING' && proposal.canVote;
+        case 'ACTIVE':
+          return (proposal.status == 'VOTING' && !proposal.canVote) ||
+              proposal.status == 'PASSED';
+        case 'SCHEDULED':
+          return proposal.status == 'SCHEDULED';
+        case 'HISTORY':
+          return !{'VOTING', 'PASSED', 'SCHEDULED'}.contains(proposal.status);
+        default:
+          return true;
+      }
+    }).toList(growable: false);
+    scoped.sort((a, b) {
+      final day = b.submittedGameDay.compareTo(a.submittedGameDay);
+      return day != 0 ? day : b.id.compareTo(a.id);
+    });
+    return scoped
+        .map((proposal) => proposal.toCardMap())
+        .toList(growable: false);
+  }
+
+  int _proposalPriority(GovernanceProposal proposal) {
+    if (proposal.status == 'VOTING' && proposal.canVote) return 0;
+    if (proposal.status == 'VOTING' && proposal.voted) return 1;
+    if (proposal.status == 'SCHEDULED') return 2;
+    return 3;
   }
 
   @override
   Widget build(BuildContext context) {
-    final worldCount = _proposalsForScope('WORLD').length;
+    final earthCount = _proposalsForScope('EARTH').length;
     final corpCount = _proposalsForScope('CORPORATION').length;
+    final pendingVotes = _proposals
+        .where((proposal) => proposal.status == 'VOTING' && proposal.canVote)
+        .length;
+    final scheduledChanges =
+        _proposals.where((proposal) => proposal.status == 'SCHEDULED').length;
 
     return EarthSection(
       title: 'PROPOSALS',
@@ -511,30 +576,79 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
         'Quorum is the minimum participation required; approval is the percentage of decisive votes needed to pass.',
         'Passed proposals stay approved until daily settlement starts the action. The proposal then closes while construction or research continues separately.',
         'Stages: SCHEDULED → OPEN → APPROVED → ACTION STARTED → CLOSED.',
+        'One House, one ballot. The active Human casts the House\'s vote.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildScopeTabs(context, corpCount, worldCount),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 16),
+              child: LinearProgressIndicator(),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Row(children: [
+                Expanded(
+                    child: Text(_error!, style: context.widgetFooterStyle)),
+                TextButton(onPressed: _load, child: const Text('RETRY')),
+              ]),
+            ),
+          EarthPageCockpit(
+            status: pendingVotes > 0 ? 'ACTION REQUIRED' : 'GOVERNANCE CURRENT',
+            statusColor:
+                pendingVotes > 0 ? context.warningColor : context.primaryColor,
+            title: 'GOVERNANCE',
+            subtitle: pendingVotes > 0
+                ? '$pendingVotes vote${pendingVotes == 1 ? '' : 's'} need${pendingVotes == 1 ? 's' : ''} your attention'
+                : 'No pending votes require your attention',
+            metrics: [
+              CockpitMetric(
+                label: 'PENDING VOTES',
+                value: '$pendingVotes',
+                icon: Icons.how_to_vote_outlined,
+                color: context.warningColor,
+              ),
+              CockpitMetric(
+                label: 'EARTH PROPOSALS',
+                value: '$earthCount',
+                icon: Icons.public_outlined,
+                color: context.primaryColor,
+              ),
+              CockpitMetric(
+                label: 'CORPORATION',
+                value: '$corpCount',
+                icon: Icons.account_balance_outlined,
+                color: context.secondaryColor,
+              ),
+              CockpitMetric(
+                label: 'SCHEDULED CHANGES',
+                value: '$scheduledChanges',
+                icon: Icons.schedule_outlined,
+                color: context.primaryColor,
+              ),
+            ],
+          ),
+          SizedBox(height: context.spacingTitleOffset),
+          _buildScopeTabs(context, corpCount, earthCount),
           SizedBox(height: context.spacingTitleOffset),
           AnimatedBuilder(
             animation: _tabController,
             builder: (context, _) {
-              final scope = switch (_tabController.index) {
-                0 => 'CORPORATION',
-                1 => 'WORLD',
-                _ => 'CORPORATION',
-              };
-              return _ProposalTabContent(
-                key: ValueKey(scope),
-                proposals: _proposalsForScope(scope),
-                scopeLabel: scope,
-                state: widget.state,
-                busy: widget.busy,
-                action: widget.action,
-                now: _now,
-                scopeFor: _scopeFor,
-              );
+              final scope = _hasCorporation
+                  ? switch (_tabController.index) {
+                      0 => 'ALL',
+                      1 => 'CORPORATION',
+                      2 => 'EARTH',
+                      _ => 'ALL',
+                    }
+                  : switch (_tabController.index) {
+                      0 => 'ALL',
+                      1 => 'EARTH',
+                      _ => 'ALL',
+                    };
+              return _buildProposalSections(context, scope);
             },
           ),
         ],
@@ -542,8 +656,31 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
     );
   }
 
-  Widget _buildScopeTabs(
-      BuildContext context, int corpCount, int worldCount) {
+  Widget _buildProposalSections(BuildContext context, String scope) {
+    const categories = ['ACTION REQUIRED', 'ACTIVE', 'SCHEDULED', 'HISTORY'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final category in categories) ...[
+          Text(category, style: context.topicTitleStyle),
+          const SizedBox(height: 8),
+          _ProposalTabContent(
+            key: ValueKey('$scope-$category-${_proposals.length}'),
+            proposals: _proposalsForCategory(scope, category),
+            scopeLabel: scope,
+            state: widget.state,
+            busy: widget.busy,
+            action: widget.action,
+            now: _now,
+            scopeFor: _scopeFor,
+          ),
+          SizedBox(height: context.spacingTitleOffset),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildScopeTabs(BuildContext context, int corpCount, int earthCount) {
     return AnimatedBuilder(
       animation: _tabController,
       builder: (context, _) => Container(
@@ -553,9 +690,12 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
           border: Border.all(color: context.subtleBorderColor),
         ),
         child: Row(children: [
-          _scopeTab(context, 0, 'CORPORATION ($corpCount)',
-              Icons.account_balance_outlined),
-          _scopeTab(context, 1, 'EARTH ($worldCount)', Icons.public_outlined),
+          _scopeTab(context, 0, 'ALL', Icons.dashboard_outlined),
+          if (_hasCorporation)
+            _scopeTab(context, 1, 'MY CORPORATION ($corpCount)',
+                Icons.account_balance_outlined),
+          _scopeTab(context, _hasCorporation ? 2 : 1, 'EARTH ($earthCount)',
+              Icons.public_outlined),
         ]),
       ),
     );
@@ -648,27 +788,11 @@ class _ProposalTabContentState extends State<_ProposalTabContent> {
 
   @override
   Widget build(BuildContext context) {
-    final rawRules = widget.state.governance['legacyRules'] is List
-        ? (widget.state.governance['legacyRules'] as List)
-        : (widget.state.governance['rules'] is List
-            ? (widget.state.governance['rules'] as List)
-            : const []);
-    final rules = rawRules
-        .where((raw) => raw is Map && raw['status']?.toString() == 'active')
-        .toList();
-    final proposalRuleId = widget.proposals
-        .map((proposal) => proposal['rule_version_id']?.toString())
-        .firstWhere((id) => id != null && id.isNotEmpty, orElse: () => null);
-    final currentRule = rules
-        .cast<Map>()
-        .map((raw) => Map<String, dynamic>.from(raw))
-        .where((rule) =>
-            proposalRuleId == null || rule['id']?.toString() == proposalRuleId)
-        .cast<Map<String, dynamic>?>()
-        .firstWhere((rule) => rule != null, orElse: () => null);
-    final ruleSummary = currentRule == null
-        ? 'No active governance rule is published for this scope.'
-        : 'Current rule: ${asIntOr(asDoubleOr(currentRule['quorum_threshold'], .25) * 100, 25)}% quorum · ${asIntOr(asDoubleOr(currentRule['approval_threshold'], .5) * 100, 50)}% approval · ${currentRule['voting_period_days'] ?? '—'}-day vote · implementation delay ${currentRule['implementation_delay_days'] ?? '—'} days.';
+    final firstProposal =
+        widget.proposals.isEmpty ? null : widget.proposals.first;
+    final ruleSummary = firstProposal == null
+        ? 'No proposal-specific Constitution snapshot is available.'
+        : 'Server Constitution snapshot: ${asDoubleOr(firstProposal['quorum_bps'], 0) / 100}% quorum · ${asDoubleOr(firstProposal['approval_bps'], 0) / 100}% approval.';
 
     if (widget.proposals.isEmpty) {
       return Column(
@@ -784,6 +908,50 @@ class _ProposalCard extends StatelessWidget {
     required this.scopeFor,
   });
 
+  Widget _impactDetails(BuildContext context) {
+    final rawImpact = proposal['impact'];
+    if (rawImpact is! Map) {
+      return Text(proposal['impact_summary'].toString(),
+          style: context.widgetFooterStyle.copyWith(height: 1.35));
+    }
+    final impact = Map<String, dynamic>.from(rawImpact);
+    final changes = impact['changes'] is List ? impact['changes'] as List : const [];
+    final rows = <String>[];
+    if (changes.isNotEmpty) {
+      for (final raw in changes) {
+        if (raw is! Map) continue;
+        final change = Map<String, dynamic>.from(raw);
+        rows.add('${change['ruleCode'] ?? 'RULE'}: '
+            '${change['currentValue'] ?? 'UNAVAILABLE'} → '
+            '${change['proposedValue'] ?? 'UNAVAILABLE'}');
+      }
+    } else {
+      const labels = <String, String>{
+        'costUnits': 'Cost',
+        'footprintUnits': 'Capacity footprint',
+        'serviceCapacityUnits': 'Expected service',
+        'capability': 'Capability',
+        'domainId': 'Domain',
+        'generationNumber': 'Generation',
+      };
+      for (final entry in labels.entries) {
+        if (impact[entry.key] != null) rows.add('${entry.value}: ${impact[entry.key]}');
+      }
+    }
+    if (impact['effectiveFromGameDay'] != null) {
+      rows.add('Effective day: ${impact['effectiveFromGameDay']}');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows.isEmpty
+          ? [Text(proposal['impact_summary'].toString(), style: context.widgetFooterStyle)]
+          : rows.map((row) => Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(row, style: context.widgetFooterStyle),
+              )).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final votes = proposal['votes'] is Map
@@ -800,6 +968,7 @@ class _ProposalCard extends StatelessWidget {
     final isStarted = executionStatus == 'started';
     final isExecuted = executionStatus == 'executed';
     final outcome = proposal['outcome']?.toString().toLowerCase() ?? 'pending';
+    final executedGameDay = proposal['executed_game_day'];
     final isApproved =
         proposal['status']?.toString().toLowerCase() == 'approved';
     final isScheduled =
@@ -812,20 +981,22 @@ class _ProposalCard extends StatelessWidget {
                 ? 'UNFUNDED'
                 : outcome == 'rejected'
                     ? 'REJECTED'
-                    : outcome == 'no_quorum'
-                        ? 'NO QUORUM'
-                        : isAwaitingFunding
-                            ? 'AWAITING FUNDING'
-                            : isApproved || isPassed
-                                ? 'APPROVED'
-                                : isScheduled
-                                    ? 'VOTING SCHEDULED'
-                                    : proposal['status']
-                                                ?.toString()
-                                                .toLowerCase() ==
-                                            'open'
-                                        ? 'VOTING OPEN'
-                                        : 'RESOLVING';
+                    : outcome == 'failed'
+                        ? 'FAILED'
+                        : outcome == 'no_quorum'
+                            ? 'NO QUORUM'
+                            : isAwaitingFunding
+                                ? 'AWAITING FUNDING'
+                                : isApproved || isPassed
+                                    ? 'APPROVED'
+                                    : isScheduled
+                                        ? 'VOTING SCHEDULED'
+                                        : proposal['status']
+                                                    ?.toString()
+                                                    .toLowerCase() ==
+                                                'open'
+                                            ? 'VOTING OPEN'
+                                            : 'RESOLVING';
 
     final currentDay = asIntOr(state.clock['day'], 1);
     final currentMinute = asIntOr(state.clock['minute'], 0);
@@ -868,16 +1039,14 @@ class _ProposalCard extends StatelessWidget {
         proposal['status']?.toString().toLowerCase() == 'open' &&
             !gameDeadlinePassed;
 
-    final myVote = proposal['my_vote']?.toString() ??
-        proposal['myVote']?.toString() ??
-        ((proposal['ballots'] is Map)
-            ? (proposal['ballots'] as Map)[state.human['id']?.toString()]
-                ?.toString()
-            : null);
+    final myVote = proposal['my_vote']?.toString();
     final viewer = proposal['viewer'] is Map
         ? Map<String, dynamic>.from(proposal['viewer'] as Map)
         : const <String, dynamic>{};
-    final canVote = viewer.isEmpty || viewer['canVote'] == true;
+    final eligible = viewer['eligible'] == true;
+    final voted =
+        viewer['voted'] == true || (myVote != null && myVote.isNotEmpty);
+    final canVote = viewer['canVote'] == true;
     final ineligibleReason = viewer['ineligibleReason']?.toString();
     final voteDeadline = _formatGameDeadline(proposal);
     final gameMinutesRemaining = closesTotalMinutes == null
@@ -887,16 +1056,16 @@ class _ProposalCard extends StatelessWidget {
     final supportCount = asIntOr(votes['support'], 0);
     final opposeCount = asIntOr(votes['oppose'], 0);
     final abstainCount = asIntOr(votes['abstain'], 0);
-    final castCount = asIntOr(votes['cast_count'] ?? votes['voter_count'],
-        supportCount + opposeCount + abstainCount);
+    final castCount = supportCount + opposeCount + abstainCount;
     final eligibleCount = asIntOr(proposal['eligible_voter_count'], 0);
-    final uncastCount = votes['uncast'] != null
-        ? asIntOr(votes['uncast'], 0)
-        : math.max(0, eligibleCount - castCount);
+    final uncastCount =
+        asIntOr(votes['uncast'], math.max(0, eligibleCount - castCount));
     final decisiveCount = supportCount + opposeCount;
-    final turnout = eligibleCount > 0 ? castCount / eligibleCount * 100 : null;
-    final approval =
-        decisiveCount > 0 ? supportCount / decisiveCount * 100 : null;
+    final participation = asDoubleOr(votes['participation_bps'], 0) / 100;
+    final approval = asDoubleOr(votes['decisive_approval_bps'], 0) / 100;
+    final quorum = asDoubleOr(proposal['quorum_bps'], 0) / 100;
+    final requiredApproval = asDoubleOr(proposal['approval_bps'], 0) / 100;
+    final quorumMet = proposal['quorum_met'] == true;
 
     Color statusColor = context.primaryColor;
     if (isExecuted) statusColor = context.successColor;
@@ -982,11 +1151,16 @@ class _ProposalCard extends StatelessWidget {
                                   height: 1.25,
                                 ),
                               ),
+                              if (executedGameDay != null) ...[
+                                const SizedBox(height: 4),
+                                Text('Executed day $executedGameDay',
+                                    style: context.widgetFooterStyle),
+                              ],
                               if (voteDeadline != null) ...[
                                 const SizedBox(height: 5),
                                 Text(
                                   isScheduled
-                                      ? 'Voting begins: ${_formatGameStart(proposal, state) ?? 'next game day'} · Voting closes: $voteDeadline'
+                                      ? 'Voting begins: ${_formatGameStart(proposal) ?? 'next game day'} · Voting closes: $voteDeadline'
                                       : isVotingOpen &&
                                               gameMinutesRemaining != null
                                           ? 'Voting ends in ${_formatGameTimeRemaining(gameMinutesRemaining)} · $voteDeadline'
@@ -1061,26 +1235,62 @@ class _ProposalCard extends StatelessWidget {
             ],
           ),
 
+          if (proposal['impact_summary'] != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(context.cardPadding * .75),
+              decoration: BoxDecoration(
+                color: context.primaryColor.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(context.radiusControl),
+                border: Border.all(
+                    color: context.primaryColor.withValues(alpha: .25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('REVIEW IMPACT · ESTIMATED IMPACT',
+                      style: context.topicTitleStyle),
+                  const SizedBox(height: 5),
+                  _impactDetails(context),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
 
-          // Voting tally breakdown & full-width progress bar
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Voting tally: quorum counts every ballot; approval counts only
+          // decisive support and opposition.
+          Text('VOTE TALLY', style: context.widgetTitleStyle),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 18,
+            runSpacing: 6,
             children: [
-              Flexible(
-                child: Text(
-                  votes.containsKey('abstain') || abstainCount > 0
-                      ? 'Support $supportCount  ·  Oppose $opposeCount  ·  Abstain $abstainCount  ·  Uncast $uncastCount'
-                      : 'Support $supportCount  ·  Oppose $opposeCount  ·  Uncast $uncastCount',
-                  style: context.widgetTitleStyle,
-                ),
-              ),
-              if (approval != null)
-                Text(
-                  '${approval.toStringAsFixed(1)}% DECISIVE APPROVAL',
-                  style: context.widgetTitleStyle
-                      .copyWith(color: context.primaryColor),
-                ),
+              _voteMetric(
+                  context, 'SUPPORT', supportCount, context.primaryColor),
+              _voteMetric(context, 'OPPOSE', opposeCount, context.errorColor),
+              _voteMetric(context, 'ABSTAIN', abstainCount, Colors.amber),
+              _voteMetric(context, 'UNCAST', uncastCount, context.mutedColor),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 18,
+            runSpacing: 6,
+            children: [
+              Text('ELECTORATE $eligibleCount',
+                  style: context.widgetFooterStyle),
+              Text('PARTICIPATION ${participation.toStringAsFixed(1)}%',
+                  style: context.widgetFooterStyle),
+              Text(
+                  'QUORUM ${quorum.toStringAsFixed(1)}% ${quorumMet ? '✓' : '—'}',
+                  style: context.widgetFooterStyle),
+              Text('APPROVAL ${approval.toStringAsFixed(1)}%',
+                  style: context.widgetFooterStyle),
+              Text(
+                  'REQUIRED ${requiredApproval.toStringAsFixed(1)}% ${approval >= requiredApproval && decisiveCount > 0 ? '✓' : '—'}',
+                  style: context.widgetFooterStyle),
             ],
           ),
           const SizedBox(height: 6),
@@ -1143,20 +1353,37 @@ class _ProposalCard extends StatelessWidget {
           SizedBox(height: context.spacingTitleOffset),
 
           // Voting action buttons — only visible when voting is open
-          if (isVotingOpen && !canVote)
+          if (isVotingOpen && !eligible)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 ineligibleReason == null || ineligibleReason.isEmpty
-                    ? 'You are not eligible to vote on this proposal.'
+                    ? 'Not in this proposal\'s frozen electorate.'
                     : ineligibleReason,
                 style: context.widgetFooterStyle
                     .copyWith(color: context.warningColor),
               ),
             ),
-          if (isVotingOpen &&
-              canVote &&
-              (myVote == null || myVote.isEmpty))
+          if (isVotingOpen && eligible && voted)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                children: [
+                  Text('Your vote: ${myVote?.toUpperCase() ?? '—'}',
+                      style: context.widgetTitleStyle),
+                  TextButton(
+                    onPressed: busy || proposalId.isEmpty
+                        ? null
+                        : () => _changeVote(context, proposalId,
+                            proposal['title']?.toString() ?? 'this proposal'),
+                    child: const Text('CHANGE VOTE'),
+                  ),
+                ],
+              ),
+            ),
+          if (isVotingOpen && eligible && canVote && !voted)
             Wrap(
               spacing: 8,
               runSpacing: 6,
@@ -1196,8 +1423,7 @@ class _ProposalCard extends StatelessWidget {
                               ),
                             );
                             if (confirmed == true) {
-                              await action(() =>
-                                  const EarthApi().vote(proposalId, choice));
+                              await action(() => _voteV5(proposalId, choice));
                             }
                           },
                   ),
@@ -1206,6 +1432,44 @@ class _ProposalCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<EarthState> _voteV5(String proposalId, String choice) async {
+    await const EarthApi().voteV5Proposal(proposalId, choice);
+    return const EarthApi().world();
+  }
+
+  Widget _voteMetric(
+      BuildContext context, String label, int value, Color color) {
+    return RichText(
+      text: TextSpan(
+        style: context.widgetFooterStyle,
+        children: [
+          TextSpan(
+              text: '$label  ',
+              style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+          TextSpan(text: '$value', style: context.widgetTitleStyle),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _changeVote(
+      BuildContext context, String proposalId, String title) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('Change vote on “$title”'),
+        children: [
+          for (final option in ['SUPPORT', 'OPPOSE', 'ABSTAIN'])
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(option),
+              child: Text(option),
+            ),
+        ],
+      ),
+    );
+    if (choice != null) await action(() => _voteV5(proposalId, choice));
   }
 
   String _fundingProgress(Map<String, dynamic> proposal, int currentDay) {
@@ -1890,37 +2154,16 @@ class _ProposalCard extends StatelessWidget {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
-  String? _formatGameStart(Map<String, dynamic> proposal, EarthState state) {
+  String? _formatGameStart(Map<String, dynamic> proposal) {
     var day = asInt(proposal['voting_start_day'] ??
         proposal['votingStartDay'] ??
+        proposal['voting_start_game_day'] ??
+        proposal['votingStartGameDay'] ??
         proposal['opens_game_day'] ??
         proposal['opensGameDay']);
     var minute = asIntOr(
         proposal['opens_game_minute'] ?? proposal['opensGameMinute'], 0);
-    if (day == null) {
-      final closesDay =
-          asInt(proposal['closes_game_day'] ?? proposal['closesGameDay']);
-      if (closesDay == null) return null;
-      final ruleId = proposal['rule_version_id'] ?? proposal['ruleVersionId'];
-      final rawRules = state.governance['legacyRules'] is List
-          ? (state.governance['legacyRules'] as List)
-          : (state.governance['rules'] is List
-              ? (state.governance['rules'] as List)
-              : const []);
-      final rule = rawRules.whereType<Map>().cast<Map?>().firstWhere(
-          (item) => item?['id']?.toString() == ruleId?.toString(),
-          orElse: () => null);
-      final votingDays = asIntOr(rule?['voting_period_days'], 3);
-      final startTotal = ((closesDay - 1) * 1440 +
-              asIntOr(
-                  proposal['closes_game_minute'] ??
-                      proposal['closesGameMinute'],
-                  0) -
-              votingDays * 1440)
-          .clamp(0, 1 << 31);
-      day = startTotal ~/ 1440 + 1;
-      minute = startTotal % 1440;
-    }
+    if (day == null) return null;
     return _formatGameDay(day);
   }
 
@@ -2301,6 +2544,218 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Displays the active V5 constitutional rules without translating them into
+/// the retired tax-only read model. The server supplies the effective values
+/// and their provenance; this widget is presentation only.
+class RulesInForcePanel extends StatefulWidget {
+  final EarthState state;
+  final EarthApi api;
+
+  const RulesInForcePanel(
+      {super.key, required this.state, this.api = const EarthApi()});
+
+  @override
+  State<RulesInForcePanel> createState() => _RulesInForcePanelState();
+}
+
+class _RulesInForcePanelState extends State<RulesInForcePanel> {
+  late Future<Map<String, dynamic>> _future;
+
+  String? get _corporationId {
+    final membershipId = widget.state.membership?['corporation_id'];
+    final corporationId = widget.state.corporation['id'];
+    final value = membershipId ?? corporationId;
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<Map<String, dynamic>> _load() async {
+    final corporationId = _corporationId;
+    final constitution = await widget.api.getV5Constitution(
+      corporationId: corporationId,
+    );
+    if (constitution['ok'] == false) {
+      throw StateError('Constitution rules are unavailable');
+    }
+    return constitution;
+  }
+
+  void _retry() => setState(() => _future = _load());
+
+  String _humanize(String value) => value
+      .replaceAll(RegExp(r'[_-]+'), ' ')
+      .split(' ')
+      .where((word) => word.isNotEmpty)
+      .map((word) =>
+          '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
+      .join(' ');
+
+  List<Map<String, dynamic>> _rulesFor(
+    Map<String, dynamic> constitution, {
+    required bool corporation,
+    String? corporationId,
+  }) {
+    final rawRules = constitution[corporation ? 'rules' : 'earthRules'] ??
+        constitution['rules'];
+    if (rawRules is! Map) return const [];
+    final provenance = constitution['provenance'] is Map
+        ? Map<String, dynamic>.from(constitution['provenance'] as Map)
+        : const <String, dynamic>{};
+    final definitions = constitution['definitions'] is List
+        ? (constitution['definitions'] as List)
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from)
+        : const <Map<String, dynamic>>[];
+    final definitionByCode = {
+      for (final definition in definitions)
+        definition['rule_code']?.toString(): definition,
+    };
+    final history = constitution['history'] is List
+        ? (constitution['history'] as List)
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from)
+            .toList()
+        : const <Map<String, dynamic>>[];
+    final gameDay = int.tryParse(constitution['gameDay']?.toString() ?? '');
+    final authorityId = corporation ? corporationId : 'EARTH';
+    return rawRules.entries
+        .where(
+            (entry) => !corporation || provenance[entry.key] == 'CORPORATION')
+        .map((entry) {
+      final definition =
+          definitionByCode[entry.key] ?? const <String, dynamic>{};
+      final source = provenance[entry.key]?.toString() ?? 'EARTH';
+      final version = history.firstWhere(
+        (row) {
+          final effectiveDay =
+              int.tryParse(row['effective_from_game_day']?.toString() ?? '');
+          return row['rule_code']?.toString() == entry.key &&
+              row['authority_type']?.toString() == source &&
+              row['authority_id']?.toString() == authorityId &&
+              (gameDay == null ||
+                  effectiveDay == null ||
+                  effectiveDay <= gameDay);
+        },
+        orElse: () => const <String, dynamic>{},
+      );
+      return {
+        'code': entry.key,
+        'value': entry.value,
+        'valueType': definition['value_type'],
+        'policyGroup': definition['policy_group'],
+        'source': source,
+        'version': version['version'],
+        'effectiveFromGameDay': version['effective_from_game_day'],
+      };
+    }).toList()
+      ..sort((a, b) => a['code'].toString().compareTo(b['code'].toString()));
+  }
+
+  Widget _scope(
+      BuildContext context, String title, List<Map<String, dynamic>> rules) {
+    if (rules.isEmpty) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: context.spacingTitleOffset),
+        child: Text('$title\nNo local overrides are currently published.',
+            style: context.widgetFooterStyle),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.spacingTitleOffset),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: context.topicTitleStyle),
+          const SizedBox(height: 8),
+          EarthDataList(
+            children: rules.indexed.map((indexed) {
+              final rule = indexed.$2;
+              final source = rule['source']?.toString() ?? 'EARTH';
+              final metadata = [
+                if (rule['valueType'] != null) rule['valueType'],
+                if (rule['policyGroup'] != null) rule['policyGroup'],
+                'SOURCE $source',
+                if (rule['version'] != null) 'VERSION ${rule['version']}',
+                if (rule['effectiveFromGameDay'] != null)
+                  'EFFECTIVE DAY ${rule['effectiveFromGameDay']}',
+              ].join(' · ');
+              return EarthDataRow(
+                title: _humanize(rule['code'].toString()),
+                subtitle:
+                    '${ConstitutionValueFormatter.format(rule['value'], rule['valueType'])} · $metadata',
+                leading: Icon(Icons.rule_outlined,
+                    size: context.iconSize, color: context.primaryColor),
+                trailing: EarthStatusPill(
+                  label: 'VALUE',
+                  value: ConstitutionValueFormatter.format(
+                      rule['value'], rule['valueType']),
+                  color: context.primaryColor,
+                ),
+                showDivider: indexed.$1 != rules.length - 1,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError || snapshot.data == null) {
+          return EarthSection(
+            title: 'RULES IN FORCE',
+            child: Row(children: [
+              const Expanded(
+                  child:
+                      Text('Canonical constitutional rules are unavailable.')),
+              TextButton(onPressed: _retry, child: const Text('RETRY')),
+            ]),
+          );
+        }
+        final constitution = snapshot.data!;
+        final corporationId = _corporationId;
+        return EarthSection(
+          title: 'RULES IN FORCE',
+          icon: Icons.gavel_outlined,
+          infoBulletPoints: const [
+            'These values come from the active V5 Constitution read model.',
+            'Source and effective policy ownership are shown for every rule.',
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _scope(
+                  context,
+                  'EARTH',
+                  _rulesFor(constitution,
+                      corporation: false, corporationId: corporationId)),
+              if (corporationId != null)
+                _scope(
+                    context,
+                    'MY CORPORATION',
+                    _rulesFor(constitution,
+                        corporation: true, corporationId: corporationId)),
+            ],
+          ),
+        );
+      },
     );
   }
 }

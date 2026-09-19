@@ -125,7 +125,16 @@ export async function handleGovernanceRoutes(
     return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/governance/v5/proposals' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => listV5GovernanceProposals(repository, viewer.id));
+    const requestedStatus = url.searchParams.get('status');
+    const requestedScope = url.searchParams.get('scope')?.toUpperCase();
+    const status = requestedStatus === 'active' || requestedStatus === 'history'
+      ? requestedStatus
+      : undefined;
+    const scope = requestedScope === 'EARTH' || requestedScope === 'CORPORATION'
+      ? requestedScope
+      : undefined;
+    const result = await withRepository(env, (repository) =>
+      listV5GovernanceProposals(repository, viewer.id, { status, scope }));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }

@@ -1,16 +1,35 @@
 part of 'earth_api.dart';
 
 extension EarthApiGovernance on EarthApi {
-  Future<Map<String, dynamic>> getV5Constitution({String? corporationId}) async {
-    final suffix = corporationId == null ? '' : '?corporationId=${Uri.encodeQueryComponent(corporationId)}';
+  Future<Map<String, dynamic>> getV5Constitution(
+      {String? corporationId}) async {
+    final suffix = corporationId == null
+        ? ''
+        : '?corporationId=${Uri.encodeQueryComponent(corporationId)}';
     final response = await _request('/api/governance/v5/constitution$suffix');
     return Map<String, dynamic>.from(response as Map);
   }
-  Future<Map<String, dynamic>> listV5Proposals() async {
-    final response = await _request('/api/governance/v5/proposals');
-    return response is Map<String, dynamic>
-        ? response
-        : <String, dynamic>{'ok': false, 'error': 'V5 proposals unavailable'};
+
+  Future<List<GovernanceProposal>> listV5Proposals({
+    String? status,
+    String? scope,
+  }) async {
+    final query = <String, String>{
+      if (status != null) 'status': status,
+      if (scope != null) 'scope': scope,
+    };
+    final suffix = query.isEmpty
+        ? ''
+        : '?${query.entries.map((entry) => '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
+    final response = await _request('/api/governance/v5/proposals$suffix');
+    if (response is! Map) throw StateError('V5 proposals unavailable');
+    final rows = response['proposals'];
+    if (rows is! List) throw StateError('V5 proposals unavailable');
+    return rows
+        .whereType<Map>()
+        .map((row) =>
+            GovernanceProposal.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>> proposeV5ConstitutionAmendment({
@@ -21,8 +40,10 @@ extension EarthApiGovernance on EarthApi {
     required List<Map<String, dynamic>> changes,
     int? effectiveFromGameDay,
   }) async {
-    final effectiveDay = effectiveFromGameDay ?? await _nextV5ConstitutionGameDay(subjectId);
-    final response = await _request('/api/governance/v5/proposals', method: 'POST', body: {
+    final effectiveDay =
+        effectiveFromGameDay ?? await _nextV5ConstitutionGameDay(subjectId);
+    final response =
+        await _request('/api/governance/v5/proposals', method: 'POST', body: {
       'subjectType': subjectType,
       'subjectId': subjectId,
       'actionType': 'CONSTITUTION_AMENDMENT',
@@ -37,7 +58,9 @@ extension EarthApiGovernance on EarthApi {
   Future<int> _nextV5ConstitutionGameDay(String? corporationId) async {
     final current = await getV5Constitution(corporationId: corporationId);
     final gameDay = int.tryParse(current['gameDay']?.toString() ?? '') ?? 0;
-    if (gameDay < 1) throw StateError('Canonical Constitution game day is unavailable');
+    if (gameDay < 1) {
+      throw StateError('Canonical Constitution game day is unavailable');
+    }
     return gameDay + 1;
   }
 
@@ -45,10 +68,12 @@ extension EarthApiGovernance on EarthApi {
     String? corporationId,
     required List<Map<String, dynamic>> changes,
   }) async {
-    final response = await _request('/api/governance/v5/constitution/preview', method: 'POST', body: {
-      if (corporationId != null) 'corporationId': corporationId,
-      'changes': changes,
-    });
+    final response = await _request('/api/governance/v5/constitution/preview',
+        method: 'POST',
+        body: {
+          if (corporationId != null) 'corporationId': corporationId,
+          'changes': changes,
+        });
     return Map<String, dynamic>.from(response as Map);
   }
 
