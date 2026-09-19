@@ -75,7 +75,7 @@ export async function healthResponse(request: Request, env: Env, options: { read
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'buildings'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('tax_rule_versions', 'tax_obligations')"),
       repository.query<{ invalid: string }>(`SELECT COALESCE(SUM(invalid_count) FILTER (WHERE invalid_count > 0), 0)::text AS invalid FROM earth_integrity_report()`),
-      repository.query("SELECT COALESCE(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MAX(completed_at))), 0) AS age_seconds FROM scheduler_runs WHERE status = 'completed'"),
+      repository.query("SELECT COALESCE(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MAX(completed_at))), 0) AS age_seconds FROM scheduler_runs WHERE status IN ('completed', 'partial', 'busy')"),
       repository.query(`
         SELECT
           COUNT(*) FILTER (WHERE processed_at IS NULL)::integer AS pending,
