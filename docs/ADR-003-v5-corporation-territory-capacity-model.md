@@ -1,10 +1,10 @@
 # ADR-003: V5 Corporation and Territory Capacity Model
 
-- Status: **Accepted target / pending runtime cutover**
+- Status: **Accepted / current V5 authority**
 - Date: 2026-09-16
 - Owners: EARTH product and engineering
 - Scope: Gameplay V5 hierarchy, Corporation affiliation, Territory ownership/capacity, land charges, admission, insolvency
-- Runtime effect: **None until the V5 migration phases are implemented and cut over**
+- Runtime effect: **Current V5 domain authority**
 
 ## Decision
 
@@ -162,9 +162,9 @@ Corporation non-payment to EARTH follows:
 6. dissolution only through explicit resolution rules preserving history and
    protecting House assets from instant deletion.
 
-## Relationship to current V4 documents
+## Relationship to historical pre-V5 documents
 
-This ADR changes important V4 target assumptions. In particular:
+This ADR supersedes important pre-V5 assumptions. In particular:
 
 - V4 describes Corporation/Community as Organization archetypes and permits a
   House to participate in multiple Organizations independently of Territory.
@@ -226,7 +226,7 @@ strong threshold gaming. V5 always uses marginal brackets.
 - Settlement must calculate and post both levels of capacity charge in a
   deterministic, replay-safe phase.
 
-## Cutover condition
+## Current authority
 
-This ADR becomes current runtime authority only when V5 migration gates pass and
-`docs/DOCUMENT_STATUS.md` explicitly marks V5 as current.
+V5 is current. This ADR is part of the active domain authority together with the
+Constitution, V5 master gameplay specification, and current repository evidence.
