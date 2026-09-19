@@ -14,10 +14,9 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     final client = MockClient((_) async => http.Response(NanoMarkupHelper.encode({
-      'ok': true, 'gameDay': 185, 'daysElapsed': 1, 'sinceDay': 184,
-      'netWealthDelta': {'current': 158000, 'previous': 152400, 'delta': 5600, 'deltaPct': 3.67},
-      'financial': {'incomeUnits': '0', 'expensesUnits': '0', 'netCashflowUnits': '0', 'taxesUnits': '0', 'marketSalesUnits': '0', 'marketPurchasesUnits': '0'},
-      'marketMovements': [],
+      'ok': true, 'summaryDay': 185, 'currentGameDay': 186,
+      'financial': {'incomeUnits': '0', 'expensesUnits': '0', 'netCashflowUnits': '0'},
+      'marketActivity': [],
       'buildings': {'operatedBuildingCount': 0},
       'governance': {'eventCount': 0, 'events': []},
       'alerts': {'unreadNotifications': 2, 'unreadComms': 1, 'criticalAlertsCount': 0},

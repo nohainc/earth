@@ -214,8 +214,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
 
   Widget _buildWhatChangedContent(
       BuildContext context, DailySummaryReport briefing) {
-    final netDelta = briefing.netWealthDelta;
-    final isPositiveDelta = netDelta.delta >= 0;
+    final cashflowUnits = briefing.financial.netCashflowUnits;
+    final deltaUnits = BigInt.tryParse(cashflowUnits) ?? BigInt.zero;
+    final isPositiveDelta = deltaUnits >= BigInt.zero;
     final sign = isPositiveDelta ? '+' : '';
 
     return Container(
@@ -270,7 +271,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR ($sign${netDelta.deltaPct.toStringAsFixed(1)}%) · Cashflow Net: ${formatCreditUnits(briefing.financial.netCashflowUnits)}/day',
+                          'Daily Cashflow: $sign${formatCreditUnits(cashflowUnits)} · Income ${formatCreditUnits(briefing.financial.incomeUnits)} · Expenses ${formatCreditUnits(briefing.financial.expensesUnits)}',
                       style: context.widgetValueStyle.copyWith(
                         color: isPositiveDelta
                             ? context.successColor

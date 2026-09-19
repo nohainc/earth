@@ -1,40 +1,7 @@
-double _parseNum(dynamic v) {
-  if (v == null) return 0.0;
-  if (v is num) return v.toDouble();
-  return double.tryParse(v.toString()) ?? 0.0;
-}
-
 int _parseInt(dynamic v) {
   if (v == null) return 0;
   if (v is num) return v.toInt();
   return int.tryParse(v.toString()) ?? 0;
-}
-
-class NetWealthDelta {
-  final double current;
-  final double previous;
-  final double delta;
-  final double deltaPct;
-
-  const NetWealthDelta({
-    required this.current,
-    required this.previous,
-    required this.delta,
-    required this.deltaPct,
-  });
-
-  factory NetWealthDelta.fromJson(Map<String, dynamic>? json) {
-    if (json == null) {
-      return const NetWealthDelta(
-          current: 0, previous: 0, delta: 0, deltaPct: 0);
-    }
-    return NetWealthDelta(
-      current: _parseNum(json['current']),
-      previous: _parseNum(json['previous']),
-      delta: _parseNum(json['delta']),
-      deltaPct: _parseNum(json['deltaPct']),
-    );
-  }
 }
 
 String _parseUnitsString(dynamic v) {
@@ -49,17 +16,13 @@ class FinancialSummary {
   final String incomeUnits;
   final String expensesUnits;
   final String netCashflowUnits;
-  final String taxesUnits;
-  final String marketSalesUnits;
-  final String marketPurchasesUnits;
+  final List<CashflowBreakdownRow> cashflowBreakdown;
 
   const FinancialSummary({
     required this.incomeUnits,
     required this.expensesUnits,
     required this.netCashflowUnits,
-    required this.taxesUnits,
-    required this.marketSalesUnits,
-    this.marketPurchasesUnits = '0',
+    this.cashflowBreakdown = const [],
   });
 
   factory FinancialSummary.fromJson(Map<String, dynamic>? json) {
@@ -68,53 +31,67 @@ class FinancialSummary {
         incomeUnits: '0',
         expensesUnits: '0',
         netCashflowUnits: '0',
-        taxesUnits: '0',
-        marketSalesUnits: '0',
-        marketPurchasesUnits: '0',
+        cashflowBreakdown: const [],
       );
     }
     return FinancialSummary(
       incomeUnits: _parseUnitsString(json['incomeUnits']),
       expensesUnits: _parseUnitsString(json['expensesUnits']),
       netCashflowUnits: _parseUnitsString(json['netCashflowUnits']),
-      taxesUnits: _parseUnitsString(json['taxesUnits']),
-      marketSalesUnits: _parseUnitsString(json['marketSalesUnits']),
-      marketPurchasesUnits: _parseUnitsString(json['marketPurchasesUnits']),
+      cashflowBreakdown: (json['cashflowBreakdown'] as List<dynamic>? ?? [])
+          .whereType<Map>()
+          .map((row) => CashflowBreakdownRow.fromJson(
+              Map<String, dynamic>.from(row)))
+          .toList(),
     );
   }
 }
 
-class MarketMovementSummary {
-  final String commodity;
-  final double currentPrice;
-  final double previousPrice;
-  final double deltaPct;
-  final String trend;
-  final int volume24h;
-  final double purchases;
-  final double sales;
+class CashflowBreakdownRow {
+  final String category;
+  final String inflowUnits;
+  final String outflowUnits;
 
-  const MarketMovementSummary({
-    required this.commodity,
-    required this.currentPrice,
-    required this.previousPrice,
-    required this.deltaPct,
-    required this.trend,
-    required this.volume24h,
-    this.purchases = 0,
-    this.sales = 0,
+  const CashflowBreakdownRow({
+    required this.category,
+    required this.inflowUnits,
+    required this.outflowUnits,
   });
 
-  factory MarketMovementSummary.fromJson(Map<String, dynamic> json) {
-    return MarketMovementSummary(
+  factory CashflowBreakdownRow.fromJson(Map<String, dynamic> json) {
+    return CashflowBreakdownRow(
+      category: json['category']?.toString() ?? 'OTHER',
+      inflowUnits: _parseUnitsString(json['inflowUnits']),
+      outflowUnits: _parseUnitsString(json['outflowUnits']),
+    );
+  }
+}
+
+class MarketDailyActivity {
+  final String commodity;
+  final String boughtUnits;
+  final String soldUnits;
+  final String creditSpentUnits;
+  final String creditReceivedUnits;
+  final String volumeUnits;
+
+  const MarketDailyActivity({
+    required this.commodity,
+    required this.boughtUnits,
+    required this.soldUnits,
+    required this.creditSpentUnits,
+    required this.creditReceivedUnits,
+    required this.volumeUnits,
+  });
+
+  factory MarketDailyActivity.fromJson(Map<String, dynamic> json) {
+    return MarketDailyActivity(
       commodity: json['commodity']?.toString() ?? '',
-      currentPrice: _parseNum(json['currentPrice']),
-      previousPrice: _parseNum(json['previousPrice']),
-      deltaPct: _parseNum(json['deltaPct']),
-      trend: json['trend']?.toString() ?? 'flat',
-      volume24h: _parseInt(json['volume24h']),
-      purchases: _parseNum(json['purchases']),
-      sales: _parseNum(json['sales']),
+      boughtUnits: _parseUnitsString(json['boughtUnits']),
+      soldUnits: _parseUnitsString(json['soldUnits']),
+      creditSpentUnits: _parseUnitsString(json['creditSpentUnits']),
+      creditReceivedUnits: _parseUnitsString(json['creditReceivedUnits']),
+      volumeUnits: _parseUnitsString(json['volumeUnits']),
     );
   }
 }
@@ -149,23 +126,25 @@ class BuildingSummary {
 
 class ResourceDelta {
   final String resource;
-  final double produced;
-  final double consumed;
-  final double net;
+  final String producedUnits;
+  final String consumedUnits;
+  final String netUnits;
 
   const ResourceDelta(
       {required this.resource,
-      required this.produced,
-      required this.consumed,
-      required this.net});
+      required this.producedUnits,
+      required this.consumedUnits,
+      required this.netUnits});
 
   factory ResourceDelta.fromJson(Map<String, dynamic> json) => ResourceDelta(
         resource:
             json['resource']?.toString() ?? json['commodity']?.toString() ?? '',
-        produced: _parseNum(json['produced']),
-        consumed: _parseNum(json['consumed']),
-        net: _parseNum(json['net']),
+        producedUnits: _parseUnitsString(json['producedUnits']),
+        consumedUnits: _parseUnitsString(json['consumedUnits']),
+        netUnits: _parseUnitsString(json['netUnits']),
       );
+
+  bool get isShortfall => (BigInt.tryParse(netUnits) ?? BigInt.zero) < BigInt.zero;
 }
 
 class DailySummaryEvent {
@@ -175,6 +154,8 @@ class DailySummaryEvent {
   final String details;
   final int gameDay;
   final int? gameMinute;
+  final String source;
+  final String category;
 
   const DailySummaryEvent(
       {required this.id,
@@ -182,18 +163,22 @@ class DailySummaryEvent {
       required this.title,
       required this.details,
       required this.gameDay,
-      this.gameMinute});
+      this.gameMinute,
+      this.source = 'GAME_EVENT',
+      this.category = 'EVENT'});
 
   factory DailySummaryEvent.fromJson(Map<String, dynamic> json) =>
       DailySummaryEvent(
         id: json['id']?.toString() ?? '',
-        type: (json['type'] ?? json['event_type'] ?? '').toString(),
+        type: (json['type'] ?? '').toString(),
         title: (json['title'] ?? '').toString(),
         details: (json['details'] ?? '').toString(),
-        gameDay: _parseInt(json['gameDay'] ?? json['game_day']),
-        gameMinute: json['gameMinute'] == null && json['game_minute'] == null
+        gameDay: _parseInt(json['gameDay']),
+        gameMinute: json['gameMinute'] == null
             ? null
-            : _parseInt(json['gameMinute'] ?? json['game_minute']),
+            : _parseInt(json['gameMinute']),
+        source: (json['source'] ?? 'GAME_EVENT').toString(),
+        category: (json['category'] ?? 'EVENT').toString(),
       );
 }
 
@@ -214,19 +199,6 @@ class GovernanceSummary {
     required this.events,
   });
 
-  factory GovernanceSummary.fromJson(Map<String, dynamic>? json) {
-    if (json == null) {
-      return const GovernanceSummary(
-        eventCount: 0,
-        events: [],
-      );
-    }
-    final events = _eventList(json['events']);
-    return GovernanceSummary(
-      eventCount: _parseInt(json['eventCount']),
-      events: events,
-    );
-  }
 }
 
 class AlertSummary {
@@ -260,6 +232,42 @@ class AlertSummary {
   }
 }
 
+class DailyStatementMetadata {
+  final int gameDay;
+  final bool immutable;
+  final String settlementStatus;
+  final String? rulesVersion;
+  final DateTime? finalizedAt;
+  final DateTime? statementCreatedAt;
+  final DateTime? statementUpdatedAt;
+
+  const DailyStatementMetadata({
+    required this.gameDay,
+    required this.immutable,
+    required this.settlementStatus,
+    this.rulesVersion,
+    this.finalizedAt,
+    this.statementCreatedAt,
+    this.statementUpdatedAt,
+  });
+
+  factory DailyStatementMetadata.fromJson(Map<String, dynamic>? json,
+      {int fallbackGameDay = 0}) {
+    DateTime? parseDate(dynamic value) => value == null
+        ? null
+        : DateTime.tryParse(value.toString())?.toUtc();
+    return DailyStatementMetadata(
+      gameDay: _parseInt(json?['gameDay'] ?? fallbackGameDay),
+      immutable: json?['immutable'] == true,
+      settlementStatus: json?['settlementStatus']?.toString() ?? 'unknown',
+      rulesVersion: json?['rulesVersion']?.toString(),
+      finalizedAt: parseDate(json?['finalizedAt']),
+      statementCreatedAt: parseDate(json?['statementCreatedAt']),
+      statementUpdatedAt: parseDate(json?['statementUpdatedAt']),
+    );
+  }
+}
+
 class SummaryHighlight {
   final String id;
   final String title;
@@ -279,9 +287,9 @@ class SummaryHighlight {
 
   factory SummaryHighlight.fromJson(Map<String, dynamic> json) {
     return SummaryHighlight(
-      id: json['id']?.toString() ?? json['code']?.toString() ?? '',
-      title: json['title']?.toString() ?? json['code']?.toString() ?? '',
-      urgency: (json['urgency'] ?? json['severity'])?.toString() ?? 'medium',
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      urgency: json['urgency']?.toString() ?? 'medium',
       reason: json['reason']?.toString() ?? '',
       actionLabel: json['actionLabel']?.toString() ?? 'VIEW',
       targetSection: json['targetSection']?.toString() ?? 'command',
@@ -294,9 +302,10 @@ class DailySummaryReport {
   final int currentGameDay;
   final int daysElapsed;
   final int sinceDay;
-  final NetWealthDelta netWealthDelta;
+  final DailyStatementMetadata statementMetadata;
+  final List<DailySummaryEvent> timeline;
   final FinancialSummary financial;
-  final List<MarketMovementSummary> marketMovements;
+  final List<MarketDailyActivity> marketActivity;
   final BuildingSummary buildings;
   final GovernanceSummary governance;
   final AlertSummary alerts;
@@ -312,9 +321,10 @@ class DailySummaryReport {
     this.currentGameDay = 0,
     required this.daysElapsed,
     required this.sinceDay,
-    required this.netWealthDelta,
+    required this.statementMetadata,
+    required this.timeline,
     required this.financial,
-    required this.marketMovements,
+    required this.marketActivity,
     required this.buildings,
     required this.governance,
     required this.alerts,
@@ -332,16 +342,14 @@ class DailySummaryReport {
       currentGameDay: gameDay,
       daysElapsed: 0,
       sinceDay: gameDay,
-      netWealthDelta:
-          const NetWealthDelta(current: 0, previous: 0, delta: 0, deltaPct: 0),
+      statementMetadata: DailyStatementMetadata.fromJson(null, fallbackGameDay: gameDay),
+      timeline: const [],
       financial: const FinancialSummary(
           incomeUnits: '0',
           expensesUnits: '0',
           netCashflowUnits: '0',
-          taxesUnits: '0',
-          marketSalesUnits: '0',
-          marketPurchasesUnits: '0'),
-      marketMovements: const [],
+          cashflowBreakdown: const []),
+      marketActivity: const [],
       buildings: const BuildingSummary(operatedBuildingCount: 0),
       governance: const GovernanceSummary(eventCount: 0, events: []),
       alerts: const AlertSummary(
@@ -356,24 +364,13 @@ class DailySummaryReport {
   }
 
   factory DailySummaryReport.fromJson(Map<String, dynamic> json) {
-    final traded = json['resources'] is Map
-        ? (Map<String, dynamic>.from(json['resources'] as Map)['traded']
-                as List<dynamic>? ??
-            [])
-        : <dynamic>[];
-    final rawMarkets = json['marketMovements'] as List<dynamic>? ?? traded;
+    final rawMarkets = json['marketActivity'] as List<dynamic>? ?? [];
     final rawDirectives = json['highlights'] as List<dynamic>? ?? [];
-    final rawNetWealth = json['netWealthDelta'] is Map
-        ? Map<String, dynamic>.from(json['netWealthDelta'] as Map)
-        : null;
     final rawCashflow = json['financial'] is Map
         ? Map<String, dynamic>.from(json['financial'] as Map)
         : null;
     final rawBusiness = json['buildings'] is Map
         ? Map<String, dynamic>.from(json['buildings'] as Map)
-        : null;
-    final rawGovernance = json['governance'] is Map
-        ? Map<String, dynamic>.from(json['governance'] as Map)
         : null;
     final rawAlerts = json['alerts'] is Map
         ? Map<String, dynamic>.from(json['alerts'] as Map)
@@ -381,22 +378,31 @@ class DailySummaryReport {
     final rawResources = json['resources'] is Map
         ? Map<String, dynamic>.from(json['resources'] as Map)
         : const <String, dynamic>{};
+    final timeline = _eventList(json['timeline']);
+    final governanceEvents = timeline
+        .where((event) => event.type.startsWith('PROPOSAL_') ||
+            event.type.startsWith('GOVERNANCE_'))
+        .toList();
 
     return DailySummaryReport(
-      gameDay: _parseInt(json['summaryDay'] ?? json['gameDay']),
-      currentGameDay:
-          _parseInt(json['currentGameDay'] ?? json['current_game_day']),
-      daysElapsed:
-          _parseInt(json['summaryDay'] != null ? 1 : json['daysElapsed']),
-      sinceDay: _parseInt(json['summaryDay'] ?? json['sinceDay']),
-      netWealthDelta: NetWealthDelta.fromJson(rawNetWealth),
+      gameDay: _parseInt(json['summaryDay']),
+      currentGameDay: _parseInt(json['currentGameDay']),
+      daysElapsed: 1,
+      sinceDay: _parseInt(json['summaryDay']),
+      statementMetadata: DailyStatementMetadata.fromJson(
+          json['statementMetadata'] is Map
+              ? Map<String, dynamic>.from(json['statementMetadata'] as Map)
+              : null,
+          fallbackGameDay: _parseInt(json['summaryDay'])),
+      timeline: timeline,
       financial: FinancialSummary.fromJson(rawCashflow),
-      marketMovements: rawMarkets
-          .map((e) => MarketMovementSummary.fromJson(
+      marketActivity: rawMarkets
+          .map((e) => MarketDailyActivity.fromJson(
               Map<String, dynamic>.from(e as Map)))
           .toList(),
       buildings: BuildingSummary.fromJson(rawBusiness),
-      governance: GovernanceSummary.fromJson(rawGovernance),
+      governance: GovernanceSummary(
+          eventCount: governanceEvents.length, events: governanceEvents),
       alerts: rawAlerts == null
           ? AlertSummary.fromJson({'notifications': json['alerts'] ?? []})
           : AlertSummary.fromJson(rawAlerts),

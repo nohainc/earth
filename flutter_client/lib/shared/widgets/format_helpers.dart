@@ -124,6 +124,21 @@ String formatCreditUnits(dynamic value, {String fallback = 'UNAVAILABLE'}) {
   return '${negative ? '-' : ''}$whole.$cents C';
 }
 
+/// Formats an exact quantity according to its authoritative asset kind.
+/// CREDIT values are atomic cents; resources are integer quantity units.
+/// Neither path converts through double.
+String formatAssetQuantity(String assetCode, dynamic value,
+    {String fallback = 'UNAVAILABLE'}) {
+  if (assetCode.toUpperCase() == 'CREDIT') {
+    return formatCreditUnits(value, fallback: fallback);
+  }
+  if (value == null) return fallback;
+  final raw = value.toString().trim();
+  final units = BigInt.tryParse(raw);
+  if (units == null) return fallback;
+  return units.toString();
+}
+
 String formatPercent(dynamic value) {
   final number = value is num ? value.toDouble() : 0.0;
   return '${(number.clamp(0, 1) * 100).round()}%';

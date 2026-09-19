@@ -246,6 +246,8 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
           ),
         ],
         const SizedBox(height: 24),
+        _buildStatementStatus(r.statementMetadata),
+        SizedBox(height: context.spacingControl),
         EarthSection(
           title: 'DAY ${r.gameDay} RESULTS',
           showSurface: false,
@@ -298,63 +300,93 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
     );
   }
 
-  Widget _buildCreditFlow(DailySummaryReport r) {
-    final f = r.financial;
-    final rows = [
-      (
-        'Income',
-        '+${formatCreditUnits(f.incomeUnits)}',
-        context.successColor
-      ),
-      (
-        'Expenses',
-        '-${formatCreditUnits(f.expensesUnits)}',
-        context.warningColor
-      ),
-      (
-        'Taxes paid',
-        '-${formatCreditUnits(f.taxesUnits)}',
-        context.mutedColor
-      ),
-      (
-        'Market sales',
-        '+${formatCreditUnits(f.marketSalesUnits)}',
-        context.successColor
-      ),
-      (
-        'Market purchases',
-        '-${formatCreditUnits(f.marketPurchasesUnits)}',
-        context.mutedColor
-      ),
-    ];
-    return EarthSection(
-      title: 'CREDIT FLOW',
-      showSurface: true,
-      child: Column(
-        children: rows
-            .map((row) => EarthDataRow(
-                  title: row.$1,
-                  trailing: Text(row.$2,
-                      style: context.widgetTitleStyle.copyWith(color: row.$3)),
-                ))
-            .toList(),
+  Widget _buildStatementStatus(DailyStatementMetadata metadata) {
+    final finalized = metadata.immutable && metadata.finalizedAt != null;
+    return EarthDataRow(
+      title: finalized ? 'FINALIZED DAY ${metadata.gameDay}' : 'STATEMENT STATUS',
+      subtitle: finalized
+          ? 'Immutable settlement record · Rules ${metadata.rulesVersion ?? 'unversioned'}'
+          : 'Settlement status: ${metadata.settlementStatus.toUpperCase()}',
+      trailing: Icon(
+        finalized ? Icons.lock_outline : Icons.sync_problem_outlined,
+        color: finalized ? context.successColor : context.warningColor,
+        size: context.iconSize,
       ),
     );
   }
 
-  Widget _buildRecentChangesContent(DailySummaryReport r) {
-    final events = [
-      ...r.buildings.completed,
-      ...r.buildings.upgraded,
-      ...r.buildings.inactive,
-      ...r.researchEvents,
-      ...r.governance.events,
-      ...r.houseEvents,
+  Widget _buildCreditFlow(DailySummaryReport r) {
+    final f = r.financial;
+    String labelFor(String category) => switch (category) {
+          'BUILDING_OPERATIONS' => 'Building operations',
+          'CONSTRUCTION' => 'Construction',
+          'RESEARCH' => 'Research',
+          'CAPACITY' => 'Capacity',
+          'MARKET' => 'Market',
+          'TAX' => 'Tax',
+          _ => 'Other',
+        };
+    final rows = <Widget>[
+      EarthDataRow(
+        title: 'Income',
+        trailing: Text('+${formatCreditUnits(f.incomeUnits)}',
+            style: context.widgetTitleStyle
+                .copyWith(color: context.successColor)),
+      ),
+      EarthDataRow(
+        title: 'Expenses',
+        trailing: Text('-${formatCreditUnits(f.expensesUnits)}',
+            style: context.widgetTitleStyle
+                .copyWith(color: context.warningColor)),
+      ),
+      EarthDataRow(
+        title: 'Net',
+        trailing: Text(
+          '${f.netCashflowUnits.startsWith('-') ? '' : '+'}${formatCreditUnits(f.netCashflowUnits)}',
+          style: context.widgetTitleStyle.copyWith(
+              color: f.netCashflowUnits.startsWith('-')
+                  ? context.warningColor
+                  : context.primaryColor),
+        ),
+      ),
     ];
+    for (final breakdown in f.cashflowBreakdown) {
+      final inflow = formatCreditUnits(breakdown.inflowUnits);
+      final outflow = formatCreditUnits(breakdown.outflowUnits);
+      final hasInflow = breakdown.inflowUnits != '0';
+      final hasOutflow = breakdown.outflowUnits != '0';
+      final value = hasInflow && hasOutflow
+          ? '+$inflow / -$outflow'
+          : hasInflow
+              ? '+$inflow'
+              : '-$outflow';
+      rows.add(EarthDataRow(
+        title: labelFor(breakdown.category),
+        subtitle: 'Included in Income / Expenses',
+        trailing: Text(value, style: context.bodyStyle),
+      ));
+    }
+    return EarthSection(
+      title: 'CREDIT FLOW',
+      showSurface: true,
+      child: Column(children: rows),
+    );
+  }
+
+  Widget _buildRecentChangesContent(DailySummaryReport r) {
+    final events = r.timeline.isNotEmpty
+        ? r.timeline
+        : [
+            ...r.buildings.completed,
+            ...r.buildings.upgraded,
+            ...r.buildings.inactive,
+            ...r.researchEvents,
+            ...r.governance.events,
+            ...r.houseEvents,
+          ];
     if (events.isEmpty) {
       return const EarthEmptyState(
-        message:
-            'Everything operated normally. No material changes were recorded.',
+        message: 'No material events were recorded.',
         icon: Icons.check_circle_outline,
       );
     }
@@ -433,22 +465,22 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
       rows.addAll(r.resources.map((resource) => EarthDataRow(
             title: resource.resource,
             subtitle:
-                'Produced ${formatWholeNumber(resource.produced)} · Consumed ${formatWholeNumber(resource.consumed)}',
+                'Produced ${formatAssetQuantity(resource.resource, resource.producedUnits)} · Consumed ${formatAssetQuantity(resource.resource, resource.consumedUnits)}',
             leading: Icon(
-                resource.net < 0 ? Icons.trending_down : Icons.trending_up,
+                resource.isShortfall ? Icons.trending_down : Icons.trending_up,
                 size: context.iconSize,
-                color: resource.net < 0
+                color: resource.isShortfall
                     ? context.warningColor
                     : context.successColor),
             trailing: Text(
-                '${resource.net >= 0 ? '+' : ''}${formatWholeNumber(resource.net)}',
+                '${resource.isShortfall ? '' : '+'}${formatAssetQuantity(resource.resource, resource.netUnits)}',
                 style: context.widgetTitleStyle),
           )));
     }
-    rows.addAll(r.marketMovements.map((movement) => EarthDataRow(
-          title: movement.commodity,
+    rows.addAll(r.marketActivity.map((activity) => EarthDataRow(
+          title: activity.commodity,
           subtitle:
-              'Bought ${formatWholeNumber(movement.purchases)} · Sold ${formatWholeNumber(movement.sales)} · Volume ${movement.volume24h}',
+              'Bought ${formatAssetQuantity(activity.commodity, activity.boughtUnits)} · Sold ${formatAssetQuantity(activity.commodity, activity.soldUnits)} · Volume ${formatAssetQuantity(activity.commodity, activity.volumeUnits)} · Spent ${formatCreditUnits(activity.creditSpentUnits)} · Received ${formatCreditUnits(activity.creditReceivedUnits)}',
           leading: Icon(Icons.storefront_outlined,
               size: context.iconSize, color: context.primaryColor),
         )));

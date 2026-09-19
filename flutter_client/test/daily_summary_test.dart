@@ -9,33 +9,56 @@ import 'package:earth_client/core/nano_markup_helper.dart';
 import 'package:earth_client/features/command_center/daily_summary_dialog.dart';
 
 void main() {
+  test('Daily Summary preserves exact CREDIT and resource units', () {
+    final report = DailySummaryReport.fromJson({
+      'financial': {
+        'incomeUnits': '9007199254740993',
+        'expensesUnits': '2',
+        'netCashflowUnits': '9007199254740991',
+      },
+      'resources': {
+        'deltas': [
+          {
+            'resource': 'COMPUTE',
+            'producedUnits': '9007199254740993',
+            'consumedUnits': '2',
+            'netUnits': '9007199254740991',
+          },
+        ],
+      },
+    });
+
+    expect(report.financial.incomeUnits, '9007199254740993');
+    expect(report.resources.single.producedUnits, '9007199254740993');
+    expect(report.resources.single.isShortfall, isFalse);
+  });
+
   test('DailySummaryReport parses fromJson with all nested fields', () {
     final json = {
-      'gameDay': 185,
+      'summaryDay': 185,
+      'currentGameDay': 186,
       'daysElapsed': 1,
       'sinceDay': 184,
-      'netWealthDelta': {
-        'current': 158000.0,
-        'previous': 152400.0,
-        'delta': 5600.0,
-        'deltaPct': 3.67,
-      },
       'financial': {
         'incomeUnits': '1425000',
         'expensesUnits': '482000',
         'netCashflowUnits': '943000',
-        'taxesUnits': '220000',
-        'marketSalesUnits': '775000',
-        'marketPurchasesUnits': '0',
+        'cashflowBreakdown': [
+          {
+            'category': 'TAX',
+            'inflowUnits': '0',
+            'outflowUnits': '5',
+          },
+        ],
       },
-      'marketMovements': [
+      'marketActivity': [
         {
           'commodity': 'ENERGY',
-          'currentPrice': 108.5,
-          'previousPrice': 102.0,
-          'deltaPct': 6.37,
-          'trend': 'up',
-          'volume24h': 14200,
+          'boughtUnits': '40',
+          'soldUnits': '12',
+          'creditSpentUnits': '10850',
+          'creditReceivedUnits': '10200',
+          'volumeUnits': '52',
         },
       ],
       'buildings': {
@@ -44,12 +67,9 @@ void main() {
         'degradedMachinesCount': 1,
         'pendingContractsCount': 2,
       },
-      'governance': {
-        'eventCount': 1,
-        'events': [
-          {'id': 'gov-1', 'type': 'GOVERNANCE_POLICY_PASSED', 'title': 'Policy passed', 'details': 'Energy Infrastructure Subsidy', 'gameDay': 185},
-        ],
-      },
+      'timeline': [
+        {'id': 'gov-1', 'type': 'GOVERNANCE_POLICY_PASSED', 'title': 'Policy passed', 'details': 'Energy Infrastructure Subsidy', 'gameDay': 185, 'gameMinute': 240, 'source': 'GAME_EVENT', 'category': 'GOVERNANCE'},
+      ],
       'alerts': {
         'unreadNotifications': 2,
         'unreadComms': 1,
@@ -69,11 +89,14 @@ void main() {
 
     final report = DailySummaryReport.fromJson(json);
     expect(report.gameDay, 185);
-    expect(report.netWealthDelta.delta, 5600.0);
     expect(report.financial.netCashflowUnits, '943000');
     expect(report.financial.incomeUnits, '1425000');
     expect(report.financial.expensesUnits, '482000');
-    expect(report.marketMovements.length, 1);
+    expect(report.financial.cashflowBreakdown.single.category, 'TAX');
+    expect(report.financial.cashflowBreakdown.single.outflowUnits, '5');
+    expect(report.marketActivity.length, 1);
+    expect(report.marketActivity.single.boughtUnits, '40');
+    expect(report.marketActivity.single.creditSpentUnits, '10850');
     expect(report.buildings.operatedBuildingCount, 4);
     expect(report.governance.eventCount, 1);
     expect(report.alerts.unreadNotifications, 2);
@@ -94,50 +117,39 @@ void main() {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
-            'gameDay': 185,
+            'summaryDay': 185,
+            'currentGameDay': 186,
             'daysElapsed': 1,
             'sinceDay': 184,
-            'netWealthDelta': {
-              'current': 158000.0,
-              'previous': 152400.0,
-              'delta': 5600.0,
-              'deltaPct': 3.67,
-            },
             'financial': {
               'incomeUnits': '1425000',
               'expensesUnits': '482000',
               'netCashflowUnits': '943000',
-              'marketSalesUnits': '775000',
-              'marketPurchasesUnits': '0',
-              'taxesUnits': '220000',
             },
-            'marketMovements': [
+            'marketActivity': [
               {
                 'commodity': 'ENERGY',
-                'currentPrice': 108.5,
-                'previousPrice': 102.0,
-                'deltaPct': 6.37,
-                'trend': 'up',
-                'volume24h': 14200,
+                'boughtUnits': '40',
+                'soldUnits': '12',
+                'creditSpentUnits': '10850',
+                'creditReceivedUnits': '10200',
+                'volumeUnits': '52',
               },
               {
                 'commodity': 'MATERIAL',
-                'currentPrice': 42.1,
-                'previousPrice': 44.8,
-                'deltaPct': -6.03,
-                'trend': 'down',
-                'volume24h': 9800,
+                'boughtUnits': '8',
+                'soldUnits': '15',
+                'creditSpentUnits': '4210',
+                'creditReceivedUnits': '4480',
+                'volumeUnits': '23',
               },
             ],
             'buildings': {
               'operatedBuildingCount': 4,
             },
-            'governance': {
-              'eventCount': 1,
-              'events': [
-                {'id': 'gov-1', 'type': 'GOVERNANCE_POLICY_PASSED', 'title': 'Policy passed', 'details': 'Energy Infrastructure Subsidy', 'gameDay': 185},
-              ],
-            },
+            'timeline': [
+              {'id': 'gov-1', 'type': 'GOVERNANCE_POLICY_PASSED', 'title': 'Policy passed', 'details': 'Energy Infrastructure Subsidy', 'gameDay': 185, 'gameMinute': 240, 'source': 'GAME_EVENT', 'category': 'GOVERNANCE'},
+            ],
             'alerts': {
               'unreadNotifications': 2,
               'unreadComms': 1,
