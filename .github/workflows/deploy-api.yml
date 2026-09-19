@@ -58,6 +58,10 @@ jobs:
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+      - name: Verify pg_dump version
+        run: |
+          which pg_dump
           pg_dump --version
       - name: Capture production restore point
         run: EARTH_BACKUP_DIR=backups npm run db:backup:postgres
