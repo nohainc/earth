@@ -20,10 +20,9 @@ must not define a competing value. A copied value is marked **projection** or
 | Tax rate and base | `tax_rule_versions` selected by settlement day | tax assessment and proposals | legacy `tax_rules` is compatibility history only |
 | Market price | completed Spot Market batches/fills | candles, analytics, UI | `market_prices` is a transitional read projection only |
 | Bank rates and limits | effective versioned bank rules | Finance V2 | hard-coded loan/deposit rates |
-| Human needs | Human Needs rules and daily needs projection | life, city dynamics, mortality | UI estimates |
+| Human needs | Human Needs rules and daily needs projection | life, V5 service/resource settlement, mortality | UI estimates |
 | Budget authority | `institution_budget_lines` | budget engine and proposals | legacy `budgets` |
 | Fiscal commitments | `institution_budget_commitments` | spending and distress | counters without source rows |
-| City service capacity | `city_service_capacity_daily` | city dynamics and needs | scalar capacity as independent authority |
 | Research capacity | Building V2 daily capacity projection | research scheduler | fixed project-duration formulas |
 | Reference balance price | `economic_reference_prices` | balance/read models only | market prices and live account balances |
 | Live monetary balance | `economic_accounts` (Economy V2) | all financial flows | legacy account/balance tables |
@@ -50,9 +49,9 @@ The matrix is a release checklist for removing those reads, not permission to
 add new ones.
 
 The building catalog no longer contains a monetary output field. `output_credits`
-was removed from the canonical schema in migration 349; the world snapshot may
+was removed from the canonical schema in historical pre-V5 migration; the world snapshot may
 retain a zero-valued response field temporarily for API compatibility, but no
 settlement path may read or write it. Building condition, wear, and repair
-fields were removed by migration 340. Historical migration files may still
+fields were removed by historical pre-V5 migration. Historical migration files may still
 mention those fields because migration history is append-only; they are not
 part of the current schema authority.
