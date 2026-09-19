@@ -21,6 +21,9 @@ must not define a competing value. A copied value is marked **projection** or
 | Market price | completed Spot Market batches/fills | candles, analytics, UI | `market_prices` is a transitional read projection only |
 | Bank rates and limits | effective versioned bank rules | Finance V2 | hard-coded loan/deposit rates |
 | Human needs | Human Needs rules and daily needs projection | life, V5 service/resource settlement, mortality | UI estimates |
+| House physical-capacity state | `v5_house_settlement_profiles` rebuilt from canonical House affiliation and active V5 building footprint facts | capacity quotes, House finance, daily capacity settlement | old Territory/City service-capacity projections must not become authority |
+| Corporation occupied-capacity state | `v5_corporation_settlement_profiles` and game-day `corporation_capacity_state_v5` | Corporation capacity/fiscal reads and EARTH capacity settlement | standalone Territory container counts are derived presentation/audit facts |
+| Capacity policy and progressive pricing | game-day `resolved_constitution_snapshots_v5` plus `progressive_policy_brackets` | House/Corporation quotes, settlement, governance previews | hard-coded capacity rates or legacy Territory/City policy fields |
 | Budget authority | `institution_budget_lines` | budget engine and proposals | legacy `budgets` |
 | Fiscal commitments | `institution_budget_commitments` | spending and distress | counters without source rows |
 | Research capacity | Building V2 daily capacity projection | research scheduler | fixed project-duration formulas |
