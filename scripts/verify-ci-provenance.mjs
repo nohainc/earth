@@ -3,8 +3,8 @@ const sourceSha = process.env.SOURCE_SHA;
 const token = process.env.GITHUB_TOKEN;
 if (!repository || !sourceSha || !token) throw new Error('GITHUB_REPOSITORY, SOURCE_SHA, and GITHUB_TOKEN are required');
 
-const MAX_ATTEMPTS = 3;
-const RETRY_DELAY_MS = 10_000;
+const MAX_ATTEMPTS = 10;
+const RETRY_DELAY_MS = 30_000;
 
 async function queryRuns() {
   const response = await fetch(`https://api.github.com/repos/${repository}/actions/runs?head_sha=${encodeURIComponent(sourceSha)}&event=push&per_page=100`, {
