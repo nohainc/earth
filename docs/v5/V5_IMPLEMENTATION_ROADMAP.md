@@ -1,6 +1,6 @@
 # EARTH Gameplay V5 — Implementation Roadmap
 
-Status: **TARGET EXECUTION PLAN / NOT YET IMPLEMENTED**  
+Status: **IMPLEMENTATION HISTORY / REFERENCE**  
 Version: 5.0-design
 
 ## 1. Purpose
@@ -17,7 +17,7 @@ should be split into the smallest complete vertical slices described in
 
 # 2. Program rules
 
-- No phase may claim V5 is current until the cutover gate is satisfied.
+- V5 is now current; old phase/cutover wording below is retained only to explain implementation sequencing.
 - PostgreSQL is authoritative.
 - Schema changes are forward-only and update canonical schema/manifest.
 - Existing history/ledger data is preserved.
@@ -47,8 +47,7 @@ Make V5 unambiguous to future humans and AI agents before changing runtime.
    - progressive marginal-bracket authority;
    - capacity-rent obligations and staged resolution.
 4. Map V4/current runtime conflicts explicitly.
-5. Update `DOCUMENT_STATUS.md` to list V5 as accepted target, V4 as current
-   runtime until cutover.
+5. Keep `DOCUMENT_STATUS.md` aligned with V5 as the sole active gameplay authority.
 6. Add V5 section to `AI_DEVELOPMENT_INSTRUCTIONS.md` telling agents to read the
    V5 pack for V5-labelled tasks.
 7. Freeze naming:
