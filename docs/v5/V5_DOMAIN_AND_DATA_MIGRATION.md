@@ -1,12 +1,14 @@
 # EARTH Gameplay V5 — Domain and Data Migration Plan
 
-Status: **TARGET-CANONICAL MIGRATION PLAN / NOT YET EXECUTED**  
+Status: **IMPLEMENTATION HISTORY / V5 MIGRATION REFERENCE**  
 Version: 5.0-design
 
 ## 1. Purpose
 
-This document maps the current repository/runtime model to the V5 target model.
-It is intentionally migration-first: no AI agent should delete or repurpose
+This document records the migration model used to reach V5. It is retained as
+implementation history and schema rationale, not as a competing current gameplay
+specification. Current V5 source/schema/tests take precedence. No contributor
+should delete or repurpose
 current Territory/Corporation data merely because V5 no longer exposes the same
 relationship to players.
 

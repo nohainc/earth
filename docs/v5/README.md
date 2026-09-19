@@ -1,23 +1,19 @@
 # EARTH Gameplay V5 — Documentation Index
 
-Status: **TARGET DESIGN WITH IMPLEMENTED KERNEL SLICE / NOT YET FULLY CURRENT RUNTIME**
+Status: **CURRENT V5 GAMEPLAY DOCUMENTATION**
 Audience: product, engineering, AI development agents, reviewers  
 Repository: `nohainc/earth`  
-Target version: Gameplay V5
+Current gameplay version: V5
 
 ## Purpose
 
 This directory is the authoritative planning package for the V5 gameplay migration.
-It defines the target gameplay model, the economic/capacity rules, the migration
-sequence, and the AI-execution discipline required to move the existing V4 runtime
-toward V5 safely.
+It defines the current V5 gameplay model, economic/capacity rules, and the
+implementation discipline for maintaining and extending V5 safely.
 
-V5 remains a **target architecture until the implementation/cutover gates in this
-pack are completed**. The repository does contain an active Constitution &
-Governance Kernel slice and migrated V5 capacity/tax consumers; those implemented
-surfaces are documented explicitly in `V5_CONSTITUTION_GOVERNANCE_KERNEL.md`.
-AI agents must not describe the full V5 gameplay model as current merely because
-some V5 slices are implemented.
+V5 is the current gameplay authority. Historical migration and roadmap documents
+remain in this directory only as implementation reference; their old "target",
+"shadow", or "cutover" wording must not override current V5 source/schema/tests.
 
 ## Read order for every V5 task
 
@@ -51,11 +47,9 @@ For UI work also read:
 | `V5_AI_EXECUTION_PLAYBOOK.md` | EXECUTION | AI-ready work packages, constraints, tests, handoff requirements |
 | `V5_UI_MIGRATION_MATRIX.md` | TARGET-UX | Page-by-page product changes required after authoritative backend slices |
 
-The existing V4 documents remain the authority for **runtime behavior that has not
-been explicitly migrated**. For migrated Constitution, capacity, and tax slices,
-the implementation evidence and `V5_CONSTITUTION_GOVERNANCE_KERNEL.md` are the
-more precise status references. This index remains the authority for whether the
-overall V5 cutover has completed.
+There is no active V4 gameplay authority. Current source, schema, migrations, tests,
+and V5 documents are the implementation authority. Historical V4 material is
+available only through Git history.
 
 ## Core V5 decision in one paragraph
 
@@ -91,22 +85,16 @@ independent government, constitution, tax system, or membership layer.
 - EARTH fiscal underfunding is valid gameplay: programs may be delayed or unavailable when Treasury funds are insufficient.
 - V5 migrations must preserve economic history and use forward-only schema changes.
 
-## Definition of V5 cutover
+## Current-runtime rule
 
-V5 becomes the current gameplay authority only when all of the following are true:
+V5 is current. When a document in this directory still describes a future cutover,
+shadow mode, or V4 coexistence, treat that wording as migration history and update
+it when touching the document. Current repository evidence wins.
 
-1. The V5 constitutional/domain amendments are accepted in repository docs.
-2. Canonical schema and forward migrations support the V5 relationships.
-3. Progressive policy and capacity billing are server-authoritative and covered by tests.
-4. Daily settlement charges House capacity rent and Corporation EARTH land rent correctly.
-5. Corporation admission and founding follow V5 rules.
-6. Legacy City/Territory political authority is removed from runtime paths.
-7. House/building gameplay no longer depends on a specific Territory unit unless a later explicit V5+ feature reintroduces differentiated geography.
-8. V5 read models power the client without client economic fallbacks.
-9. Required Flutter migrations are complete for the affected pages.
-10. Full automated, migration, replay, invariant, smoke, and monitored game-day gates pass.
-11. `docs/DOCUMENT_STATUS.md` and `docs/CURRENT_STATE.md` are updated to mark V5 as current.
+## Product guardrail
 
-Until that cutover, V5 documents describe the target while the kernel status
-document identifies the implemented V5 slices; V4/current-runtime documents
+Territory is physical/geographic capacity context, not a third government. A
+standalone Territories management page is not required merely because Territory
+records exist. City is obsolete and must not be introduced into new V5 domain,
+API, UI, or documentation.
 continue to describe production behavior for all unmigrated areas.

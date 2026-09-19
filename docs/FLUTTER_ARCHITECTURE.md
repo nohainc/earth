@@ -31,7 +31,7 @@ lib/
     command_center/    state coordinator, dashboard composition, navigation
     market/            market panels and order actions
     governance/        proposals, voting, delegation, arbitration
-    institutions/      cities, corporations, communities, services
+    institutions/      corporations, communities, institutional/capacity views
     operations/        machines, production, technology, AI policies
     lifecycle/         succession, estates, history, rankings
   shared/

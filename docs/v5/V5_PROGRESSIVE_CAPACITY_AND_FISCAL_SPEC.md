@@ -1,6 +1,6 @@
 # EARTH Gameplay V5 — Progressive Capacity and Fiscal Specification
 
-Status: **TARGET-CANONICAL / NOT YET CURRENT RUNTIME**  
+Status: **CURRENT-CANONICAL V5 GAMEPLAY**  
 Version: 5.0-design
 
 ## 1. Purpose

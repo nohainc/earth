@@ -1,90 +1,116 @@
 # EARTH — Current Project State
 
-> Last updated: 2026-09-16 · Development baseline: see `ARCHITECTURE_BASELINE.md`.
+Status: **V5 CURRENT**
+Updated: 2026-09-19
 
----
+## Gameplay baseline
 
-## ✅ Implemented in the current codebase
+Gameplay V5 is the active design baseline.
 
-- Identity, sessions, MFA, rate limiting, email verification, account recovery
-- World clock, lifecycle, succession, inheritance, estate liquidation
-- Market book, batch-auction settlement, escrow, fees, ledger
-- Communities, cities, corporations — budgets, membership, representation
-- Governance: proposals, ballots, roles, delegation, appeals, arbitration
-- Production: machines, maintenance, upgrades, recycling, building construction
-- Research, patents, licenses, royalties
-- Personal finance, taxation, liquidity, insolvency restructuring
-- Businesses: shares, constitutions, managers, statements, dividends, mergers
-- Contracts: employment, supply, intellectual-service, disputes
-- House/dynasty: lineage, perks, heirlooms, succession
-- Notifications, audit log, SSE / WebSocket event fan-out
-- Daily Summary, net-worth history, market OHLC
-- Transactional outbox delivery (emails via Cloudflare Email Service)
-- Flutter Web client fully functional at `/app`
-- Migration head 78; local canonical schema and manifest are reconciled through
-  migration 78. Production deployment still requires the remote database,
-  readiness, canary, and rollback gates described in `RELEASE_REHEARSAL.md`.
+The current world model is:
 
----
+- EARTH: global authority and constitutional framework.
+- Corporation: local political/economic institution.
+- House: persistent player and private economic principal.
+- Human: mortal House representative.
+- Community: voluntary many-to-many social association.
+- Territory: physical/geographic capacity context only.
 
-## 🔄 In Progress / Active Debt
+City is not part of the current domain model.
 
-- **`index.ts` route extraction** — 2,371 lines; route groups for AI, house, read-models extracted (2026-08-29); communities, corporations, cities, finance, contracts, governance, market, lifecycle still in index.ts
-- **`scheduler-postgres.ts`** — contains long inline SQL; resumable V2 settlement now provisions future entry partitions before daily work
-- **`objectives.ts`** — all target thresholds (`100000`, `50000`, `25`, etc.) hardcoded; should be loaded from `world_rules` table
-- **Economy V2 archival** — the current cutover verifier reports no legacy
-  production callers; archival/removal remains a separate reviewed forward
-  migration and is not performed automatically.
+Territory must not be treated as a third government or as a required
+player-facing management system. Standardized Territory capacity is pooled;
+Houses and buildings do not select a specific Territory container in V5.
 
----
+## Current production architecture
 
-## ⏸️ Deferred (require new ADR before adoption)
-
-- Hono router
-- Zod validation
-- Drizzle ORM
-- Riverpod code generation (Flutter)
-- OpenAPI-generated Dart clients
-- Cloudflare Queues
-- Cloudflare R2
-- Microservices split
-
----
-
-## 🏗️ Architecture Quick Reference
-
-```
-Flutter Web → Cloudflare Worker (cloudflare/src/index.ts)
-           → *-postgres.ts domain modules
-           → PostgreSQL via Hyperdrive (PlanetScale)
-           → MarketCoordinator Durable Object (WebSocket fan-out only — no state)
+```text
+Flutter Web
+  -> Cloudflare Worker
+  -> PostgreSQL domain/settlement modules
+  -> PostgreSQL through Hyperdrive
+  -> Durable Objects / realtime delivery where applicable
 ```
 
-**Authority rule**: PostgreSQL is the only authoritative store. Flutter is an
-untrusted presentation shell. Economy V2 ledger tables and projections are the
-active runtime authority; retired legacy accounting paths are not release
-dependencies.
+PostgreSQL is the canonical persistence authority. Flutter is presentation.
+Worker code validates/orchestrates authoritative commands. Durable Objects do
+not own canonical economic state.
 
----
+## Current database state
 
-## 📁 Key Files for AI Sessions
+- Active migration files currently extend through `140_seed_v5_capacity_policy.sql`.
+- `db/schema.sql` and `db/schema-manifest.json` are current-schema artifacts and
+  must remain synchronized with the supported migration chain.
+- Historical migrations are append-only and may contain obsolete vocabulary.
+- V5 final legacy cutover protections are present in migration 129, followed by
+  authoritative clock, settlement, market, schema-parity, account-policy, and
+  V5 capacity-policy fixes through migration 140.
 
-| Task | Read first |
-|---|---|
-| Add API route | `AI_FILE_MAP.md` → matching `*-routes.ts` → `*-postgres.ts` |
-| Fix simulation | `scheduler-postgres.ts` → relevant `engines/*.ts` |
-| Add migration | `db/migrations/` → `db/schema-manifest.json` |
-| Flutter change | `flutter_client/lib/features/<domain>/` → `core/api/` |
-| AI advisor | `ai-postgres.ts` + `decision-queue.ts` + `objectives.ts` |
-| Test | `npm run qa:<feature>` (see package.json scripts) |
+Do not rely on old documentation that names earlier migration heads.
 
----
+## Current player navigation direction
 
-## 🧪 Test Gate
+Primary gameplay areas are:
 
-- 80% line coverage required before merge (documented; not yet CI-enforced)
-- `npm run db:verify:canonical` checks the fresh-install schema against the manifest and migration head
-- Run: `npm run qa:<feature>` or `npm test`
-- Flutter smoke: `npm run test:flutter:smoke`
-- Flutter authoritative suite: `cd flutter_client && flutter test`
-- DB invariants: `npm run db:verify:invariants` (requires `DATABASE_URL`)
+```text
+COMMAND
+  Overview
+  Daily Briefing
+  News
+
+HOUSE
+  Citizen
+  House
+  Finance
+  Automation
+
+ECONOMY
+  Buildings
+  Market
+  Technology
+
+SOCIETY
+  My Corporation
+  Corporations
+  Communities
+  Governance
+
+WORLD
+  Conditions
+  Rankings
+  Initiatives
+  Constitution
+  Memorial
+```
+
+A standalone Territories management page is not a required V5 primary gameplay
+surface. Territory data may be shown contextually where capacity or world
+conditions matter.
+
+## Important remaining cleanup
+
+The repository still contains compatibility code/tests/modules with historical
+names such as V2/V3/V4, territory leases/commons, organization adapters, and old
+service paths. A historical name alone does not make a module authoritative.
+
+For every cleanup:
+
+1. verify runtime callers;
+2. verify schema dependencies;
+3. preserve append-only economic/history records;
+4. remove obsolete current-source behavior only after tests prove it is unused;
+5. update docs/tests in the same change.
+
+## Verification
+
+Use the repository scripts rather than documentation copies of old commands:
+
+```bash
+npm run db:verify:migrations
+npm run db:verify:canonical
+npm run test:certification
+npm test
+cd flutter_client && flutter test
+```
+
+Run narrower domain/QA scripts from `package.json` when appropriate.

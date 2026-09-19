@@ -1,7 +1,7 @@
 # V5 Constitution & Governance Kernel
 
 This document records the implemented kernel slice. It does not declare the
-full V5 cutover complete.
+the broader V5 implementation.
 
 ## Current implementation
 
@@ -34,13 +34,13 @@ version exists. `CORPORATION_LOCAL` values are scoped to one Corporation.
 Independent Houses therefore resolve directly against the Earth snapshot and do
 not require a synthetic Corporation.
 
-## Remaining cutover work
+## Remaining compatibility cleanup
 
-The legacy V4 proposal store, legacy charter data, and tax rule tables remain
+Legacy proposal-store, charter-data, and tax-rule compatibility tables may remain
 readable migration bridges. They must not become new gameplay authorities. The
 readiness gate now verifies Earth and Corporation Constitution snapshots for
 the assessed day and the presence of the typed definition registry. Remaining
-cutover work is to dual-record and shadow-compare all migrated tax rules,
+cleanup work is to verify parity for migrated tax rules,
 complete the unified action-handler migration, finish the Constitution UI
 history/progressive renderers, and retire the legacy stores after production
 verification gates pass.
