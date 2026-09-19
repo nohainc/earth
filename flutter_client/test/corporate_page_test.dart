@@ -4,10 +4,22 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
 
 void main() {
-  testWidgets('corporate page shows affiliation, capital city, and safe leave confirmation', (tester) async {
+  testWidgets('corporate page shows affiliation and safe leave confirmation', (tester) async {
     const state = EarthState({
-      'membership': {'corporation_id': 'CORP-01', 'city_id': 'CITY-01'},
-      'institutions': {'corporation': {'id': 'CORP-01', 'name': 'Aether Dynamics', 'capital_city_name': 'New Kyoto', 'member_count': 42, 'treasury': 12000}},
+      'membership': {'corporation_id': 'CORP-01'},
+      'institutions': {
+        'corporation': {
+          'id': 'CORP-01',
+          'name': 'Aether Dynamics',
+          'member_house_count': 42,
+          'treasury_units': '12000',
+          'occupied_capacity_units': '42',
+          'standard_capacity_units': '50',
+          'required_standard_units': '1',
+          'capacity_utilization_bps': 8400,
+          'technology_count': 2,
+        },
+      },
       'technology': {'research': {}},
     });
     var actions = 0;
@@ -18,7 +30,7 @@ void main() {
     )))));
     await tester.pumpAndSettle();
     expect(find.textContaining('Aether Dynamics'), findsWidgets);
-    expect(find.textContaining('New Kyoto'), findsWidgets);
+    expect(find.textContaining('New Kyoto'), findsNothing);
     expect(find.text('LEAVE CORPORATION'), findsOneWidget);
     await tester.ensureVisible(find.text('LEAVE CORPORATION').first);
     await tester.tap(find.text('LEAVE CORPORATION').first);
@@ -50,24 +62,25 @@ void main() {
       'human': {'id': 'H-0044'},
       'membership': {
         'corporation_id': 'CORP-001',
-        'city_id': 'CITY-0084',
       },
       'institutions': {
         'corporation': {
           'id': 'CORP-001',
           'name': 'Solaris Conglomerate',
-          'members': 42,
-          'treasury': 8500000.0,
-          'capital_city_name': 'New Carthage',
-          'rules': {
-            'incomeTaxBps': 250,
-            'salesTaxBps': 150,
-            'corporateTaxBps': 300,
-          },
+          'member_house_count': 42,
+          'treasury_units': '8500000',
+          'occupied_capacity_units': '184',
+          'standard_capacity_units': '200',
+          'required_standard_units': '1',
+          'capacity_utilization_bps': 9200,
+          'technology_count': 7,
+          'income_tax_bps': 250,
+          'sales_tax_bps': 150,
+          'corporate_tax_bps': 300,
         },
       },
       'roles': [],
-      'technology': {'corporationSharedPatents': []},
+      'technology': {'research': {}},
     });
 
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(

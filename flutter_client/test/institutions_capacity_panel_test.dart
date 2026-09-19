@@ -37,14 +37,39 @@ void main() {
         'corporation': {
           'id': 'CORP-001',
           'name': 'Carthage Dynamics',
-          'member_count': 38,
-          'treasury': 12500,
+          'member_house_count': 38,
+          'treasury_units': '1250000',
+          'occupied_capacity_units': '184',
+          'standard_capacity_units': '200',
+          'required_standard_units': '1',
+          'capacity_utilization_bps': 9200,
+          'capacity_status': 'CURRENT',
+          'technology_count': 7,
+          'income_tax_bps': 250,
+          'sales_tax_bps': 100,
+          'corporate_tax_bps': 300,
+          'property_tax_bps': 150,
         },
       },
-      'membership': {'corporation_id': 'CORP-001', 'city_id': 'CITY-0084'},
+      'membership': {'corporation_id': 'CORP-001'},
       'rankings': {
         'corporations': [
-          {'id': 'CORP-001', 'name': 'Carthage Dynamics', 'member_count': 38},
+          {
+            'id': 'CORP-001',
+            'name': 'Carthage Dynamics',
+            'member_house_count': 38,
+            'treasury_units': '1250000',
+            'occupied_capacity_units': '184',
+            'standard_capacity_units': '200',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 9200,
+            'capacity_status': 'CURRENT',
+            'technology_count': 7,
+            'income_tax_bps': 250,
+            'sales_tax_bps': 100,
+            'corporate_tax_bps': 300,
+            'property_tax_bps': 150,
+          },
         ],
       },
     });
@@ -58,12 +83,12 @@ void main() {
     expect(find.text('CORPORATION'), findsNothing);
     expect(find.text('You belong to Carthage Dynamics.'), findsNothing);
     expect(find.text('LEAVE CORPORATION'), findsOneWidget);
-    expect(find.text('CORPORATE CHARTER & BYLAWS'), findsOneWidget);
+    expect(find.text('POLICY & ECONOMY'), findsOneWidget);
     expect(find.text('Internal Corporate Tax Levy'), findsOneWidget);
-    expect(find.text('Shareholder Supermajority Protection'), findsOneWidget);
+    expect(find.text('Corporate Dividend Distribution'), findsNothing);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
     expect(find.text('38'), findsWidgets);
-    expect(find.text('12500 C'), findsWidgets);
+    expect(find.text('1250000 C'), findsWidgets);
   });
 
   testWidgets(
@@ -80,30 +105,26 @@ void main() {
           {
             'id': 'CORP-001',
             'name': 'Carthage Dynamics',
-            'member_count': 38,
-            'treasury': 12500,
-            'capital_city_name': 'New Carthage',
+            'member_house_count': 38,
+            'treasury_units': '1250000',
+            'occupied_capacity_units': '184',
+            'standard_capacity_units': '200',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 9200,
+            'capacity_status': 'CURRENT',
+            'technology_count': 7,
           },
           {
             'id': 'CORP-002',
             'name': 'Aether Syndicate',
-            'member_count': 94,
-            'treasury': 45000,
-            'capital_city_name': 'Sky Spire',
-          },
-        ],
-        'cities': [
-          {
-            'id': 'CITY-1',
-            'name': 'New Carthage',
-            'corporation_id': 'CORP-001',
-            'residents': 150
-          },
-          {
-            'id': 'CITY-2',
-            'name': 'Sky Spire',
-            'corporation_id': 'CORP-002',
-            'residents': 300
+            'member_house_count': 94,
+            'treasury_units': '4500000',
+            'occupied_capacity_units': '620',
+            'standard_capacity_units': '1000',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 6200,
+            'capacity_status': 'CURRENT',
+            'technology_count': 2,
           },
         ],
       },
@@ -276,19 +297,22 @@ void main() {
       (tester) async {
     const state = EarthState({
       'human': {'id': 'H-0044'},
-      'membership': {'corporation_id': 'CORP-001', 'city_id': 'CITY-0084'},
+      'membership': {'corporation_id': 'CORP-001'},
       'institutions': {
         'corporation': {
           'id': 'CORP-001',
           'name': 'Carthage Dynamics',
-          'member_count': 38,
-          'treasury': 12500,
-          'capital_city_name': 'New Carthage',
-          'rules': {
-            'incomeTaxBps': 250,
-            'salesTaxBps': 100,
-            'corporateTaxBps': 300,
-          },
+          'member_house_count': 38,
+          'treasury_units': '1250000',
+          'occupied_capacity_units': '184',
+          'standard_capacity_units': '200',
+          'required_standard_units': '1',
+          'capacity_utilization_bps': 9200,
+          'technology_count': 7,
+          'income_tax_bps': 250,
+          'sales_tax_bps': 100,
+          'corporate_tax_bps': 300,
+          'property_tax_bps': 150,
         },
       },
       'rankings': {
@@ -296,28 +320,32 @@ void main() {
           {
             'id': 'CORP-001',
             'name': 'Carthage Dynamics',
-            'member_count': 38,
-            'treasury': 12500,
-            'capital_city_name': 'New Carthage',
-            'city_count': 3,
-            'rules': {
-              'incomeTaxBps': 250,
-              'salesTaxBps': 100,
-              'corporateTaxBps': 300,
-            },
+            'member_house_count': 38,
+            'treasury_units': '1250000',
+            'occupied_capacity_units': '184',
+            'standard_capacity_units': '200',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 9200,
+            'technology_count': 7,
+            'income_tax_bps': 250,
+            'sales_tax_bps': 100,
+            'corporate_tax_bps': 300,
+            'property_tax_bps': 150,
           },
           {
             'id': 'CORP-002',
             'name': 'Aether Syndicate',
-            'member_count': 15,
-            'treasury': 5400,
-            'capital_city_name': 'Olympus Peak',
-            'city_count': 1,
-            'rules': {
-              'incomeTaxBps': 180,
-              'salesTaxBps': 80,
-              'corporateTaxBps': 200,
-            },
+            'member_house_count': 15,
+            'treasury_units': '540000',
+            'occupied_capacity_units': '60',
+            'standard_capacity_units': '100',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 6000,
+            'technology_count': 0,
+            'income_tax_bps': 180,
+            'sales_tax_bps': 80,
+            'corporate_tax_bps': 200,
+            'property_tax_bps': 100,
           },
         ],
       },
@@ -338,26 +366,107 @@ void main() {
 
     expect(find.text('CORPORATION DIRECTORY'), findsOneWidget);
     expect(find.text('ACTIVE AFFILIATION: Carthage Dynamics'), findsOneWidget);
-    expect(find.text('VIEW CONSTITUTION & TAX CHARTER'), findsOneWidget);
+    expect(find.text('VIEW CORPORATION PROFILE'), findsOneWidget);
     expect(find.text('ALL CORPORATIONS'), findsOneWidget);
 
     expect(find.text('Carthage Dynamics'), findsWidgets);
     expect(find.textContaining('3.0%'), findsWidgets);
 
-    final charterBtn = find.text('CHARTER & PERKS').first;
+    final charterBtn = find.text('VIEW CORPORATION').first;
     await tester.ensureVisible(charterBtn);
     await tester.tap(charterBtn);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Charter & Constitution'), findsOneWidget);
-    expect(find.text('CONSTITUTIONAL TAX SCHEDULE'), findsOneWidget);
-    expect(find.text('Corporate Tax Protection'), findsWidgets);
+    expect(find.textContaining('Corporation Profile'), findsOneWidget);
+    expect(find.text('CAPACITY'), findsOneWidget);
+    expect(find.text('FINANCE'), findsOneWidget);
+    expect(find.text('TECHNOLOGY'), findsOneWidget);
   });
 
   testWidgets('CivicRankingsPanel legacy multi-entity index is retired',
       (tester) async {
     // Covered by world_rankings_panel_test.dart using the canonical V4 payload.
   }, skip: true);
+
+  testWidgets(
+      'Corporation directory renders authoritative V5 policies and fields',
+      (tester) async {
+    const state = EarthState({
+      'membership': {},
+      'rankings': {
+        'corporations': [
+          {
+            'id': 'CORP-OPEN',
+            'name': 'Open Works',
+            'admission_policy': 'OPEN',
+            'membership_state': 'ELIGIBLE',
+            'member_house_count': 4,
+            'occupied_capacity_units': '17',
+            'standard_capacity_units': '25',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 6800,
+            'capacity_status': 'CURRENT',
+            'technology_count': 3,
+            'treasury_units': '123450',
+          },
+          {
+            'id': 'CORP-APPROVAL',
+            'name': 'Civic Foundry',
+            'admission_policy': 'APPROVAL',
+            'membership_state': 'PENDING',
+            'member_house_count': 8,
+            'occupied_capacity_units': '20',
+            'standard_capacity_units': '25',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 8000,
+            'capacity_status': 'CURRENT',
+            'technology_count': 1,
+          },
+          {
+            'id': 'CORP-INVITE',
+            'name': 'Private Exchange',
+            'admission_policy': 'INVITE_ONLY',
+            'membership_state': 'INELIGIBLE',
+            'member_house_count': 2,
+            'occupied_capacity_units': '7',
+            'standard_capacity_units': '10',
+            'required_standard_units': '1',
+            'capacity_utilization_bps': 7000,
+            'capacity_status': 'CURRENT',
+            'technology_count': 0,
+          },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: CorporationDirectoryPanel(
+          state: state,
+          busy: false,
+          isExpandable: true,
+          action: (_) async {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('OPEN'), findsOneWidget);
+    expect(find.text('APPLICATION'), findsOneWidget);
+    expect(find.text('INVITE ONLY'), findsOneWidget);
+    await tester.tap(find.text('Civic Foundry').first, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(find.text('APPLICATION PENDING'), findsOneWidget);
+    await tester.tap(find.text('Open Works').first, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(find.text('Not published'), findsWidgets);
+    expect(find.text('3 adopted'), findsOneWidget);
+    expect(find.text('17 / 25'), findsOneWidget);
+    expect(find.text('city_count'), findsNothing);
+    expect(find.text('capital_city_name'), findsNothing);
+    expect(find.text('shared_patents'), findsNothing);
+    expect(find.textContaining('Territory infrastructure'), findsNothing);
+  });
 
   testWidgets('CivicRankingsPanel legacy pagination is retired',
       (tester) async {

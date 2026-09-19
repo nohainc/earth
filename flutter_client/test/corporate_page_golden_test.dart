@@ -9,24 +9,25 @@ void main() {
     'human': {'id': 'H-0044'},
     'membership': {
       'corporation_id': 'CORP-001',
-      'city_id': 'CITY-0084',
     },
     'institutions': {
       'corporation': {
         'id': 'CORP-001',
         'name': 'Solaris Conglomerate',
-        'members': 42,
-        'treasury': 8500000.0,
-        'capital_city_name': 'New Carthage',
-        'rules': {
-          'incomeTaxBps': 250,
-          'salesTaxBps': 150,
-          'corporateTaxBps': 300,
-        },
+        'member_house_count': 42,
+        'treasury_units': '8500000',
+        'occupied_capacity_units': '184',
+        'standard_capacity_units': '200',
+        'required_standard_units': '1',
+        'capacity_utilization_bps': 9200,
+        'technology_count': 7,
+        'income_tax_bps': 250,
+        'sales_tax_bps': 150,
+        'corporate_tax_bps': 300,
       },
     },
     'roles': [],
-    'technology': {'corporationSharedPatents': []},
+    'technology': {'research': {}},
   });
 
   for (final viewport in [const Size(375, 812), const Size(768, 1024), const Size(1440, 900)]) {

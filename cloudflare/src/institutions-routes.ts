@@ -186,10 +186,14 @@ export async function handleInstitutionRoutes(
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commitment update failed' }, { status: 400 });
     }
   }
-  if (url.pathname === '/api/corporations' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => listCorporations(repository, url.searchParams.get('search') ?? ''));
+  if (url.pathname === '/api/v5/corporations/directory' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => listCorporations(repository, url.searchParams.get('search') ?? '', viewer.id));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/api/corporations' && request.method === 'GET') {
+    return Response.json({ ok: false, error: 'Legacy Corporation directory is retired; use /api/v5/corporations/directory.' }, { status: 410 });
   }
 
   if (url.pathname === '/api/corporations' && request.method === 'POST') {

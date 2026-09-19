@@ -22,7 +22,12 @@ test('canonical market and research routes have no runtime aliases', () => {
 
 test('V5 Corporation routes reach the institution router', () => {
   const index = read('cloudflare/src/index.ts');
+  const institutions = read('cloudflare/src/institutions-routes.ts');
+  const institutionsApi = read('flutter_client/lib/core/api/earth_api_institutions.dart');
   assert.match(index, /url\.pathname\.startsWith\('\/api\/corporations'\) \|\| url\.pathname\.startsWith\('\/api\/v5\/corporations'\)/);
+  assert.match(institutions, /url\.pathname === '\/api\/v5\/corporations\/directory' && request\.method === 'GET'/);
+  assert.match(institutions, /Legacy Corporation directory is retired/);
+  assert.match(institutionsApi, /['"]\/api\/v5\/corporations\/directory/);
 });
 
 test('canonical cancellation and research operations are registered once', () => {
@@ -32,8 +37,10 @@ test('canonical cancellation and research operations are registered once', () =>
     'GET /api/research/buildings',
     'POST /api/research/buildings',
     'POST /api/research/contribute',
+    'GET /api/v5/corporations/directory',
   ]) assert.ok(keys.has(key), `missing canonical route ${key}`);
   assert.ok(!keys.has('POST /api/market/orders/{id}/cancel'));
+  assert.equal(API_ROUTES.find((route) => routeKey(route) === 'GET /api/corporations')?.status, 'RETIRED');
 });
 
 test('production routes do not contain fixture identity fallbacks', () => {

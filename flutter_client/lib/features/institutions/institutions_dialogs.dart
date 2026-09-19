@@ -92,9 +92,13 @@ class _FormationComposerDialogState extends State<_FormationComposerDialog> {
                 items: const [
                   DropdownMenuItem(value: 'OPEN', child: Text('Open')),
                   DropdownMenuItem(value: 'APPROVAL', child: Text('Approval')),
-                  DropdownMenuItem(value: 'INVITE_ONLY', child: Text('Invite only')),
+                  DropdownMenuItem(
+                      value: 'INVITE_ONLY', child: Text('Invite only')),
                 ],
-                onChanged: _busy ? null : (value) => setState(() => _admissionPolicy = value ?? 'OPEN'),
+                onChanged: _busy
+                    ? null
+                    : (value) =>
+                        setState(() => _admissionPolicy = value ?? 'OPEN'),
               ),
             ],
           ),
@@ -108,23 +112,25 @@ class _FormationComposerDialogState extends State<_FormationComposerDialog> {
         ),
         EarthButton(
           label: 'Submit',
-          onPressed: _busy ? null : () async {
-            final selectedName = _nameController.text.trim();
-            if (selectedName.length < 3) return;
-            setState(() => _busy = true);
-            try {
-              Navigator.pop(context);
-              await widget.action(() async {
-                await const EarthApi().foundV5Corporation(
-                  name: selectedName,
-                  admissionPolicy: _admissionPolicy,
-                );
-                return const EarthApi().world();
-              });
-            } catch (_) {
-              if (context.mounted) setState(() => _busy = false);
-            }
-          },
+          onPressed: _busy
+              ? null
+              : () async {
+                  final selectedName = _nameController.text.trim();
+                  if (selectedName.length < 3) return;
+                  setState(() => _busy = true);
+                  try {
+                    Navigator.pop(context);
+                    await widget.action(() async {
+                      await const EarthApi().foundV5Corporation(
+                        name: selectedName,
+                        admissionPolicy: _admissionPolicy,
+                      );
+                      return const EarthApi().world();
+                    });
+                  } catch (_) {
+                    if (context.mounted) setState(() => _busy = false);
+                  }
+                },
         ),
       ],
     );
@@ -1620,7 +1626,7 @@ Future<void> showAdmissionPolicyDialog(
               activeColor: context.primaryColor,
               onChanged: (value) => setState(() => policy = value!),
               title: Text('Open membership', style: context.widgetValueStyle),
-              subtitle: Text('New members join the Corporation\'s primary Territory immediately.',
+              subtitle: Text('New members join the Corporation immediately.',
                   style: context.widgetFooterStyle),
             ),
             RadioListTile<String>(
@@ -1657,7 +1663,7 @@ Future<void> showAdmissionPolicyDialog(
   );
 }
 
-/// Displays comprehensive constitutional rules, tax rates, and perks of a corporation.
+/// Displays the canonical, fact-based Corporation profile.
 Future<void> showCorporationCharterDialog(
   BuildContext context,
   Map<String, dynamic> corporation,
@@ -1665,25 +1671,30 @@ Future<void> showCorporationCharterDialog(
   bool isMember = false,
   VoidCallback? onJoin,
 }) async {
-  final id = corporation['id']?.toString() ?? '';
-  final name = corporation['name']?.toString() ?? id;
-  final capitalCity = corporation['capital_territory_name']?.toString() ??
-      corporation['capital_city_name']?.toString() ??
-      'Territory unavailable';
-  final members = asIntOr(corporation['member_count'], 0);
-  final cityCount = asIntOr(corporation['city_count'], 1);
-  final treasury = asDouble(corporation['treasury']) ?? 0.0;
+  final name = corporation['name']?.toString() ?? 'Corporation';
+  final members = asIntOr(corporation['member_house_count'], 0);
   final admissionPolicy =
       (corporation['admission_policy']?.toString() ?? 'open').toUpperCase();
 
-  final rules = corporation['rules'] is Map
-      ? Map<String, dynamic>.from(corporation['rules'] as Map)
-      : const <String, dynamic>{};
+  final incomeTaxBps = asInt(corporation['income_tax_bps']);
+  final salesTaxBps = asInt(corporation['sales_tax_bps']);
+  final corporateTaxBps = asInt(corporation['corporate_tax_bps']);
+  final propertyTaxBps = asInt(corporation['property_tax_bps']);
 
-  final incomeTaxBps = asIntOr(rules['incomeTaxBps'], 200);
-  final salesTaxBps = asIntOr(rules['salesTaxBps'], 100);
-  final corporateTaxBps = asIntOr(rules['corporateTaxBps'], 250);
-  final propertyTaxBps = asIntOr(rules['propertyTaxBps'], 150);
+  String rate(int? bps) =>
+      bps == null ? 'UNAVAILABLE' : '${(bps / 100).toStringAsFixed(1)}%';
+  String money(dynamic value) =>
+      value == null ? 'UNAVAILABLE' : formatCreditsAmount(value);
+  String value(dynamic raw) => raw?.toString() ?? 'UNAVAILABLE';
+  final occupied = value(corporation['occupied_capacity_units']);
+  final standard = value(corporation['standard_capacity_units']);
+  final required = value(corporation['required_standard_units']);
+  final utilizationBps = asInt(corporation['capacity_utilization_bps']);
+  final utilization = utilizationBps == null
+      ? 'UNAVAILABLE'
+      : '${(utilizationBps / 100).toStringAsFixed(1)}%';
+  final technologyCount = asIntOr(corporation['technology_count'], 0);
+  final activeResearchCount = asIntOr(corporation['active_research_count'], 0);
 
   await showDialog<void>(
     context: context,
@@ -1699,7 +1710,7 @@ Future<void> showCorporationCharterDialog(
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '$name Charter & Constitution',
+              '$name Corporation Profile',
               style:
                   context.topicTitleStyle.copyWith(color: context.primaryColor),
             ),
@@ -1713,7 +1724,7 @@ Future<void> showCorporationCharterDialog(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'CONSTITUTIONAL TAX SCHEDULE',
+                'MEMBERSHIP',
                 style: context.widgetTitleStyle
                     .copyWith(color: context.mutedColor),
               ),
@@ -1721,112 +1732,152 @@ Future<void> showCorporationCharterDialog(
               EarthMetricGrid(
                 metrics: [
                   EarthMetricTile(
+                      label: 'POLICY',
+                      value: admissionPolicy,
+                      subtitle: 'Membership rule',
+                      icon: Icons.shield_outlined),
+                  EarthMetricTile(
+                      label: 'MEMBER HOUSES',
+                      value: '$members',
+                      subtitle: 'Active affiliations',
+                      icon: Icons.groups_outlined),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'CAPACITY',
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.mutedColor),
+              ),
+              const SizedBox(height: 8),
+              EarthMetricGrid(
+                metrics: [
+                  EarthMetricTile(
+                      label: 'OCCUPIED',
+                      value: occupied,
+                      subtitle: 'Physical capacity units',
+                      icon: Icons.stacked_bar_chart_outlined),
+                  EarthMetricTile(
+                      label: 'STANDARD BLOCK',
+                      value: standard,
+                      subtitle: 'Capacity units',
+                      icon: Icons.layers_outlined),
+                  EarthMetricTile(
+                      label: 'REQUIRED BLOCKS',
+                      value: required,
+                      subtitle: 'Standardized capacity blocks',
+                      icon: Icons.grid_view_outlined),
+                  EarthMetricTile(
+                      label: 'UTILIZATION',
+                      value: utilization,
+                      subtitle: 'Occupied / standard',
+                      icon: Icons.percent_outlined),
+                  EarthMetricTile(
+                      label: 'HOUSE BASE RATE',
+                      value: corporation['house_capacity_base_rate_units'] ==
+                              null
+                          ? 'UNAVAILABLE'
+                          : '${formatCreditsAmount(corporation['house_capacity_base_rate_units'])} / unit / day',
+                      subtitle: 'Canonical capacity price',
+                      icon: Icons.payments_outlined),
+                  EarthMetricTile(
+                      label: 'STATUS',
+                      value: value(corporation['capacity_status']),
+                      subtitle: 'Capacity assessment',
+                      icon: Icons.health_and_safety_outlined),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'TAXES & FEES',
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.mutedColor),
+              ),
+              const SizedBox(height: 8),
+              EarthMetricGrid(metrics: [
+                EarthMetricTile(
                     label: 'INCOME TAX',
-                    value: '${(incomeTaxBps / 100).toStringAsFixed(1)}%',
-                    subtitle: 'Applied to member income',
-                    icon: Icons.percent_outlined,
-                  ),
-                  EarthMetricTile(
-                    label: 'MARKET SALES FEE',
-                    value: '${(salesTaxBps / 100).toStringAsFixed(1)}%',
-                    subtitle: 'Transaction levy',
-                    icon: Icons.storefront_outlined,
-                  ),
-                  EarthMetricTile(
+                    value: rate(incomeTaxBps),
+                    subtitle: 'BPS-backed rule',
+                    icon: Icons.percent_outlined),
+                EarthMetricTile(
+                    label: 'SALES FEE',
+                    value: rate(salesTaxBps),
+                    subtitle: 'BPS-backed rule',
+                    icon: Icons.storefront_outlined),
+                EarthMetricTile(
                     label: 'CORPORATE TAX',
-                    value: '${(corporateTaxBps / 100).toStringAsFixed(1)}%',
-                    subtitle: 'Enterprise revenue levy',
-                    icon: Icons.domain,
-                  ),
-                  EarthMetricTile(
-                    label: 'PROPERTY LEVY',
-                    value: '${(propertyTaxBps / 100).toStringAsFixed(1)}%',
-                    subtitle: 'Asset base tax',
-                    icon: Icons.home_work_outlined,
-                  ),
-                ],
-              ),
+                    value: rate(corporateTaxBps),
+                    subtitle: 'BPS-backed rule',
+                    icon: Icons.domain),
+                EarthMetricTile(
+                    label: 'PROPERTY TAX',
+                    value: rate(propertyTaxBps),
+                    subtitle: 'BPS-backed rule',
+                    icon: Icons.home_work_outlined),
+              ]),
               const SizedBox(height: 20),
-              Text(
-                'GOVERNANCE & ECONOMIC STANDING',
-                style: context.widgetTitleStyle
-                    .copyWith(color: context.mutedColor),
-              ),
+              Text('FINANCE',
+                  style: context.widgetTitleStyle
+                      .copyWith(color: context.mutedColor)),
               const SizedBox(height: 8),
-              EarthMetricGrid(
-                metrics: [
-                  EarthMetricTile(
-                    label: 'CAPITAL TERRITORY',
-                    value: capitalCity,
-                    subtitle: 'Administrative Seat',
-                    icon: Icons.location_city_outlined,
-                  ),
-                  EarthMetricTile(
-                    label: 'MEMBER CITIZENS',
-                    value: '$members',
-                    subtitle: 'Affiliated Population',
-                    icon: Icons.groups_outlined,
-                  ),
-                  EarthMetricTile(
-                    label: 'CORPORATE TREASURY',
-                    value: '${treasury.toStringAsFixed(0)} C',
-                    subtitle: 'Liquid Capital Reserves',
-                    icon: Icons.savings_outlined,
-                  ),
-                  EarthMetricTile(
-                    label: 'MUNICIPAL NETWORK',
-                    value: '$cityCount Territories',
-                    subtitle: 'Chartered Territories',
-                    icon: Icons.hub_outlined,
-                  ),
-                  EarthMetricTile(
-                    label: 'ADMISSION POLICY',
-                    value: admissionPolicy,
-                    subtitle: 'Membership Rule',
-                    icon: Icons.shield_outlined,
-                  ),
-                ],
-              ),
+              EarthMetricGrid(metrics: [
+                EarthMetricTile(
+                    label: 'TREASURY',
+                    value: money(corporation['treasury_units']),
+                    subtitle: 'CREDIT units',
+                    icon: Icons.account_balance_wallet_outlined),
+                EarthMetricTile(
+                    label: 'OPERATIONS',
+                    value: money(corporation['operations_units']),
+                    subtitle: 'CREDIT units',
+                    icon: Icons.settings_outlined),
+                EarthMetricTile(
+                    label: 'RESERVE',
+                    value: money(corporation['reserve_units']),
+                    subtitle: 'CREDIT units',
+                    icon: Icons.shield_outlined),
+                EarthMetricTile(
+                    label: 'HOUSE CAPACITY REVENUE',
+                    value: money(corporation['house_capacity_revenue_units']),
+                    subtitle: 'CREDIT units / day',
+                    icon: Icons.south_west_outlined),
+                EarthMetricTile(
+                    label: 'EARTH CAPACITY COST',
+                    value: money(corporation['earth_capacity_expense_units']),
+                    subtitle: 'CREDIT units / day',
+                    icon: Icons.north_east_outlined),
+                EarthMetricTile(
+                    label: 'CAPACITY MARGIN',
+                    value: money(corporation['capacity_margin_units']),
+                    subtitle: 'CREDIT units / day',
+                    icon: Icons.balance_outlined),
+              ]),
               const SizedBox(height: 20),
-              Text(
-                'AFFILIATION BENEFITS & CONSTITUTION',
-                style: context.widgetTitleStyle
-                    .copyWith(color: context.mutedColor),
-              ),
+              Text('TECHNOLOGY',
+                  style: context.widgetTitleStyle
+                      .copyWith(color: context.mutedColor)),
               const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: context.surfaceColor,
-                  borderRadius: BorderRadius.circular(context.radiusCard),
-                  border: Border.all(color: context.subtleBorderColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildBenefitRow(
-                      context,
-                      Icons.shield_outlined,
-                      'Corporate Tax Protection',
-                      'Members enjoy capped territorial tax rates ($incomeTaxBps bps income / $salesTaxBps bps sales) across all $cityCount affiliated territories.',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildBenefitRow(
-                      context,
-                      Icons.biotech_outlined,
-                      'Shared Technology & Patents',
-                      'Access proprietary corporate technology shares without paying external licensing premiums.',
-                    ),
-                    const SizedBox(height: 10),
-                    _buildBenefitRow(
-                      context,
-                      Icons.how_to_vote_outlined,
-                      'Shareholder Democratic Franchise',
-                      'Vote on organization leadership, territorial tax updates, and territory adoptions.',
-                    ),
-                  ],
-                ),
-              ),
+              EarthMetricGrid(metrics: [
+                EarthMetricTile(
+                    label: 'ADOPTED TECHNOLOGIES',
+                    value: '$technologyCount',
+                    subtitle: 'Canonical adoptions',
+                    icon: Icons.biotech_outlined),
+                EarthMetricTile(
+                    label: 'ACTIVE RESEARCH',
+                    value: '$activeResearchCount',
+                    subtitle: 'Queued or active projects',
+                    icon: Icons.science_outlined),
+              ]),
+              const SizedBox(height: 20),
+              Text('GOVERNANCE',
+                  style: context.widgetTitleStyle
+                      .copyWith(color: context.mutedColor)),
+              const SizedBox(height: 8),
+              Text(
+                  'Governance powers and voting rules are defined by the Corporation Constitution. No additional policy is inferred here.',
+                  style: context.widgetFooterStyle),
             ],
           ),
         ),
@@ -1848,30 +1899,5 @@ Future<void> showCorporationCharterDialog(
           ),
       ],
     ),
-  );
-}
-
-Widget _buildBenefitRow(
-    BuildContext context, IconData icon, String title, String description) {
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(icon, size: 18, color: context.primaryColor),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: context.widgetTitleStyle
-                    .copyWith(color: context.primaryColor)),
-            const SizedBox(height: 2),
-            Text(description,
-                style: context.bodyStyle
-                    .copyWith(color: context.inkColor.withValues(alpha: .85))),
-          ],
-        ),
-      ),
-    ],
   );
 }

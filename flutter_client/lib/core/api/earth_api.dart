@@ -2,6 +2,7 @@ import 'dart:math';
 import 'earth_api_transport.dart';
 import '../auth_storage.dart';
 import '../models/earth_state.dart';
+import '../models/corporation_directory_entry.dart';
 
 part 'earth_api_auth.dart';
 part 'earth_api_world.dart';

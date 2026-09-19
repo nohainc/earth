@@ -65,7 +65,22 @@ async function v5Pricing(tx: PostgresRepository, corporationId: string, building
     : [{ ordinal: 1, lowerBound: 0n, upperBound: null, multiplierNumerator: 1n, multiplierDenominator: 1n }];
   const current = calculateProgressiveCharge({ quantity: 1n + buildingUnits, baseRate: BigInt(rate), brackets });
   const after = calculateProgressiveCharge({ quantity: 2n + buildingUnits, baseRate: BigInt(rate), brackets });
-  return { available: true, gameDay: day, residentialDelta: 1, currentUsage: current.quantity.toString(), afterUsage: after.quantity.toString(), currentCharge: current.totalCharge.toString(), afterCharge: after.totalCharge.toString(), incrementalCharge: (after.totalCharge - current.totalCharge).toString(), scheduleId, policyVersion: constitution.versionIds['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] ?? global.policyVersion };
+  const delta = after.totalCharge - current.totalCharge;
+  return {
+    available: true,
+    gameDay: day,
+    residentialDelta: 1,
+    currentUsage: current.quantity.toString(),
+    afterUsage: after.quantity.toString(),
+    currentCharge: current.totalCharge.toString(),
+    afterCharge: after.totalCharge.toString(),
+    incrementalCharge: delta.toString(),
+    currentDailyRentUnits: current.totalCharge.toString(),
+    afterJoiningDailyRentUnits: after.totalCharge.toString(),
+    dailyRentDeltaUnits: delta.toString(),
+    scheduleId,
+    policyVersion: constitution.versionIds['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] ?? global.policyVersion,
+  };
 }
 
 export async function quoteV5CorporationMembership(repository: PostgresRepository, humanId: string, corporationId: string) {

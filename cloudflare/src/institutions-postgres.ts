@@ -37,7 +37,65 @@ async function provisionCorporationEconomy(tx: PostgresRepository, corporationId
   return economicId;
 }
 
-export async function listCorporations(repository: PostgresRepository, search = ''): Promise<Record<string, unknown>> {
+export type CorporationDirectoryEntry = {
+  id: string;
+  name: string;
+  admissionPolicy: string;
+  memberHouseCount: number;
+  incomeTaxBps: number | null;
+  salesTaxBps: number | null;
+  corporateTaxBps: number | null;
+  propertyTaxBps: number | null;
+  houseCapacityBaseRateUnits: string | null;
+  occupiedCapacityUnits: string;
+  standardCapacityUnits: string;
+  requiredStandardUnits: string;
+  capacityUtilizationBps: number;
+  houseCapacityRevenueUnits: string;
+  earthCapacityExpenseUnits: string;
+  capacityMarginUnits: string;
+  capacityStatus: string;
+  treasuryUnits: string;
+  operationsUnits: string;
+  reserveUnits: string;
+  technologyCount: number;
+  activeResearchCount: number;
+  canJoin: boolean;
+  membershipState: 'MEMBER' | 'PENDING' | 'ELIGIBLE' | 'INELIGIBLE';
+};
+
+type CorporationDirectoryRow = Record<string, unknown>;
+
+function corporationDirectoryEntry(row: CorporationDirectoryRow): CorporationDirectoryEntry {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    admissionPolicy: String(row.admission_policy ?? 'UNKNOWN'),
+    memberHouseCount: Number(row.member_house_count ?? 0),
+    incomeTaxBps: row.income_tax_bps == null ? null : Number(row.income_tax_bps),
+    salesTaxBps: row.sales_tax_bps == null ? null : Number(row.sales_tax_bps),
+    corporateTaxBps: row.corporate_tax_bps == null ? null : Number(row.corporate_tax_bps),
+    propertyTaxBps: row.property_tax_bps == null ? null : Number(row.property_tax_bps),
+    houseCapacityBaseRateUnits: row.house_capacity_base_rate_units == null ? null : String(row.house_capacity_base_rate_units),
+    occupiedCapacityUnits: String(row.occupied_capacity_units ?? '0'),
+    standardCapacityUnits: String(row.standard_capacity_units ?? '0'),
+    requiredStandardUnits: String(row.required_standard_units ?? '0'),
+    capacityUtilizationBps: Number(row.capacity_utilization_bps ?? 0),
+    houseCapacityRevenueUnits: String(row.house_capacity_revenue_units ?? '0'),
+    earthCapacityExpenseUnits: String(row.earth_capacity_expense_units ?? '0'),
+    capacityMarginUnits: String(row.capacity_margin_units ?? '0'),
+    capacityStatus: String(row.capacity_status ?? 'CURRENT'),
+    treasuryUnits: String(row.treasury_units ?? '0'),
+    operationsUnits: String(row.operations_units ?? '0'),
+    reserveUnits: String(row.reserve_units ?? '0'),
+    technologyCount: Number(row.technology_count ?? 0),
+    activeResearchCount: Number(row.active_research_count ?? 0),
+    canJoin: Boolean(row.can_join),
+    membershipState: String(row.membership_state ?? 'INELIGIBLE') as CorporationDirectoryEntry['membershipState'],
+  };
+}
+
+export async function listCorporations(repository: PostgresRepository, search = '', viewerHumanId?: string): Promise<{ corporations: CorporationDirectoryEntry[] }> {
   const term = `%${search.trim().replace(/[%_]/g, '')}%`;
   const result = await repository.query(`
     SELECT c.id, i.name, i.status, c.status AS corporation_status,
@@ -46,24 +104,25 @@ export async function listCorporations(repository: PostgresRepository, search = 
            NULLIF(corp_rules.rules->>'CORPORATION.TAX.SALES_RATE', '')::INTEGER AS sales_tax_bps,
            NULLIF(corp_rules.rules->>'CORPORATION.TAX.PROPERTY_RATE', '')::INTEGER AS property_tax_bps,
            NULLIF(corp_rules.rules->>'CORPORATION.TAX.CORPORATE_RATE', '')::INTEGER AS corporate_tax_bps,
-           NULLIF(COALESCE(corp_rules.rules->>'CORPORATION.HOUSE_CAPACITY.BASE_RATE', earth_rules.rules->>'EARTH.CAPACITY.BASE_RATE'), '')::TEXT AS v5_house_capacity_base_rate,
-           NULLIF(earth_rules.rules->>'EARTH.CAPACITY.BASE_RATE', '')::TEXT AS v5_earth_capacity_base_rate,
-           (SELECT COUNT(*)::integer FROM territories t WHERE t.corporation_id = c.id AND t.status = 'ACTIVE') AS territory_count,
-           (SELECT COUNT(*)::integer FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_count,
-           (SELECT s.total_occupied_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_occupied_capacity,
-           (SELECT s.required_territory_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_required_territory_units,
-           (SELECT s.standard_territory_capacity_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_standard_territory_capacity,
-           (SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'HOUSE' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'HOUSE')) AS v5_house_capacity_revenue,
-           (SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'CORPORATION' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'CORPORATION')) AS v5_earth_capacity_expense,
-           (SELECT status FROM v5_capacity_delinquency_state d WHERE d.subject_type = 'CORPORATION' AND d.subject_id = c.id) AS v5_capacity_status,
-           (SELECT t.id FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_id,
-           (SELECT t.name FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_name,
-           (SELECT s.private_slot_capacity FROM territory_capacity_state s JOIN territories t ON t.id = s.territory_id WHERE t.corporation_id = c.id AND t.is_primary = TRUE ORDER BY s.game_day DESC LIMIT 1) AS private_slot_capacity,
-           (SELECT s.private_slots_used FROM territory_capacity_state s JOIN territories t ON t.id = s.territory_id WHERE t.corporation_id = c.id AND t.is_primary = TRUE ORDER BY s.game_day DESC LIMIT 1) AS private_slots_used,
-           (SELECT COUNT(*)::integer FROM organization_technology_adoptions a WHERE a.organization_id = c.id AND a.status = 'ADOPTED') AS technology_count,
-           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE'), 0)::TEXT AS treasury,
-           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'OPERATIONS' AND a.status = 'ACTIVE'), 0)::TEXT AS operating_budget,
-           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'RESERVE' AND a.status = 'ACTIVE'), 0)::TEXT AS reserve
+           NULLIF(COALESCE(corp_rules.rules->>'CORPORATION.HOUSE_CAPACITY.BASE_RATE', earth_rules.rules->>'EARTH.CAPACITY.BASE_RATE'), '')::TEXT AS house_capacity_base_rate_units,
+           COALESCE((SELECT s.total_occupied_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::TEXT AS occupied_capacity_units,
+           COALESCE((SELECT s.standard_territory_capacity_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::TEXT AS standard_capacity_units,
+           COALESCE((SELECT s.required_territory_units FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::TEXT AS required_standard_units,
+           COALESCE((SELECT s.total_occupied_units * 10000 / NULLIF(s.standard_territory_capacity_units, 0) FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1), 0)::INTEGER AS capacity_utilization_bps,
+           COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'HOUSE' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'HOUSE')), 0)::TEXT AS house_capacity_revenue_units,
+           COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'CORPORATION' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'CORPORATION')), 0)::TEXT AS earth_capacity_expense_units,
+           (COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'HOUSE' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'HOUSE')), 0) - COALESCE((SELECT SUM(o.assessed_units) FROM v5_capacity_obligations o WHERE o.corporation_id = c.id AND o.capacity_level = 'CORPORATION' AND o.game_day = (SELECT MAX(game_day) FROM v5_capacity_obligations WHERE corporation_id = c.id AND capacity_level = 'CORPORATION')), 0))::TEXT AS capacity_margin_units,
+           COALESCE((SELECT status FROM v5_capacity_delinquency_state d WHERE d.subject_type = 'CORPORATION' AND d.subject_id = c.id), 'CURRENT') AS capacity_status,
+           COALESCE((SELECT COUNT(*)::integer FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE'), 0) AS member_house_count,
+           COALESCE((SELECT COUNT(*)::integer FROM organization_technology_adoptions a WHERE a.organization_id = c.id AND a.status = 'ADOPTED'), 0) AS technology_count,
+           COALESCE((SELECT COUNT(*)::integer FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id WHERE o.id = c.id AND p.status IN ('QUEUED', 'ACTIVE')), 0) AS active_research_count,
+           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'TREASURY' AND a.status = 'ACTIVE'), 0)::TEXT AS treasury_units,
+           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'OPERATIONS' AND a.status = 'ACTIVE'), 0)::TEXT AS operations_units,
+           COALESCE((SELECT a.balance_units FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 'RESERVE' AND a.status = 'ACTIVE'), 0)::TEXT AS reserve_units,
+           CASE WHEN EXISTS (SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id WHERE vh.id = $2 AND ha.corporation_id = c.id AND ha.status = 'ACTIVE') THEN 'MEMBER'
+                WHEN EXISTS (SELECT 1 FROM corporation_membership_applications_v5 a JOIN humans vh ON vh.house_id = a.house_id WHERE vh.id = $2 AND a.corporation_id = c.id AND a.status = 'PENDING') THEN 'PENDING'
+                WHEN COALESCE(c.admission_policy, 'OPEN') = 'OPEN' THEN 'ELIGIBLE' ELSE 'INELIGIBLE' END AS membership_state,
+           (COALESCE(c.admission_policy, 'OPEN') = 'OPEN' AND NOT EXISTS (SELECT 1 FROM house_affiliations ha JOIN humans vh ON vh.house_id = ha.house_id WHERE vh.id = $2 AND ha.corporation_id = c.id AND ha.status = 'ACTIVE')) AS can_join
       FROM corporations c
       JOIN institutions i ON i.id = c.id
       LEFT JOIN LATERAL (
@@ -92,8 +151,8 @@ export async function listCorporations(repository: PostgresRepository, search = 
       ) corp_rules ON TRUE
      WHERE i.status = 'ACTIVE' AND ($1 = '%%' OR i.name ILIKE $1)
      ORDER BY i.name ASC
-     LIMIT 100`, [term]);
-  return { corporations: result.rows };
+     LIMIT 100`, [term, viewerHumanId ?? null]);
+  return { corporations: result.rows.map(corporationDirectoryEntry) };
 }
 
 export async function listCorporationTerritories(repository: PostgresRepository, corporationId: string): Promise<Record<string, unknown>> {

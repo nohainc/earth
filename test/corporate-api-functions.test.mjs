@@ -20,6 +20,19 @@ test('Corporate API list returns active corporations and safely parameterizes se
   });
   const result = await listCorporations(new PostgresRepository(db), 'Aether%_');
   assert.equal(result.corporations[0].name, 'Aether Dynamics');
+  assert.equal(result.corporations[0].treasuryUnits, '0');
+  assert.equal(result.corporations[0].memberHouseCount, 0);
+  assert.equal(result.corporations[0].capacityMarginUnits, '0');
+  assert.equal(result.corporations[0].membershipState, 'INELIGIBLE');
+  assert.ok(!Object.hasOwn(result.corporations[0], 'treasury'));
+  assert.ok(!Object.hasOwn(result.corporations[0], 'capacity'));
+  for (const legacyField of [
+    'territory_count',
+    'primary_territory_id',
+    'primary_territory_name',
+    'private_slot_capacity',
+    'private_slots_used',
+  ]) assert.ok(!Object.hasOwn(result.corporations[0], legacyField), `legacy directory field leaked: ${legacyField}`);
   const query = db.calls.find((call) => call.sql.includes('FROM corporations'));
   assert.equal(query.params[0], '%Aether%');
 });

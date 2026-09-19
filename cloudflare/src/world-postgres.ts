@@ -179,6 +179,11 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                  c.created_game_day,
                                  (SELECT COUNT(*)::INTEGER FROM territories t WHERE t.corporation_id = c.id AND t.status = 'ACTIVE') AS territory_count,
                                  (SELECT COUNT(*)::INTEGER FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_count,
+                                 (SELECT COUNT(*)::INTEGER FROM house_affiliations ha WHERE ha.corporation_id = c.id AND ha.status = 'ACTIVE') AS member_house_count,
+                                 (SELECT COUNT(*)::INTEGER FROM organization_technology_adoptions a WHERE a.organization_id = c.id AND a.status = 'ADOPTED') AS technology_count,
+                                 (SELECT s.total_occupied_units::TEXT FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_occupied_capacity,
+                                 (SELECT s.required_territory_units::TEXT FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_required_territory_units,
+                                 (SELECT s.standard_territory_capacity_units::TEXT FROM corporation_capacity_state_v5 s WHERE s.corporation_id = c.id ORDER BY s.game_day DESC LIMIT 1) AS v5_standard_territory_capacity,
                                  (SELECT t.name FROM territories t WHERE t.corporation_id = c.id AND t.is_primary = TRUE AND t.status = 'ACTIVE' LIMIT 1) AS primary_territory_name
                             FROM house_affiliations ha
                             JOIN corporations c ON c.id = ha.corporation_id
@@ -312,8 +317,19 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   const corporationSnapshot = corporation.rows[0] ? {
     ...corporation.rows[0],
     treasury: corpTreasury,
+    treasury_units: corpTreasury,
+    operations_units: String(corpAccounts.rows.find((row: any) => row.code === 'CREDIT' && row.account_type === 'OPERATIONS')?.balance_units ?? '0'),
+    reserve_units: String(corpAccounts.rows.find((row: any) => row.code === 'CREDIT' && row.account_type === 'RESERVE')?.balance_units ?? '0'),
+    income_tax_bps: constitutionRules['CORPORATION.TAX.INCOME_RATE'] == null ? null : Number(constitutionRules['CORPORATION.TAX.INCOME_RATE']),
+    sales_tax_bps: constitutionRules['CORPORATION.TAX.SALES_RATE'] == null ? null : Number(constitutionRules['CORPORATION.TAX.SALES_RATE']),
+    corporate_tax_bps: constitutionRules['CORPORATION.TAX.CORPORATE_RATE'] == null ? null : Number(constitutionRules['CORPORATION.TAX.CORPORATE_RATE']),
+    property_tax_bps: constitutionRules['CORPORATION.TAX.PROPERTY_RATE'] == null ? null : Number(constitutionRules['CORPORATION.TAX.PROPERTY_RATE']),
+    house_capacity_base_rate_units: constitutionRules['CORPORATION.HOUSE_CAPACITY.BASE_RATE'] == null ? null : String(constitutionRules['CORPORATION.HOUSE_CAPACITY.BASE_RATE']),
     resources: corpResources,
     settlementProfile: corpProfile,
+    v5_occupied_capacity: corpProfile?.total_occupied_capacity_units ?? corporation.rows[0].v5_occupied_capacity ?? null,
+    v5_required_territory_units: corporation.rows[0].v5_required_territory_units ?? null,
+    v5_standard_territory_capacity: corporation.rows[0].v5_standard_territory_capacity ?? null,
     scaleCapabilities: corpScaleCaps,
   } : null;
   const marketProducts = Object.fromEntries(marketInstruments.rows.map((row: any) => {

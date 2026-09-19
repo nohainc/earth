@@ -11,41 +11,63 @@ extension EarthApiInstitutions on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> getV5CorporationCapacity(String corporationId) async {
-    final response = await _request('/api/v5/corporations/$corporationId/capacity');
+  Future<Map<String, dynamic>> getV5CorporationCapacity(
+      String corporationId) async {
+    final response =
+        await _request('/api/v5/corporations/$corporationId/capacity');
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> quoteV5CorporationMembership(String corporationId) async {
-    final response = await _request('/api/v5/corporations/$corporationId/membership');
+  Future<Map<String, dynamic>> quoteV5CorporationMembership(
+      String corporationId) async {
+    final response =
+        await _request('/api/v5/corporations/$corporationId/membership');
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> applyV5CorporationMembership({required String corporationId, String? inviteToken, String? correlationId}) async {
-    final response = await _request('/api/v5/corporations/$corporationId/membership', method: 'POST', body: {
-      'correlationId': correlationId ?? newClientCorrelationId('v5-membership'),
-      if (inviteToken != null && inviteToken.isNotEmpty) 'inviteToken': inviteToken,
-    });
+  Future<Map<String, dynamic>> applyV5CorporationMembership(
+      {required String corporationId,
+      String? inviteToken,
+      String? correlationId}) async {
+    final response = await _request(
+        '/api/v5/corporations/$corporationId/membership',
+        method: 'POST',
+        body: {
+          'correlationId':
+              correlationId ?? newClientCorrelationId('v5-membership'),
+          if (inviteToken != null && inviteToken.isNotEmpty)
+            'inviteToken': inviteToken,
+        });
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<EarthState> joinV5Corporation({required String corporationId, String? inviteToken}) async {
-    await applyV5CorporationMembership(corporationId: corporationId, inviteToken: inviteToken);
+  Future<EarthState> joinV5Corporation(
+      {required String corporationId, String? inviteToken}) async {
+    await applyV5CorporationMembership(
+        corporationId: corporationId, inviteToken: inviteToken);
     return world();
   }
 
-  Future<Map<String, dynamic>> listV5MembershipApplications(String corporationId, {String status = 'PENDING'}) async {
-    final response = await _request('/api/v5/corporations/$corporationId/membership/applications?status=$status');
+  Future<Map<String, dynamic>> listV5MembershipApplications(
+      String corporationId,
+      {String status = 'PENDING'}) async {
+    final response = await _request(
+        '/api/v5/corporations/$corporationId/membership/applications?status=$status');
     return Map<String, dynamic>.from(response as Map);
   }
 
   Future<Map<String, dynamic>> quoteV5CorporationFounding(String name) async {
-    final response = await _request('/api/v5/corporations/founding/quote', method: 'POST', body: {'name': name});
+    final response = await _request('/api/v5/corporations/founding/quote',
+        method: 'POST', body: {'name': name});
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> foundV5Corporation({required String name, required String admissionPolicy, String? correlationId}) async {
-    final response = await _request('/api/v5/corporations', method: 'POST', body: {
+  Future<Map<String, dynamic>> foundV5Corporation(
+      {required String name,
+      required String admissionPolicy,
+      String? correlationId}) async {
+    final response =
+        await _request('/api/v5/corporations', method: 'POST', body: {
       'name': name,
       'admissionPolicy': admissionPolicy,
       'correlationId': correlationId ?? newClientCorrelationId('v5-founding'),
@@ -53,41 +75,61 @@ extension EarthApiInstitutions on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> delegateV5CorporationLeadership({required String corporationId, required String targetHumanId, String? correlationId}) async {
-    final response = await _request('/api/v5/corporations/$corporationId/leadership/delegate', method: 'POST', body: {
-      'targetHumanId': targetHumanId,
-      'correlationId': correlationId ?? newClientCorrelationId('v5-delegate-leadership'),
-    });
+  Future<Map<String, dynamic>> delegateV5CorporationLeadership(
+      {required String corporationId,
+      required String targetHumanId,
+      String? correlationId}) async {
+    final response = await _request(
+        '/api/v5/corporations/$corporationId/leadership/delegate',
+        method: 'POST',
+        body: {
+          'targetHumanId': targetHumanId,
+          'correlationId':
+              correlationId ?? newClientCorrelationId('v5-delegate-leadership'),
+        });
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> scheduleV5CorporationDissolution({required String corporationId, String? reason, int? transitionDays, String? correlationId}) async {
-    final response = await _request('/api/v5/corporations/$corporationId/dissolution/schedule', method: 'POST', body: {
-      if (reason != null) 'reason': reason,
-      if (transitionDays != null) 'transitionDays': transitionDays,
-      'correlationId': correlationId ?? newClientCorrelationId('v5-schedule-dissolution'),
-    });
+  Future<Map<String, dynamic>> scheduleV5CorporationDissolution(
+      {required String corporationId,
+      String? reason,
+      int? transitionDays,
+      String? correlationId}) async {
+    final response = await _request(
+        '/api/v5/corporations/$corporationId/dissolution/schedule',
+        method: 'POST',
+        body: {
+          if (reason != null) 'reason': reason,
+          if (transitionDays != null) 'transitionDays': transitionDays,
+          'correlationId': correlationId ??
+              newClientCorrelationId('v5-schedule-dissolution'),
+        });
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<List<Map<String, dynamic>>> listCorporations({String? search}) async {
+  Future<List<CorporationDirectoryEntry>> listCorporations(
+      {String? search}) async {
     final query = search == null || search.trim().isEmpty
         ? ''
         : '?search=${Uri.encodeQueryComponent(search.trim())}';
-    final response =
-        (await _request('/api/corporations$query')) as Map<String, dynamic>;
+    final response = (await _request('/api/v5/corporations/directory$query'))
+        as Map<String, dynamic>;
     return (response['corporations'] as List<dynamic>? ?? const [])
         .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
+        .map((row) =>
+            CorporationDirectoryEntry.fromJson(Map<String, dynamic>.from(row)))
         .toList();
   }
 
-  Future<Map<String, dynamic>> listCorporationTerritories(String corporationId) async {
-    final response = await _request('/api/corporations/$corporationId/territories');
+  Future<Map<String, dynamic>> listCorporationTerritories(
+      String corporationId) async {
+    final response =
+        await _request('/api/corporations/$corporationId/territories');
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> getCorporationFiscalState(String corporationId) async {
+  Future<Map<String, dynamic>> getCorporationFiscalState(
+      String corporationId) async {
     final response = await _request('/api/finance/corporations/$corporationId');
     return Map<String, dynamic>.from(response as Map);
   }
@@ -113,10 +155,17 @@ extension EarthApiInstitutions on EarthApi {
     required String policy,
   }) async {
     await proposeV5ConstitutionAmendment(
-      subjectType: 'CORPORATION', subjectId: corporationId,
+      subjectType: 'CORPORATION',
+      subjectId: corporationId,
       title: 'Change Corporation admission policy',
-      body: 'Propose a constitutional change to the Corporation admission policy.',
-      changes: [{'ruleCode': 'CORPORATION.ADMISSION_POLICY', 'value': policy.toUpperCase()}],
+      body:
+          'Propose a constitutional change to the Corporation admission policy.',
+      changes: [
+        {
+          'ruleCode': 'CORPORATION.ADMISSION_POLICY',
+          'value': policy.toUpperCase()
+        }
+      ],
     );
     return world();
   }
@@ -265,17 +314,20 @@ extension EarthApiInstitutions on EarthApi {
     int propertyTaxBps = 0,
   }) async {
     await proposeV5ConstitutionAmendment(
-      subjectType: 'CORPORATION', subjectId: corporationId,
+      subjectType: 'CORPORATION',
+      subjectId: corporationId,
       title: 'Change Corporation tax policy',
       body: 'Propose a constitutional change to the Corporation tax policy.',
       changes: [
         {'ruleCode': 'CORPORATION.TAX.INCOME_RATE', 'value': incomeTaxBps},
         {'ruleCode': 'CORPORATION.TAX.SALES_RATE', 'value': salesTaxBps},
-        {'ruleCode': 'CORPORATION.TAX.CORPORATE_RATE', 'value': corporateTaxBps},
+        {
+          'ruleCode': 'CORPORATION.TAX.CORPORATE_RATE',
+          'value': corporateTaxBps
+        },
         {'ruleCode': 'CORPORATION.TAX.PROPERTY_RATE', 'value': propertyTaxBps},
       ],
     );
     return world();
   }
-
 }
