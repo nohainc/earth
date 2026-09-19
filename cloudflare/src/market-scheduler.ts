@@ -84,6 +84,16 @@ async function completeMarketBatch(repository: PostgresRepository, batch: number
   });
 }
 
+async function releaseMarketBatch(repository: PostgresRepository, batch: number, leaseOwner: string): Promise<void> {
+  await repository.query(
+    `UPDATE market_processing_control
+        SET status = 'IDLE', current_market_batch = NULL, lease_owner = NULL, lease_expires_at = NULL,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = 'WORLD' AND status = 'PROCESSING' AND current_market_batch = $1 AND lease_owner = $2`,
+    [batch, leaseOwner],
+  );
+}
+
 async function failMarketBatch(repository: PostgresRepository, batch: number, leaseOwner: string, error: unknown): Promise<void> {
   await repository.query(
     `UPDATE market_processing_control
@@ -133,7 +143,8 @@ export async function processDueMarketBatches(
         if (expired.expired === 0) break;
       }
       if (Date.now() - startedAt >= workBudgetMs) {
-        throw new Error(`Market batch ${batchNumber} expiry replay exceeded its work budget`);
+        await releaseMarketBatch(repository, batchNumber, leaseOwner);
+        break;
       }
       if (batch) {
         await repository.query(`UPDATE market_batches SET status = 'CLEARING' WHERE id = $1 AND status IN ('OPEN','FAILED')`, [batch.id]);
