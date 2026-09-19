@@ -258,7 +258,7 @@ Tests are evidence only when they cover the requirement being claimed.
 - **Biometric Health & Stochastic Actuarial Mortality**:
   - **Health Impact (0–100%)**: Affects physical labor throughput, machine maintenance speed, corporate executive stamina, and periodic medical costs.
   - **Non-Linear Mortality**: Mortality is **not** a deterministic countdown to 0% health. Citizens can live long lives with sub-optimal or chronic health conditions (30–60%).
-  - **Stochastic Actuarial Hazard**: Past retirement age (65+), an annual probabilistic hazard roll (Gompertz-Makeham curve) determines mortality risk. Lower health increases the annual hazard rate, while advanced municipal healthcare, high vitality, and clean environment increase longevity (up to 95–100+ simulation years).
+  - **Stochastic Actuarial Hazard**: Past retirement age (65+), an annual probabilistic hazard roll (Gompertz-Makeham curve) determines mortality risk. Lower health increases the annual hazard rate, while advanced healthcare, high vitality, and clean environment increase longevity (up to 95–100+ simulation years).
 
 ## 9. Deployment and commits
 
