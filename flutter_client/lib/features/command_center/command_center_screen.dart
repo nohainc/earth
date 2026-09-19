@@ -19,6 +19,7 @@ import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
 import '../communications/comm_link_dialog.dart';
 import '../../core/models/live_connection_status.dart';
+import '../../core/models/command_overview.dart';
 import '../../core/auth_storage.dart';
 import '../../core/realtime_socket.dart';
 import '../../earth_http_client.dart';
@@ -66,6 +67,7 @@ class _CommandCenterState extends State<CommandCenter>
   String? newsNextCursor;
   List<dynamic> notifications = const [];
   List<dynamic> decisionQueue = const [];
+  CommandOverview? commandOverview;
   List<dynamic> ownershipEvents = const [];
   List<dynamic> membershipEvents = const [];
   Map<String, dynamic> marketHistory = const {};
@@ -485,6 +487,9 @@ class _CommandCenterState extends State<CommandCenter>
           decisionQueue = v5Overview['version'] != null
               ? v5Attention
               : (decisionData['decisions'] as List<dynamic>?) ?? const [];
+          commandOverview = v5Overview['version'] != null
+              ? CommandOverview.fromJson(v5Overview)
+              : null;
           unreadNotifications = asInt(notificationData['unread']) ??
               asInt(notificationData['unreadCount']) ??
               0;
@@ -922,6 +927,7 @@ class _CommandCenterState extends State<CommandCenter>
                                             onLoadEarlierNews: _loadEarlierNews,
                                             notifications: notifications,
                                             decisionQueue: decisionQueue,
+                                            commandOverview: commandOverview,
                                             ownershipEvents: ownershipEvents,
                                             membershipEvents: membershipEvents,
                                             marketHistory: marketHistory,

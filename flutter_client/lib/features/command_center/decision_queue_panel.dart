@@ -7,12 +7,16 @@ import '../../shared/widgets/earth_primitives.dart';
 class DecisionQueuePanel extends StatefulWidget {
   final List<DecisionQueueItem> items;
   final ValueChanged<DecisionQueueItem>? onExecuteDecision;
+  /// Optional detail opener. Receives the canonical route and entity ID
+  /// together so callers can open a specific proposal, building, or order.
+  final ValueChanged<DecisionQueueItem>? onOpenDecision;
   final ValueChanged<String>? onNavigate;
 
   const DecisionQueuePanel({
     super.key,
     required this.items,
     this.onExecuteDecision,
+    this.onOpenDecision,
     this.onNavigate,
   });
 
@@ -27,29 +31,23 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
     switch (_selectedFilter) {
       case 'CRITICAL':
         return widget.items
-            .where((i) =>
-                i.riskLevel.toLowerCase() == 'critical' ||
-                i.riskLevel.toLowerCase() == 'high')
+            .where((i) => i.actionStatus == 'CRITICAL')
             .toList();
-      case 'ORGANIZATION':
-      case 'CORPORATION':
+      case 'ACTION_REQUIRED':
         return widget.items
-            .where((i) =>
-                i.category.toLowerCase() == 'business' ||
-                i.category.toLowerCase() == 'organization' ||
-                i.category.toLowerCase() == 'buildings' ||
-                i.category.toLowerCase() == 'market')
+            .where((i) => i.actionStatus == 'ACTION REQUIRED')
             .toList();
-      case 'CIVIC_HOUSE':
-      case 'CIVIC_DYNASTY':
+      case 'HOUSE':
         return widget.items
-            .where((i) =>
-                i.category.toLowerCase() == 'governance' ||
-                i.category.toLowerCase() == 'civic' ||
-                i.category.toLowerCase() == 'house' ||
-                i.category.toLowerCase() == 'dynasty' ||
-                i.category.toLowerCase() == 'technology' ||
-                i.category.toLowerCase() == 'finance')
+            .where((i) => i.category.toLowerCase() == 'house')
+            .toList();
+      case 'BUILDINGS':
+      case 'FINANCE':
+      case 'GOVERNANCE':
+      case 'MARKET':
+      case 'TECHNOLOGY':
+        return widget.items
+            .where((i) => i.category.toUpperCase() == _selectedFilter)
             .toList();
       case 'ALL':
       default:
@@ -60,15 +58,16 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
   @override
   Widget build(BuildContext context) {
     final criticalCount = widget.items
-        .where((i) =>
-            i.riskLevel.toLowerCase() == 'critical' ||
-            i.riskLevel.toLowerCase() == 'high')
+        .where((i) => i.actionStatus == 'CRITICAL')
+        .length;
+    final actionRequiredCount = widget.items
+        .where((i) => i.actionStatus == 'ACTION REQUIRED')
         .length;
 
     return EarthPanel(
-      title: 'PRIORITIZED DECISION QUEUE',
+      title: 'ACTION QUEUE',
       infoDescription:
-          '• Unified Strategic Loop: Aggregates high-priority decisions across your corporate operations, civic referendums, building upkeep, research initiatives, and house succession.\n\n• Decision Tiers:\n  - CRITICAL / HIGH: Immediate risk of asset loss, default penalty, or production stoppage.\n  - MEDIUM: Governance referendums and market price arbitrage.\n  - LOW: Research funding opportunities and non-blocking civic updates.\n\n• Primary Action: Tapping the action button primes the decision parameters and opens the target terminal for immediate execution.',
+          'Server-authored actions from current House needs, buildings, finance, governance, technology, succession, and market state. The internal priority score controls ordering but is not shown to players.',
       width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,8 +91,10 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 ),
                 child: Text(
                   criticalCount > 0
-                      ? '$criticalCount URGENT ACTIONS REQUIRED'
-                      : 'ALL OBLIGATIONS RESOLVED',
+                      ? '$criticalCount CRITICAL'
+                      : actionRequiredCount > 0
+                          ? '$actionRequiredCount ACTION REQUIRED'
+                          : 'NO ACTION REQUIRED',
                   style: TextStyle(
                     color: criticalCount > 0
                         ? context.errorColor
@@ -125,11 +126,13 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
               children: [
                 _buildFilterPill('ALL', 'ALL (${widget.items.length})'),
                 const SizedBox(width: 6),
-                _buildFilterPill('CRITICAL', 'CRITICAL / HIGH ($criticalCount)'),
+                _buildFilterPill('CRITICAL', 'CRITICAL ($criticalCount)'),
                 const SizedBox(width: 6),
-              _buildFilterPill('CORPORATION', 'ORGANIZATIONS & ASSETS'),
-                const SizedBox(width: 6),
-                _buildFilterPill('CIVIC_HOUSE', 'CIVIC & HOUSE'),
+                _buildFilterPill('ACTION_REQUIRED', 'ACTION REQUIRED ($actionRequiredCount)'),
+                for (final domain in const ['HOUSE', 'BUILDINGS', 'FINANCE', 'GOVERNANCE', 'MARKET', 'TECHNOLOGY']) ...[
+                  const SizedBox(width: 6),
+                  _buildFilterPill(domain, domain),
+                ],
               ],
             ),
           ),
@@ -150,7 +153,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                   Icon(Icons.check_circle_outline, color: Color(0xFF00E676), size: 28),
                   SizedBox(height: 8),
                   Text(
-                    'No pending decisions in this category.',
+                    'NO ACTION REQUIRED',
                     style: TextStyle(
                       color: inkColor,
                       fontSize: 12,
@@ -159,7 +162,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Your enterprises, assets, and civic duties are currently operating smoothly.',
+                    'This domain has no server-authored action waiting for you.',
                     style: TextStyle(color: mutedColor, fontSize: 11),
                     textAlign: TextAlign.center,
                   ),
@@ -210,7 +213,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
   }
 
   Widget _buildDecisionCard(DecisionQueueItem item) {
-    final riskColor = item.riskColor;
+    final statusColor = item.actionStatusColor;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -218,10 +221,10 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
         color: surfaceColor.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: item.riskLevel.toLowerCase() == 'critical'
-              ? riskColor.withValues(alpha: 0.6)
+          color: item.actionStatus == 'CRITICAL'
+              ? statusColor.withValues(alpha: 0.6)
               : Colors.white12,
-          width: item.riskLevel.toLowerCase() == 'critical' ? 1.5 : 1,
+          width: item.actionStatus == 'CRITICAL' ? 1.5 : 1,
         ),
       ),
       child: Column(
@@ -246,14 +249,14 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: riskColor.withValues(alpha: 0.15),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: riskColor.withValues(alpha: 0.4)),
+                border: Border.all(color: statusColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(
-                  item.riskLabel,
+                  item.actionStatus,
                   style: TextStyle(
-                    color: riskColor,
+                    color: statusColor,
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.6,
@@ -317,7 +320,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 icon: Icons.timer_outlined,
                 label: 'DEADLINE',
                 value: item.deadline,
-                valueColor: item.riskLevel.toLowerCase() == 'critical'
+                valueColor: item.actionStatus == 'CRITICAL'
                     ? context.errorColor
                     : context.warningColor,
               ),
@@ -336,28 +339,31 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               ElevatedButton.icon(
-                onPressed: () {
-                  if (widget.onExecuteDecision != null) {
+                onPressed: item.viewerCanAct ? () {
+                  if (widget.onOpenDecision != null) {
+                    widget.onOpenDecision!(item);
+                  } else if (widget.onExecuteDecision != null) {
                     widget.onExecuteDecision!(item);
                   } else if (widget.onNavigate != null) {
-                    widget.onNavigate!(item.targetSection);
+                    widget.onNavigate!(item.targetRoute);
                   }
-                },
+                } : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: riskColor.withValues(alpha: 0.2),
-                  foregroundColor: riskColor,
-                  side: BorderSide(color: riskColor.withValues(alpha: 0.8)),
+                  backgroundColor: statusColor.withValues(alpha: 0.2),
+                  foregroundColor: statusColor,
+                  side: BorderSide(color: statusColor.withValues(alpha: 0.8)),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(6),
                   ),
                   elevation: 0,
                 ),
-                icon: Icon(item.categoryIcon, size: 14, color: riskColor),
+                icon: Icon(item.categoryIcon, size: 14, color: statusColor),
                 label: Text(
-                  item.primaryActionLabel.toUpperCase(),
+                  (item.viewerCanAct ? item.primaryActionLabel : 'VIEW ONLY')
+                      .toUpperCase(),
                   style: TextStyle(
-                    color: riskColor,
+                    color: statusColor,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.8,

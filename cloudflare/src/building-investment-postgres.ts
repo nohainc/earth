@@ -357,17 +357,21 @@ export async function quoteBuildingUpgrade(repository: PostgresRepository, input
     const day = await currentDay(tx);
     const building = await getHouseBuildingActionContext(tx, input.buildingId, input.humanId);
     await refreshV5SettlementProfilesForHouse(tx, building.house_id, day);
-    const next = (await tx.query<{ id: string; tier: number; slot_footprint: string; construction_credit_units: string; construction_minutes: number; operating_credit_units: string; resource_input_units: unknown; resource_output_units: unknown; service_capacity_units: string; minimum_scale_capability: string }>(
-      `SELECT id, tier, slot_footprint::TEXT, construction_credit_units::TEXT, construction_minutes,
-              operating_credit_units::TEXT,
-              (SELECT COALESCE(jsonb_object_agg(ea.code, f.operating_input_units), '{}'::JSONB)
-                 FROM building_catalog_resource_flows f JOIN economic_assets ea ON ea.id = f.asset_id
-                WHERE f.catalog_id = building_catalog.id) AS resource_input_units,
-              (SELECT COALESCE(jsonb_object_agg(ea.code, f.operating_output_units), '{}'::JSONB)
-                 FROM building_catalog_resource_flows f JOIN economic_assets ea ON ea.id = f.asset_id
-                WHERE f.catalog_id = building_catalog.id) AS resource_output_units,
-              NULL::BIGINT AS service_capacity_units, minimum_scale_capability
-         FROM building_catalog WHERE family_code = $1 AND tier = $2`,
+    const next = (await tx.query<{ id: string; tier: number; slot_footprint: string; construction_credit_units: string; construction_minutes: number; operating_credit_units: string; resource_flows: unknown; service_capacity_units: string; minimum_scale_capability: string }>(
+      `SELECT c.id, c.tier, c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes,
+              c.operating_credit_units::TEXT,
+              COALESCE(jsonb_agg(jsonb_build_object(
+                'assetCode', ea.code,
+                'constructionUnits', f.construction_units::TEXT,
+                'operatingInputUnits', f.operating_input_units::TEXT,
+                'operatingOutputUnits', f.operating_output_units::TEXT
+              ) ORDER BY ea.code) FILTER (WHERE f.asset_id IS NOT NULL), '[]'::jsonb) AS resource_flows,
+              c.service_capacity_units::TEXT, c.minimum_scale_capability
+         FROM building_catalog c
+         LEFT JOIN building_catalog_resource_flows f ON f.catalog_id = c.id
+         LEFT JOIN economic_assets ea ON ea.id = f.asset_id
+        WHERE c.family_code = $1 AND c.tier = $2
+        GROUP BY c.id`,
       [building.family_code, building.tier + 1])).rows[0];
     const projectInProgress = Boolean((await tx.query('SELECT 1 FROM construction_projects WHERE building_id = $1 AND status = \'IN_PROGRESS\'', [input.buildingId])).rows[0]);
     const footprintDelta = next ? BigInt(next.slot_footprint) - BigInt(building.slot_footprint) : 0n;
@@ -418,8 +422,7 @@ export async function quoteBuildingUpgrade(repository: PostgresRepository, input
       targetCatalog: next ? {
         id: next.id, tier: next.tier, slotFootprint: next.slot_footprint,
         operatingCreditUnits: next.operating_credit_units,
-        resourceInputUnits: next.resource_input_units,
-        resourceOutputUnits: next.resource_output_units,
+        resourceFlows: next.resource_flows,
         serviceCapacityUnits: next.service_capacity_units,
       } : null,
       capacity, blockers, currentOperatingMode: building.operating_mode,

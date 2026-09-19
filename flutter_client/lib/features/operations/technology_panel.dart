@@ -4,11 +4,11 @@ import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/design_system/building_function.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'technology_dialogs.dart';
-
 
 class CorporateBuildingResearchPanel extends StatefulWidget {
   final EarthState state;
@@ -173,17 +173,15 @@ class _CorporateBuildingResearchPanelState
       final bType = b['building_type']?.toString() ?? '';
       final aTier = (unlockedTiers[aType] ?? 1) + 1;
       final bTier = (unlockedTiers[bType] ?? 1) + 1;
-      final aCost = asDouble(
-              a['research_credit_units'] ??
-                  a['research_credit_cost_units'] ??
-                  a['researchCost'] ??
-                  a['research_cost']) ??
+      final aCost = asDouble(a['research_credit_units'] ??
+              a['research_credit_cost_units'] ??
+              a['researchCost'] ??
+              a['research_cost']) ??
           0.0;
-      final bCost = asDouble(
-              b['research_credit_units'] ??
-                  b['research_credit_cost_units'] ??
-                  b['researchCost'] ??
-                  b['research_cost']) ??
+      final bCost = asDouble(b['research_credit_units'] ??
+              b['research_credit_cost_units'] ??
+              b['researchCost'] ??
+              b['research_cost']) ??
           0.0;
       final costCmp = aCost.compareTo(bCost);
       if (costCmp != 0) return costCmp;
@@ -256,22 +254,20 @@ class _CorporateBuildingResearchPanelState
                 final currentTier = unlockedTiers[type] ?? 1;
                 final targetTier = currentTier + 1;
 
-                final baseCost = asDouble(
-                        bp['construction_credit_units'] ?? bp['cost_credits']) ??
+                final baseCost = asDouble(bp['construction_credit_units'] ??
+                        bp['cost_credits']) ??
                     0.0;
                 final slots =
                     asInt(bp['slot_footprint'] ?? bp['slotFootprint']) ?? 1;
-                final nextResearchCost = asDouble(
-                        bp['research_credit_units'] ??
-                            bp['research_credit_cost_units'] ??
-                            bp['researchCost'] ??
-                            bp['research_cost']) ??
+                final nextResearchCost = asDouble(bp['research_credit_units'] ??
+                        bp['research_credit_cost_units'] ??
+                        bp['researchCost'] ??
+                        bp['research_cost']) ??
                     0.0;
-                final durationDays = asInt(
-                        bp['research_duration_game_days'] ??
-                            bp['research_duration_days'] ??
-                            bp['duration_days'] ??
-                            bp['construction_days']) ??
+                final durationDays = asInt(bp['research_duration_game_days'] ??
+                        bp['research_duration_days'] ??
+                        bp['duration_days'] ??
+                        bp['construction_days']) ??
                     1;
 
                 final activeProject = activeProjectMap[type];
@@ -284,23 +280,13 @@ class _CorporateBuildingResearchPanelState
                 final desc =
                     (bp['description'] ?? bp['catalog_description'] ?? '')
                         .toString();
-                final rawPurpose = (bp['primary_economic_purpose'] ??
-                        bp['primaryEconomicPurpose'])
-                    ?.toString();
-                final purpose =
-                    (rawPurpose != null && rawPurpose.trim().isNotEmpty)
-                        ? rawPurpose
-                        : EarthBuildingMeta.getEconomicPurpose(
-                            bp,
-                            ownership: ownership,
-                            category: category,
-                          );
+                final purpose = buildingEconomicFunctionFromJson(bp);
                 final civicBenefit = bp['civicBenefit']?.toString();
 
                 // Show next-tier economics only when the catalog publishes them.
                 final costCreditsCur = baseCost;
-                final costCreditsNext = asDouble(
-                    bp['next_construction_credit_units']);
+                final costCreditsNext =
+                    asDouble(bp['next_construction_credit_units']);
                 final matBase = 0.0;
                 final compBase = 0.0;
                 final computeBase = 0.0;
@@ -408,7 +394,7 @@ class _CorporateBuildingResearchPanelState
                                   ],
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Economic Purpose: $purpose',
+                                    'Economic Function: $purpose',
                                     style: context.widgetFooterStyle,
                                   ),
                                   if (civicBenefit != null &&
@@ -779,10 +765,12 @@ class _CorporateBuildingResearchPanelState
                                         onPressed: isButtonDisabled
                                             ? null
                                             : () async {
-                                                Map<String, dynamic> quote = const {};
+                                                Map<String, dynamic> quote =
+                                                    const {};
                                                 try {
                                                   quote = await const EarthApi()
-                                                      .quoteCorporationBuildingResearch(type);
+                                                      .quoteCorporationBuildingResearch(
+                                                          type);
                                                 } catch (_) {}
                                                 if (!context.mounted) return;
                                                 await _confirmAndStartResearch(
@@ -990,8 +978,10 @@ class _CorporateBuildingResearchPanelState
     final quote = serverQuote['quote'] is Map
         ? Map<String, dynamic>.from(serverQuote['quote'] as Map)
         : const <String, dynamic>{};
-    final quotedCost = int.tryParse(quote['researchCostUnits']?.toString() ?? '');
-    final quotedDuration = int.tryParse(quote['durationDays']?.toString() ?? '');
+    final quotedCost =
+        int.tryParse(quote['researchCostUnits']?.toString() ?? '');
+    final quotedDuration =
+        int.tryParse(quote['durationDays']?.toString() ?? '');
     final effectiveCost = quotedCost ?? costCredits;
     final effectiveDuration = quotedDuration ?? durationDays;
 
@@ -1470,119 +1460,122 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
         )
       else
         ...visibleItems.take(8).map((item) {
-        final name =
-            (item['name'] ?? item['title'] ?? 'Approved capability').toString();
-        final description = (item['description'] ??
-                'Approved capability with a defined gameplay effect.')
-            .toString();
-        final effect = (item['effect'] ?? 'Practical capability improvement')
-            .toString()
-            .replaceAll('_', ' ');
-        final branch = _branchFor(item);
-        final target = (item['target'] ??
-                item['affected_buildings'] ??
-                item['resource_effect'] ??
-                'Buildings, businesses, or civic services')
-            .toString()
-            .replaceAll('_', ' ');
-        final requirement = item['requirements'] ?? item['requirement'];
-        final locked = item['locked'] == true;
-        final prerequisite = item['prerequisites'] ?? item['requires'];
-        final prerequisiteText = _formatPrerequisites(prerequisite);
-        final researchCost = item['researchCost'] ??
-            item['research_cost'] ??
-            item['cost'] ??
-            item['cost_credits'];
-        final before =
-            item['before'] ?? item['currentValue'] ?? item['current_value'];
-        final after =
-            item['after'] ?? item['projectedValue'] ?? item['projected_value'];
-        final milestone =
-            item['milestone'] ?? item['tier'] ?? _milestoneFor(item);
-        final adopted = adoptedNames.contains(name);
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 7),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .65),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white12)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Icon(Icons.auto_awesome_outlined,
-                size: 16, color: cyanAccentColor),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Row(children: [
-                    Expanded(
-                        child: Text(name,
-                            style: const TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.w800))),
-                    Text(_effectLabel(effect).toUpperCase(),
-                        style: const TextStyle(
-                            color: violetColor,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800))
-                  ]),
-                  const SizedBox(height: 3),
-                  Text(description,
-                      style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-                  const SizedBox(height: 5),
-                  Text('PATH: $branch · $milestone · APPLIES TO: $target',
-                      style: const TextStyle(
-                          color: cyanAccentColor,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 3),
-                  Text(
-                      'COST: ${researchCost == null ? 'Set by project' : '${researchCost.toString()} C'} · PREREQUISITE: $prerequisiteText',
-                      style: const TextStyle(
-                          color: mutedColor,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w600)),
-                  if (before != null || after != null) ...[
-                    const SizedBox(height: 5),
-                    Text(
-                        'BEFORE → AFTER: ${before ?? 'Current'} → ${after ?? 'Improved'}',
-                        style: const TextStyle(
-                            color: Colors.tealAccent,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                  if (adopted) ...[
+          final name = (item['name'] ?? item['title'] ?? 'Approved capability')
+              .toString();
+          final description = (item['description'] ??
+                  'Approved capability with a defined gameplay effect.')
+              .toString();
+          final effect = (item['effect'] ?? 'Practical capability improvement')
+              .toString()
+              .replaceAll('_', ' ');
+          final branch = _branchFor(item);
+          final target = (item['target'] ??
+                  item['affected_buildings'] ??
+                  item['resource_effect'] ??
+                  'Buildings, businesses, or civic services')
+              .toString()
+              .replaceAll('_', ' ');
+          final requirement = item['requirements'] ?? item['requirement'];
+          final locked = item['locked'] == true;
+          final prerequisite = item['prerequisites'] ?? item['requires'];
+          final prerequisiteText = _formatPrerequisites(prerequisite);
+          final researchCost = item['researchCost'] ??
+              item['research_cost'] ??
+              item['cost'] ??
+              item['cost_credits'];
+          final before =
+              item['before'] ?? item['currentValue'] ?? item['current_value'];
+          final after = item['after'] ??
+              item['projectedValue'] ??
+              item['projected_value'];
+          final milestone =
+              item['milestone'] ?? item['tier'] ?? _milestoneFor(item);
+          final adopted = adoptedNames.contains(name);
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 7),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .65),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.auto_awesome_outlined,
+                  size: 16, color: cyanAccentColor),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Row(children: [
+                      Expanded(
+                          child: Text(name,
+                              style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800))),
+                      Text(_effectLabel(effect).toUpperCase(),
+                          style: const TextStyle(
+                              color: violetColor,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800))
+                    ]),
                     const SizedBox(height: 3),
-                    const Text('ADOPTED · Currently affecting outcomes',
-                        style: TextStyle(
+                    Text(description,
+                        style:
+                            const TextStyle(color: mutedColor, fontSize: 9.5)),
+                    const SizedBox(height: 5),
+                    Text('PATH: $branch · $milestone · APPLIES TO: $target',
+                        style: const TextStyle(
                             color: cyanAccentColor,
                             fontSize: 8.5,
                             fontWeight: FontWeight.w700)),
-                  ],
-                  if (prerequisite != null) ...[
-                    const SizedBox(height: 3),
-                    Text('PREREQUISITE · $prerequisite',
-                        style: const TextStyle(
-                            color: Colors.orangeAccent,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                  if (locked || requirement != null) ...[
                     const SizedBox(height: 3),
                     Text(
-                        locked
-                            ? 'LOCKED · ${requirement ?? 'Complete the prerequisite research first.'}'
-                            : 'REQUIREMENT · $requirement',
+                        'COST: ${researchCost == null ? 'Set by project' : '${researchCost.toString()} C'} · PREREQUISITE: $prerequisiteText',
                         style: const TextStyle(
-                            color: Colors.orangeAccent,
+                            color: mutedColor,
                             fontSize: 8.5,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                ])),
-          ]),
-        );
-      }),
+                            fontWeight: FontWeight.w600)),
+                    if (before != null || after != null) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                          'BEFORE → AFTER: ${before ?? 'Current'} → ${after ?? 'Improved'}',
+                          style: const TextStyle(
+                              color: Colors.tealAccent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    if (adopted) ...[
+                      const SizedBox(height: 3),
+                      const Text('ADOPTED · Currently affecting outcomes',
+                          style: TextStyle(
+                              color: cyanAccentColor,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    if (prerequisite != null) ...[
+                      const SizedBox(height: 3),
+                      Text('PREREQUISITE · $prerequisite',
+                          style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    if (locked || requirement != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                          locked
+                              ? 'LOCKED · ${requirement ?? 'Complete the prerequisite research first.'}'
+                              : 'REQUIREMENT · $requirement',
+                          style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ])),
+            ]),
+          );
+        }),
     ]);
   }
 

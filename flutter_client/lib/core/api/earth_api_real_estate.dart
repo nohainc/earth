@@ -1,17 +1,26 @@
 part of 'earth_api.dart';
 
 extension EarthApiRealEstate on EarthApi {
-  Future<Map<String, dynamic>> getBuildingCapitalOptions({required String buildingId}) async {
-    final response = await _request('/api/v5/buildings/$buildingId/capital-options');
+  Future<Map<String, dynamic>> getBuildingCapitalOptions(
+      {required String buildingId}) async {
+    final response =
+        await _request('/api/v5/buildings/$buildingId/capital-options');
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> startBuildingCapitalProject({required String buildingId, required String projectKind, String? targetGenerationId}) async {
-    final response = await _request('/api/v5/buildings/$buildingId/capital-projects', method: 'POST', body: {
-      'projectKind': projectKind,
-      if (targetGenerationId != null) 'targetGenerationId': targetGenerationId,
-      'correlationId': newClientCorrelationId('CAPITAL-PROJECT'),
-    });
+  Future<Map<String, dynamic>> startBuildingCapitalProject(
+      {required String buildingId,
+      required String projectKind,
+      String? targetGenerationId}) async {
+    final response = await _request(
+        '/api/v5/buildings/$buildingId/capital-projects',
+        method: 'POST',
+        body: {
+          'projectKind': projectKind,
+          if (targetGenerationId != null)
+            'targetGenerationId': targetGenerationId,
+          'correlationId': newClientCorrelationId('CAPITAL-PROJECT'),
+        });
     return Map<String, dynamic>.from(response as Map);
   }
 
@@ -23,6 +32,7 @@ extension EarthApiRealEstate on EarthApi {
   Future<EarthState> purchaseV5Building({
     required String buildingType,
     required String name,
+    int? generation,
   }) async {
     final res = await _request(
       '/api/v5/buildings',
@@ -30,6 +40,7 @@ extension EarthApiRealEstate on EarthApi {
       body: {
         'buildingType': buildingType,
         'name': name,
+        if (generation != null) 'generation': generation,
         'correlationId': newClientCorrelationId('V5-BUILDING'),
       },
     );
@@ -69,14 +80,19 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<Map<String, dynamic>> quoteBuildingUpgrade({required String buildingId}) async {
-    final response = await _request('/api/v5/buildings/$buildingId/upgrade-quote');
+  Future<Map<String, dynamic>> quoteBuildingUpgrade(
+      {required String buildingId}) async {
+    final response =
+        await _request('/api/v5/buildings/$buildingId/upgrade-quote');
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> quoteBuildingRetrofit({required String buildingId, int? targetGeneration}) async {
-    final query = targetGeneration == null ? '' : '?targetGeneration=$targetGeneration';
-    final response = await _request('/api/v5/buildings/$buildingId/retrofit-quote$query');
+  Future<Map<String, dynamic>> quoteBuildingRetrofit(
+      {required String buildingId, int? targetGeneration}) async {
+    final path = targetGeneration == null
+        ? '/api/v5/buildings/$buildingId/retrofit-quote'
+        : '/api/v5/buildings/$buildingId/retrofit-quote?targetGeneration=$targetGeneration';
+    final response = await _request(path);
     return Map<String, dynamic>.from(response as Map);
   }
 
@@ -95,8 +111,10 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<Map<String, dynamic>> quoteBuildingOperatingPolicy({required String buildingId}) async {
-    final response = await _request('/api/v5/buildings/$buildingId/policy-quote');
+  Future<Map<String, dynamic>> quoteBuildingOperatingPolicy(
+      {required String buildingId}) async {
+    final response =
+        await _request('/api/v5/buildings/$buildingId/policy-quote');
     return Map<String, dynamic>.from(response as Map);
   }
 
@@ -111,8 +129,10 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<Map<String, dynamic>> quoteBuildingDemolition({required String buildingId}) async {
-    final response = await _request('/api/v5/buildings/$buildingId/demolition-quote');
+  Future<Map<String, dynamic>> quoteBuildingDemolition(
+      {required String buildingId}) async {
+    final response =
+        await _request('/api/v5/buildings/$buildingId/demolition-quote');
     return Map<String, dynamic>.from(response as Map);
   }
 
@@ -133,5 +153,4 @@ extension EarthApiRealEstate on EarthApi {
     );
     return EarthState(res as Map<String, dynamic>);
   }
-
 }

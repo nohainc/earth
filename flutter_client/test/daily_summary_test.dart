@@ -21,13 +21,12 @@ void main() {
         'deltaPct': 3.67,
       },
       'financial': {
-        'totalIncome': 14250.0,
-        'totalExpenses': 4820.0,
-        'netProfit': 9430.0,
-        'businessDividends': 6500.0,
-        'marketSales': 7750.0,
-        'machineMaintenance': 2620.0,
-        'civicTaxes': 2200.0,
+        'incomeUnits': '1425000',
+        'expensesUnits': '482000',
+        'netCashflowUnits': '943000',
+        'taxesUnits': '220000',
+        'marketSalesUnits': '775000',
+        'marketPurchasesUnits': '0',
       },
       'marketMovements': [
         {
@@ -40,18 +39,16 @@ void main() {
         },
       ],
       'buildings': {
-        'activeBusinesses': 2,
-        'totalDailyOutput': 3840,
+        'operatedBuildingCount': 4,
         'activeMachines': 4,
         'degradedMachinesCount': 1,
         'pendingContractsCount': 2,
       },
       'governance': {
-        'activeProposals': 3,
-        'passedProposals24h': 1,
-        'cityResidency': 'New Geneva',
-        'cityTaxRatePct': 4.5,
-        'recentCivicEvents': ['Passed: Energy Infrastructure Subsidy'],
+        'eventCount': 1,
+        'events': [
+          {'id': 'gov-1', 'type': 'GOVERNANCE_POLICY_PASSED', 'title': 'Policy passed', 'details': 'Energy Infrastructure Subsidy', 'gameDay': 185},
+        ],
       },
       'alerts': {
         'unreadNotifications': 2,
@@ -73,10 +70,12 @@ void main() {
     final report = DailySummaryReport.fromJson(json);
     expect(report.gameDay, 185);
     expect(report.netWealthDelta.delta, 5600.0);
-    expect(report.financial.netProfit, 9430.0);
+    expect(report.financial.netCashflowUnits, '943000');
+    expect(report.financial.incomeUnits, '1425000');
+    expect(report.financial.expensesUnits, '482000');
     expect(report.marketMovements.length, 1);
-    expect(report.buildings.activeBusinesses, 2);
-    expect(report.governance.cityResidency, 'New Geneva');
+    expect(report.buildings.operatedBuildingCount, 4);
+    expect(report.governance.eventCount, 1);
     expect(report.alerts.unreadNotifications, 2);
     expect(report.highlights.length, 1);
   });
@@ -105,13 +104,12 @@ void main() {
               'deltaPct': 3.67,
             },
             'financial': {
-              'totalIncome': 14250.0,
-              'totalExpenses': 4820.0,
-              'netProfit': 9430.0,
-              'businessDividends': 6500.0,
-              'marketSales': 7750.0,
-              'machineMaintenance': 2620.0,
-              'civicTaxes': 2200.0,
+              'incomeUnits': '1425000',
+              'expensesUnits': '482000',
+              'netCashflowUnits': '943000',
+              'marketSalesUnits': '775000',
+              'marketPurchasesUnits': '0',
+              'taxesUnits': '220000',
             },
             'marketMovements': [
               {
@@ -132,18 +130,13 @@ void main() {
               },
             ],
             'buildings': {
-              'activeBusinesses': 2,
-              'totalDailyOutput': 3840,
-              'activeMachines': 4,
-              'degradedMachinesCount': 1,
-              'pendingContractsCount': 2,
+              'operatedBuildingCount': 4,
             },
             'governance': {
-              'activeProposals': 3,
-              'passedProposals24h': 1,
-              'cityResidency': 'New Geneva',
-              'cityTaxRatePct': 4.5,
-              'recentCivicEvents': ['Passed: Energy Infrastructure Subsidy'],
+              'eventCount': 1,
+              'events': [
+                {'id': 'gov-1', 'type': 'GOVERNANCE_POLICY_PASSED', 'title': 'Policy passed', 'details': 'Energy Infrastructure Subsidy', 'gameDay': 185},
+              ],
             },
             'alerts': {
               'unreadNotifications': 2,
@@ -189,9 +182,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('DAY 185 RESULTS'), findsOneWidget);
-    expect(find.text('+9430 CR'), findsNWidgets(2));
-    expect(find.text('+14250 CR'), findsNWidgets(3));
-    expect(find.text('-4820 CR'), findsNWidgets(2));
+    expect(find.text('+9430.00 C'), findsNWidgets(2));
+    expect(find.text('+14250.00 C'), findsNWidgets(3));
+    expect(find.text('-4820.00 C'), findsNWidgets(2));
     expect(find.text('WHAT REQUIRES ATTENTION'), findsOneWidget);
     expect(find.text('Capitalize on Energy Rally'), findsOneWidget);
 

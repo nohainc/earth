@@ -3,7 +3,7 @@ import { listCommunities } from './communities-postgres.ts';
 import { listWorldConditions } from './world-conditions-postgres.ts';
 import { listRankings } from './rankings-postgres.ts';
 import { listOrganizations } from './organizations-postgres.ts';
-import { generateDecisionQueue } from './decision-queue.ts';
+import { getDecisionQueue } from './decision-queue-postgres.ts';
 import { listTechnology } from './read-postgres.ts';
 import { listCorporationBuildingResearch } from './corporation-building-research-postgres.ts';
 import { assetUnitScale, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
@@ -71,21 +71,23 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                   WHERE actor_human_id = $1 AND category = 'LIFECYCLE'
                                   ORDER BY game_day DESC, game_minute DESC NULLS LAST
                                   LIMIT 8`, [viewerId]) : Promise.resolve({ rows: [] }),
-    repository.query(`SELECT c.id, c.code, c.code AS building_type, c.family_code, c.tier, c.tier_formula_version,
+    repository.query(`SELECT c.id, c.code, c.name, c.description, c.category,
+                             c.code AS building_type, c.family_code, c.tier, c.tier_formula_version,
                              c.economic_role, c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                              c.construction_credit_units, c.construction_minutes,
                              c.research_credit_units, c.research_duration_game_days,
                              c.operating_credit_units, c.service_type, c.service_capacity_units,
                              c.slot_footprint, c.definition_version, c.technology_domain, c.minimum_scale_capability,
                              COALESCE(jsonb_agg(jsonb_build_object(
-                               'assetId', f.asset_id,
-                               'constructionUnits', f.construction_units,
-                               'operatingInputUnits', f.operating_input_units,
-                               'operatingOutputUnits', f.operating_output_units
-                             ) ORDER BY f.asset_id) FILTER (WHERE f.asset_id IS NOT NULL), '[]'::jsonb) AS resource_flows
+                               'assetCode', a.code,
+                               'constructionUnits', f.construction_units::TEXT,
+                               'operatingInputUnits', f.operating_input_units::TEXT,
+                               'operatingOutputUnits', f.operating_output_units::TEXT
+                             ) ORDER BY a.code) FILTER (WHERE f.asset_id IS NOT NULL), '[]'::jsonb) AS resource_flows
                         FROM building_catalog c
                         LEFT JOIN building_catalog_resource_flows f ON f.catalog_id = c.id
-                       GROUP BY c.id, c.code, c.family_code, c.tier, c.tier_formula_version,
+                        LEFT JOIN economic_assets a ON a.id = f.asset_id
+                       GROUP BY c.id, c.code, c.name, c.description, c.category, c.family_code, c.tier, c.tier_formula_version,
                                 c.economic_role, c.ownership_scope, c.construction_credit_units,
                                 c.construction_minutes, c.research_credit_units, c.research_duration_game_days,
                                 c.operating_credit_units, c.service_type,
@@ -96,7 +98,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                              o.id AS owner_id, o.owner_type,
                                              b.construction_state, b.installed_generation, b.technology_definition_version,
                                              b.operating_mode,
-                                             c.code, c.code AS building_type, c.tier, c.economic_role,
+                                             c.code, c.code AS building_type, c.family_code, c.tier, c.economic_role,
                                              c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                                              c.service_type, c.service_capacity_units, c.slot_footprint,
                                              c.operating_credit_units, c.technology_domain, c.minimum_scale_capability,
@@ -148,7 +150,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                              o.id AS owner_id, o.owner_type,
                                              b.construction_state, b.installed_generation, b.technology_definition_version,
                                              b.operating_mode,
-                                             c.code, c.code AS building_type, c.tier, c.economic_role,
+                                             c.code, c.code AS building_type, c.family_code, c.tier, c.economic_role,
                                              c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                                              c.service_type, c.service_capacity_units, c.slot_footprint,
                                              c.operating_credit_units, c.technology_domain, c.minimum_scale_capability,
@@ -523,17 +525,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     generatedFrom: 'postgres-canonical-facts',
   };
   const needs = serviceAssessments.rows.filter((row) => row.game_day === latestServiceDay);
-  const decisionQueue = generateDecisionQueue({
-    gameDay,
-    house: { successor_id: null },
-    resources,
-    finance: { unpaid_tax: obligations.rows.length, debt: obligations.rows.length },
-    territory: capacity ? { ...capacity, id: capacity.territory_id, residents: capacity.active_house_count } : undefined,
-    needs,
-    proposals: proposals.rows,
-    market: Object.values(marketProducts),
-    buildings: buildings.rows,
-  });
+  const decisionQueue = viewerHouseId
+    ? (await getDecisionQueue(repository, viewerHouseId, 20)).decisions
+    : [];
   return toJsonSafe({
     ok: true,
     viewerId: viewerId ?? null,

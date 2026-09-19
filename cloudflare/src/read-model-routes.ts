@@ -167,22 +167,24 @@ export async function handleReadModelRoutes(
 
   if (url.pathname === '/api/buildings/catalog' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => repository.query(
-      `SELECT c.id, c.code, c.family_code, c.tier, c.tier_formula_version,
+      `SELECT c.id, c.code, c.name, c.description, c.category,
+              c.family_code, c.tier, c.tier_formula_version,
               c.economic_role,
               c.construction_credit_units, c.construction_minutes,
               c.research_credit_units, c.research_duration_game_days,
               c.operating_credit_units, c.service_type, c.service_capacity_units,
               c.slot_footprint, c.definition_version,
               COALESCE(jsonb_agg(jsonb_build_object(
-                'assetId', f.asset_id,
-                'constructionUnits', f.construction_units,
-                'operatingInputUnits', f.operating_input_units,
-                'operatingOutputUnits', f.operating_output_units
-              ) ORDER BY f.asset_id) FILTER (WHERE f.asset_id IS NOT NULL), '[]'::jsonb) AS resource_flows
+                'assetCode', a.code,
+                'constructionUnits', f.construction_units::TEXT,
+                'operatingInputUnits', f.operating_input_units::TEXT,
+                'operatingOutputUnits', f.operating_output_units::TEXT
+              ) ORDER BY a.code) FILTER (WHERE f.asset_id IS NOT NULL), '[]'::jsonb) AS resource_flows
          FROM building_catalog c
          LEFT JOIN building_catalog_resource_flows f ON f.catalog_id = c.id
+         LEFT JOIN economic_assets a ON a.id = f.asset_id
         GROUP BY c.id, c.code, c.family_code, c.tier, c.tier_formula_version,
-                 c.economic_role,
+                 c.name, c.description, c.category, c.economic_role,
                  c.construction_credit_units, c.construction_minutes,
                  c.research_credit_units, c.research_duration_game_days,
                  c.operating_credit_units, c.service_type, c.service_capacity_units,

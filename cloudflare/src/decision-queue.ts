@@ -1,14 +1,23 @@
 export type DecisionCategory =
-  | 'organization'
-  | 'governance'
-  | 'civic'
-  | 'technology'
   | 'house'
-  | 'dynasty'
-  | 'market'
-  | 'finance';
+  | 'buildings'
+  | 'finance'
+  | 'governance'
+  | 'technology'
+  | 'market';
 
 export type DecisionRiskLevel = 'critical' | 'high' | 'medium' | 'low';
+export type DecisionRoute =
+  | 'market'
+  | 'buildings'
+  | 'finance'
+  | 'technology'
+  | 'civic'
+  | 'governance'
+  | 'house'
+  | 'life'
+  | 'citizen'
+  | 'corporation';
 
 export interface DecisionQueueItem {
   id: string;
@@ -19,60 +28,80 @@ export interface DecisionQueueItem {
   expectedImpact: string;
   riskLevel: DecisionRiskLevel;
   primaryActionLabel: string;
-  targetSection: string;
+  targetRoute: DecisionRoute;
+  targetEntityId?: string;
+  viewerCanAct: boolean;
   urgencyScore: number;
 }
 
+type DecisionQueueDraft = Omit<DecisionQueueItem, 'targetRoute' | 'targetEntityId' | 'viewerCanAct'> & {
+  targetSection: string;
+  targetEntityId?: string;
+  viewerCanAct?: boolean;
+};
+
 export interface DecisionQueueInput {
-  resources?: Record<string, unknown>;
-  proposals?: Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>;
-  technology?: { progress?: unknown; active_patents?: unknown; is_funding_open?: boolean };
-  house?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
-  dynasty?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
-  organization?: { id?: string; name?: string; profit?: unknown; net_income?: unknown; condition?: unknown };
-  finance?: { unpaid_tax?: unknown; status?: string; debt?: unknown };
-  territory?: { id?: string; residents?: unknown; housing_capacity?: unknown; energy_capacity?: unknown; connectivity_capacity?: unknown; health_capacity?: unknown };
-  market?: Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>;
-  buildings?: Array<{ id: string; utilization_bps?: unknown; status?: string }>;
-  needs?: Array<{ need_code: string; demand_units?: unknown; allocated_units?: unknown; shortfall_units?: unknown; risk_level?: string }>;
   gameDay?: number;
+  house?: { has_successor?: boolean };
+  needs?: Array<{
+    need_code: string;
+    demand_units?: unknown;
+    allocated_units?: unknown;
+    shortfall_units?: unknown;
+    risk_level?: string;
+  }>;
+  buildings?: Array<{
+    id: string;
+    catalog_code?: string;
+    building_type?: string;
+    status?: string;
+    v5_productive_status?: string;
+    utilization_bps?: unknown;
+    latest_settlement_status?: string;
+  }>;
+  finance?: {
+    unpaid_tax?: unknown;
+    unpaid_obligations?: unknown;
+    capacity_arrears_units?: unknown;
+    delinquency_status?: string;
+    status?: string;
+    debt?: unknown;
+  };
+  proposals?: Array<{
+    id: string;
+    title?: string;
+    action_type?: string;
+    status?: string;
+    viewer?: { canVote?: boolean };
+  }>;
+  technology?: {
+    progress?: unknown;
+    has_active_research?: boolean;
+    available_projects_count?: number;
+  };
+  market?: Array<{
+    product: string;
+    supply?: unknown;
+    demand?: unknown;
+    price?: unknown;
+  }>;
+  orders?: {
+    open_count?: unknown;
+    expiring_count?: unknown;
+  };
 }
 
 const num = (v: unknown): number => Number(v ?? 0);
 
 /**
  * Generates a unified, prioritized decision queue aggregating critical
- * alerts across operational, financial, civic, and dynasty domains.
+ * alerts across V5 House needs, buildings, finance/capacity, governance,
+ * succession, research, and market conditions.
  */
 export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueItem[] {
-  const items: DecisionQueueItem[] = [];
-  const gameDay = input.gameDay ?? 0;
+  const items: DecisionQueueDraft[] = [];
 
-  const territory = input.territory;
-  if (territory?.id) {
-    const residents = Math.max(1, num(territory.residents));
-    const energyRatio = num(territory.energy_capacity) / residents;
-    const healthRatio = num(territory.health_capacity) / 100;
-    if (energyRatio < 1) items.push({
-      id: `decision-territory-energy-${territory.id}`, category: 'civic',
-      title: 'Your Territory needs an energy recovery plan',
-      whyItMatters: `The local grid provides ${Math.round(num(territory.energy_capacity))} capacity for ${Math.round(residents)} residents.`,
-      deadline: 'Before the next settlement',
-      expectedImpact: 'Restore reliable local services and protect productive assets from brownouts.',
-      riskLevel: energyRatio < 0.75 ? 'critical' : 'high',
-      primaryActionLabel: 'Review Territory Capacity', targetSection: 'territory',
-      urgencyScore: Math.round(85 + Math.max(0, 1 - energyRatio) * 15),
-    });
-    if (healthRatio < 0.5) items.push({
-      id: `decision-territory-health-${territory.id}`, category: 'civic',
-      title: 'Your Territory needs a health recovery plan',
-      whyItMatters: `Health capacity is at ${Math.round(healthRatio * 100)}%; a prolonged deficit can reduce quality of life and trigger mobility pressure.`,
-      deadline: 'Before the next settlement',
-      expectedImpact: 'Raise health capacity and keep your household and workforce in place.',
-      riskLevel: 'critical', primaryActionLabel: 'Review Territory Capacity', targetSection: 'territory', urgencyScore: 92,
-    });
-  }
-
+  // 1. House needs & basic life services
   for (const need of input.needs ?? []) {
     const shortfall = num(need.shortfall_units);
     const level = String(need.risk_level ?? '').toLowerCase();
@@ -82,177 +111,161 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     const allocated = num(need.allocated_units);
     const coverage = allocated / demand;
     items.push({
-      id: `decision-house-service-${code.toLowerCase()}`, category: 'house',
+      id: `decision-house-service-${code.toLowerCase()}`,
+      category: 'house',
       title: `House ${code} access needs attention`,
       whyItMatters: `Your House received ${Math.round(allocated)} of ${Math.round(demand)} ${code} service units in the latest settlement.`,
       deadline: 'Before the next settlement',
-      expectedImpact: `Improve ${code.toLowerCase()} coverage and reduce pressure on House continuity.`,
+      expectedImpact: `Improve ${code.toLowerCase()} coverage and protect household vitality.`,
       riskLevel: level === 'critical' || coverage === 0 ? 'critical' : 'high',
-      primaryActionLabel: 'Review Life & Services', targetSection: 'services',
-      urgencyScore: Math.round(90 - Math.min(40, coverage * 40)),
+      primaryActionLabel: 'Review Life & Services',
+      targetSection: 'citizen',
+      urgencyScore: Math.round(95 - Math.min(40, coverage * 40)),
     });
   }
 
-  // Organization resource deficit / energy drain.
-  const energy = num(input.resources?.energy);
-  const materials = num(input.resources?.material ?? input.resources?.materials);
-  const profit = num(input.organization?.profit ?? input.organization?.net_income ?? 0);
-
-  if (energy <= 50) {
-    items.push({
-      id: 'decision-organization-energy-deficit',
-      category: 'organization',
-      title: 'An Organization is losing energy',
-      whyItMatters: 'Energy reserves are dangerously depleted; productive operations will halt if energy drops to zero.',
-      deadline: energy <= 20 ? 'Immediate' : 'Next game day',
-      expectedImpact: 'Prevent an operating blackout and avoid idle capacity penalties.',
-      riskLevel: energy <= 20 ? 'critical' : 'high',
-      primaryActionLabel: 'Procure Energy',
-      targetSection: 'market',
-      urgencyScore: 100 - energy,
-    });
-  } else if (materials < 25) {
-    items.push({
-      id: 'decision-organization-material-deficit',
-      category: 'organization',
-      title: 'Organization materials are running low',
-      whyItMatters: 'Productive operations cannot fulfill planned output without material inputs.',
-      deadline: 'In 1 Game Day',
-      expectedImpact: 'Keep industrial assembly lines running at 100% capacity.',
-      riskLevel: 'high',
-      primaryActionLabel: 'Buy Materials',
-      targetSection: 'market',
-      urgencyScore: 75,
-    });
-  } else if (profit < 0) {
-    items.push({
-      id: 'decision-organization-negative-cashflow',
-      category: 'organization',
-      title: 'Organization is operating at a net loss',
-      whyItMatters: 'Operating expenses exceed daily revenues, eroding working capital.',
-      deadline: 'End of Fiscal Cycle',
-      expectedImpact: 'Adjust production pricing and policy to restore positive operating margins.',
-      riskLevel: 'high',
-      primaryActionLabel: 'Review Financials',
-      targetSection: 'business',
-      urgencyScore: 70,
-    });
-  }
-
+  // 2. Building settlement shortfalls & degraded utilization
   for (const building of input.buildings ?? []) {
+    const status = String(building.status ?? '').toUpperCase();
+    const productiveStatus = String(building.v5_productive_status ?? '').toUpperCase();
+    const settlementStatus = String(building.latest_settlement_status ?? '').toUpperCase();
     const utilization = num(building.utilization_bps) / 100;
-    if (String(building.status ?? '').toUpperCase() === 'ACTIVE' && utilization < 75) {
+
+    if (productiveStatus === 'SUSPENDED' || status === 'SUSPENDED') {
+      items.push({
+      id: `decision-building-suspended-${building.id}`,
+        targetEntityId: building.id,
+        category: 'buildings',
+        title: 'A building is suspended from operation',
+        whyItMatters: 'Productive operations are halted due to capacity delinquency or manual suspension.',
+        deadline: 'Before the next settlement',
+        expectedImpact: 'Restore capacity standing and reactivate building production.',
+        riskLevel: 'critical',
+        primaryActionLabel: 'Review Buildings',
+        targetSection: 'buildings',
+        urgencyScore: 94,
+      });
+    } else if (settlementStatus === 'SHORTFALL' || settlementStatus === 'HALTED' || (status === 'ACTIVE' && utilization < 75)) {
       items.push({
         id: `decision-building-utilization-${building.id}`,
-        category: 'organization',
+        targetEntityId: building.id,
+        category: 'buildings',
         title: 'A building is operating below capacity',
-        whyItMatters: `Latest settlement utilization is ${Math.round(utilization)}%; shortages or operating policy may be limiting output.`,
+        whyItMatters: `Latest settlement utilization is ${Math.round(utilization)}%; resource shortfalls or operating conditions may be limiting output.`,
         deadline: 'Before the next settlement',
-        expectedImpact: 'Restore productive utilization and improve operating margin.',
-        riskLevel: utilization === 0 ? 'critical' : 'high',
+        expectedImpact: 'Supply necessary inputs and restore full productive margin.',
+        riskLevel: utilization === 0 || settlementStatus === 'HALTED' ? 'critical' : 'high',
         primaryActionLabel: 'Review Buildings',
-        targetSection: 'business',
-        urgencyScore: Math.round(80 - Math.min(30, utilization / 3)),
+        targetSection: 'buildings',
+        urgencyScore: Math.round(85 - Math.min(30, utilization / 3)),
       });
     }
   }
 
-  // 2. Unresolved Governance & Civic Referendums
-  const openProposals = (input.proposals ?? []).filter((p) => String(p.status ?? '').toLowerCase() === 'open');
+  // 3. Financial obligations, capacity rent arrears, and delinquency
+  const finance = input.finance ?? {};
+  const unpaidTax = num(finance.unpaid_tax ?? finance.unpaid_obligations ?? finance.debt ?? 0);
+  const capacityArrears = num(finance.capacity_arrears_units ?? 0);
+  const delinquencyStatus = String(finance.delinquency_status ?? finance.status ?? '').toUpperCase();
+
+  if (delinquencyStatus === 'PRODUCTIVE_CAPACITY_SUSPENDED' || delinquencyStatus === 'DELINQUENT' || capacityArrears > 0) {
+    items.push({
+      id: 'decision-finance-capacity-arrears',
+      category: 'finance',
+      title: 'House capacity rent requires urgent settlement',
+      whyItMatters: 'Unpaid capacity rent restricts expansion and eventually suspends productive building operations.',
+      deadline: 'Before the next settlement',
+      expectedImpact: 'Restore the House to good standing and safeguard productive buildings.',
+      riskLevel: delinquencyStatus === 'PRODUCTIVE_CAPACITY_SUSPENDED' ? 'critical' : 'high',
+      primaryActionLabel: 'Review Finance',
+      targetSection: 'finance',
+      urgencyScore: delinquencyStatus === 'PRODUCTIVE_CAPACITY_SUSPENDED' ? 98 : 88,
+    });
+  } else if (unpaidTax > 0) {
+    items.push({
+      id: 'decision-finance-tax-settlement',
+      category: 'finance',
+      title: 'A financial obligation needs settlement',
+      whyItMatters: 'Outstanding obligations accrue interest and limit House liquidity.',
+      deadline: 'Before the next settlement',
+      expectedImpact: 'Protect House liquidity and keep your financial standing healthy.',
+      riskLevel: 'high',
+      primaryActionLabel: 'Settle Obligation',
+      targetSection: 'finance',
+      urgencyScore: 78,
+    });
+  }
+
+  // 4. V5 Governance proposals open for voting
+  const openProposals = (input.proposals ?? []).filter((p) => {
+    const s = String(p.status ?? '').toLowerCase();
+    return s === 'open' || s === 'voting';
+  });
   if (openProposals.length > 0) {
     const proposal = openProposals[0];
+    const proposalTitle = proposal.title ?? proposal.action_type ?? 'Governance proposal';
     items.push({
       id: `decision-governance-vote-${proposal.id}`,
+      targetEntityId: proposal.id,
       category: 'governance',
       title: 'You have an unresolved governance vote',
-      whyItMatters: 'A governance proposal closes this cycle and may change shared rules or spending priorities.',
+      whyItMatters: `Proposal "${proposalTitle}" is actively voting and determines shared institutional rules and constitutional rates.`,
       deadline: 'Voting Closes Today',
-      expectedImpact: 'Shape the rules and shared investments that affect your House and Territory.',
+      expectedImpact: 'Participate in governance to represent your House interests.',
       riskLevel: 'medium',
       primaryActionLabel: 'Cast Ballot',
-      targetSection: 'civic',
+      targetSection: 'governance',
+      viewerCanAct: proposal.viewer?.canVote !== false,
       urgencyScore: 65,
     });
   }
 
-  // 4. Research & Technology Funding
+  // 5. House succession plans
+  const houseData = input.house;
+  if (houseData?.has_successor !== true) {
+    items.push({
+      id: 'decision-house-successor-pending',
+      category: 'house',
+      title: 'A house decision is pending',
+      whyItMatters: 'No legal successor is registered for your lineage. Designation ensures seamless estate continuity and prevents forfeiture of assets during generational transitions.',
+      deadline: 'Prior to Transition',
+      expectedImpact: 'Designate a successor to safeguard House legacy and productive assets.',
+      riskLevel: 'high',
+      primaryActionLabel: 'Manage House',
+      targetSection: 'house',
+      urgencyScore: 75,
+    });
+  }
+
+  // 6. Technology & Corporation Research
   const techProgress = num(input.technology?.progress);
   if (techProgress < 100) {
     items.push({
       id: 'decision-tech-funding-available',
       category: 'technology',
       title: 'Research funding is available',
-      whyItMatters: 'Contributions to the current research program can unlock shared technology improvements.',
+      whyItMatters: 'Advancing corporate research unlocks new building tiers, generational retrofits, and scale capabilities.',
       deadline: 'Current Research Cycle',
-      expectedImpact: 'Advance the technology generation and improve future productive capacity.',
+      expectedImpact: 'Accelerate tech research to unlock next-generation productive assets.',
       riskLevel: 'low',
       primaryActionLabel: 'Fund Research',
       targetSection: 'technology',
-      urgencyScore: 40,
+      urgencyScore: 45,
     });
   }
 
-  // 6. House & Succession Decisions
-  const houseData = input.house || input.dynasty;
-  if (!houseData?.successor_id) {
-    items.push({
-      id: 'decision-house-successor-pending',
-      category: 'house',
-      title: 'A house decision is pending',
-      whyItMatters: 'No legal successor is registered for your lineage. After mortality, you can designate an existing adult or begin a new adult through Civic Rebirth, but an unplanned estate risks liquidation and lost productive assets.',
-      deadline: 'Prior to Transition',
-      expectedImpact: 'Choose your continuity path early, preserve more productive assets, and keep the house eligible for family perks.',
-      riskLevel: 'high',
-      primaryActionLabel: 'Manage House',
-      targetSection: 'house',
-      urgencyScore: 78,
-    });
-  }
-  if (houseData?.perks_available) {
-    items.push({
-      id: 'decision-house-perk-available',
-      category: 'house',
-      title: 'Legacy points can unlock a family trait',
-      whyItMatters: 'A house perk creates a lasting advantage for every future generation.',
-      deadline: 'When House continuity capacity is available',
-      expectedImpact: 'Improve production, research, finance, or civic influence across the lineage.',
-      riskLevel: 'low',
-      primaryActionLabel: 'Open House',
-      targetSection: 'house',
-      urgencyScore: 48,
-    });
-  }
-
-  // 7. Finance & Outstanding Tax Settlement
-  const unpaidTax = num(input.finance?.unpaid_tax ?? 0);
-  if (unpaidTax > 0 || input.finance?.status === 'delinquent') {
-    items.push({
-      id: 'decision-finance-tax-settlement',
-      category: 'finance',
-      title: 'A financial obligation needs settlement',
-      whyItMatters: 'Unpaid obligations can accrue penalties and restrict your House from acting freely.',
-      deadline: 'Fiscal Day End',
-      expectedImpact: 'Protect House liquidity and keep your financial standing healthy.',
-      riskLevel: 'high',
-      primaryActionLabel: 'Settle Tax',
-      targetSection: 'finance',
-      urgencyScore: 72,
-    });
-  }
-
-  // 8. Market Arbitrage Signals
+  // 7. Market conditions & supply/demand imbalances
   const marketShortages = (input.market ?? []).filter(
-    (p) => num(p.demand) > num(p.supply) * 1.5 && num(p.demand) > 10
+    (p) => num(p.demand) > num(p.supply) * 1.5 && num(p.demand) > 10,
   );
-  if (marketShortages.length > 0) {
-    const topShortage = marketShortages[0];
+  for (const shortage of marketShortages) {
     items.push({
-      id: `decision-market-shortage-${topShortage.product}`,
+      id: `decision-market-shortage-${shortage.product}`,
       category: 'market',
-      title: `Critical ${topShortage.product.toUpperCase()} shortage on Central Market`,
-      whyItMatters: `Demand exceeds supply by ${(num(topShortage.demand) / Math.max(1, num(topShortage.supply))).toFixed(1)}x; premium spot pricing is available.`,
+      title: `Critical ${shortage.product.toUpperCase()} shortage on Central Market`,
+      whyItMatters: `Demand exceeds supply by ${(num(shortage.demand) / Math.max(1, num(shortage.supply))).toFixed(1)}x; premium spot pricing is available.`,
       deadline: 'Next Batch Settlement',
-      expectedImpact: 'Capture high-margin spot trade profits before market equilibrium restores.',
+      expectedImpact: 'Capture high-margin spot trade opportunities before market clears.',
       riskLevel: 'medium',
       primaryActionLabel: 'Place Trade Order',
       targetSection: 'market',
@@ -260,6 +273,39 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     });
   }
 
+  const expiringOrders = num(input.orders?.expiring_count);
+  if (expiringOrders > 0) {
+    items.push({
+      id: 'decision-market-orders-expiring',
+      category: 'market',
+      title: 'Open Market orders are nearing expiry',
+      whyItMatters: `${Math.round(expiringOrders)} of your open orders expire by the next market boundary.`,
+      deadline: 'Before the next batch settlement',
+      expectedImpact: 'Review open orders and renew or cancel positions intentionally.',
+      riskLevel: 'medium',
+      primaryActionLabel: 'Review Market Orders',
+      targetSection: 'market',
+      urgencyScore: 55,
+    });
+  }
+
   // Sort by urgency score descending
-  return items.sort((a, b) => b.urgencyScore - a.urgencyScore);
+  const allowed = new Set<DecisionRoute>([
+    'market', 'buildings', 'finance', 'technology', 'civic',
+    'governance', 'house', 'life', 'citizen', 'corporation',
+  ]);
+  return items
+    .sort((a, b) => b.urgencyScore - a.urgencyScore)
+    .map(({ targetSection, targetEntityId, viewerCanAct, ...item }) => {
+      const normalized = targetSection;
+      const targetRoute = allowed.has(normalized as DecisionRoute)
+        ? normalized as DecisionRoute
+        : 'house';
+      return {
+        ...item,
+        targetRoute,
+        ...(targetEntityId ? { targetEntityId } : {}),
+        viewerCanAct: viewerCanAct !== false,
+      };
+    });
 }

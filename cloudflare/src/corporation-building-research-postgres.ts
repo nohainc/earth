@@ -5,6 +5,29 @@ import { runEconomicMutation, postEconomicTransaction } from './settlement-barri
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
 
+async function loadBlueprint(
+  tx: PostgresRepository,
+  familyCode: string,
+  tier: number,
+): Promise<Record<string, unknown> | undefined> {
+  return (await tx.query(
+    `SELECT c.*,
+            COALESCE(jsonb_agg(jsonb_build_object(
+              'assetCode', a.code,
+              'constructionUnits', f.construction_units::TEXT,
+              'operatingInputUnits', f.operating_input_units::TEXT,
+              'operatingOutputUnits', f.operating_output_units::TEXT
+            ) ORDER BY a.code) FILTER (WHERE f.asset_id IS NOT NULL), '[]'::jsonb) AS resource_flows
+       FROM building_catalog c
+       LEFT JOIN building_catalog_resource_flows f ON f.catalog_id = c.id
+       LEFT JOIN economic_assets a ON a.id = f.asset_id
+      WHERE c.family_code = $1 AND c.tier = $2
+      GROUP BY c.id
+      LIMIT 1`,
+    [familyCode, tier],
+  )).rows[0] as Record<string, unknown> | undefined;
+}
+
 async function corporationForHuman(tx: PostgresRepository, humanId: string): Promise<string> {
   const membership = await tx.query<{ corporation_id: string | null }>(
     "SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' AND ha.corporation_id IS NOT NULL LIMIT 1",
@@ -138,11 +161,11 @@ export async function quoteCorporationBuildingResearch(repository: PostgresRepos
       [corporationId, input.buildingType],
     );
     const currentTier = Number(unlocked.rows[0]?.tier ?? 1);
-    const previous = (await tx.query(`SELECT * FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1`, [input.buildingType, currentTier])).rows[0];
+    const previous = await loadBlueprint(tx, input.buildingType, currentTier);
     if (!previous) throw new Error('Building blueprint not found');
     const targetTier = currentTier + 1;
     if (targetTier > 5) throw new Error(`No predefined building tier remains after Tier ${currentTier}`);
-    const target = (await tx.query(`SELECT * FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1`, [input.buildingType, targetTier])).rows[0];
+    const target = await loadBlueprint(tx, input.buildingType, targetTier);
     if (!target) throw new Error(`Predefined Tier ${targetTier} blueprint is missing from the building catalog`);
     const existing = (await tx.query<{ id: string; status: string }>(
       `SELECT p.id, p.status FROM corporation_research_projects p

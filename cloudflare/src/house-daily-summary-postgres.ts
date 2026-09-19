@@ -60,7 +60,7 @@ export async function getHouseDailySummary(
     throw new Error('Summary day must be a completed game day');
   }
 
-  const [statement, cashflow, taxes, market, events, notifications, capacity] = await Promise.all([
+  const [statement, cashflow, taxes, market, events, notifications, operatedBuildings] = await Promise.all([
     repository.query(`
       SELECT opening_assets, closing_assets, production, consumption, market_activity,
              obligations, exceptions, net_credit_units
@@ -107,6 +107,11 @@ export async function getHouseDailySummary(
       FROM notifications
       WHERE house_id = $1 AND game_day = $2
       ORDER BY created_at, id`, [houseId, summaryDay]),
+    repository.query(`
+      SELECT COUNT(*)::text AS count
+      FROM buildings b
+      JOIN owner_registry o ON o.economic_id = b.owner_economic_id
+      WHERE o.id = $1 AND b.status = 'ACTIVE'`, [houseId]),
   ]);
 
   let authoritative = statement.rows[0] as Record<string, unknown> | undefined;
@@ -173,6 +178,7 @@ export async function getHouseDailySummary(
     consumed: unitString(consumption[resource]),
     net: (units(production[resource]) - units(consumption[resource])).toString(),
   }));
+  const resourceShortfallCount = resourceDeltas.filter((delta) => units(delta.net) < 0n).length;
   const statementView = {
     openingAssets: jsonObject(authoritative.opening_assets),
     closingAssets: jsonObject(authoritative.closing_assets),
@@ -220,19 +226,25 @@ export async function getHouseDailySummary(
     currentGameDay,
     summaryDay,
     financial: {
-      income: income.toString(),
-      expenses: expenses.toString(),
-      net: (income - expenses).toString(),
-      taxes: taxUnits.toString(),
-      marketPurchases: market.rows.reduce((sum, row) => sum + units(row.purchases), 0n).toString(),
-      marketSales: market.rows.reduce((sum, row) => sum + units(row.sales), 0n).toString(),
+      incomeUnits: income.toString(),
+      expensesUnits: expenses.toString(),
+      netCashflowUnits: (income - expenses).toString(),
+      taxesUnits: taxUnits.toString(),
+      marketPurchasesUnits: market.rows.reduce((sum, row) => sum + units(row.purchases), 0n).toString(),
+      marketSalesUnits: market.rows.reduce((sum, row) => sum + units(row.sales), 0n).toString(),
       ...(capacityRow ? { capacityRent } : {}),
     },
     statement: statementView,
+    resourceShortfallCount,
     resources: { produced: resourceDeltas.filter((item) => units(item.produced) > 0n), consumed: resourceDeltas.filter((item) => units(item.consumed) > 0n), deltas: resourceDeltas, traded: market.rows.map((row) => ({ commodity: row.commodity, purchases: unitString(row.purchases), sales: unitString(row.sales), volume: unitString(row.volume) })) },
-    buildings: { completed: buildings.filter((event) => event.type.includes('COMPLETED')), upgraded: buildings.filter((event) => event.type.includes('UPGRADED')), inactive: buildings.filter((event) => event.type.includes('INACTIVE')) },
+    buildings: {
+      operatedBuildingCount: Number(operatedBuildings.rows[0]?.count ?? 0),
+      completed: buildings.filter((event) => event.type.includes('COMPLETED')),
+      upgraded: buildings.filter((event) => event.type.includes('UPGRADED')),
+      inactive: buildings.filter((event) => event.type.includes('INACTIVE')),
+    },
     research: { progress: research.filter((event) => !event.type.includes('COMPLETED')), completed: research.filter((event) => event.type.includes('COMPLETED')) },
-    governance: { relevantEvents: governance },
+    governance: { eventCount: governance.length, events: governance },
     house: { events: houseEvents },
     alerts,
     highlights,

@@ -33,10 +33,18 @@ export type BuildingOperatingPolicy = {
   }>;
 };
 
+export type BuildingResourceFlow = {
+  assetCode: string;
+  constructionUnits: string;
+  operatingInputUnits: string;
+  operatingOutputUnits: string;
+};
+
 export type BuildingAsset = {
   id: string;
   catalogId: string;
   buildingType: string;
+  familyCode: string | null;
   ownerType: BuildingOwnerType;
   ownerId: string;
   ownershipScope: BuildingScope;
@@ -56,6 +64,9 @@ export type BuildingAsset = {
 export type BuildingCatalogEntry = {
   id: string;
   code: string;
+  name: string;
+  description: string;
+  category: string;
   familyCode: string | null;
   tier: number;
   ownershipScope: BuildingScope;
@@ -66,7 +77,9 @@ export type BuildingCatalogEntry = {
   slotFootprintUnits: string;
   technologyDomain: string | null;
   minimumScaleCapability: string | null;
-  resourceFlows: unknown[];
+  serviceType: string | null;
+  serviceCapacityUnits: string | null;
+  resourceFlows: BuildingResourceFlow[];
 };
 
 export type BuildingPortfolio = {
@@ -116,6 +129,22 @@ function unitObject(value: unknown): Record<string, string> | null {
   return Object.keys(result).length ? result : null;
 }
 
+function resourceFlows(value: unknown): BuildingResourceFlow[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const assetCode = row.assetCode ?? row.asset_code ?? row.assetId;
+    if (assetCode == null || String(assetCode).trim() === '') return [];
+    return [{
+      assetCode: String(assetCode),
+      constructionUnits: text(row.constructionUnits ?? row.construction_units),
+      operatingInputUnits: text(row.operatingInputUnits ?? row.operating_input_units),
+      operatingOutputUnits: text(row.operatingOutputUnits ?? row.operating_output_units),
+    }];
+  });
+}
+
 function scaleUnits(value: Record<string, string> | null, numerator: number, denominator: number): Record<string, string> | null {
   if (!value || denominator <= 0) return null;
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, ((BigInt(item) * BigInt(numerator)) / BigInt(denominator)).toString()]));
@@ -145,6 +174,7 @@ export function buildingAssetFromRow(
     id: text(row.id, ''),
     catalogId: text(row.catalog_id, ''),
     buildingType: text(row.building_type ?? row.code, ''),
+    familyCode: row.family_code == null ? null : String(row.family_code),
     ownerType: String(row.owner_type ?? 'HOUSE') as BuildingOwnerType,
     ownerId: text(row.owner_id, ''),
     ownershipScope: String(row.ownership_scope ?? 'PRIVATE') as BuildingScope,
@@ -180,6 +210,9 @@ export function buildingCatalogEntryFromRow(row: Record<string, unknown>): Build
   return {
     id: text(row.id, ''),
     code: text(row.code, ''),
+    name: text(row.name, ''),
+    description: text(row.description, ''),
+    category: text(row.category, ''),
     familyCode: row.family_code == null ? null : String(row.family_code),
     tier: Number(row.tier ?? 0),
     ownershipScope: String(row.ownership_scope ?? 'PRIVATE') as BuildingScope,
@@ -190,7 +223,9 @@ export function buildingCatalogEntryFromRow(row: Record<string, unknown>): Build
     slotFootprintUnits: text(row.slot_footprint),
     technologyDomain: row.technology_domain == null ? null : String(row.technology_domain),
     minimumScaleCapability: row.minimum_scale_capability == null ? null : String(row.minimum_scale_capability),
-    resourceFlows: Array.isArray(row.resource_flows) ? row.resource_flows : [],
+    serviceType: row.service_type == null ? null : String(row.service_type),
+    serviceCapacityUnits: row.service_capacity_units == null ? null : text(row.service_capacity_units),
+    resourceFlows: resourceFlows(row.resource_flows),
   };
 }
 

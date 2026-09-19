@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/building_models.dart';
 import '../../shared/design_system/design_system.dart';
 
 /// Reviews the server's upgrade quote before submitting the upgrade command.
@@ -13,7 +14,7 @@ Future<bool?> showBuildingDetailUpgradeDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
   Map<String, dynamic> building,
-  List<dynamic> catalog, {
+  List<BuildingCatalogEntry> catalog, {
   EarthApi api = const EarthApi(),
 }) async {
   final buildingId = building['id']?.toString() ?? '';

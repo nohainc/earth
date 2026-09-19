@@ -225,7 +225,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
   @override
   Widget build(BuildContext context) {
     final human = widget.state.human;
-    final credits = formatWholeNumber(human['credits']);
+    final credits = formatCreditUnits(
+        widget.state.finance['balance'] ?? human['credits']);
     final flowMap = (widget.state.json['resourceFlows'] is Map
         ? widget.state.json['resourceFlows'] as Map
         : const {});
@@ -244,7 +245,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
     final resources = [
       _HudResource(
         key: 'energy',
-        label: 'Energy (NRG)',
+        label: 'Energy',
         icon: Icons.bolt_rounded,
         color: EarthResourceColors.energy,
         value: formatWholeNumber(widget.state.resources['energy']),
@@ -253,7 +254,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
       ),
       _HudResource(
         key: 'food',
-        label: 'Food (BIO)',
+        label: 'Food',
         icon: Icons.eco_outlined,
         color: EarthResourceColors.food,
         value: formatWholeNumber(widget.state.resources['food']),
@@ -262,7 +263,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
       ),
       _HudResource(
         key: 'material',
-        label: 'Materials (ORE)',
+        label: 'Materials',
         icon: Icons.terrain_outlined,
         color: EarthResourceColors.materials,
         value: formatWholeNumber(widget.state.resources['material'] ??
@@ -272,7 +273,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
       ),
       _HudResource(
         key: 'components',
-        label: 'Components (MAT)',
+        label: 'Components',
         icon: Icons.precision_manufacturing_outlined,
         color: EarthResourceColors.components,
         value: formatWholeNumber(widget.state.resources['components']),
@@ -281,7 +282,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
       ),
       _HudResource(
         key: 'compute',
-        label: 'Compute (DAT)',
+        label: 'Compute',
         icon: Icons.memory_rounded,
         color: EarthResourceColors.compute,
         value: formatWholeNumber(widget.state.resources['compute']),
@@ -585,7 +586,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel>
           context: context,
           icon: Icons.account_balance_wallet_outlined,
           label: 'Credits',
-          value: '$credits C',
+          value: credits,
           color: EarthResourceColors.credits,
           net: 0,
           onTap: () {

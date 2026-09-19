@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import { getDecisionQueue } from './decision-queue-postgres.ts';
 
 /** Convert database bigint values to the JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -18,7 +19,7 @@ function toJsonSafe<T>(value: T): T {
  * prices, resource balances, or Territory capacity on the client.
  */
 export async function getV5Overview(repository: PostgresRepository, houseId: string) {
-  const [clock, house, affiliation, wallet, statement, delinquency] = await Promise.all([
+  const [clock, house, affiliation, wallet, statement, delinquency, buildingCounts, marketRows, decisionQueue] = await Promise.all([
     readAuthoritativeGameTime(repository),
     repository.query<{ id: string; house_name: string; generation: number; status: string }>(
       'SELECT id, house_name, generation, status FROM houses WHERE id = $1', [houseId]),
@@ -36,6 +37,25 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
     repository.query<{ status: string; arrears_since_game_day: number | null; consecutive_missed_days: number }>(
       `SELECT status, arrears_since_game_day, consecutive_missed_days
        FROM v5_capacity_delinquency_state WHERE subject_type = 'HOUSE' AND subject_id = $1`, [houseId]),
+    repository.query<{ total_count: string; active_count: string; suspended_count: string; other_count: string }>(
+      `SELECT
+         COUNT(*)::TEXT AS total_count,
+         COUNT(*) FILTER (WHERE b.status = 'ACTIVE')::TEXT AS active_count,
+         COUNT(*) FILTER (WHERE b.status = 'SUSPENDED')::TEXT AS suspended_count,
+         COUNT(*) FILTER (WHERE b.status NOT IN ('ACTIVE', 'SUSPENDED'))::TEXT AS other_count
+       FROM buildings b
+       JOIN owner_registry o ON o.economic_id = b.owner_economic_id
+       WHERE o.id = $1 AND o.owner_type = 'HOUSE'`, [houseId]),
+    repository.query<{ product: string; supply: string; demand: string; price: string }>(
+      `SELECT LOWER(REPLACE(i.symbol, 'SPOT-', '')) AS product,
+              COALESCE(s.open_sell_units, 0)::TEXT AS supply,
+              COALESCE(s.open_buy_units, 0)::TEXT AS demand,
+              COALESCE(s.last_clearing_price_units, 0)::TEXT AS price
+         FROM market_instruments i
+         LEFT JOIN market_instrument_state s ON s.instrument_id = i.id
+        WHERE i.instrument_type = 'SPOT' AND i.status = 'ACTIVE'
+        ORDER BY i.symbol`),
+    getDecisionQueue(repository, houseId, 20),
   ]);
 
   const currentGameDay = clock.gameDay;
@@ -60,10 +80,34 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
       primaryActionLabel: 'Review Finance',
       status: delinquencyRow.status,
       missedDays: Number(delinquencyRow.consecutive_missed_days ?? 0),
-      targetSection: 'finance',
+      targetRoute: 'finance',
+      viewerCanAct: true,
       urgencyScore: delinquencyRow.status === 'PRODUCTIVE_CAPACITY_SUSPENDED' ? 100 : 90,
     });
   }
+
+  const buildingCountRow = buildingCounts.rows[0] ?? {
+    total_count: '0',
+    active_count: '0',
+    suspended_count: '0',
+    other_count: '0',
+  };
+
+  const marketProducts = marketRows.rows.map((r) => ({
+    product: r.product,
+    supplyUnits: r.supply,
+    demandUnits: r.demand,
+    priceUnits: r.price,
+  }));
+
+  const energyPriceUnits = marketRows.rows.find((r) => r.product === 'energy')?.price ?? '0';
+  const materialsPriceUnits = marketRows.rows.find((r) => r.product === 'material' || r.product === 'materials')?.price ?? '0';
+  const componentsPriceUnits = marketRows.rows.find((r) => r.product === 'component' || r.product === 'components')?.price ?? '0';
+
+  const decisions = decisionQueue.decisions ?? [];
+  const criticalCount = decisions.filter((d) => d.riskLevel === 'critical').length;
+  const highCount = decisions.filter((d) => d.riskLevel === 'high').length;
+
   return {
     ok: true,
     version: 'V5-OVERVIEW-1',
@@ -80,6 +124,24 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
     finance: {
       availableWalletUnits: wallet.rows[0]?.balance_units ?? '0',
       latestStatement: toJsonSafe(statement.rows[0] ?? null),
+    },
+    buildings: {
+      totalCount: Number(buildingCountRow.total_count),
+      activeCount: Number(buildingCountRow.active_count),
+      suspendedCount: Number(buildingCountRow.suspended_count),
+      otherCount: Number(buildingCountRow.other_count),
+    },
+    market: {
+      energyPriceUnits,
+      materialsPriceUnits,
+      componentsPriceUnits,
+      products: marketProducts,
+    },
+    decisions: {
+      totalCount: decisions.length,
+      criticalCount,
+      highCount,
+      items: decisions,
     },
     attention,
     generatedFrom: 'postgres-canonical-facts-v5',

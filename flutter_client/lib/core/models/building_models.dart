@@ -50,12 +50,12 @@ class BuildingSettlement {
         status: json['status']?.toString(),
         operatingCreditUnits: json['operatingCreditUnits']?.toString(),
         inputUnits: json['inputUnits'] is Map
-            ? (json['inputUnits'] as Map).map(
-                (key, value) => MapEntry(key.toString(), value.toString()))
+            ? (json['inputUnits'] as Map)
+                .map((key, value) => MapEntry(key.toString(), value.toString()))
             : null,
         outputUnits: json['outputUnits'] is Map
-            ? (json['outputUnits'] as Map).map(
-                (key, value) => MapEntry(key.toString(), value.toString()))
+            ? (json['outputUnits'] as Map)
+                .map((key, value) => MapEntry(key.toString(), value.toString()))
             : null,
       );
 }
@@ -79,9 +79,11 @@ class BuildingOperatingPolicy {
                 .toList(growable: false) ??
             const [],
         effectsByMode: (json['effectsByMode'] as Map?)?.map((mode, value) =>
-                MapEntry(mode.toString(), value is Map
-                    ? Map<String, dynamic>.from(value)
-                    : <String, dynamic>{})) ??
+                MapEntry(
+                    mode.toString(),
+                    value is Map
+                        ? Map<String, dynamic>.from(value)
+                        : <String, dynamic>{})) ??
             const {},
       );
 }
@@ -90,6 +92,7 @@ class BuildingAsset {
   final String id;
   final String catalogId;
   final String buildingType;
+  final String? familyCode;
   final String ownerType;
   final String ownerId;
   final String ownershipScope;
@@ -109,6 +112,7 @@ class BuildingAsset {
     required this.id,
     required this.catalogId,
     required this.buildingType,
+    required this.familyCode,
     required this.ownerType,
     required this.ownerId,
     required this.ownershipScope,
@@ -132,6 +136,7 @@ class BuildingAsset {
         id: json['id']?.toString() ?? '',
         catalogId: json['catalogId']?.toString() ?? '',
         buildingType: json['buildingType']?.toString() ?? '',
+        familyCode: json['familyCode']?.toString(),
         ownerType: json['ownerType']?.toString() ?? 'HOUSE',
         ownerId: json['ownerId']?.toString() ?? '',
         ownershipScope: json['ownershipScope']?.toString() ?? 'PRIVATE',
@@ -146,24 +151,47 @@ class BuildingAsset {
             json['operatingPolicy'] is Map
                 ? Map<String, dynamic>.from(json['operatingPolicy'] as Map)
                 : const {}),
-        permissions: BuildingPermissions.fromJson(
-            json['permissions'] is Map
-                ? Map<String, dynamic>.from(json['permissions'] as Map)
-                : const {}),
+        permissions: BuildingPermissions.fromJson(json['permissions'] is Map
+            ? Map<String, dynamic>.from(json['permissions'] as Map)
+            : const {}),
         allowedActions: (json['allowedActions'] as List?)
                 ?.map((value) => value.toString())
                 .toList(growable: false) ??
             const [],
-        settlement: BuildingSettlement.fromJson(
-            json['settlement'] is Map
-                ? Map<String, dynamic>.from(json['settlement'] as Map)
-                : const {}),
+        settlement: BuildingSettlement.fromJson(json['settlement'] is Map
+            ? Map<String, dynamic>.from(json['settlement'] as Map)
+            : const {}),
+      );
+}
+
+class BuildingResourceFlow {
+  final String assetCode;
+  final String constructionUnits;
+  final String operatingInputUnits;
+  final String operatingOutputUnits;
+
+  const BuildingResourceFlow({
+    required this.assetCode,
+    required this.constructionUnits,
+    required this.operatingInputUnits,
+    required this.operatingOutputUnits,
+  });
+
+  factory BuildingResourceFlow.fromJson(Map<String, dynamic> json) =>
+      BuildingResourceFlow(
+        assetCode: json['assetCode']?.toString() ?? '',
+        constructionUnits: json['constructionUnits']?.toString() ?? '0',
+        operatingInputUnits: json['operatingInputUnits']?.toString() ?? '0',
+        operatingOutputUnits: json['operatingOutputUnits']?.toString() ?? '0',
       );
 }
 
 class BuildingCatalogEntry {
   final String id;
   final String code;
+  final String name;
+  final String description;
+  final String category;
   final String? familyCode;
   final int tier;
   final String ownershipScope;
@@ -174,11 +202,16 @@ class BuildingCatalogEntry {
   final String slotFootprintUnits;
   final String? technologyDomain;
   final String? minimumScaleCapability;
-  final List<dynamic> resourceFlows;
+  final String? serviceType;
+  final String? serviceCapacityUnits;
+  final List<BuildingResourceFlow> resourceFlows;
 
   const BuildingCatalogEntry({
     required this.id,
     required this.code,
+    required this.name,
+    required this.description,
+    required this.category,
     required this.familyCode,
     required this.tier,
     required this.ownershipScope,
@@ -189,6 +222,8 @@ class BuildingCatalogEntry {
     required this.slotFootprintUnits,
     required this.technologyDomain,
     required this.minimumScaleCapability,
+    required this.serviceType,
+    required this.serviceCapacityUnits,
     required this.resourceFlows,
   });
 
@@ -196,6 +231,9 @@ class BuildingCatalogEntry {
       BuildingCatalogEntry(
         id: json['id']?.toString() ?? '',
         code: json['code']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        description: json['description']?.toString() ?? '',
+        category: json['category']?.toString() ?? '',
         familyCode: json['familyCode']?.toString(),
         tier: int.tryParse('${json['tier']}') ?? 0,
         ownershipScope: json['ownershipScope']?.toString() ?? 'PRIVATE',
@@ -207,7 +245,13 @@ class BuildingCatalogEntry {
         slotFootprintUnits: json['slotFootprintUnits']?.toString() ?? '0',
         technologyDomain: json['technologyDomain']?.toString(),
         minimumScaleCapability: json['minimumScaleCapability']?.toString(),
-        resourceFlows: (json['resourceFlows'] as List?)?.toList(growable: false) ??
+        serviceType: json['serviceType']?.toString(),
+        serviceCapacityUnits: json['serviceCapacityUnits']?.toString(),
+        resourceFlows: (json['resourceFlows'] as List?)
+                ?.whereType<Map>()
+                .map((row) => BuildingResourceFlow.fromJson(
+                    Map<String, dynamic>.from(row)))
+                .toList(growable: false) ??
             const [],
       );
 }
@@ -241,11 +285,13 @@ class BuildingPortfolio {
             'postgres-canonical-building-contract-v5',
         corporationPermissions: BuildingPermissions.fromJson(
             json['corporationPermissions'] is Map
-                ? Map<String, dynamic>.from(json['corporationPermissions'] as Map)
+                ? Map<String, dynamic>.from(
+                    json['corporationPermissions'] as Map)
                 : const {}),
       );
 
-  static List<BuildingAsset> _assets(dynamic value) => (value as List?)
+  static List<BuildingAsset> _assets(dynamic value) =>
+      (value as List?)
           ?.whereType<Map>()
           .map((row) => BuildingAsset.fromJson(Map<String, dynamic>.from(row)))
           .toList(growable: false) ??
@@ -309,8 +355,8 @@ class BuildingQuote {
             const [],
         resourceRequirements: (json['resourceRequirements'] as List?)
                 ?.whereType<Map>()
-                .map((value) => value.map((key, item) =>
-                    MapEntry(key.toString(), item.toString())))
+                .map((value) => value.map(
+                    (key, item) => MapEntry(key.toString(), item.toString())))
                 .toList(growable: false) ??
             const [],
         effectiveConstructionMinutes:

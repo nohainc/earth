@@ -1,44 +1,70 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
-import '../../core/models/earth_state.dart';
+import '../../core/models/building_models.dart';
+import '../../core/models/command_overview.dart';
+import '../../shared/design_system/earth_theme_context.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
 class CommandExecutiveQuadrant extends StatelessWidget {
-  final EarthState state;
+  final CommandOverview? overview;
+  final List<BuildingAsset> houseAssets;
   final ValueChanged<String>? onNavigate;
 
   const CommandExecutiveQuadrant({
     super.key,
-    required this.state,
+    this.overview,
+    this.houseAssets = const [],
     this.onNavigate,
   });
 
   @override
   Widget build(BuildContext context) {
-    final activeBuildings = state.buildings.whereType<Map>().where((building) {
-      return (building['status']?.toString().toLowerCase() ?? 'active') ==
-          'active';
-    }).length;
+    final effectiveOverview = overview;
+    if (effectiveOverview == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Text('Executive overview is temporarily unavailable.'),
+      );
+    }
+    final activeBuildings = houseAssets
+        .where((asset) => asset.status.toUpperCase() == 'ACTIVE')
+        .length;
+    final totalBuildings = houseAssets.length;
+    final otherBuildings = houseAssets
+        .where((asset) => asset.status.toUpperCase() != 'ACTIVE')
+        .length;
 
-    final marketProducts = state.market;
-    String formatPrice(dynamic val) {
-      if (val is Map) return formatPrice(val['price']);
-      if (val is num) return val.toStringAsFixed(2);
-      if (val is String && val.isNotEmpty) {
-        final d = double.tryParse(val);
-        if (d != null) return d.toStringAsFixed(2);
-        return val;
+    String formatMarketPrice(String val) {
+      if (val.isEmpty || val == '0' || val == '—') return '—';
+      final n = num.tryParse(val);
+      if (n != null) {
+        return formatCreditUnits(val);
       }
-      return '—';
+      return val;
     }
 
-    final rawComp = formatPrice(marketProducts['components']);
-    final componentsPrice = rawComp;
-    final rawEnergy = formatPrice(marketProducts['energy']);
-    final energyPrice = rawEnergy;
-    final rawMat = formatPrice(marketProducts['materials']);
-    final materialsPrice = rawMat;
+    final marketRows = <OverviewMarketProduct>[
+      const OverviewMarketProduct(product: 'energy', supplyUnits: '0', demandUnits: '0', priceUnits: '0'),
+      const OverviewMarketProduct(product: 'food', supplyUnits: '0', demandUnits: '0', priceUnits: '0'),
+      const OverviewMarketProduct(product: 'material', supplyUnits: '0', demandUnits: '0', priceUnits: '0'),
+      const OverviewMarketProduct(product: 'components', supplyUnits: '0', demandUnits: '0', priceUnits: '0'),
+      const OverviewMarketProduct(product: 'compute', supplyUnits: '0', demandUnits: '0', priceUnits: '0'),
+    ].map((fallback) => effectiveOverview.market.products.firstWhere(
+          (product) {
+            final key = product.product.toLowerCase();
+            return key == fallback.product ||
+                (fallback.product == 'material' && key == 'materials');
+          },
+          orElse: () => fallback,
+        )).toList();
+    final resourceColors = <String, Color>{
+      'energy': EarthResourceColors.energy,
+      'food': EarthResourceColors.food,
+      'material': EarthResourceColors.materials,
+      'components': EarthResourceColors.components,
+      'compute': EarthResourceColors.compute,
+    };
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -83,14 +109,16 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rowMetric('Energy (NRG)', '$energyPrice C',
-                          EarthResourceColors.energy),
-                      const SizedBox(height: 5),
-                      _rowMetric('Materials (ORE)', '$materialsPrice C',
-                          EarthResourceColors.materials),
-                      const SizedBox(height: 5),
-                      _rowMetric('Components (MAT)', '$componentsPrice C',
-                          EarthResourceColors.components),
+                      for (var i = 0; i < marketRows.length; i++) ...[
+                        _rowMetric(
+                          EarthResourceMeta.forCommodity(marketRows[i].product).label,
+                          formatMarketPrice(marketRows[i].priceUnits) == '—'
+                              ? '—'
+                              : formatMarketPrice(marketRows[i].priceUnits),
+                          resourceColors[marketRows[i].product] ?? context.primaryColor,
+                        ),
+                        if (i < marketRows.length - 1) const SizedBox(height: 5),
+                      ],
                     ],
                   ),
                   onTap: () => onNavigate?.call('market'),
@@ -100,22 +128,22 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 _ExecutiveCard(
                   width: cardWidth,
                   icon: '◈',
-                  iconColor: violetColor,
-                  title: 'OPERATIONS',
+                  iconColor: context.secondaryColor,
+                  title: 'BUILDINGS',
                   subtitle:
-                      '$activeBuildings ACTIVE · ${state.buildings.length} TOTAL',
+                      '$activeBuildings ACTIVE · $totalBuildings TOTAL',
                   infoDescription:
                       'Current building inventory and lifecycle state. Open Buildings for construction, maintenance, and production controls.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _rowMetric('Active buildings', '$activeBuildings',
-                          cyanAccentColor),
+                          context.primaryColor),
                       const SizedBox(height: 5),
                       _rowMetric(
                           'Other lifecycle states',
-                          '${state.buildings.length - activeBuildings}',
-                          mutedColor),
+                          '$otherBuildings',
+                          context.mutedColor),
                     ],
                   ),
                   onTap: () => onNavigate?.call('buildings'),
@@ -125,7 +153,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 _ExecutiveCard(
                   width: cardWidth,
                   icon: '§',
-                  iconColor: Colors.tealAccent,
+                  iconColor: context.successColor,
                   title: 'FINANCE',
                   subtitle: 'CURRENT BALANCE',
                   infoDescription:
@@ -135,14 +163,44 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     children: [
                       _rowMetric(
                           'Liquid Credits',
-                          formatCreditsAmount(state.finance['balance'] ??
-                              state.personalFinance['balance'] ??
-                              state.human['credits']),
-                          violetColor),
+                          formatCreditUnits(effectiveOverview.finance.availableWalletUnits),
+                          context.goldColor),
                       const SizedBox(height: 5),
                     ],
                   ),
                   onTap: () => onNavigate?.call('finance'),
+                ),
+
+                // 4. PHYSICAL CAPACITY CARD
+                _ExecutiveCard(
+                  width: cardWidth,
+                  icon: '▦',
+                  iconColor: context.primaryColor,
+                  title: 'CAPACITY',
+                  subtitle: effectiveOverview.capacity?.delinquencyStatus ?? 'UNAVAILABLE',
+                  infoDescription:
+                      'Authoritative House capacity allocation and current standing. Open Buildings for asset-level capacity and rent details.',
+                  body: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _rowMetric(
+                        'Allocated capacity',
+                        effectiveOverview.capacity == null
+                            ? 'UNAVAILABLE'
+                            : '${effectiveOverview.capacity!.totalUnits} units',
+                        context.primaryColor,
+                      ),
+                      const SizedBox(height: 5),
+                      _rowMetric(
+                        'Building capacity',
+                        effectiveOverview.capacity == null
+                            ? 'UNAVAILABLE'
+                            : '${effectiveOverview.capacity!.buildingUnits} units',
+                        context.mutedColor,
+                      ),
+                    ],
+                  ),
+                  onTap: () => onNavigate?.call('buildings'),
                 ),
               ],
             ),

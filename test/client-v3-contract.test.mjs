@@ -5,14 +5,14 @@ import fs from 'node:fs';
 const read = (file) => fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
 
 test('client canonical building and Territory surfaces use V3 vocabulary', () => {
-  const models = read('flutter_client/lib/models/building_models.dart');
+  const models = read('flutter_client/lib/core/models/building_models.dart');
   const realEstate = read('flutter_client/lib/core/api/earth_api_real_estate.dart');
   const navigation = read('flutter_client/lib/core/navigation_registry.dart');
   const dashboard = read('flutter_client/lib/features/command_center/dashboard.dart');
   const institutions = read('flutter_client/lib/core/api/earth_api_institutions.dart');
-  assert.match(models, /territoryId/);
-  assert.doesNotMatch(models, /cityId|city_id/);
-  assert.match(realEstate, /territoryId/);
+  assert.match(models, /BuildingCatalogEntry/);
+  assert.match(models, /resourceFlows/);
+  assert.doesNotMatch(models, /cityId|city_id|resourceOutputAmount/);
   assert.doesNotMatch(realEstate, /cityId|city_id/);
   assert.match(navigation, /canonicalRoute: 'territories'/);
   assert.match(navigation, /deprecated transition alias/);

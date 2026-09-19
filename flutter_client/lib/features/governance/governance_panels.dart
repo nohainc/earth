@@ -7,6 +7,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/governance_proposal.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/design_system/building_function.dart';
 import '../../core/nano_markup_helper.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
@@ -915,7 +916,8 @@ class _ProposalCard extends StatelessWidget {
           style: context.widgetFooterStyle.copyWith(height: 1.35));
     }
     final impact = Map<String, dynamic>.from(rawImpact);
-    final changes = impact['changes'] is List ? impact['changes'] as List : const [];
+    final changes =
+        impact['changes'] is List ? impact['changes'] as List : const [];
     final rows = <String>[];
     if (changes.isNotEmpty) {
       for (final raw in changes) {
@@ -935,7 +937,8 @@ class _ProposalCard extends StatelessWidget {
         'generationNumber': 'Generation',
       };
       for (final entry in labels.entries) {
-        if (impact[entry.key] != null) rows.add('${entry.value}: ${impact[entry.key]}');
+        if (impact[entry.key] != null)
+          rows.add('${entry.value}: ${impact[entry.key]}');
       }
     }
     if (impact['effectiveFromGameDay'] != null) {
@@ -944,11 +947,16 @@ class _ProposalCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: rows.isEmpty
-          ? [Text(proposal['impact_summary'].toString(), style: context.widgetFooterStyle)]
-          : rows.map((row) => Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Text(row, style: context.widgetFooterStyle),
-              )).toList(),
+          ? [
+              Text(proposal['impact_summary'].toString(),
+                  style: context.widgetFooterStyle)
+            ]
+          : rows
+              .map((row) => Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Text(row, style: context.widgetFooterStyle),
+                  ))
+              .toList(),
     );
   }
 
@@ -1640,11 +1648,7 @@ class _ProposalCard extends StatelessWidget {
     final ownership = detail['ownership_class']?.toString() ?? 'civic';
     final desc = (detail['description'] ?? detail['catalog_description'] ?? '')
         .toString();
-    final purpose = (detail['primary_economic_purpose'] ??
-            detail['primaryEconomicPurpose'] ??
-            EarthBuildingMeta.getEconomicPurpose(detail,
-                category: category, ownership: ownership))
-        .toString();
+    final purpose = buildingEconomicFunctionFromJson(detail);
 
     final creditCost = asIntOr(
         detail['cost_credits'] ?? detail['baseCreditCost'] ?? detail['cost'],
@@ -1787,7 +1791,7 @@ class _ProposalCard extends StatelessWidget {
                     ],
                     const SizedBox(height: 6),
                     Text(
-                      'Economic Purpose: $purpose',
+                      'Economic Function: $purpose',
                       style: context.widgetFooterStyle,
                     ),
                   ],

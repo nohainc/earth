@@ -16,10 +16,10 @@ void main() {
     final client = MockClient((_) async => http.Response(NanoMarkupHelper.encode({
       'ok': true, 'gameDay': 185, 'daysElapsed': 1, 'sinceDay': 184,
       'netWealthDelta': {'current': 158000, 'previous': 152400, 'delta': 5600, 'deltaPct': 3.67},
-      'financial': {'income': 0, 'expenses': 0, 'net': 0, 'taxes': 0},
+      'financial': {'incomeUnits': '0', 'expensesUnits': '0', 'netCashflowUnits': '0', 'taxesUnits': '0', 'marketSalesUnits': '0', 'marketPurchasesUnits': '0'},
       'marketMovements': [],
-      'buildings': {'activeBusinesses': 2, 'totalDailyOutput': 3840, 'activeMachines': 4, 'degradedMachinesCount': 1, 'pendingContractsCount': 2},
-      'governance': {'relevantEvents': []},
+      'buildings': {'operatedBuildingCount': 0},
+      'governance': {'eventCount': 0, 'events': []},
       'alerts': {'unreadNotifications': 2, 'unreadComms': 1, 'criticalAlertsCount': 0},
       'highlights': [{'id': 'rec_energy', 'title': 'Capitalize on Energy Rally', 'urgency': 'high', 'reason': 'Energy up', 'actionLabel': 'SELL ENERGY', 'targetSection': 'market'}],
     }), 200, headers: {'content-type': 'application/nanomarkup'}));

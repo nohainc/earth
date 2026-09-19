@@ -72,16 +72,19 @@ class _LastCompletedDayStripState extends State<LastCompletedDayStrip> {
                           Text('DAY ${summary.gameDay}',
                               style: context.widgetTitleStyle),
                           Text(
-                              'NET ${formatWholeNumber(summary.financial.netProfit)} C',
+                              'NET CASHFLOW ${formatCreditUnits(summary.financial.netCashflowUnits)}',
                               style: context.widgetTitleStyle.copyWith(
-                                  color: summary.financial.netProfit >= 0
+                                  color: !summary.financial.netCashflowUnits.startsWith('-')
                                       ? context.successColor
                                       : context.warningColor)),
                           Text(
-                              '${summary.buildings.activeBuildings} active buildings',
+                              '${summary.buildings.operatedBuildingCount} buildings operated',
                               style: context.widgetFooterStyle),
                           Text(
-                              '${summary.governance.recentCivicEvents.length} civic updates',
+                              '${summary.governance.eventCount} governance events',
+                              style: context.widgetFooterStyle),
+                          Text(
+                              '${summary.resourceShortfallCount} resource shortfalls',
                               style: context.widgetFooterStyle),
                         ],
                       ),

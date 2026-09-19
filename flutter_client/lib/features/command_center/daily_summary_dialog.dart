@@ -145,28 +145,29 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
   }
 
   Widget _buildHeroDeltaBanner(DailySummaryReport r) {
-    final net = r.financial.netProfit;
+    final netUnits = r.financial.netCashflowUnits;
+    final isNegative = netUnits.startsWith('-');
 
     return EarthMetricGrid(
       metrics: [
         EarthMetricTile(
-          label: 'NET CREDIT FLOW',
-          value: '${net >= 0 ? '+' : ''}${formatWholeNumber(net)} CR',
+          label: 'NET CASHFLOW',
+          value: '${isNegative ? '' : '+'}${formatCreditUnits(netUnits)}',
           subtitle:
-              net >= 0 ? 'Positive completed day' : 'Negative completed day',
-          icon: net >= 0 ? Icons.trending_up : Icons.trending_down,
+              !isNegative ? 'Positive completed day' : 'Negative completed day',
+          icon: !isNegative ? Icons.trending_up : Icons.trending_down,
           accentColor: context.primaryColor,
         ),
         EarthMetricTile(
           label: 'INCOME',
-          value: '+${formatWholeNumber(r.financial.totalIncome)} CR',
+          value: '+${formatCreditUnits(r.financial.incomeUnits)}',
           subtitle: 'Recorded House receipts',
           icon: Icons.south_west_outlined,
           accentColor: context.successColor,
         ),
         EarthMetricTile(
           label: 'EXPENSES',
-          value: '-${formatWholeNumber(r.financial.totalExpenses)} CR',
+          value: '-${formatCreditUnits(r.financial.expensesUnits)}',
           subtitle: 'Recorded House outflows',
           icon: Icons.north_east_outlined,
           accentColor: context.warningColor,
@@ -177,6 +178,7 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
 
   Widget _buildAllBriefingContent(DailySummaryReport r) {
     final financial = r.financial;
+    final isNegative = financial.netCashflowUnits.startsWith('-');
 
     final cockpit = EarthPageCockpit(
       status: 'DAY ${r.gameDay} COMPLETE',
@@ -190,19 +192,19 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
           'Your House results, changes, and priorities from the completed day',
       metrics: [
         CockpitMetric(
-          label: 'Net Flow',
+          label: 'Net Cashflow',
           value:
-              '${financial.netProfit >= 0 ? '+' : ''}${formatWholeNumber(financial.netProfit)} CR',
-          icon: financial.netProfit >= 0
+              '${isNegative ? '' : '+'}${formatCreditUnits(financial.netCashflowUnits)}',
+          icon: !isNegative
               ? Icons.trending_up
               : Icons.trending_down,
-          color: financial.netProfit >= 0
+          color: !isNegative
               ? context.successColor
               : context.warningColor,
         ),
         CockpitMetric(
           label: 'Income',
-          value: '+${formatWholeNumber(financial.totalIncome)} CR',
+          value: '+${formatCreditUnits(financial.incomeUnits)}',
           icon: Icons.south_west_outlined,
           color: context.successColor,
         ),
@@ -270,7 +272,7 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
           title: 'WHAT REQUIRES ATTENTION',
           showSurface: false,
           infoBulletPoints: const [
-            'High-priority operational, civic, and commercial directives recommended for your immediate review.',
+            'High-priority operational, governance, and commercial directives recommended for your immediate review.',
           ],
           child: _buildDirectivesContent(r),
         ),
@@ -285,12 +287,12 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
         ),
         SizedBox(height: context.spacingTopic),
         EarthSection(
-          title: 'TERRITORY & GOVERNANCE CHANGES',
+          title: 'GOVERNANCE EVENTS',
           showSurface: false,
           infoBulletPoints: const [
-            'Public territory and governance events recorded during this day.',
+            'V5 Earth and Corporation governance events recorded during this day.',
           ],
-          child: _buildCivicContent(r),
+          child: _buildGovernanceContent(r),
         ),
       ],
     );
@@ -301,27 +303,27 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
     final rows = [
       (
         'Income',
-        '+${formatWholeNumber(f.totalIncome)} CR',
+        '+${formatCreditUnits(f.incomeUnits)}',
         context.successColor
       ),
       (
         'Expenses',
-        '-${formatWholeNumber(f.totalExpenses)} CR',
+        '-${formatCreditUnits(f.expensesUnits)}',
         context.warningColor
       ),
       (
         'Taxes paid',
-        '-${formatWholeNumber(f.civicTaxes)} CR',
+        '-${formatCreditUnits(f.taxesUnits)}',
         context.mutedColor
       ),
       (
         'Market sales',
-        '+${formatWholeNumber(f.marketSales)} CR',
+        '+${formatCreditUnits(f.marketSalesUnits)}',
         context.successColor
       ),
       (
         'Market purchases',
-        '-${formatWholeNumber(f.marketPurchases)} CR',
+        '-${formatCreditUnits(f.marketPurchasesUnits)}',
         context.mutedColor
       ),
     ];
@@ -346,7 +348,7 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
       ...r.buildings.upgraded,
       ...r.buildings.inactive,
       ...r.researchEvents,
-      ...r.governanceEvents,
+      ...r.governance.events,
       ...r.houseEvents,
     ];
     if (events.isEmpty) {
@@ -457,14 +459,14 @@ class _DailySummaryDialogState extends State<DailySummaryDialog> {
         : EarthDataList(children: rows);
   }
 
-  Widget _buildCivicContent(DailySummaryReport r) {
-    if (r.governanceEvents.isEmpty) {
+  Widget _buildGovernanceContent(DailySummaryReport r) {
+    if (r.governance.events.isEmpty) {
       return const EarthEmptyState(
-          message: 'No territory or governance changes were recorded.',
+        message: 'No governance events were recorded.',
           icon: Icons.account_balance_outlined);
     }
     return EarthDataList(
-        children: r.governanceEvents
+        children: r.governance.events
             .map((event) => EarthDataRow(
                   title: event.title,
                   subtitle: event.details.isEmpty ? event.type : event.details,

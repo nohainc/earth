@@ -244,7 +244,23 @@
       "path": "/api/house",
       "owner": "HouseRoutes",
       "auth": "HOUSE_SELF",
-      "service": "getHouseOverview",
+      "service": "getHouseProfile",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/house/profile",
+      "owner": "HouseRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "updateHouseProfile",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/house/succession",
+      "owner": "HouseRoutes",
+      "auth": "HUMAN_SELF",
+      "service": "registerHouseSuccessor",
       "status": "ACTIVE"
     },
     {
@@ -437,6 +453,14 @@
       "owner": "BuildingRoutes",
       "auth": "HOUSE_SELF",
       "service": "quoteBuildingUpgrade",
+      "status": "ACTIVE"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v5/buildings/{id}/retrofit-quote",
+      "owner": "BuildingRoutes",
+      "auth": "HOUSE_SELF",
+      "service": "quoteBuildingRetrofit",
       "status": "ACTIVE"
     },
     {

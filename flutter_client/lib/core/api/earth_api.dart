@@ -7,6 +7,7 @@ import '../models/corporation_profile.dart';
 import '../models/governance_proposal.dart';
 import '../models/house_profile.dart';
 import '../models/building_models.dart';
+import '../models/command_overview.dart';
 
 part 'earth_api_auth.dart';
 part 'earth_api_world.dart';
@@ -26,6 +27,8 @@ part 'earth_api_real_estate.dart';
 part 'earth_api_organizations.dart';
 part 'earth_api_residency.dart';
 part 'earth_api_mutual_credit.dart';
+part 'earth_api_command_overview.dart';
+
 
 String newClientCorrelationId(String prefix) =>
     '$prefix-${Random.secure().nextInt(0x7fffffff)}';

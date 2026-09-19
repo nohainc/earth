@@ -6,6 +6,7 @@ import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/building_models.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/design_system/building_function.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'building_detail_upgrade_dialog.dart';
@@ -32,22 +33,62 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   String _selectedCategory = 'all';
   String _catalogFilter = 'all';
   String _sortMode = 'default';
-  String _plannerSelectedBlueprint = 'restaurant';
+  String _plannerSelectedBlueprint = '';
   Set<String>? _expandedBuildingGroups;
 
   bool get _hasActiveCorporation {
-    final corporationId = widget.state.membership?['corporation_id']
-            ?.toString() ??
-        widget.state.human['corporation_id']?.toString();
+    final corporationId =
+        widget.state.membership?['corporation_id']?.toString() ??
+            widget.state.human['corporation_id']?.toString();
     return corporationId != null &&
         corporationId.isNotEmpty &&
         corporationId != 'null' &&
         corporationId != 'Independent';
   }
 
-  String _buildingImageAsset(String buildingType) {
-    return EarthBuildingMeta.getAssetPath(buildingType);
+  String _familyKey(BuildingCatalogEntry entry) {
+    final family = entry.familyCode?.trim();
+    return family == null || family.isEmpty ? entry.code : family;
   }
+
+  String? _familyCodeForBuilding(
+      Map<String, dynamic> building, List<BuildingCatalogEntry> catalog) {
+    final explicit = building['family_code']?.toString().trim();
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    final catalogId = building['catalog_id']?.toString();
+    final buildingType = building['building_type']?.toString();
+    for (final entry in catalog) {
+      if (entry.id == catalogId || entry.code == buildingType) {
+        return entry.familyCode;
+      }
+    }
+    return null;
+  }
+
+  String _catalogDisplayName(BuildingCatalogEntry entry) {
+    if (entry.name.trim().isNotEmpty) return entry.name;
+    // A missing canonical name is a catalog integrity error. Keep the exact
+    // blueprint code visible so the malformed record is diagnosable.
+    return '[MISSING NAME: ${entry.code}]';
+  }
+
+  Map<String, dynamic> _catalogQuoteFields(BuildingCatalogEntry entry) => {
+        'id': entry.id,
+        'code': entry.code,
+        'building_type': entry.code,
+        'family_code': entry.familyCode,
+        'tier': entry.tier,
+        'name': _catalogDisplayName(entry),
+        'description': entry.description,
+        'category': entry.category,
+        'ownership_scope': entry.ownershipScope,
+        'construction_credit_units': entry.constructionCreditUnits,
+        'construction_minutes': entry.constructionMinutes,
+        'operating_credit_units': entry.operatingCreditUnits,
+        'slot_footprint': entry.slotFootprintUnits,
+        'technology_domain': entry.technologyDomain,
+        'minimum_scale_capability': entry.minimumScaleCapability,
+      };
 
   String? _currentHouseCapacityCostUnits() {
     final profile = widget.state.corporationProfile;
@@ -55,7 +96,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     if (capacity is Map && capacity['houseBaseRateUnits'] != null) {
       return capacity['houseBaseRateUnits'].toString();
     }
-    return widget.state.corporation['house_capacity_base_rate_units']?.toString();
+    return widget.state.corporation['house_capacity_base_rate_units']
+        ?.toString();
   }
 
   String _lastSettlementFlow(List<Map<String, dynamic>> buildings) {
@@ -67,7 +109,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     if (settled.isEmpty) return 'UNAVAILABLE';
     final latestDay = settled.first['latest_settlement_game_day'];
     final statuses = settled
-        .where((building) => building['latest_settlement_game_day'] == latestDay)
+        .where(
+            (building) => building['latest_settlement_game_day'] == latestDay)
         .map((building) => building['latest_settlement_status']?.toString())
         .whereType<String>()
         .toSet()
@@ -83,6 +126,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       'id': asset.id,
       'catalog_id': asset.catalogId,
       'building_type': asset.buildingType,
+      'family_code': asset.familyCode,
       'owner_type': asset.ownerType,
       'owner_id': asset.ownerId,
       'ownership_scope': asset.ownershipScope,
@@ -108,18 +152,19 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         'allowedModes': asset.operatingPolicy.allowedModes,
         'effectsByMode': asset.operatingPolicy.effectsByMode,
       },
-      'settlement_operating_credit_units': asset.settlement.operatingCreditUnits,
+      'settlement_operating_credit_units':
+          asset.settlement.operatingCreditUnits,
       'settlement_input_units': asset.settlement.inputUnits,
       'settlement_output_units': asset.settlement.outputUnits,
     });
     return row;
   }
 
-  Widget _buildingImage(BuildContext context, String buildingType) {
+  Widget _buildingImage(BuildContext context, {String? familyCode}) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(context.radiusControl),
       child: Image.asset(
-        _buildingImageAsset(buildingType),
+        EarthBuildingMeta.getFamilyAssetPath(familyCode),
         width: 92,
         height: 92,
         cacheWidth: 256,
@@ -228,10 +273,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 fontSize: 11, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 6),
                         ...options.map((option) {
-                          final cost = formatCreditUnits(option['creditCostUnits']);
+                          final cost =
+                              formatCreditUnits(option['creditCostUnits']);
                           final payback = option['paybackGameDays'];
                           final label = option['type']?.toString() ?? 'OPTION';
-                          final effect = option['effect']?.toString() ?? 'effect unavailable';
+                          final effect = option['effect']?.toString() ??
+                              'effect unavailable';
                           final minutes = option['constructionMinutes'];
                           return Padding(
                             padding: const EdgeInsets.only(top: 3),
@@ -379,9 +426,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final quotedCreditCost =
         int.tryParse(quote['creditCostUnits']?.toString() ?? '');
     final quotedFootprint = int.tryParse(
-        (quote['footprintUnits'] ?? quote['targetFootprintUnits'])?.toString() ?? '');
-    final quotedMinutes = int.tryParse(
-        quote['effectiveConstructionMinutes']?.toString() ?? '');
+        (quote['footprintUnits'] ?? quote['targetFootprintUnits'])
+                ?.toString() ??
+            '');
+    final quotedMinutes =
+        int.tryParse(quote['effectiveConstructionMinutes']?.toString() ?? '');
     final resourceRequirements = (quote['resourceRequirements'] as List?)
         ?.whereType<Map>()
         .map((item) => '${item['code']}: ${item['requiredUnits']}')
@@ -641,7 +690,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
-    final catalog = widget.state.buildingCatalog;
+    final List<BuildingCatalogEntry> catalog =
+        widget.state.buildingPortfolio?.catalog ?? const [];
     final isIndependent = !_hasActiveCorporation;
     final viewerId = widget.state.human['id']?.toString();
     final houseId = widget.state.house['id']?.toString() ??
@@ -659,12 +709,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             .where((b) => b['status'] != 'closed')
             .toList()
         : buildings
-        .where((b) =>
-            b['owner_type']?.toString().toUpperCase() == 'HOUSE' &&
-            houseId != null && b['owner_id']?.toString() == houseId &&
-            b['status'] != 'closed')
-        .toList();
-    final corporationPublicBuildings = widget.state.corporationPublicBuildingAssets
+            .where((b) =>
+                b['owner_type']?.toString().toUpperCase() == 'HOUSE' &&
+                houseId != null &&
+                b['owner_id']?.toString() == houseId &&
+                b['status'] != 'closed')
+            .toList();
+    final corporationPublicBuildings = widget
+        .state.corporationPublicBuildingAssets
         .map((asset) => _houseAssetRow(asset, null))
         .where((b) => b['status'] != 'closed')
         .toList();
@@ -850,7 +902,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   Widget _buildPrivatePanel(
     BuildContext context, {
     required List<Map<String, dynamic>> privateBuildings,
-    required List<dynamic> catalog,
+    required List<BuildingCatalogEntry> catalog,
     required int? usedPrivateSlots,
     required String? viewerId,
     required String? capacityCostUnits,
@@ -919,8 +971,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           ),
         ] else
           _buildCatalogTab(context,
-              catalog: catalog,
-              ownershipFilter: 'private'),
+              catalog: catalog, ownershipFilter: 'private'),
       ],
     );
   }
@@ -929,7 +980,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   Widget _buildCorporationPanel(
     BuildContext context, {
     required List<Map<String, dynamic>> publicBuildings,
-    required List<dynamic> catalog,
+    required List<BuildingCatalogEntry> catalog,
     required String? viewerId,
     bool showSubTabs = false,
     int contentTab = 0,
@@ -939,7 +990,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showPanelTitle)
-          Text('CORPORATION / PUBLIC BUILDINGS', style: context.topicTitleStyle),
+          Text('CORPORATION / PUBLIC BUILDINGS',
+              style: context.topicTitleStyle),
         SizedBox(height: context.spacingControl),
         _buildAttributeGrid(
           context,
@@ -952,7 +1004,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             ),
             (
               'OCCUPIED CAPACITY',
-              publicBuildings.fold<int>(0, (sum, building) => sum + asIntOr(building['slot_footprint'], 0)).toString(),
+              publicBuildings
+                  .fold<int>(
+                      0,
+                      (sum, building) =>
+                          sum + asIntOr(building['slot_footprint'], 0))
+                  .toString(),
               Icons.pie_chart_outline,
               context.warningColor
             ),
@@ -969,7 +1026,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         if (!showSubTabs || contentTab == 0) ...[
           publicBuildings.isEmpty
               ? const EarthEmptyState(
-          message: 'No Corporation/Public buildings are available.',
+                  message: 'No Corporation/Public buildings are available.',
                   icon: Icons.account_balance_outlined)
               : LayoutBuilder(
                   builder: (context, constraints) {
@@ -980,7 +1037,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   },
                 ),
         ] else
-          _buildCatalogTab(context, catalog: catalog, ownershipFilter: 'public'),
+          _buildCatalogTab(context,
+              catalog: catalog, ownershipFilter: 'public'),
         SizedBox(height: context.spacingTopic),
       ],
     );
@@ -988,7 +1046,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
   // ─── CATALOG panel ─────────────────────────────────────────────────────────
   Widget _buildCatalogPanel(BuildContext context,
-      {required List<dynamic> catalog}) {
+      {required List<BuildingCatalogEntry> catalog}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1069,7 +1127,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   Widget _buildEstatesTab(
     BuildContext context, {
     required List<Map<String, dynamic>> privateBuildings,
-    required List<dynamic> catalog,
+    required List<BuildingCatalogEntry> catalog,
     required String? viewerId,
   }) {
     final filteredBuildings = _selectedCategory == 'all'
@@ -1228,23 +1286,24 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   }
 
   List<Widget> _buildGroupedBuildingCards(
-    BuildContext context,
-    List<Map<String, dynamic>> buildings,
-    String? viewerId,
-    List<dynamic> catalog) {
+      BuildContext context,
+      List<Map<String, dynamic>> buildings,
+      String? viewerId,
+      List<BuildingCatalogEntry> catalog) {
     final expandedGroups = _expandedBuildingGroups ??= <String>{};
     final groups = <String, List<Map<String, dynamic>>>{};
     for (final building in buildings) {
-      final key =
-          '${building['building_type'] ?? ''}|${building['name'] ?? ''}';
+      final key = _familyCodeForBuilding(building, catalog) ??
+          building['building_type']?.toString() ??
+          '';
       groups.putIfAbsent(key, () => []).add(building);
     }
     return groups.values.map((items) {
       final first = items.first;
       final bType = first['building_type']?.toString() ?? '';
-      final totalSpace =
-          items.fold<int>(0, (sum, b) => sum + (asInt(b['slot_footprint']) ?? 0));
-      final tiers = items.map((b) => asIntOr(b['tier'], 1)).toList()..sort();
+      final familyCode = _familyCodeForBuilding(first, catalog);
+      final totalSpace = items.fold<int>(
+          0, (sum, b) => sum + (asInt(b['slot_footprint']) ?? 0));
       final hasConstruction =
           items.any((b) => b['status']?.toString() == 'under_construction');
       final hasIssue = items.any((b) {
@@ -1259,59 +1318,48 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       final avgProgress = constructionItems.isEmpty
           ? 100.0
           : constructionItems.fold<double>(
-              0, (sum, b) => sum + _authoritativeBuildingProgress(b)) /
+                  0, (sum, b) => sum + _authoritativeBuildingProgress(b)) /
               constructionItems.length;
-      final allConstructed = items.every((b) =>
-        _authoritativeBuildingProgress(b) >= 100.0 &&
-          b['status']?.toString() != 'under_construction');
-      final aggregate = Map<String, dynamic>.from(first)
-        ..['slot_footprint'] = totalSpace
-        ..['tier'] = tiers.first
-        ..['construction_progress'] = avgProgress
-        ..['resource_output_amount'] = items.fold<double>(
-            0, (sum, b) => sum + asDoubleOr(b['resource_output_amount'], 0))
-        ..['daily_operating_credits'] = items.fold<double>(
-            0, (sum, b) => sum + asDoubleOr(b['daily_operating_credits'], 0));
-      for (final field in [
-        'upkeep_energy',
-        'upkeep_food',
-        'upkeep_materials',
-        'upkeep_components',
-        'upkeep_compute'
-      ]) {
-        aggregate[field] =
-            items.fold<double>(0, (sum, b) => sum + asDoubleOr(b[field], 0));
+      // Resolve the current tier and family presentation from canonical V5
+      // catalog data. The family is the visual/progression identity; the
+      // exact code remains only the installed blueprint identity.
+      BuildingCatalogEntry? catalogMatch;
+      for (final entry in catalog) {
+        if (entry.code == bType ||
+            entry.id == first['catalog_id']?.toString()) {
+          catalogMatch = entry;
+          break;
+        }
       }
-
-      // Lookup catalog spec for description and economic purpose
-      final catalogMatch = catalog.whereType<Map>().firstWhere(
-            (c) => (c['building_type'] ?? c['type']) == bType,
-            orElse: () => <String, dynamic>{},
-          );
+      final familyEntry = familyCode == null
+          ? catalogMatch
+          : catalog
+              .where((entry) => _familyKey(entry) == familyCode)
+              .fold<BuildingCatalogEntry?>(
+                  null,
+                  (current, entry) =>
+                      current == null || entry.tier < current.tier
+                          ? entry
+                          : current);
       final desc = (first['description'] ??
               first['catalog_description'] ??
-              catalogMatch['description'] ??
+              catalogMatch?.description ??
               '')
           .toString();
-      final isCorporationPublic = first['owner_type']?.toString().toUpperCase() == 'CORPORATION' &&
-          first['ownership_scope']?.toString().toUpperCase() == 'PUBLIC';
+      final isCorporationPublic =
+          first['owner_type']?.toString().toUpperCase() == 'CORPORATION' &&
+              first['ownership_scope']?.toString().toUpperCase() == 'PUBLIC';
       final category =
-          (first['category'] ?? catalogMatch['category'] ?? 'facility')
+          (first['category'] ?? catalogMatch?.category ?? 'facility')
               .toString()
               .toUpperCase();
-      final purpose = (first['primary_economic_purpose'] ??
-              first['primaryEconomicPurpose'] ??
-              catalogMatch['primary_economic_purpose'] ??
-              catalogMatch['primaryEconomicPurpose'] ??
-              EarthBuildingMeta.getEconomicPurpose(
-                first,
-                ownership: first['ownership_class']?.toString(),
-                category: category,
-              ))
-          .toString();
+      final purpose = buildingEconomicFunctionFromJson(first);
 
-      final name = first['name']?.toString() ?? 'Building';
-      final groupKey = '$bType|$name';
+      final name = familyEntry?.name ??
+          catalogMatch?.name ??
+          first['name']?.toString() ??
+          'Building';
+      final groupKey = familyCode ?? bType;
       final isExpanded = expandedGroups.contains(groupKey);
       final policies = items
           .map((b) => b['operating_mode']?.toString() ?? 'UNKNOWN')
@@ -1344,7 +1392,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildingImage(context, bType),
+                      _buildingImage(context, familyCode: familyCode),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -1379,8 +1427,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               runSpacing: 4,
                               children: [
                                 EarthBadge(
-                                  label:
-                                      '$totalSpace CAPACITY UNITS',
+                                  label: '$totalSpace CAPACITY UNITS',
                                   variant: EarthBadgeVariant.neutral,
                                 ),
                                 EarthBadge(
@@ -1401,7 +1448,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             ],
                             const SizedBox(height: 6),
                             Text(
-                              'Economic Purpose: $purpose',
+                              'Economic Function: $purpose',
                               style: context.widgetFooterStyle,
                             ),
                             if (hasConstruction) ...[
@@ -1457,9 +1504,21 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               spacing: 4,
                               children: [
                                 for (final policyOption in const [
-                                  {'id': 'balanced', 'label': 'BALANCED', 'help': 'Server-defined effects'},
-                                  {'id': 'frugal', 'label': 'CONSERVATIVE', 'help': 'Server-defined effects'},
-                                  {'id': 'high_output', 'label': 'GROWTH', 'help': 'Server-defined effects'},
+                                  {
+                                    'id': 'balanced',
+                                    'label': 'BALANCED',
+                                    'help': 'Server-defined effects'
+                                  },
+                                  {
+                                    'id': 'frugal',
+                                    'label': 'CONSERVATIVE',
+                                    'help': 'Server-defined effects'
+                                  },
+                                  {
+                                    'id': 'high_output',
+                                    'label': 'GROWTH',
+                                    'help': 'Server-defined effects'
+                                  },
                                 ])
                                   Tooltip(
                                     message: policyOption['help']!,
@@ -1469,14 +1528,26 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                           ? null
                                           : () async {
                                               try {
-                                                final preview = await const EarthApi()
-                                                    .quoteBuildingOperatingPolicy(
-                                                        buildingId: items.first['id'].toString());
-                                                final allowed = (preview['allowedModes'] as List?)
-                                                    ?.map((mode) => mode.toString().toLowerCase())
-                                                    .toSet();
-                                                if (allowed != null && allowed.isNotEmpty && !allowed.contains(policyOption['id']!.toLowerCase())) {
-                                                  _showBuildingFeedback('This operating policy is not available for the group.');
+                                                final preview =
+                                                    await const EarthApi()
+                                                        .quoteBuildingOperatingPolicy(
+                                                            buildingId: items
+                                                                .first['id']
+                                                                .toString());
+                                                final allowed =
+                                                    (preview['allowedModes']
+                                                            as List?)
+                                                        ?.map((mode) => mode
+                                                            .toString()
+                                                            .toLowerCase())
+                                                        .toSet();
+                                                if (allowed != null &&
+                                                    allowed.isNotEmpty &&
+                                                    !allowed.contains(
+                                                        policyOption['id']!
+                                                            .toLowerCase())) {
+                                                  _showBuildingFeedback(
+                                                      'This operating policy is not available for the group.');
                                                   return;
                                                 }
                                               } catch (_) {}
@@ -1550,34 +1621,20 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   // ==================== TAB 2: BUILD ====================
   Widget _buildPlannerTab(
     BuildContext context, {
-    required List<dynamic> catalog,
+    required List<BuildingCatalogEntry> catalog,
     required int? availablePrivateSlots,
     required int? population,
     required double? creditsAvailable,
     required double? materialsAvailable,
   }) {
-    final blueprints = catalog.whereType<Map>().where((b) {
-      final bType = b['building_type'] ?? b['type'];
-      if (bType == 'private-estate-plot') {
-        return false;
-      }
-      final ownership = b['ownership_class'] ??
-          b['defaultOwnershipClass'] ??
-          b['ownershipClass'] ??
-          'private';
-      final tier = asIntOr(b['tier'], 1);
-      final prevId = b['prev_catalog_id'];
-      return ownership == 'private' &&
-          tier == 1 &&
-          (prevId == null || prevId.toString().isEmpty);
+    final blueprints = catalog.where((b) {
+      return b.ownershipScope == 'PRIVATE' && b.tier == 1;
     }).toList()
       ..sort((a, b) {
-        final aCost = asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 0);
-        final bCost = asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 0);
-        final costCompare = aCost.compareTo(bCost);
+        final costCompare = BigInt.parse(a.constructionCreditUnits)
+            .compareTo(BigInt.parse(b.constructionCreditUnits));
         if (costCompare != 0) return costCompare;
-        return (a['name']?.toString() ?? 'Blueprint')
-            .compareTo(b['name']?.toString() ?? 'Blueprint');
+        return _catalogDisplayName(a).compareTo(_catalogDisplayName(b));
       });
     if (blueprints.isEmpty) {
       return const EarthEmptyState(
@@ -1587,25 +1644,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     }
 
     final currentSpec = blueprints.firstWhere(
-      (b) => (b['building_type'] ?? b['type']) == _plannerSelectedBlueprint,
+      (b) => b.code == _plannerSelectedBlueprint,
       orElse: () => blueprints.first,
     );
 
-    final name = currentSpec['name']?.toString() ?? 'Blueprint';
-    final type =
-        (currentSpec['building_type'] ?? currentSpec['type'])?.toString() ?? '';
-    final category = currentSpec['category']?.toString() ?? 'commercial';
-    final footprint = asInt(currentSpec['slot_footprint']);
-    final creditCostUnits = currentSpec['construction_credit_units'];
-    final materialCost = asInt(currentSpec['construction_material_units']);
-    final paybackDays = asInt(currentSpec['estimatedPaybackDays']);
-    final sensitivity =
-        currentSpec['resourceSensitivity']?.toString().toUpperCase() ??
-            'MEDIUM';
-    final risk =
-        currentSpec['maintenanceRisk']?.toString().toUpperCase() ?? 'LOW';
-    final purpose =
-        currentSpec['primaryEconomicPurpose']?.toString() ?? 'Economic Output';
+    final name = _catalogDisplayName(currentSpec);
+    final type = currentSpec.code;
+    final category = currentSpec.category;
+    final footprint = int.tryParse(currentSpec.slotFootprintUnits);
+    final creditCostUnits = currentSpec.constructionCreditUnits;
+    final materialCost = currentSpec.resourceFlows
+        .where((flow) => flow.assetCode == 'MATERIAL')
+        .map((flow) => int.tryParse(flow.constructionUnits))
+        .firstWhere((value) => value != null, orElse: () => null);
+    final paybackDays = null;
+    final sensitivity = 'SERVER QUOTE';
+    final risk = 'SERVER QUOTE';
+    final purpose = buildingEconomicFunction(currentSpec);
     // Eligibility, cost and prerequisites are authoritative quote data. The
     // catalog is descriptive only; never block or approve construction from a
     // client-side capacity, population or balance calculation.
@@ -1643,14 +1698,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             spacing: 8,
             runSpacing: 8,
             children: blueprints.map((b) {
-              final bType = (b['building_type'] ?? b['type'])?.toString() ?? '';
-              final bName = b['name']?.toString() ?? bType;
-              final bSpace = asInt(b['slot_footprint']);
-              final bCostUnits = b['construction_credit_units'];
-              final bResourceType = b['resource_output_type']?.toString();
-              final bResourceAmount = asDouble(
-                  bResourceType == null ? null : b['output_$bResourceType']);
-              final isSel = _plannerSelectedBlueprint == bType;
+              final bType = b.code;
+              final bName = _catalogDisplayName(b);
+              final bSpace = int.tryParse(b.slotFootprintUnits);
+              final bCostUnits = b.constructionCreditUnits;
+              final isSel = (_plannerSelectedBlueprint.isEmpty
+                      ? currentSpec.code
+                      : _plannerSelectedBlueprint) ==
+                  bType;
               return SizedBox(
                 width: 230,
                 child: InkWell(
@@ -1747,7 +1802,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   metrics: [
                     EarthMetricTile(
                       label: 'ESTIMATED PAYBACK',
-                      value: paybackDays == null ? 'UNAVAILABLE' : '~ $paybackDays DAYS',
+                      value: paybackDays == null
+                          ? 'UNAVAILABLE'
+                          : '~ $paybackDays DAYS',
                       icon: Icons.timer_outlined,
                       accentColor: paybackDays != null && paybackDays <= 15
                           ? context.successColor
@@ -1805,7 +1862,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           _buildRequirementItem(
                             context,
                             'CREDIT cost: ${formatCreditUnits(creditCostUnits)}',
-                            creditCostUnits != null,
+                            true,
                           ),
                           _buildRequirementItem(
                             context,
@@ -1832,20 +1889,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           ? null
                           : () async {
                               EarthAudioEngine.instance.playClick();
-                              final pDays = asInt(currentSpec['construction_days']);
 
                               await _confirmConstruction(
                                 context,
                                 buildingName: name,
                                 buildingType: _plannerSelectedBlueprint,
-                                creditCost: null,
-                                materialCost: null,
-                                capacityCost: footprint,
-                                remainingCapacity: null,
-                                constructionDays: pDays,
-                                // Construction confirmation must not project
-                                // game-day settlement from catalog fields.
-                                netYields: const [],
                               );
                             },
                     ),
@@ -1863,12 +1911,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     BuildContext context, {
     required String buildingName,
     required String buildingType,
-    required int? creditCost,
-    required int? materialCost,
-    required int? capacityCost,
-    required int? remainingCapacity,
-    int? constructionDays,
-    required List<(IconData, Color, String, bool)> netYields,
   }) async {
     EarthAudioEngine.instance.playClick();
     var quotedCapacityQuote = <String, dynamic>{};
@@ -1890,6 +1932,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final requirements = quote['resourceRequirements'] is List
         ? (quote['resourceRequirements'] as List).whereType<Map>()
         : const <Map>[];
+    final quotedBuildingType = quote['buildingType']?.toString();
+    final quotedGeneration = asInt(quote['installedGeneration']);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1923,7 +1967,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     ),
                   ),
                   Text(
-                    '$buildingName · Tier 1 Blueprint',
+                    '$buildingName · Generation ${quotedGeneration?.toString() ?? 'UNAVAILABLE'}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1958,14 +2002,19 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   decoration: BoxDecoration(
                     color: context.dangerColor.withValues(alpha: .08),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: context.dangerColor.withValues(alpha: .35)),
+                    border: Border.all(
+                        color: context.dangerColor.withValues(alpha: .35)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('BLOCKERS', style: context.captionStyle.copyWith(color: context.dangerColor)),
+                      Text('BLOCKERS',
+                          style: context.captionStyle
+                              .copyWith(color: context.dangerColor)),
                       const SizedBox(height: 4),
-                      ...blockers.map((blocker) => Text('• $blocker', style: context.bodyStyle.copyWith(color: context.dangerColor))),
+                      ...blockers.map((blocker) => Text('• $blocker',
+                          style: context.bodyStyle
+                              .copyWith(color: context.dangerColor))),
                     ],
                   ),
                 ),
@@ -2004,8 +2053,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'Capacity: ${quotedCapacityQuote['currentUsage'] ?? 'UNAVAILABLE'} → ${quotedCapacityQuote['afterUsage'] ?? 'UNAVAILABLE'} units · daily rent current ${quotedCapacityQuote['currentChargeUnits'] ?? 'UNAVAILABLE'} · after ${quotedCapacityQuote['afterChargeUnits'] ?? 'UNAVAILABLE'} · marginal ${quotedCapacityQuote['incrementalChargeUnits'] ?? 'UNAVAILABLE'} CREDIT units',
-                          style: TextStyle(fontSize: 11, color: context.mutedColor),
+                          'Capacity: ${quotedCapacityQuote['currentUsage'] ?? 'UNAVAILABLE'} → ${quotedCapacityQuote['afterUsage'] ?? 'UNAVAILABLE'} units\nDaily capacity rent: ${formatCreditUnits(quotedCapacityQuote['currentChargeUnits'])} → ${formatCreditUnits(quotedCapacityQuote['afterChargeUnits'])}\nMarginal capacity-rent impact: ${formatCreditUnits(quotedCapacityQuote['incrementalChargeUnits'])} / day',
+                          style: TextStyle(
+                              fontSize: 11, color: context.mutedColor),
                         ),
                       ),
                     ],
@@ -2020,7 +2070,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             size: 14, color: Colors.amber),
                         const SizedBox(width: 4),
                         Text(
-                              quote['effectiveConstructionMinutes'] == null ? 'UNAVAILABLE' : '${quote['effectiveConstructionMinutes']} game minutes',
+                          quote['effectiveConstructionMinutes'] == null
+                              ? 'UNAVAILABLE'
+                              : '${quote['effectiveConstructionMinutes']} game minutes',
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w800,
@@ -2072,6 +2124,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 style: context.widgetFooterStyle,
               ),
               const SizedBox(height: 12),
+              Text('PERMISSIONS', style: context.captionStyle),
+              const SizedBox(height: 6),
+              Text(
+                'Can construct: ${((quote['permissions'] as Map?)?['canConstruct'] == true) ? 'YES' : 'NO'} · Actions: ${(quote['allowedActions'] as List?)?.join(', ') ?? 'UNAVAILABLE'}',
+                style: context.widgetFooterStyle,
+              ),
 
               Text(
                 'SETTLEMENT RESULT',
@@ -2128,16 +2186,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             label: 'CONFIRM BUILD',
             icon: Icons.domain_add_outlined,
             variant: EarthButtonVariant.primary,
-            onPressed: eligible ? () => Navigator.of(dialogContext).pop(true) : null,
+            onPressed:
+                eligible ? () => Navigator.of(dialogContext).pop(true) : null,
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
+      if (quotedBuildingType == null || quotedBuildingType.isEmpty) {
+        _showBuildingFeedback(
+            'The live quote did not identify a buildable blueprint.');
+        return;
+      }
       await widget.action(() => const EarthApi().purchaseV5Building(
-            buildingType: buildingType,
+            buildingType: quotedBuildingType,
             name: buildingName,
+            generation: quotedGeneration,
           ));
       if (mounted) {
         ScaffoldMessenger.of(this.context).showSnackBar(
@@ -2239,50 +2304,29 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
   Widget _buildCatalogTab(
     BuildContext context, {
-    required List<dynamic> catalog,
+    required List<BuildingCatalogEntry> catalog,
     String? ownershipFilter,
   }) {
-    final allCatalogMaps = catalog
-        .whereType<Map>()
-        .map((m) => Map<String, dynamic>.from(m))
-        .where((item) {
-          final bType = (item['building_type'] ?? item['type'])?.toString();
-          return bType != 'private-estate-plot' &&
-              bType != 'private-estate-plot';
-        })
-        .toList();
+    final allCatalogEntries =
+        catalog.where((entry) => entry.code.isNotEmpty).toList();
 
-    // Only display root blueprints (tier 1 or prev_catalog_id is null) in the catalog blueprints view
-    final rootBlueprints = allCatalogMaps.where((item) {
-      final prevId = item['prev_catalog_id'];
-      final tier = asInt(item['tier']) ?? 1;
-      return (prevId == null || prevId.toString().isEmpty) && tier == 1;
-    }).toList();
+    // Tier 1 is the entry point for each family. familyCode is the
+    // progression identity; code remains the exact tier blueprint identity.
+    final rootBlueprints =
+        allCatalogEntries.where((entry) => entry.tier == 1).toList();
 
     rootBlueprints.sort((a, b) {
-      return (a['name']?.toString() ?? 'Blueprint')
-          .compareTo(b['name']?.toString() ?? 'Blueprint');
+      return _catalogDisplayName(a).compareTo(_catalogDisplayName(b));
     });
 
-    final privateCount = rootBlueprints.where((item) {
-      final ownership = item['ownership_class']?.toString() ??
-          item['defaultOwnershipClass']?.toString() ??
-          item['ownershipClass']?.toString() ??
-          'private';
-      return ownership == 'private';
-    }).length;
+    final privateCount =
+        rootBlueprints.where((item) => item.ownershipScope == 'PRIVATE').length;
 
-    final corporationPublicCount = rootBlueprints.where((item) {
-      final ownership = item['ownership_class']?.toString() ??
-          item['defaultOwnershipClass']?.toString() ??
-          item['ownershipClass']?.toString();
-      return ownership == 'public';
-    }).length;
+    final corporationPublicCount =
+        rootBlueprints.where((item) => item.ownershipScope == 'PUBLIC').length;
 
-    String economicRole(Map<String, dynamic> item) =>
-        (item['economic_role'] ?? item['economicRole'] ?? 'ESTATE')
-            .toString()
-            .toUpperCase();
+    String economicRole(BuildingCatalogEntry item) =>
+        (item.economicRole ?? 'ESTATE').toUpperCase();
     final roleCounts = <String, int>{
       for (final role in const [
         'PRODUCER',
@@ -2295,20 +2339,18 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     };
 
     final filteredList = rootBlueprints.where((item) {
-      final ownership = item['ownership_class']?.toString() ??
-          item['defaultOwnershipClass']?.toString() ??
-          item['ownershipClass']?.toString() ??
-          'private';
+      final ownership = item.ownershipScope;
 
-      if (ownershipFilter != null && ownership != ownershipFilter) {
+      if (ownershipFilter != null &&
+          ownership.toLowerCase() != ownershipFilter.toLowerCase()) {
         return false;
       }
 
       if (_catalogFilter == 'private') {
-        return ownership == 'private';
+        return ownership == 'PRIVATE';
       }
       if (_catalogFilter == 'public') {
-        return ownership == 'public';
+        return ownership == 'PUBLIC';
       }
       if (roleCounts.containsKey(_catalogFilter)) {
         return economicRole(item) == _catalogFilter;
@@ -2334,7 +2376,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               _catalogFilterChip(context,
                   label: 'PRIVATE ($privateCount)', filter: 'private'),
               _catalogFilterChip(context,
-                  label: 'CORPORATION / PUBLIC ($corporationPublicCount)', filter: 'public'),
+                  label: 'CORPORATION / PUBLIC ($corporationPublicCount)',
+                  filter: 'public'),
             ],
             ...roleCounts.entries.map((entry) => _catalogFilterChip(
                   context,
@@ -2353,140 +2396,45 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 : (constraints.maxWidth >= 700 ? 2 : 1);
             final cards =
                 filteredList.map<Widget Function({bool fillHeight})>((item) {
-              final bType = item['building_type']?.toString() ??
-                  item['type']?.toString() ??
-                  '';
-              final name = item['name']?.toString() ?? 'Blueprint';
-              final category =
-                  (item['category']?.toString() ?? 'commercial').toUpperCase();
-              final ownership = item['ownership_class']?.toString() ??
-                  item['defaultOwnershipClass']?.toString() ??
-                  item['ownershipClass']?.toString() ??
-                  'private';
+              final bType = item.code;
+              final name = _catalogDisplayName(item);
+              final category = item.category.toUpperCase();
+              final ownership = item.ownershipScope;
               final role = economicRole(item);
-              final footprint =
-                  asInt(item['slot_footprint'] ?? item['slotFootprint']);
+              final footprint = int.tryParse(item.slotFootprintUnits);
 
-              // Group count: total upgrades/tiers available in the catalog for this building type
-              final groupBuildings = allCatalogMaps
-                  .where((b) => (b['building_type'] ?? b['type']) == bType)
+              // All tiers in one progression share familyCode. The selected
+              // card still uses code as the exact blueprint identity.
+              final groupBuildings = allCatalogEntries
+                  .where((b) => _familyKey(b) == _familyKey(item))
                   .toList();
               final tierCount = math.max(1, groupBuildings.length);
 
-              final purpose = (item['primary_economic_purpose'] ??
-                      item['primaryEconomicPurpose'] ??
-                      EarthBuildingMeta.getEconomicPurpose(
-                        item,
-                        ownership: ownership,
-                        category: category,
-                      ))
-                  .toString();
-              final desc =
-                  (item['description'] ?? item['catalog_description'] ?? '')
-                      .toString();
+              final purpose = buildingEconomicFunction(item);
+              final desc = item.description;
 
-              // Outputs (24-resource vector)
-              final outputs = <(IconData, Color, String)>[];
-              void addOutput(
-                  String key, String label, IconData icon, Color color) {
-                final val = asDoubleOr(item['output_$key'], 0);
-                if (val > 0) {
-                  outputs.add((
-                    icon,
-                    color,
-                    key == 'credits'
-                        ? '${formatCreditUnits(item['output_$key'])} / DAY'
-                        : '${val.toStringAsFixed(1)} $label / DAY'
-                  ));
-                }
-              }
+              final constructionFlows = item.resourceFlows
+                  .where(
+                      (flow) => (int.tryParse(flow.constructionUnits) ?? 0) > 0)
+                  .toList(growable: false);
+              final operatingInputs = item.resourceFlows
+                  .where((flow) =>
+                      (int.tryParse(flow.operatingInputUnits) ?? 0) > 0)
+                  .toList(growable: false);
+              final operatingOutputs = item.resourceFlows
+                  .where((flow) =>
+                      (int.tryParse(flow.operatingOutputUnits) ?? 0) > 0)
+                  .toList(growable: false);
+              String flowText(String code, String units) =>
+                  '$units ${code.replaceAll('_', ' ')}';
+              final constructionTime = (item.constructionMinutes ?? 0) > 0
+                  ? '${item.constructionMinutes} MIN'
+                  : 'UNAVAILABLE';
+              final operatingCost = item.operatingCreditUnits == null
+                  ? 'UNAVAILABLE'
+                  : '${formatCreditUnits(item.operatingCreditUnits)} / DAY';
 
-              addOutput(
-                  'credits',
-                  'CREDITS',
-                  Icons.account_balance_wallet_outlined,
-                  EarthResourceColors.credits);
-              addOutput('energy', 'ENERGY', Icons.bolt_rounded,
-                  EarthResourceColors.energy);
-              addOutput(
-                  'food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
-              addOutput('materials', 'MATERIALS', Icons.terrain_outlined,
-                  EarthResourceColors.materials);
-              addOutput(
-                  'components',
-                  'COMPONENTS',
-                  Icons.precision_manufacturing_outlined,
-                  EarthResourceColors.components);
-              addOutput('compute', 'COMPUTE', Icons.memory_rounded,
-                  EarthResourceColors.compute);
-
-              // Inputs / Upkeep (24-resource vector)
-              final inputs = <(IconData, Color, String)>[];
-              void addInput(
-                  String key, String label, IconData icon, Color color) {
-                final val = asDoubleOr(item['input_$key'], 0);
-                if (val > 0) {
-                  inputs.add((
-                    icon,
-                    color,
-                    key == 'credits'
-                        ? '-${formatCreditUnits(item['input_$key'])}'
-                        : '-${val.toStringAsFixed(1)} $label'
-                  ));
-                }
-              }
-
-              addInput(
-                  'credits',
-                  'CREDITS',
-                  Icons.account_balance_wallet_outlined,
-                  EarthResourceColors.credits);
-              addInput('energy', 'ENERGY', Icons.bolt_rounded,
-                  EarthResourceColors.energy);
-              addInput(
-                  'food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
-              addInput('materials', 'MATERIALS', Icons.terrain_outlined,
-                  EarthResourceColors.materials);
-              addInput(
-                  'components',
-                  'COMPONENTS',
-                  Icons.precision_manufacturing_outlined,
-                  EarthResourceColors.components);
-              addInput('compute', 'COMPUTE', Icons.memory_rounded,
-                  EarthResourceColors.compute);
-
-              final operatingCredits = asDoubleOr(
-                  item['operating_credits'],
-                  0);
-              final operatingEnergy = asDoubleOr(
-                  item['operating_energy'] ??
-                      item['operatingCostEnergy'] ??
-                      item['operating_cost_energy'],
-                  0);
-              final operatingFood = asDoubleOr(
-                  item['operating_food'] ??
-                      item['operatingCostFood'] ??
-                      item['operating_cost_food'],
-                  0);
-              final operatingMaterials = asDoubleOr(
-                  item['operating_materials'] ??
-                      item['operatingCostMaterials'] ??
-                      item['operating_cost_materials'],
-                  0);
-              final operatingComponents = asDoubleOr(
-                  item['operating_components'] ??
-                      item['operatingCostComponents'] ??
-                      item['operating_cost_components'],
-                  0);
-              final operatingCompute = asDoubleOr(
-                  item['operating_compute'] ??
-                      item['operatingCostCompute'] ??
-                      item['operating_cost_compute'],
-                  0);
-
-              final outCreditsVal = asDoubleOr(item['output_credits'], 0);
-
-              final isCorporationPublic = ownership == 'public';
+              final isCorporationPublic = ownership == 'PUBLIC';
               final corporationPermissions =
                   widget.state.buildingPortfolio?.corporationPermissions;
               final canProposePublic = isCorporationPublic &&
@@ -2518,7 +2466,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildingImage(context, bType),
+                                _buildingImage(context,
+                                    familyCode: item.familyCode),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
@@ -2567,7 +2516,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                       ],
                                       const SizedBox(height: 6),
                                       Text(
-                                        'Economic Purpose: $purpose',
+                                        'Economic Function: $purpose',
                                         style: context.widgetFooterStyle,
                                       ),
                                     ],
@@ -2577,150 +2526,35 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                             ),
                             const SizedBox(height: 10),
 
-                            // Cost line
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text('COST', style: context.captionStyle),
-                                const SizedBox(width: 2),
-                                const Icon(
-                                    Icons.account_balance_wallet_outlined,
-                                    size: 14,
-                                    color: EarthResourceColors.credits),
-                                Text('SELECT FOR AUTHORITATIVE QUOTE',
-                                    style: context.widgetFooterStyle),
-                              ],
+                            const SizedBox(height: 10),
+                            Text('BASE ECONOMICS', style: context.captionStyle),
+                            const SizedBox(height: 4),
+                            Text(
+                              'BASE CONSTRUCTION COST · ${formatCreditUnits(item.constructionCreditUnits)}',
+                              style: context.widgetFooterStyle,
                             ),
-
-                            // Upkeep line
-                            if (false && inputs.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text('DAILY UPKEEP',
-                                      style: context.captionStyle),
-                                  const SizedBox(width: 2),
-                                  ...inputs.expand((input) => <Widget>[
-                                        Icon(input.$1,
-                                            size: 14, color: input.$2),
-                                        Text(input.$3,
-                                            style: context.widgetFooterStyle),
-                                      ]),
-                                ],
-                              ),
-                            ],
-
-                            // Output line
-                            if (false && outputs.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text('OUTPUT', style: context.captionStyle),
-                                  const SizedBox(width: 2),
-                                  ...outputs.expand((out) => <Widget>[
-                                        Icon(out.$1, size: 14, color: out.$2),
-                                        Text(out.$3,
-                                            style: context.widgetFooterStyle),
-                                      ]),
-                                ],
-                              ),
-                            ],
-
-                            // Operating Cost line
-                            if (false && (operatingCredits > 0 ||
-                                operatingEnergy > 0 ||
-                                operatingFood > 0 ||
-                                operatingMaterials > 0 ||
-                                operatingComponents > 0 ||
-                                operatingCompute > 0)) ...[
-                              const SizedBox(height: 4),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 4,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text('OPERATING COST',
-                                      style: context.captionStyle),
-                                  const SizedBox(width: 2),
-                                  if (operatingCredits > 0) ...[
-                                    const Icon(
-                                        Icons.account_balance_wallet_outlined,
-                                        size: 14,
-                                        color: EarthResourceColors.credits),
-                                    Text(
-                                        '-${formatCreditUnits(item['operating_credit_units'])} / DAY',
-                                        style: context.widgetFooterStyle),
-                                  ],
-                                  if (operatingEnergy > 0) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                        EarthResourceMeta.forCommodity('energy')
-                                            .icon,
-                                        size: 14,
-                                        color: EarthResourceColors.energy),
-                                    Text(
-                                        '-${operatingEnergy.toStringAsFixed(1)} ENERGY / DAY',
-                                        style: context.widgetFooterStyle),
-                                  ],
-                                  if (operatingFood > 0) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                        EarthResourceMeta.forCommodity('food')
-                                            .icon,
-                                        size: 14,
-                                        color: EarthResourceColors.food),
-                                    Text(
-                                        '-${operatingFood.toStringAsFixed(1)} FOOD / DAY',
-                                        style: context.widgetFooterStyle),
-                                  ],
-                                  if (operatingMaterials > 0) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                        EarthResourceMeta.forCommodity(
-                                                'materials')
-                                            .icon,
-                                        size: 14,
-                                        color: EarthResourceColors.materials),
-                                    Text(
-                                        '-${operatingMaterials.toStringAsFixed(1)} MATERIALS / DAY',
-                                        style: context.widgetFooterStyle),
-                                  ],
-                                  if (operatingComponents > 0) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                        EarthResourceMeta.forCommodity(
-                                                'components')
-                                            .icon,
-                                        size: 14,
-                                        color: EarthResourceColors.components),
-                                    Text(
-                                        '-${operatingComponents.toStringAsFixed(1)} COMPONENTS / DAY',
-                                        style: context.widgetFooterStyle),
-                                  ],
-                                  if (operatingCompute > 0) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                        EarthResourceMeta.forCommodity(
-                                                'compute')
-                                            .icon,
-                                        size: 14,
-                                        color: EarthResourceColors.compute),
-                                    Text(
-                                        '-${operatingCompute.toStringAsFixed(1)} COMPUTE / DAY',
-                                        style: context.widgetFooterStyle),
-                                  ],
-                                ],
-                              ),
-                            ],
-
+                            Text(
+                              'BASE CONSTRUCTION TIME · $constructionTime',
+                              style: context.widgetFooterStyle,
+                            ),
+                            Text(
+                              'BASE CAPACITY FOOTPRINT · ${footprint?.toString() ?? 'UNAVAILABLE'} UNITS',
+                              style: context.widgetFooterStyle,
+                            ),
+                            Text('BASE OPERATING COST · $operatingCost',
+                                style: context.widgetFooterStyle),
+                            Text(
+                              'BASE CONSTRUCTION RESOURCES · ${constructionFlows.isEmpty ? 'UNAVAILABLE' : constructionFlows.map((flow) => flowText(flow.assetCode, flow.constructionUnits)).join(' · ')}',
+                              style: context.widgetFooterStyle,
+                            ),
+                            Text(
+                              'BASE INPUT / DAY · ${operatingInputs.isEmpty ? 'UNAVAILABLE' : operatingInputs.map((flow) => flowText(flow.assetCode, flow.operatingInputUnits)).join(' · ')}',
+                              style: context.widgetFooterStyle,
+                            ),
+                            Text(
+                              'BASE OUTPUT / DAY · ${operatingOutputs.isEmpty ? 'UNAVAILABLE' : operatingOutputs.map((flow) => flowText(flow.assetCode, flow.operatingOutputUnits)).join(' · ')}',
+                              style: context.widgetFooterStyle,
+                            ),
                           ],
                         ),
                       ),
@@ -2737,7 +2571,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                     : 'Read-only: Corporation authorization required'
                                 : 'Review authoritative construction quote';
 
-                            final isActionEnabled = !isCorporationPublic || canProposePublic;
+                            final isActionEnabled =
+                                !isCorporationPublic || canProposePublic;
                             final buttonColor = isActionEnabled
                                 ? context.primaryColor
                                 : context.mutedColor;
@@ -2748,21 +2583,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 color: Colors.transparent,
                                 child: InkWell(
                                   onTap: isCorporationPublic
-                                      ? () => _showBuildingFeedback(
-                                          canProposePublic
-                                              ? 'Use V5 Corporation Governance to propose or approve this Corporation/Public construction.'
-                                              : 'This Corporation/Public blueprint is read-only for your current permissions.')
+                                      ? () => _showBuildingFeedback(canProposePublic
+                                          ? 'Use V5 Corporation Governance to propose or approve this Corporation/Public construction.'
+                                          : 'This Corporation/Public blueprint is read-only for your current permissions.')
                                       : () => _confirmConstruction(
-                                                context,
-                                                buildingName: name,
-                                                buildingType: bType,
-                                                creditCost: null,
-                                                materialCost: null,
-                                                capacityCost: null,
-                                                remainingCapacity: null,
-                                                constructionDays: null,
-                                                netYields: const [],
-                                              ),
+                                            context,
+                                            buildingName: name,
+                                            buildingType: bType,
+                                          ),
                                   borderRadius: BorderRadius.circular(24),
                                   child: Container(
                                     width: 44,
@@ -2912,11 +2740,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   }
 
   // ==================== BUILDING CARD ====================
-  Widget _buildBuildingCard(BuildContext context, Map<String, dynamic> b,
-      String? viewerId, List<dynamic> catalog,
-      {int? itemNumber,
-      bool showOperatingPolicy = true,
-      }) {
+  Widget _buildBuildingCard(
+    BuildContext context,
+    Map<String, dynamic> b,
+    String? viewerId,
+    List<BuildingCatalogEntry> catalog, {
+    int? itemNumber,
+    bool showOperatingPolicy = true,
+  }) {
     final id = b['id']?.toString() ?? '';
     final name = b['name']?.toString() ?? 'Facility';
     final bType = b['building_type']?.toString() ?? '';
@@ -2926,7 +2757,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final isOwner = b['owner_id']?.toString() == viewerId;
     final isCorporationPublic =
         b['owner_type']?.toString().toUpperCase() == 'CORPORATION' &&
-        ownershipClass == 'public';
+            ownershipClass == 'public';
     final canOperate = b['can_operate'] == true || isOwner;
     final canUpgrade = b['can_upgrade'] == true || isOwner;
     final canRetrofit = b['can_retrofit'] == true || isOwner;
@@ -2970,7 +2801,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(context.radiusCard),
         border: Border.all(
-              color: isCorporationPublic
+          color: isCorporationPublic
               ? context.secondaryColor.withValues(alpha: .4)
               : context.subtleBorderColor,
         ),
@@ -3110,7 +2941,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         spacing: 4,
                         children: [
                           for (final mode in ((b['operating_policy'] is Map)
-                              ? ((b['operating_policy'] as Map)['allowedModes'] as List? ?? const [])
+                              ? ((b['operating_policy'] as Map)['allowedModes']
+                                      as List? ??
+                                  const [])
                               : const []))
                             ChoiceChip(
                               label: Text(mode.toString(),
@@ -3120,15 +2953,21 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               onSelected: widget.busy
                                   ? null
                                   : (selected) async {
-                                      if (selected && policy != mode.toString()) {
+                                      if (selected &&
+                                          policy != mode.toString()) {
                                         EarthAudioEngine.instance.playClick();
                                         final preview = await const EarthApi()
-                                            .quoteBuildingOperatingPolicy(buildingId: id);
-                                        final allowed = (preview['allowedModes'] as List?)
-                                            ?.map((mode) => mode.toString())
-                                            .toSet();
-                                        if (allowed == null || !allowed.contains(mode.toString())) {
-                                          _showBuildingFeedback('This operating policy is not available for the building.');
+                                            .quoteBuildingOperatingPolicy(
+                                                buildingId: id);
+                                        final allowed =
+                                            (preview['allowedModes'] as List?)
+                                                ?.map((mode) => mode.toString())
+                                                .toSet();
+                                        if (allowed == null ||
+                                            !allowed
+                                                .contains(mode.toString())) {
+                                          _showBuildingFeedback(
+                                              'This operating policy is not available for the building.');
                                           return;
                                         }
                                         await widget.action(() =>
@@ -3170,10 +3009,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           variant: EarthButtonVariant.secondary,
                           onPressed: null,
                         )
-                      else if (catalog.whereType<Map>().any((c) {
-                        final type = c['building_type'] ?? c['type'];
-                        return type?.toString() == bType &&
-                            asIntOr(c['tier'], 1) == tier + 1;
+                      else if (catalog.any((c) {
+                        final current = catalog.firstWhere(
+                          (entry) => entry.code == bType,
+                          orElse: () => c,
+                        );
+                        return _familyKey(c) == _familyKey(current) &&
+                            c.tier == tier + 1;
                       }))
                         EarthButton(
                           label: isUnderConstruction
@@ -3187,21 +3029,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           variant: isUnderConstruction
                               ? EarthButtonVariant.secondary
                               : EarthButtonVariant.primary,
-                          onPressed: widget.busy || isUnderConstruction || !canUpgrade
-                              ? null
-                              : () async {
-                                  EarthAudioEngine.instance.playClick();
-                                  final started =
-                                      await showBuildingDetailUpgradeDialog(
-                                      context,
-                                      widget.action,
-                                      b,
-                                      catalog,
-                                    );
-                                  if (started == true) {
-                                    _showBuildingFeedback('$name upgrade started.');
-                                  }
-                                },
+                          onPressed:
+                              widget.busy || isUnderConstruction || !canUpgrade
+                                  ? null
+                                  : () async {
+                                      EarthAudioEngine.instance.playClick();
+                                      final started =
+                                          await showBuildingDetailUpgradeDialog(
+                                        context,
+                                        widget.action,
+                                        b,
+                                        catalog,
+                                      );
+                                      if (started == true) {
+                                        _showBuildingFeedback(
+                                            '$name upgrade started.');
+                                      }
+                                    },
                         )
                       else
                         EarthButton(
@@ -3230,11 +3074,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                   ? () => _showBuildingFeedback(
                                       'This Corporation/Public asset is read-only for your current permissions.')
                                   : () => _showBuildingResearchDialog(
-                                    context,
-                                    building: b,
-                                    targetTier: tier + 1,
-                                    catalog: catalog,
-                                  ),
+                                        context,
+                                        building: b,
+                                        targetTier: tier + 1,
+                                        catalog: catalog,
+                                      ),
                         ),
                       if (canDemolish &&
                           bType != 'private-estate-plot' &&
@@ -3270,12 +3114,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     BuildContext context, {
     required Map<String, dynamic> building,
     required int targetTier,
-    required List<dynamic> catalog,
+    required List<BuildingCatalogEntry> catalog,
   }) async {
     final bType = building['building_type']?.toString() ?? '';
     final bName = building['name']?.toString() ?? 'Facility';
-    final quoteResponse = await const EarthApi()
-        .quoteCorporationBuildingResearch(bType);
+    final quoteResponse =
+        await const EarthApi().quoteCorporationBuildingResearch(bType);
     if (!context.mounted) return;
 
     Map<String, dynamic> serverQuote = const <String, dynamic>{};
@@ -3297,32 +3141,50 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           : const <String, dynamic>{};
     }
 
+    BuildingCatalogEntry? installedCatalogEntry;
+    for (final entry in catalog) {
+      if (entry.code == bType ||
+          entry.id == building['catalog_id']?.toString()) {
+        installedCatalogEntry = entry;
+        break;
+      }
+    }
+    final installedFamilyKey = installedCatalogEntry == null
+        ? bType
+        : _familyKey(installedCatalogEntry);
+
     if (currentBlueprint.isEmpty) {
-      final curMatch = catalog.whereType<Map>().firstWhere(
-        (e) =>
-            ((e['building_type'] ?? e['type'])?.toString() == bType) &&
-            (asInt(e['tier']) ?? 1) == currentTier,
-        orElse: () => const <String, dynamic>{},
-      );
-      if (curMatch.isNotEmpty) {
-        currentBlueprint = Map<String, dynamic>.from(curMatch);
+      BuildingCatalogEntry? curMatch;
+      for (final entry in catalog) {
+        if (_familyKey(entry) == installedFamilyKey &&
+            entry.tier == currentTier) {
+          curMatch = entry;
+          break;
+        }
+      }
+      if (curMatch != null) {
+        currentBlueprint = _catalogQuoteFields(curMatch);
       } else {
-        _showBuildingFeedback('Authoritative current-tier blueprint data is unavailable.');
+        _showBuildingFeedback(
+            'Authoritative current-tier blueprint data is unavailable.');
         return;
       }
     }
 
     if (serverTarget.isEmpty) {
-      final tgtMatch = catalog.whereType<Map>().firstWhere(
-        (e) =>
-            ((e['building_type'] ?? e['type'])?.toString() == bType) &&
-            (asInt(e['tier']) ?? 1) == targetTier,
-        orElse: () => const <String, dynamic>{},
-      );
-      if (tgtMatch.isNotEmpty) {
-        serverTarget = Map<String, dynamic>.from(tgtMatch);
+      BuildingCatalogEntry? tgtMatch;
+      for (final entry in catalog) {
+        if (_familyKey(entry) == installedFamilyKey &&
+            entry.tier == targetTier) {
+          tgtMatch = entry;
+          break;
+        }
+      }
+      if (tgtMatch != null) {
+        serverTarget = _catalogQuoteFields(tgtMatch);
       } else {
-        _showBuildingFeedback('Authoritative target-tier blueprint data is unavailable.');
+        _showBuildingFeedback(
+            'Authoritative target-tier blueprint data is unavailable.');
         return;
       }
     }
@@ -3339,68 +3201,37 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final fundingSource =
         isPrivate ? 'your personal account' : 'your corporation treasury';
 
-    // Outputs
-    final outputs = <(IconData, Color, String, double, double)>[];
-    void addOutput(String key, String label, IconData icon, Color color) {
-      final raw = asDouble(currentBlueprint['output_$key']);
-      if (raw != null && raw > 0) {
-        final cur = raw;
-        final next = asDouble(serverTarget['output_$key'] ??
-            serverTarget['output${key[0].toUpperCase()}${key.substring(1)}']);
-        if (next != null) outputs.add((icon, color, label, cur, next));
-      }
+    List<Map<String, dynamic>> resourceFlows(Map<String, dynamic> blueprint) {
+      final raw = blueprint['resourceFlows'] ?? blueprint['resource_flows'];
+      if (raw is! List) return const [];
+      return raw
+          .whereType<Map>()
+          .map((flow) => Map<String, dynamic>.from(flow))
+          .toList(growable: false);
     }
 
-    addOutput('credits', 'CRD', Icons.account_balance_wallet_outlined,
-        EarthResourceColors.credits);
-    addOutput(
-        'energy', 'ENERGY', Icons.bolt_rounded, EarthResourceColors.energy);
-    addOutput('food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
-    addOutput('materials', 'MATERIALS', Icons.terrain_outlined,
-        EarthResourceColors.materials);
-    addOutput('components', 'COMPONENTS',
-        Icons.precision_manufacturing_outlined, EarthResourceColors.components);
-    addOutput('compute', 'COMPUTE', Icons.memory_rounded,
-        EarthResourceColors.compute);
+    String flowValue(Map<String, dynamic> flow, String key) =>
+        flow[key]?.toString() ?? '0';
 
-    // Upkeeps
-    final upkeeps = <(IconData, Color, String, double, double)>[];
-    void addUpkeep(String key, String label, IconData icon, Color color) {
-      final raw = asDouble(currentBlueprint['upkeep_$key']);
-      if (raw != null && raw > 0) {
-        final cur = raw;
-        final next = asDouble(serverTarget['upkeep_$key'] ??
-            serverTarget['upkeep${key[0].toUpperCase()}${key.substring(1)}']);
-        if (next != null) upkeeps.add((icon, color, label, cur, next));
-      }
+    String flowSummary(Map<String, dynamic> blueprint, String key) {
+      final flows = resourceFlows(blueprint)
+          .where((flow) => flowValue(flow, key) != '0')
+          .map((flow) =>
+              '${flow['assetCode'] ?? flow['asset_code'] ?? 'UNKNOWN'} ${flowValue(flow, key)}')
+          .toList(growable: false);
+      return flows.isEmpty ? 'UNAVAILABLE' : flows.join(' · ');
     }
 
-    addUpkeep(
-        'energy', 'ENERGY', Icons.bolt_rounded, EarthResourceColors.energy);
-    addUpkeep('food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
-    addUpkeep('materials', 'MATERIALS', Icons.terrain_outlined,
-        EarthResourceColors.materials);
-    addUpkeep('components', 'COMPONENTS',
-        Icons.precision_manufacturing_outlined, EarthResourceColors.components);
-    addUpkeep('compute', 'COMPUTE', Icons.memory_rounded,
-        EarthResourceColors.compute);
-
-    final opCreditsBase = asDouble(
-      currentBlueprint['operating_credit_units'] ??
-          currentBlueprint['operating_credits'] ??
-          currentBlueprint['daily_operating_credits'],
-    );
-    final opCreditsNext = asDouble(
-        serverTarget['operating_credit_units'] ??
-            serverTarget['operating_credits'] ??
-            serverTarget['operating_cost_credits']);
-
-    String formatVal(double val) {
-      if (val == val.roundToDouble()) return val.toInt().toString();
-      final fixed = val.toStringAsFixed(2);
-      if (fixed.endsWith('.00')) return fixed.substring(0, fixed.length - 3);
-      return fixed;
-    }
+    final currentInputs = flowSummary(currentBlueprint, 'operatingInputUnits');
+    final targetInputs = flowSummary(serverTarget, 'operatingInputUnits');
+    final currentOutputs =
+        flowSummary(currentBlueprint, 'operatingOutputUnits');
+    final targetOutputs = flowSummary(serverTarget, 'operatingOutputUnits');
+    final opCreditsBase =
+        currentBlueprint['operatingCreditUnits']?.toString() ??
+            currentBlueprint['operating_credit_units']?.toString();
+    final opCreditsNext = serverTarget['operatingCreditUnits']?.toString() ??
+        serverTarget['operating_credit_units']?.toString();
 
     EarthAudioEngine.instance.playClick();
     // Construction days
@@ -3500,7 +3331,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         const Icon(Icons.account_balance_wallet_outlined,
                             size: 14, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
-                        Text(formatCreditUnits(serverQuote['researchCostUnits']),
+                        Text(
+                            formatCreditUnits(serverQuote['researchCostUnits']),
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -3595,76 +3427,47 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                       ],
                     ),
 
-                    // Output
-                    if (outputs.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      ...outputs.map((out) {
-                        final curStr = out.$3 == 'CRD' ||
-                                out.$3 == 'CREDITS' ||
-                                out.$3 == 'C'
-                            ? formatWholeNumber(out.$4)
-                            : formatVal(out.$4);
-                        final nextStr = out.$3 == 'CRD' ||
-                                out.$3 == 'CREDITS' ||
-                                out.$3 == 'C'
-                            ? formatWholeNumber(out.$5)
-                            : formatVal(out.$5);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Row(
-                            children: [
-                              Text('Daily Output:',
-                                  style: TextStyle(
-                                      fontSize: 12, color: context.mutedColor)),
-                              const Spacer(),
-                              Icon(out.$1, size: 13, color: out.$2),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$curStr → $nextStr',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: context.mutedColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-
-                    // Upkeep
-                    if (upkeeps.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      ...upkeeps.map((input) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Row(
-                            children: [
-                              Text('Daily Upkeep:',
-                                  style: TextStyle(
-                                      fontSize: 12, color: context.mutedColor)),
-                              const Spacer(),
-                              Icon(input.$1, size: 13, color: input.$2),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${formatVal(input.$4)} → ${formatVal(input.$5)}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: context.mutedColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Operating Inputs:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        Flexible(
+                          child: Text('$currentInputs → $targetInputs',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: context.mutedColor,
+                              )),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Operating Outputs:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        Flexible(
+                          child: Text('$currentOutputs → $targetOutputs',
+                              textAlign: TextAlign.end,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: context.mutedColor,
+                              )),
+                        ),
+                      ],
+                    ),
 
                     // Operating expenses
-                    if (opCreditsBase != null &&
-                        opCreditsBase > 0 &&
-                        opCreditsNext != null) ...[
+                    if (opCreditsBase != null && opCreditsNext != null) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -3676,7 +3479,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               size: 13, color: EarthResourceColors.credits),
                           const SizedBox(width: 4),
                           Text(
-                            '-${formatCreditUnits(currentBlueprint['operating_credit_units'])} → -${formatCreditUnits(serverTarget['operating_credit_units'])}',
+                            '-${formatCreditUnits(opCreditsBase)} → -${formatCreditUnits(opCreditsNext)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -3699,7 +3502,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             onPressed: () => Navigator.pop(dialogContext, false),
           ),
           EarthButton(
-            label: isPrivate ? 'CONFIRM R&D PROJECT' : 'SUBMIT CORPORATION PROPOSAL',
+            label: isPrivate
+                ? 'CONFIRM R&D PROJECT'
+                : 'SUBMIT CORPORATION PROPOSAL',
             icon:
                 isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
             variant: EarthButtonVariant.primary,
@@ -3902,7 +3707,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       ),
     );
   }
-
 }
 
 Future<bool?> showDemolishConfirmDialog(
@@ -3912,7 +3716,9 @@ Future<bool?> showDemolishConfirmDialog(
 ) async {
   final bMap = building is Map<String, dynamic>
       ? building
-      : (building is Map ? Map<String, dynamic>.from(building) : <String, dynamic>{});
+      : (building is Map
+          ? Map<String, dynamic>.from(building)
+          : <String, dynamic>{});
   final buildingId = bMap['id']?.toString() ?? '';
   final buildingName = bMap['name']?.toString() ?? 'Facility';
   return showDialog<bool>(
@@ -3930,11 +3736,13 @@ Future<bool?> showDemolishConfirmDialog(
           onPressed: () async {
             if (action is Function) {
               try {
-                await (action as dynamic)('demolish_building', {'buildingId': buildingId});
+                await (action as dynamic)(
+                    'demolish_building', {'buildingId': buildingId});
               } catch (_) {
                 try {
                   await (action as dynamic)(() async {
-                    await const EarthApi().demolishBuilding(buildingId: buildingId);
+                    await const EarthApi()
+                        .demolishBuilding(buildingId: buildingId);
                     return const EarthApi().world();
                   });
                 } catch (_) {}

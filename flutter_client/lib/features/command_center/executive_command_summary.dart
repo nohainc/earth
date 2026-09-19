@@ -65,7 +65,11 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   @override
   Widget build(BuildContext context) {
     final briefing = _briefing;
-    final decisionItems = DecisionQueueItem.synthesizeFromState(widget.state);
+    final decisionItems = widget.state.decisionQueue
+        .whereType<Map>()
+        .map((item) => DecisionQueueItem.fromJson(Map<String, dynamic>.from(item)))
+        .toList()
+      ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
     final opportunities = widget.state.opportunities;
 
     return Column(
@@ -117,14 +121,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         : widget.state.json['business'] is Map
             ? Map<String, dynamic>.from(widget.state.json['business'] as Map)
             : const <String, dynamic>{};
-    final credits = asDouble(widget.state.finance['balance'] ??
-        widget.state.personalFinance['balance'] ??
-        widget.state.human['credits'] ??
-        (widget.state.json['player'] is Map
-            ? (widget.state.json['player'] as Map)['credits']
-            : null));
-    final profit = asDouble(business['profit']);
-    final margin = asDouble(business['margin'] ?? business['profit_margin']);
+    final creditUnits = widget.state.finance['balance']?.toString();
+    final cashflowUnits = widget.state.finance['netCashflowUnits']?.toString();
     final workforce = widget.state.json['workforce'] is List
         ? (widget.state.json['workforce'] as List)
         : widget.state.human['workforce'] is List
@@ -134,15 +132,15 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
     final capacity =
         asInt(business['workforceCapacity'] ?? business['staffCapacity']);
-    final buildings = widget.state.buildings;
+    final buildings = widget.state.houseBuildingAssets;
 
     return EarthMetricGrid(
       metrics: [
         EarthMetricTile(
           label: 'LIQUID CAPITAL',
-          value: credits == null
+          value: creditUnits == null
               ? 'UNAVAILABLE'
-              : '${formatWholeNumber(credits)} C',
+              : formatCreditUnits(creditUnits),
           subtitle: 'Spendable now',
           icon: Icons.account_balance_wallet_outlined,
           accentColor: context.primaryColor,
@@ -153,14 +151,12 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         ),
         EarthMetricTile(
           label: 'ENTERPRISE HEALTH',
-          value: profit == null
+          value: cashflowUnits == null
               ? 'UNAVAILABLE'
-              : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} CR',
-          subtitle: margin == null
-              ? 'Profit unavailable'
-              : '${margin.toStringAsFixed(1)}% margin',
+              : formatCreditUnits(cashflowUnits),
+          subtitle: 'House net cashflow',
           icon: Icons.storefront_outlined,
-          accentColor: profit == null || profit >= 0
+          accentColor: cashflowUnits == null || !cashflowUnits.startsWith('-')
               ? context.successColor
               : context.warningColor,
           onTap: () {
@@ -274,7 +270,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR ($sign${netDelta.deltaPct.toStringAsFixed(1)}%) · Cashflow Net: +${formatWholeNumber(briefing.financial.netProfit)} CR/day',
+                      'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR ($sign${netDelta.deltaPct.toStringAsFixed(1)}%) · Cashflow Net: ${formatCreditUnits(briefing.financial.netCashflowUnits)}/day',
                       style: context.widgetValueStyle.copyWith(
                         color: isPositiveDelta
                             ? context.successColor
@@ -294,18 +290,18 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (briefing.buildings.activeBuildings > 0)
+              if (briefing.buildings.operatedBuildingCount > 0)
                 _headlineChip(
                   context,
                   Icons.domain_outlined,
-                  '${briefing.buildings.activeBuildings} building${briefing.buildings.activeBuildings == 1 ? '' : 's'} operating',
+                  '${briefing.buildings.operatedBuildingCount} building${briefing.buildings.operatedBuildingCount == 1 ? '' : 's'} operated',
                   context.successColor,
                 ),
-              if (briefing.governance.recentCivicEvents.isNotEmpty)
+              if (briefing.governance.events.isNotEmpty)
                 _headlineChip(
                   context,
                   Icons.gavel,
-                  briefing.governance.recentCivicEvents.first,
+                  briefing.governance.events.first.title,
                   context.warningColor,
                 ),
             ],
@@ -320,7 +316,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 child: _microStat(
                   context,
                   'OVERNIGHT REVENUE',
-                  '+${formatWholeNumber(briefing.financial.totalIncome)} CR',
+                  '+${formatCreditUnits(briefing.financial.incomeUnits)}',
                   'Dividends & Market Sales',
                   context.successColor,
                 ),
@@ -330,7 +326,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 child: _microStat(
                   context,
                   'OVERNIGHT EXPENSES',
-                  '-${formatWholeNumber(briefing.financial.totalExpenses)} CR',
+                  '-${formatCreditUnits(briefing.financial.expensesUnits)}',
                   'Maintenance & Taxes',
                   context.warningColor,
                 ),
@@ -339,9 +335,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               Expanded(
                 child: _microStat(
                   context,
-                  'ACTIVE TERRITORY RESIDENCY',
-                  briefing.governance.territoryResidency,
-                  'Tax Rate: ${briefing.governance.territoryTaxRatePct.toStringAsFixed(1)}%',
+                  'RESOURCE SHORTFALLS',
+                  '${briefing.resourceShortfallCount}',
+                  'Finalized for Day ${briefing.gameDay}',
                   context.primaryColor,
                 ),
               ),
@@ -547,8 +543,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     DecisionQueueItem item, {
     bool isLast = false,
   }) {
-    final isCritical = item.riskLevel.toLowerCase() == 'critical' ||
-        item.riskLevel.toLowerCase() == 'high';
+    final isCritical = item.actionStatus == 'CRITICAL';
     final categoryColor = _getDecisionCategoryColor(context, item);
     final categoryIcon = _getDecisionCategoryIcon(item);
 
@@ -559,7 +554,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       leading: Icon(categoryIcon, size: context.iconSize, color: categoryColor),
       badges: [
         EarthBadge(
-          label: item.riskLevel.toUpperCase(),
+          label: item.actionStatus,
           variant: isCritical
               ? EarthBadgeVariant.warning
               : EarthBadgeVariant.neutral,
@@ -578,10 +573,11 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         ),
         onPressed: () {
           EarthAudioEngine.instance.playClick();
+          if (!item.viewerCanAct) return;
           if (widget.onExecuteDecision != null) {
             widget.onExecuteDecision!(item);
-          } else if (widget.onNavigate != null) {
-            widget.onNavigate!(item.targetSection);
+          } else if (widget.onNavigate != null && item.viewerCanAct) {
+            widget.onNavigate!(item.targetRoute);
           }
         },
         child: Text(
@@ -614,15 +610,12 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
 
   IconData _getDecisionCategoryIcon(DecisionQueueItem item) {
     switch (item.category.toLowerCase()) {
-      case 'business':
-        return Icons.storefront_outlined;
       case 'buildings':
         return Icons.domain_outlined;
       case 'governance':
       case 'civic':
         return Icons.how_to_vote_outlined;
       case 'house':
-      case 'dynasty':
         return Icons.shield_outlined;
       default:
         return Icons.alt_route;
@@ -642,7 +635,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     if (signal.contains('tech') || signal.contains('research')) {
       targetSection = 'technology';
     }
-    if (signal.contains('business')) targetSection = 'business';
+    if (signal.contains('business')) targetSection = 'corporation';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),

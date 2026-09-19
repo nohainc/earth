@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/command_overview.dart';
 import '../../core/models/decision_queue_item.dart';
 import '../../core/models/live_connection_status.dart';
 import '../../shared/widgets/format_helpers.dart';
@@ -39,6 +40,7 @@ String dashboardSectionTitle(String section, [EarthState? state]) =>
 
 class Dashboard extends StatelessWidget {
   final EarthState state;
+  final CommandOverview? commandOverview;
   // Retained as ignored constructor inputs so older widget harnesses can be
   // migrated independently; no company data is read or rendered.
   @Deprecated('Company entities were removed; use Human-owned operations.')
@@ -77,6 +79,7 @@ class Dashboard extends StatelessWidget {
   const Dashboard({
     super.key,
     required this.state,
+    this.commandOverview,
     this.businessOwnership,
     this.businessFinancials,
     this.businessProfile,
@@ -159,9 +162,9 @@ class Dashboard extends StatelessWidget {
             ),
           ),
           TextButton(
-            onPressed: onNavigate == null
+            onPressed: onNavigate == null || !decision.viewerCanAct
                 ? null
-                : () => onNavigate!.call(decision.targetSection),
+                : () => onNavigate!.call(decision.targetRoute),
             child: Text(decision.primaryActionLabel),
           ),
         ],
@@ -687,7 +690,11 @@ class Dashboard extends StatelessWidget {
                 DecisionQueueItem.fromJson(Map<String, dynamic>.from(item)))
             .toList();
         return [
-          CommandExecutiveQuadrant(state: state, onNavigate: onNavigate),
+          CommandExecutiveQuadrant(
+            overview: commandOverview,
+            houseAssets: state.houseBuildingAssets,
+            onNavigate: onNavigate,
+          ),
           const SizedBox(height: 24),
           DecisionQueuePanel(
             items: items,

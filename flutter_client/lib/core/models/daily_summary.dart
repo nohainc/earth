@@ -37,50 +37,49 @@ class NetWealthDelta {
   }
 }
 
+String _parseUnitsString(dynamic v) {
+  if (v == null) return '0';
+  if (v is String) return v.trim();
+  if (v is int || v is BigInt) return v.toString();
+  if (v is num) return v.toString();
+  return v.toString().trim();
+}
+
 class FinancialSummary {
-  final double totalIncome;
-  final double totalExpenses;
-  final double netProfit;
-  final double businessDividends;
-  final double marketSales;
-  final double marketPurchases;
-  final double buildingUpkeep;
-  final double civicTaxes;
+  final String incomeUnits;
+  final String expensesUnits;
+  final String netCashflowUnits;
+  final String taxesUnits;
+  final String marketSalesUnits;
+  final String marketPurchasesUnits;
 
   const FinancialSummary({
-    required this.totalIncome,
-    required this.totalExpenses,
-    required this.netProfit,
-    required this.businessDividends,
-    required this.marketSales,
-    this.marketPurchases = 0,
-    required this.buildingUpkeep,
-    required this.civicTaxes,
+    required this.incomeUnits,
+    required this.expensesUnits,
+    required this.netCashflowUnits,
+    required this.taxesUnits,
+    required this.marketSalesUnits,
+    this.marketPurchasesUnits = '0',
   });
 
   factory FinancialSummary.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return const FinancialSummary(
-        totalIncome: 0,
-        totalExpenses: 0,
-        netProfit: 0,
-        businessDividends: 0,
-        marketSales: 0,
-        buildingUpkeep: 0,
-        civicTaxes: 0,
+        incomeUnits: '0',
+        expensesUnits: '0',
+        netCashflowUnits: '0',
+        taxesUnits: '0',
+        marketSalesUnits: '0',
+        marketPurchasesUnits: '0',
       );
     }
     return FinancialSummary(
-      totalIncome: _parseNum(json['income'] ?? json['totalIncome']),
-      totalExpenses: _parseNum(json['expenses'] ?? json['totalExpenses']),
-      netProfit: _parseNum(json['net'] ?? json['netProfit']),
-      businessDividends:
-          _parseNum(json['dividends'] ?? json['businessDividends']),
-      marketSales: _parseNum(json['marketSales']),
-      marketPurchases: _parseNum(json['marketPurchases']),
-      buildingUpkeep:
-          _parseNum(json['buildingUpkeep'] ?? json['machineMaintenance']),
-      civicTaxes: _parseNum(json['taxes'] ?? json['civicTaxes']),
+      incomeUnits: _parseUnitsString(json['incomeUnits']),
+      expensesUnits: _parseUnitsString(json['expensesUnits']),
+      netCashflowUnits: _parseUnitsString(json['netCashflowUnits']),
+      taxesUnits: _parseUnitsString(json['taxesUnits']),
+      marketSalesUnits: _parseUnitsString(json['marketSalesUnits']),
+      marketPurchasesUnits: _parseUnitsString(json['marketPurchasesUnits']),
     );
   }
 }
@@ -121,17 +120,13 @@ class MarketMovementSummary {
 }
 
 class BuildingSummary {
-  final int activeBusinesses;
-  final int totalDailyOutput;
-  final int activeBuildings;
+  final int operatedBuildingCount;
   final List<DailySummaryEvent> completed;
   final List<DailySummaryEvent> upgraded;
   final List<DailySummaryEvent> inactive;
 
   const BuildingSummary({
-    required this.activeBusinesses,
-    required this.totalDailyOutput,
-    required this.activeBuildings,
+    required this.operatedBuildingCount,
     this.completed = const [],
     this.upgraded = const [],
     this.inactive = const [],
@@ -140,16 +135,11 @@ class BuildingSummary {
   factory BuildingSummary.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return const BuildingSummary(
-        activeBusinesses: 0,
-        totalDailyOutput: 0,
-        activeBuildings: 0,
+        operatedBuildingCount: 0,
       );
     }
     return BuildingSummary(
-      activeBusinesses: _parseInt(json['activeBusinesses']),
-      totalDailyOutput: _parseInt(json['totalDailyOutput']),
-      activeBuildings: _parseInt(
-          json['activeBuildings'] ?? (json['completed'] as List?)?.length),
+      operatedBuildingCount: _parseInt(json['operatedBuildingCount']),
       completed: _eventList(json['completed']),
       upgraded: _eventList(json['upgraded']),
       inactive: _eventList(json['inactive']),
@@ -216,52 +206,25 @@ List<DailySummaryEvent> _eventList(dynamic value) => value is List
     : const [];
 
 class GovernanceSummary {
-  final int activeProposals;
-  final int passedProposals24h;
-  final String territoryResidency;
-  final double territoryTaxRatePct;
-  final List<String> recentCivicEvents;
+  final int eventCount;
+  final List<DailySummaryEvent> events;
 
   const GovernanceSummary({
-    required this.activeProposals,
-    required this.passedProposals24h,
-    required this.territoryResidency,
-    required this.territoryTaxRatePct,
-    required this.recentCivicEvents,
+    required this.eventCount,
+    required this.events,
   });
-
-  /// Compatibility accessors for older clients; presentation uses Territory
-  /// terminology and the canonical fields above.
-  @Deprecated('Use territoryResidency')
-  String get cityResidency => territoryResidency;
-
-  @Deprecated('Use territoryTaxRatePct')
-  double get cityTaxRatePct => territoryTaxRatePct;
 
   factory GovernanceSummary.fromJson(Map<String, dynamic>? json) {
     if (json == null) {
       return const GovernanceSummary(
-        activeProposals: 0,
-        passedProposals24h: 0,
-        territoryResidency: '',
-        territoryTaxRatePct: 0.0,
-        recentCivicEvents: [],
+        eventCount: 0,
+        events: [],
       );
     }
-    final rawEvents = (json['recentCivicEvents'] as List<dynamic>?) ??
-        (json['relevantEvents'] as List<dynamic>? ?? []);
+    final events = _eventList(json['events']);
     return GovernanceSummary(
-      activeProposals: _parseInt(json['activeProposals']),
-      passedProposals24h: _parseInt(json['passedProposals24h']),
-      territoryResidency: (json['territoryResidency'] ??
-              json['territory_residency'] ??
-              json['cityResidency'] ??
-              '')
-          .toString(),
-      territoryTaxRatePct: _parseNum(json['territoryTaxRatePct'] ??
-          json['territory_tax_rate_pct'] ??
-          json['cityTaxRatePct']),
-      recentCivicEvents: rawEvents.map((e) => e.toString()).toList(),
+      eventCount: _parseInt(json['eventCount']),
+      events: events,
     );
   }
 }
@@ -339,8 +302,8 @@ class DailySummaryReport {
   final AlertSummary alerts;
   final List<SummaryHighlight> highlights;
   final List<ResourceDelta> resources;
+  final int resourceShortfallCount;
   final List<DailySummaryEvent> researchEvents;
-  final List<DailySummaryEvent> governanceEvents;
   final List<DailySummaryEvent> houseEvents;
   final List<DailySummaryEvent> alertItems;
 
@@ -357,8 +320,8 @@ class DailySummaryReport {
     required this.alerts,
     required this.highlights,
     this.resources = const [],
+    this.resourceShortfallCount = 0,
     this.researchEvents = const [],
-    this.governanceEvents = const [],
     this.houseEvents = const [],
     this.alertItems = const [],
   });
@@ -372,28 +335,21 @@ class DailySummaryReport {
       netWealthDelta:
           const NetWealthDelta(current: 0, previous: 0, delta: 0, deltaPct: 0),
       financial: const FinancialSummary(
-          totalIncome: 0,
-          totalExpenses: 0,
-          netProfit: 0,
-          businessDividends: 0,
-          marketSales: 0,
-          buildingUpkeep: 0,
-          civicTaxes: 0),
+          incomeUnits: '0',
+          expensesUnits: '0',
+          netCashflowUnits: '0',
+          taxesUnits: '0',
+          marketSalesUnits: '0',
+          marketPurchasesUnits: '0'),
       marketMovements: const [],
-      buildings: const BuildingSummary(
-          activeBusinesses: 0, totalDailyOutput: 0, activeBuildings: 0),
-      governance: const GovernanceSummary(
-          activeProposals: 0,
-          passedProposals24h: 0,
-          territoryResidency: '',
-          territoryTaxRatePct: 0,
-          recentCivicEvents: []),
+      buildings: const BuildingSummary(operatedBuildingCount: 0),
+      governance: const GovernanceSummary(eventCount: 0, events: []),
       alerts: const AlertSummary(
           unreadNotifications: 0, unreadComms: 0, criticalAlertsCount: 0),
       highlights: const [],
       resources: const [],
+      resourceShortfallCount: 0,
       researchEvents: const [],
-      governanceEvents: const [],
       houseEvents: const [],
       alertItems: const [],
     );
@@ -416,7 +372,7 @@ class DailySummaryReport {
     final rawBusiness = json['buildings'] is Map
         ? Map<String, dynamic>.from(json['buildings'] as Map)
         : null;
-    final rawCivic = json['governance'] is Map
+    final rawGovernance = json['governance'] is Map
         ? Map<String, dynamic>.from(json['governance'] as Map)
         : null;
     final rawAlerts = json['alerts'] is Map
@@ -440,7 +396,7 @@ class DailySummaryReport {
               Map<String, dynamic>.from(e as Map)))
           .toList(),
       buildings: BuildingSummary.fromJson(rawBusiness),
-      governance: GovernanceSummary.fromJson(rawCivic),
+      governance: GovernanceSummary.fromJson(rawGovernance),
       alerts: rawAlerts == null
           ? AlertSummary.fromJson({'notifications': json['alerts'] ?? []})
           : AlertSummary.fromJson(rawAlerts),
@@ -452,10 +408,9 @@ class DailySummaryReport {
           .whereType<Map>()
           .map((e) => ResourceDelta.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
+      resourceShortfallCount: _parseInt(json['resourceShortfallCount']),
       researchEvents: _eventList((json['research'] as Map?)?['completed']) +
           _eventList((json['research'] as Map?)?['progress']),
-      governanceEvents:
-          _eventList((json['governance'] as Map?)?['relevantEvents']),
       houseEvents: _eventList((json['house'] as Map?)?['events']),
       alertItems: _eventList(json['alerts']),
     );
