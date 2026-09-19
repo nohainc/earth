@@ -29,11 +29,11 @@ Each simulated day records:
 - resource totals and market prices;
 - median/p95 wealth, Gini coefficient, and top-10% wealth share;
 - building profitability;
-- city treasury stress and corporate treasury concentration;
+- Corporation treasury stress and institutional concentration;
 - research completion/progress;
 - average Food/Energy need satisfaction.
 
-The report warns about rising wealth concentration, excessive corporate concentration, low need satisfaction, and stressed city treasuries. These are calibration signals for reviewing positive-feedback loops such as corporate wealth → technology → output → wealth.
+The report warns about rising wealth concentration, excessive corporate concentration, low need satisfaction, and stressed Corporation treasuries. These are calibration signals for reviewing positive-feedback loops such as corporate wealth → technology → output → wealth.
 
 ## Review cadence
 
