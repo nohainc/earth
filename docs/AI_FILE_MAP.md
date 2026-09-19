@@ -1,8 +1,7 @@
 # EARTH AI File Map
 
 This document is a quick orientation map for future AI-assisted changes.
-It identifies which files are authoritative, which files are compatibility or
-prototype-only, and where to begin for common feature requests.
+It identifies which files are authoritative, which files are compatibility-only, and where to begin for common feature requests.
 
 ## Authority order
 
@@ -14,7 +13,6 @@ Use this order when sources appear to overlap:
 4. `db/seed.sql` — canonical starter and local test data.
 5. `test/` and `flutter_client/test/` — executable behavior and UI expectations.
 6. `server.js` — non-production local reference simulator and compatibility API.
-7. Root-level prototype files — legacy visual prototypes; do not treat them as the production application.
 
 ## Repository layout
 
@@ -29,7 +27,6 @@ Use this order when sources appear to overlap:
 | `flutter_client/test/` | Flutter widget, golden, accessibility, and UI tests | Frontend behavior |
 | `docs/` | Architecture, API, operations, security, and development guidance | Project guidance |
 | `static-site/` | Static landing-site assets used by the Worker | Static web surface |
-| Root-level `prototype*.{html,js,css}` | Earlier visual prototypes | Legacy/demo only |
 
 ## Backend map
 
@@ -197,8 +194,6 @@ Before changing behavior:
 The following files are valuable for visual comparison but should not normally
 be changed for current app behavior:
 
-- Root `prototype2.html`, `prototype2.js`, and `prototype2.css`.
-- Root `prototype3.html`, `prototype3.js`, and `prototype3.css`.
 - Root `app.js`, `index.html`, and `styles.css`.
 - `earth/server.js` and `earth/simulation.js` when the request concerns the
   authoritative Worker or Flutter application.
@@ -226,6 +221,6 @@ they may still be used for demos, review, or compatibility tests.
 ## Naming guidance
 
 Do not rename files solely to make this map cleaner. The repository contains
-legacy prototypes, compatibility code, and production-style code side by side;
+compatibility code and production-style code side by side;
 the distinction is more important than uniform naming. Update this map when a
 new feature area or authoritative entry point is introduced.
