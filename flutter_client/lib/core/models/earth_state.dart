@@ -2,6 +2,7 @@ import '../../shared/widgets/format_helpers.dart';
 import 'human_profile.dart';
 import 'human_daily_needs.dart';
 import 'human_authority_summary.dart';
+import 'building_models.dart';
 
 class EarthState {
   final Map<String, dynamic> json;
@@ -78,6 +79,14 @@ class EarthState {
   List<dynamic> get financeStatus => _toList(json['financeStatus']);
   Map<String, dynamic> get personalFinance => _toMap(json['personalFinance']);
   List<dynamic> get buildings => _toList(json['buildings']);
+  BuildingPortfolio? get buildingPortfolio {
+    final value = json['buildingPortfolio'];
+    return value is Map ? BuildingPortfolio.fromJson(_toMap(value)) : null;
+  }
+  List<BuildingAsset> get houseBuildingAssets =>
+      buildingPortfolio?.houseAssets ?? const [];
+  List<BuildingAsset> get corporationPublicBuildingAssets =>
+      buildingPortfolio?.corporationPublicAssets ?? const [];
   Map<String, dynamic> get districtZoning => _toMap(json['districtZoning']);
   List<dynamic> get investmentShares => _toList(json['investmentShares']);
   List<dynamic> get civicDividends => _toList(json['civicDividends']);

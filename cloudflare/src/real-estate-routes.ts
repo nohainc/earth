@@ -8,7 +8,7 @@ import {
   listCorporationBuildingResearch,
 } from './corporation-building-research-postgres.ts';
 import { getBuildingCapitalOptions, startBuildingCapitalProject } from './building-age-postgres.ts';
-import { decommissionBuilding, quoteBuildingDemolition, quoteBuildingOperatingMode, quoteBuildingUpgrade, setBuildingOperatingMode, upgradeBuilding } from './building-investment-postgres.ts';
+import { decommissionBuilding, quoteBuildingDemolition, quoteBuildingOperatingMode, quoteBuildingRetrofit, quoteBuildingUpgrade, setBuildingOperatingMode, upgradeBuilding } from './building-investment-postgres.ts';
 import { purchaseV5Building, quoteV5Building } from './v5-building-postgres.ts';
 import { isSettlementBarrierError } from './settlement-barrier-postgres.ts';
 
@@ -77,6 +77,22 @@ export async function handleRealEstateRoutes(
     } catch (error) {
       if (isSettlementBarrierError(error)) return error.toResponse();
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade quote unavailable' }, { status: 409 });
+    }
+  }
+  const retrofitQuoteMatch = url.pathname.match(/^\/api\/v5\/buildings\/([^/]+)\/retrofit-quote$/);
+  if (retrofitQuoteMatch && request.method === 'GET') {
+    const rawTarget = url.searchParams.get('targetGeneration');
+    const targetGeneration = rawTarget == null || rawTarget === '' ? undefined : Number(rawTarget);
+    if (targetGeneration !== undefined && (!Number.isInteger(targetGeneration) || targetGeneration < 1)) {
+      return Response.json({ ok: false, error: 'targetGeneration must be a positive integer' }, { status: 400 });
+    }
+    try {
+      const result = await withRepository(env, (repository) => quoteBuildingRetrofit(repository, { buildingId: retrofitQuoteMatch[1], humanId: viewer.id, targetGeneration }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      if (isSettlementBarrierError(error)) return error.toResponse();
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building retrofit quote unavailable' }, { status: 409 });
     }
   }
   if (url.pathname === '/api/real-estate/policy' && request.method === 'POST') {

@@ -14,6 +14,7 @@ import { assertScaleCapabilityAuthorized } from './v5-scale-postgres.ts';
 import { getAvailableGenerations, assertGenerationAuthorized } from './v5-generation-postgres.ts';
 import { readAuthoritativeGameTime, projectDeadline } from './world-clock-postgres.ts';
 import { postEconomicTransaction, runEconomicMutation } from './settlement-barrier-postgres.ts';
+import type { BuildingQuote } from './building-contract.ts';
 
 type Catalog = {
   id: string;
@@ -61,7 +62,7 @@ async function catalog(tx: PostgresRepository, buildingType: string): Promise<Ca
   return row;
 }
 
-export async function quoteV5Building(repository: PostgresRepository, input: { ownerId: string; buildingType: string; generation?: number }): Promise<Record<string, unknown>> {
+export async function quoteV5Building(repository: PostgresRepository, input: { ownerId: string; buildingType: string; generation?: number }): Promise<BuildingQuote & Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const owner = await ownerContext(tx, input.ownerId);
     const blueprint = await catalog(tx, input.buildingType);
@@ -110,13 +111,14 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
       ...(wallet && BigInt(wallet.balance_units) < BigInt(blueprint.construction_credit_units) ? ['Insufficient Credits'] : []),
     ];
     return {
-      ok: true,
+      ok: true as const,
       eligible: blockers.length === 0,
       blockers,
       ownerType: isPublic ? 'CORPORATION' : 'HOUSE',
+      ownerId: isPublic ? owner.corporationId! : owner.houseId,
       buildingType: blueprint.code,
       buildingCatalogId: blueprint.id,
-      footprintUnits: blueprint.slot_footprint,
+      footprintUnits: String(blueprint.slot_footprint),
       creditCostUnits: blueprint.construction_credit_units,
       minimumScaleCapability: blueprint.minimum_scale_capability,
       scaleAuthorization: scaleAuth,
@@ -133,6 +135,8 @@ export async function quoteV5Building(repository: PostgresRepository, input: { o
       expectedCompletionGameDay: projectDeadline(gameDay, clock.gameMinute, duration.minutes).completionGameDay,
       expectedCompletionGameMinute: projectDeadline(gameDay, clock.gameMinute, duration.minutes).completionGameMinute,
       capacity,
+      permissions: { canConstruct: blockers.length === 0 },
+      allowedActions: blockers.length === 0 ? ['CONSTRUCT'] : [],
       delinquencyStatus: delinquency,
       generatedFrom: 'postgres-canonical-building-catalog-v5',
     };

@@ -47,6 +47,14 @@ extension EarthApiRealEstate on EarthApi {
           };
   }
 
+  Future<BuildingQuote> quoteV5BuildingContract(String buildingType) async {
+    final response = await _request('/api/v5/buildings/quote',
+        method: 'POST', body: {'buildingType': buildingType});
+    return BuildingQuote.fromJson(response is Map
+        ? Map<String, dynamic>.from(response)
+        : const <String, dynamic>{});
+  }
+
   Future<EarthState> upgradeBuilding({
     required String buildingId,
   }) async {
@@ -63,6 +71,12 @@ extension EarthApiRealEstate on EarthApi {
 
   Future<Map<String, dynamic>> quoteBuildingUpgrade({required String buildingId}) async {
     final response = await _request('/api/v5/buildings/$buildingId/upgrade-quote');
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> quoteBuildingRetrofit({required String buildingId, int? targetGeneration}) async {
+    final query = targetGeneration == null ? '' : '?targetGeneration=$targetGeneration';
+    final response = await _request('/api/v5/buildings/$buildingId/retrofit-quote$query');
     return Map<String, dynamic>.from(response as Map);
   }
 

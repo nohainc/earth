@@ -6,6 +6,7 @@ import '../models/corporation_directory_entry.dart';
 import '../models/corporation_profile.dart';
 import '../models/governance_proposal.dart';
 import '../models/house_profile.dart';
+import '../models/building_models.dart';
 
 part 'earth_api_auth.dart';
 part 'earth_api_world.dart';

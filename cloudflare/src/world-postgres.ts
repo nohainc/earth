@@ -17,6 +17,7 @@ import { corporationPoliciesFromConstitution, corporationProfileFromSource } fro
 import { getInstitutionFinancialProjection } from './financial-projections.ts';
 import type { HumanProfile } from './human-profile.ts';
 import type { HumanAuthoritySummary } from './human-authority-summary.ts';
+import { buildingPortfolio } from './building-contract.ts';
 
 /** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -30,7 +31,7 @@ function toJsonSafe<T>(value: T): T {
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId?: string, viewerHouseId?: string): Promise<Record<string, unknown>> {
   const clock = await readAuthoritativeGameTime(repository);
-  const [cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, dailyMaintenance, personalRoles, lifeEvents, catalog, buildings, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
+  const [cursor, world, institutions, humans, assets, communities, serviceAssessments, conditions, viewer, dailyMaintenance, personalRoles, lifeEvents, catalog, buildings, corporationBuildings, corporationBuildingPermissions, accounts, residency, obligations, proposals, rankings, territories, corporation, organizations, governanceRules, taxRules] = await Promise.all([
     getSettlementCursor(repository, clock.gameDay),
     repository.query("SELECT id, world_seed, status, genesis_at FROM world_state WHERE id = 'WORLD'"),
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
@@ -92,7 +93,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                 c.technology_domain, c.minimum_scale_capability
                        ORDER BY c.code, c.tier, c.id`),
     viewerHouseId ? repository.query(`SELECT b.id, b.territory_id, b.catalog_id, b.status, b.started_game_day,
+                                             o.id AS owner_id, o.owner_type,
                                              b.construction_state, b.installed_generation, b.technology_definition_version,
+                                             b.operating_mode,
                                              c.code, c.code AS building_type, c.tier, c.economic_role,
                                              c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
                                              c.service_type, c.service_capacity_units, c.slot_footprint,
@@ -100,23 +103,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                              COALESCE(latest.utilization_bps, 10000) AS utilization_bps,
                                              latest.game_day AS latest_settlement_game_day,
                                              latest.status AS latest_settlement_status,
-                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
-                                               (-latest.operating_credit_units)::TEXT END AS settlement_net_credits,
-                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
-                                               (COALESCE((latest.output_units ->> 'ENERGY')::BIGINT, 0) -
-                                                COALESCE((latest.input_units ->> 'ENERGY')::BIGINT, 0))::TEXT END AS settlement_net_energy,
-                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
-                                               (COALESCE((latest.output_units ->> 'FOOD')::BIGINT, 0) -
-                                                COALESCE((latest.input_units ->> 'FOOD')::BIGINT, 0))::TEXT END AS settlement_net_food,
-                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
-                                               (COALESCE((latest.output_units ->> 'MATERIAL')::BIGINT, 0) -
-                                                COALESCE((latest.input_units ->> 'MATERIAL')::BIGINT, 0))::TEXT END AS settlement_net_materials,
-                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
-                                               (COALESCE((latest.output_units ->> 'COMPONENTS')::BIGINT, 0) -
-                                                COALESCE((latest.input_units ->> 'COMPONENTS')::BIGINT, 0))::TEXT END AS settlement_net_components,
-                                             CASE WHEN latest.game_day IS NULL THEN NULL ELSE
-                                               (COALESCE((latest.output_units ->> 'COMPUTE')::BIGINT, 0) -
-                                                COALESCE((latest.input_units ->> 'COMPUTE')::BIGINT, 0))::TEXT END AS settlement_net_compute
+                                             latest.input_units AS settlement_input_units,
+                                             latest.output_units AS settlement_output_units,
+                                             latest.operating_credit_units::TEXT AS settlement_operating_credit_units
                                         FROM buildings b
                                         JOIN owner_registry o ON o.economic_id = b.owner_economic_id
                                         JOIN building_catalog c ON c.id = b.catalog_id
@@ -129,6 +118,57 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                            LIMIT 1
                                         ) latest ON TRUE
                                        WHERE o.id = $1
+                                       ORDER BY b.status, b.id`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
+    viewerHouseId ? repository.query(`SELECT
+        EXISTS (SELECT 1 FROM institution_governance_roles r
+                 WHERE r.institution_id = ha.corporation_id AND r.human_id = $2
+                   AND r.status = 'ACTIVE'
+                   AND r.role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER', 'CORPORATION_OPERATOR')) AS viewer_can_build,
+        EXISTS (SELECT 1 FROM institution_governance_roles r
+                 WHERE r.institution_id = ha.corporation_id AND r.human_id = $2
+                   AND r.status = 'ACTIVE'
+                   AND r.role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_OPERATOR')) AS viewer_can_propose,
+        EXISTS (SELECT 1 FROM institution_governance_roles r
+                 WHERE r.institution_id = ha.corporation_id AND r.human_id = $2
+                   AND r.status = 'ACTIVE'
+                   AND r.role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER', 'CORPORATION_OPERATOR')) AS viewer_can_operate,
+        EXISTS (SELECT 1 FROM institution_governance_roles r
+                 WHERE r.institution_id = ha.corporation_id AND r.human_id = $2
+                   AND r.status = 'ACTIVE'
+                   AND r.role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_OPERATOR')) AS viewer_can_upgrade,
+        EXISTS (SELECT 1 FROM institution_governance_roles r
+                 WHERE r.institution_id = ha.corporation_id AND r.human_id = $2
+                   AND r.status = 'ACTIVE'
+                   AND r.role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_OPERATOR')) AS viewer_can_retrofit
+      FROM house_affiliations ha
+     WHERE ha.house_id = $1 AND ha.status = 'ACTIVE'
+     ORDER BY ha.joined_game_day DESC
+     LIMIT 1`, [viewerHouseId, viewerId]) : Promise.resolve({ rows: [] }),
+    viewerHouseId ? repository.query(`SELECT b.id, b.territory_id, b.catalog_id, b.status, b.started_game_day,
+                                             o.id AS owner_id, o.owner_type,
+                                             b.construction_state, b.installed_generation, b.technology_definition_version,
+                                             b.operating_mode,
+                                             c.code, c.code AS building_type, c.tier, c.economic_role,
+                                             c.ownership_scope, lower(c.ownership_scope) AS ownership_class,
+                                             c.service_type, c.service_capacity_units, c.slot_footprint,
+                                             c.operating_credit_units, c.technology_domain, c.minimum_scale_capability,
+                                             COALESCE(latest.utilization_bps, 10000) AS utilization_bps,
+                                             latest.game_day AS latest_settlement_game_day,
+                                             latest.status AS latest_settlement_status,
+                                             latest.input_units AS settlement_input_units,
+                                             latest.output_units AS settlement_output_units,
+                                             latest.operating_credit_units::TEXT AS settlement_operating_credit_units
+                                        FROM buildings b
+                                        JOIN owner_registry o ON o.economic_id = b.owner_economic_id AND o.owner_type = 'CORPORATION'
+                                        JOIN house_affiliations ha ON ha.corporation_id = o.id AND ha.house_id = $1 AND ha.status = 'ACTIVE'
+                                        JOIN building_catalog c ON c.id = b.catalog_id AND c.ownership_scope = 'PUBLIC'
+                                        LEFT JOIN LATERAL (
+                                          SELECT utilization_bps, game_day, status, input_units, output_units, operating_credit_units
+                                            FROM building_settlement_journals
+                                           WHERE building_id = b.id
+                                           ORDER BY game_day DESC
+                                           LIMIT 1
+                                        ) latest ON TRUE
                                        ORDER BY b.status, b.id`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     viewerHouseId ? repository.query(`SELECT a.account_type, asset.code, a.balance_units::TEXT AS balance_units
                                         FROM economic_accounts a
@@ -537,6 +577,12 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     serviceNeeds: needs,
     buildings: buildings.rows,
     buildingCatalog: catalog.rows,
+    buildingPortfolio: buildingPortfolio(
+      buildings.rows as Record<string, unknown>[],
+      corporationBuildings.rows as Record<string, unknown>[],
+      catalog.rows as Record<string, unknown>[],
+      corporationBuildingPermissions.rows[0] as Record<string, unknown> | undefined,
+    ),
     technology: { catalog: technology.catalog, projects: technology.projects },
     corporationBuildingResearch,
     corporateResearch: technology.projects,

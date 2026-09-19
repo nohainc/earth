@@ -85,6 +85,7 @@ export const API_ROUTES: readonly ApiRouteContract[] = [
   { method: 'POST', path: '/api/v5/buildings/quote', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'quoteV5Building', status: 'ACTIVE' },
   { method: 'POST', path: '/api/v5/buildings/{id}/upgrade', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'upgradeBuilding', status: 'ACTIVE' },
   { method: 'GET', path: '/api/v5/buildings/{id}/upgrade-quote', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'quoteBuildingUpgrade', status: 'ACTIVE' },
+  { method: 'GET', path: '/api/v5/buildings/{id}/retrofit-quote', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'quoteBuildingRetrofit', status: 'ACTIVE' },
   { method: 'POST', path: '/api/v5/buildings/{id}/policy', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'setBuildingOperatingMode', status: 'ACTIVE' },
   { method: 'GET', path: '/api/v5/buildings/{id}/policy-quote', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'quoteBuildingOperatingMode', status: 'ACTIVE' },
   { method: 'POST', path: '/api/v5/buildings/{id}/demolish', owner: 'BuildingRoutes', auth: 'HOUSE_SELF', service: 'decommissionBuilding', status: 'ACTIVE' },

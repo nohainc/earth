@@ -103,10 +103,10 @@ async function loadRetrofitResourceRequirements(
 
 async function getHouseBuildingActionContext(repository: PostgresRepository, buildingId: string, humanId: string) {
   const row = (await repository.query<{
-    id: string; house_id: string; owner_economic_id: string; tier: number; family_code: string; catalog_id: string;
+    id: string; house_id: string; owner_economic_id: string; tier: number; installed_generation: number | null; technology_domain: string | null; family_code: string; catalog_id: string;
     slot_footprint: string; construction_credit_units: string; construction_minutes: number;
     operating_mode: string; status: string;
-  }>(`SELECT b.id, h.house_id, b.owner_economic_id, c.tier, c.family_code, c.id AS catalog_id,
+    }>(`SELECT b.id, h.house_id, b.owner_economic_id, c.tier, b.installed_generation, c.technology_domain, c.family_code, c.id AS catalog_id,
       c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes,
       b.operating_mode, b.status
     FROM buildings b
@@ -121,10 +121,10 @@ async function getHouseBuildingActionContext(repository: PostgresRepository, bui
 
 async function getCorporationBuildingActionContext(repository: PostgresRepository, buildingId: string, humanId: string) {
   const row = (await repository.query<{
-    id: string; corporation_id: string; owner_economic_id: string; tier: number; family_code: string;
+    id: string; corporation_id: string; owner_economic_id: string; tier: number; installed_generation: number | null; technology_domain: string | null; family_code: string;
     slot_footprint: string; construction_credit_units: string; construction_minutes: number; operating_mode: string;
     status: string;
-  }>(`SELECT b.id, owner.id AS corporation_id, b.owner_economic_id, c.tier, c.family_code,
+  }>(`SELECT b.id, owner.id AS corporation_id, b.owner_economic_id, c.tier, b.installed_generation, c.technology_domain, c.family_code,
       c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes, b.operating_mode,
       b.status
     FROM buildings b
@@ -184,6 +184,17 @@ async function quoteCorporationBuildingUpgrade(repository: PostgresRepository, i
       afterRentUnits: capacity.afterChargeUnits ?? null,
       deltaRentUnits: capacity.currentChargeUnits != null && capacity.afterChargeUnits != null
         ? (BigInt(capacity.afterChargeUnits) - BigInt(capacity.currentChargeUnits)).toString() : null,
+      progression: {
+        kind: 'TIER_UPGRADE',
+        current: { tier: building.tier, technologyGeneration: building.installed_generation, technologyDomain: building.technology_domain },
+        target: { tier: next?.tier ?? null, technologyGeneration: building.installed_generation, technologyDomain: building.technology_domain },
+        cost: { creditUnits: creditCost.toString(), resourceRequirements: resourceRequirements.map((r) => ({ code: r.code, units: r.required_units })) },
+        time: { constructionMinutes: next?.construction_minutes ?? null },
+        capacityEffect: { footprintDeltaUnits: footprintDelta.toString(), beforeRentUnits: capacity.currentChargeUnits ?? null, afterRentUnits: capacity.afterChargeUnits ?? null, deltaRentUnits: capacity.currentChargeUnits != null && capacity.afterChargeUnits != null ? (BigInt(capacity.afterChargeUnits) - BigInt(capacity.currentChargeUnits)).toString() : null },
+        technologyEffect: { tierChange: next ? `${building.tier} -> ${next.tier}` : null, generationChange: 'UNCHANGED', requiredScaleCapability: next?.minimum_scale_capability ?? null },
+        expectedPaybackGameDays: null,
+        expectedPaybackStatus: 'UNAVAILABLE_AUTHORITATIVE_SETTLEMENT_ECONOMICS_REQUIRED',
+      },
       capacity, delinquencyStatus: delinquency, blockers,
       generatedFrom: 'postgres-canonical-corporation-upgrade-quote-v5',
     };
@@ -393,6 +404,17 @@ export async function quoteBuildingUpgrade(repository: PostgresRepository, input
       afterRentUnits: capacity.afterChargeUnits ?? null,
       deltaRentUnits: capacity.currentChargeUnits != null && capacity.afterChargeUnits != null
         ? (BigInt(capacity.afterChargeUnits) - BigInt(capacity.currentChargeUnits)).toString() : null,
+      progression: {
+        kind: 'TIER_UPGRADE',
+        current: { tier: building.tier, technologyGeneration: building.installed_generation, technologyDomain: building.technology_domain },
+        target: { tier: next?.tier ?? null, technologyGeneration: building.installed_generation, technologyDomain: building.technology_domain },
+        cost: { creditUnits: creditCost.toString(), resourceRequirements: resourceRequirements.map((r) => ({ code: r.code, units: r.required_units })) },
+        time: { constructionMinutes: next?.construction_minutes ?? null },
+        capacityEffect: { footprintDeltaUnits: footprintDelta.toString(), beforeRentUnits: capacity.currentChargeUnits ?? null, afterRentUnits: capacity.afterChargeUnits ?? null, deltaRentUnits: capacity.currentChargeUnits != null && capacity.afterChargeUnits != null ? (BigInt(capacity.afterChargeUnits) - BigInt(capacity.currentChargeUnits)).toString() : null },
+        technologyEffect: { tierChange: next ? `${building.tier} -> ${next.tier}` : null, generationChange: 'UNCHANGED', requiredScaleCapability: next?.minimum_scale_capability ?? null },
+        expectedPaybackGameDays: null,
+        expectedPaybackStatus: 'UNAVAILABLE_AUTHORITATIVE_SETTLEMENT_ECONOMICS_REQUIRED',
+      },
       targetCatalog: next ? {
         id: next.id, tier: next.tier, slotFootprint: next.slot_footprint,
         operatingCreditUnits: next.operating_credit_units,
@@ -708,6 +730,17 @@ export async function quoteBuildingRetrofit(
       effectiveConstructionMinutes: durationMinutes,
       expectedCompletionGameDay: completionDay,
       capacity,
+      progression: {
+        kind: 'GENERATION_RETROFIT',
+        current: { tier: building.tier, technologyGeneration: currentGen, technologyDomain: domain },
+        target: { tier: building.tier, technologyGeneration: targetGen, technologyDomain: domain },
+        cost: { creditUnits: creditCost.toString(), resourceRequirements: resourceReqs.map((r) => ({ code: r.code, units: r.required_units })) },
+        time: { constructionMinutes: durationMinutes, expectedCompletionGameDay: completionDay },
+        capacityEffect: { footprintDeltaUnits: '0', beforeRentUnits: capacity?.currentChargeUnits ?? null, afterRentUnits: capacity?.afterChargeUnits ?? null, deltaRentUnits: '0' },
+        technologyEffect: { tierChange: 'UNCHANGED', generationChange: `${currentGen} -> ${targetGen}`, technologyDomain: domain },
+        expectedPaybackGameDays: null,
+        expectedPaybackStatus: 'UNAVAILABLE_AUTHORITATIVE_SETTLEMENT_ECONOMICS_REQUIRED',
+      },
       blockers,
       generatedFrom: 'postgres-canonical-retrofit-quote-v5',
     };

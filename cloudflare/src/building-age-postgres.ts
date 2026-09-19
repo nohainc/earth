@@ -69,10 +69,10 @@ async function startCorporationCapitalProject(
 
 export async function getBuildingCapitalOptions(repository: PostgresRepository, buildingId: string): Promise<Record<string, unknown>> {
   const day = (await readAuthoritativeGameTime(repository)).gameDay;
-  const row = (await repository.query<any>(`SELECT b.id, b.catalog_id, b.started_game_day, COALESCE(b.last_major_rebuild_game_day, b.started_game_day) AS last_major_rebuild_game_day, c.code, c.family_code, c.tier, c.construction_credit_units::TEXT, c.operating_credit_units::TEXT, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps, COALESCE(jsonb_agg(jsonb_build_object('domainId', i.domain_id, 'generationId', i.generation_id, 'installedGameDay', i.installed_game_day)) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS installed_generations FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id JOIN building_design_life_rules r ON r.catalog_id = b.catalog_id LEFT JOIN building_generation_installations i ON i.building_id = b.id AND i.status = 'ACTIVE' WHERE b.id = $1 GROUP BY b.id, c.code, c.family_code, c.tier, c.construction_credit_units, c.operating_credit_units, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps`, [buildingId])).rows[0];
+  const row = (await repository.query<any>(`SELECT b.id, b.catalog_id, b.started_game_day, b.installed_generation, COALESCE(b.last_major_rebuild_game_day, b.started_game_day) AS last_major_rebuild_game_day, c.code, c.family_code, c.tier, c.slot_footprint::TEXT, c.construction_credit_units::TEXT, c.construction_minutes, c.operating_credit_units::TEXT, c.technology_domain, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps, COALESCE(jsonb_agg(jsonb_build_object('domainId', i.domain_id, 'generationId', i.generation_id, 'installedGameDay', i.installed_game_day)) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS installed_generations FROM buildings b JOIN building_catalog c ON c.id = b.catalog_id JOIN building_design_life_rules r ON r.catalog_id = b.catalog_id LEFT JOIN building_generation_installations i ON i.building_id = b.id AND i.status = 'ACTIVE' WHERE b.id = $1 GROUP BY b.id, c.code, c.family_code, c.tier, c.slot_footprint, c.construction_credit_units, c.construction_minutes, c.operating_credit_units, c.technology_domain, r.design_life_days, r.overdue_burden_bps_per_day, r.maximum_burden_bps`, [buildingId])).rows[0];
   if (!row) throw new Error('Building not found');
   const age = assessBuildingAge({ currentGameDay: BigInt(day), lastMajorRebuildGameDay: BigInt(row.last_major_rebuild_game_day), designLifeDays: BigInt(row.design_life_days), overdueBurdenBpsPerDay: BigInt(row.overdue_burden_bps_per_day), maximumBurdenBps: BigInt(row.maximum_burden_bps) });
-  const next = (await repository.query<any>(`SELECT id, code, construction_credit_units::TEXT, operating_credit_units::TEXT FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1`, [row.family_code, Number(row.tier) + 1])).rows[0];
+  const next = (await repository.query<any>(`SELECT id, code, tier, slot_footprint::TEXT, construction_credit_units::TEXT, construction_minutes, operating_credit_units::TEXT, technology_domain FROM building_catalog WHERE family_code = $1 AND tier = $2 LIMIT 1`, [row.family_code, Number(row.tier) + 1])).rows[0];
   const flowRows = (await repository.query<any>(`SELECT f.catalog_id, ea.code, f.operating_input_units::TEXT, f.operating_output_units::TEXT,
           COALESCE(s.last_clearing_price_units, i.genesis_reference_price_units)::TEXT AS price_units
      FROM building_catalog_resource_flows f
@@ -85,34 +85,54 @@ export async function getBuildingCapitalOptions(repository: PostgresRepository, 
     const flows = flowRows.filter((flow) => flow.catalog_id === catalogId);
     let gross = 0n;
     let inputs = 0n;
+    const authoritative = flows.length === 0 || flows.every((flow) => flow.price_units != null);
     for (const flow of flows) {
       const price = BigInt(flow.price_units ?? '0');
       gross += BigInt(flow.operating_output_units ?? '0') * price / 1000000n;
       inputs += BigInt(flow.operating_input_units ?? '0') * price / 1000000n;
     }
     const operating = inputs + BigInt(operatingCreditUnits ?? '0');
-    return { gross: gross.toString(), operating: operating.toString(), net: (gross - operating).toString() };
+    return { gross: gross.toString(), operating: operating.toString(), net: (gross - operating).toString(), authoritative };
   };
   const currentEconomics = valueForCatalog(row.catalog_id, row.operating_credit_units);
   const nextEconomics = next ? valueForCatalog(next.id, next.operating_credit_units) : null;
-  const project = (type: string, cost: bigint, economics: { gross: string; operating: string; net: string }, effect: string, targetCatalogCode: string | null = null) => {
-    const net = BigInt(economics.net);
+  const project = (type: string, cost: bigint, economics: { gross: string; operating: string; net: string; authoritative: boolean }, effect: string, targetCatalogCode: string | null = null, target: any = row) => {
+    const currentNet = BigInt(currentEconomics.net);
+    const targetNet = BigInt(economics.net);
+    const improvement = targetNet - currentNet;
+    const payback = cost > 0n && economics.authoritative && currentEconomics.authoritative && improvement > 0n
+      ? ((cost + improvement - 1n) / improvement).toString()
+      : null;
     return {
       type, effect, targetCatalogCode,
       creditCostUnits: cost.toString(),
+      constructionMinutes: target.construction_minutes ?? null,
+      capacityEffect: {
+        footprintBeforeUnits: row.slot_footprint,
+        footprintAfterUnits: target.slot_footprint ?? row.slot_footprint,
+        footprintDeltaUnits: (BigInt(target.slot_footprint ?? row.slot_footprint) - BigInt(row.slot_footprint)).toString(),
+      },
+      technologyEffect: type === 'TIER_UPGRADE'
+        ? { kind: 'TIER', currentTier: Number(row.tier), targetTier: Number(target.tier), generationChange: 'UNCHANGED' }
+        : type === 'GENERATION_RETROFIT'
+          ? { kind: 'TECHNOLOGY_GENERATION', currentGeneration: Number(row.installed_generation ?? 1), targetGeneration: 'SELECTED_IN_RETROFIT_QUOTE', technologyDomain: row.technology_domain }
+          : { kind: 'OVERHAUL', generationChange: 'UNCHANGED', resetsMajorRebuildAge: true },
       projectedDailyGrossValueUnits: economics.gross,
       projectedDailyOperatingCostUnits: economics.operating,
       projectedDailyNetValueUnits: economics.net,
-      paybackGameDays: cost > 0n && net > 0n ? Math.ceil(Number(cost) / Number(net)) : null,
+      paybackGameDays: payback,
+      paybackStatus: payback == null
+        ? (economics.authoritative && currentEconomics.authoritative ? 'UNAVAILABLE_NO_POSITIVE_INCREMENTAL_RETURN' : 'UNAVAILABLE_AUTHORITATIVE_MARKET_PRICES_REQUIRED')
+        : 'AUTHORITATIVE_INCREMENTAL_ESTIMATE',
     };
   };
   const options = [
     project('CONTINUE', 0n, currentEconomics, 'retain_current_age', row.code),
     project('OVERHAUL', BigInt(row.construction_credit_units) * 7500n / 10000n, currentEconomics, 'reset_major_rebuild_day', row.code),
-    ...(next && nextEconomics ? [project('TIER_UPGRADE', BigInt(next.construction_credit_units) - BigInt(row.construction_credit_units), nextEconomics, 'replace_physical_scale', next.code)] : []),
+    ...(next && nextEconomics ? [project('TIER_UPGRADE', BigInt(next.construction_credit_units) - BigInt(row.construction_credit_units), nextEconomics, 'replace_physical_scale', next.code, next)] : []),
     project('GENERATION_RETROFIT', BigInt(row.construction_credit_units) * 4000n / 10000n, currentEconomics, 'install_generation_without_resetting_age', row.code),
   ];
-  return { building: { id: row.id, code: row.code, familyCode: row.family_code, tier: Number(row.tier), ageDays: age.ageDays.toString(), designLifeDays: age.designLifeDays.toString(), overdueDays: age.overdueDays.toString(), burdenMultiplierBps: age.burdenMultiplierBps.toString(), operable: age.operable, installedGenerations: row.installed_generations }, options, generatedFrom: 'postgres-canonical-facts' };
+  return { building: { id: row.id, code: row.code, familyCode: row.family_code, tier: Number(row.tier), installedGeneration: Number(row.installed_generation ?? 1), technologyDomain: row.technology_domain, ageDays: age.ageDays.toString(), designLifeDays: age.designLifeDays.toString(), overdueDays: age.overdueDays.toString(), burdenMultiplierBps: age.burdenMultiplierBps.toString(), operable: age.operable, installedGenerations: row.installed_generations }, options, generatedFrom: 'postgres-canonical-progression-quote-v5' };
 }
 
 export async function startBuildingCapitalProject(
