@@ -52,8 +52,8 @@ class EarthBuildingMeta {
         'Large-Scale Water Infrastructure & Utility Dividends',
     'transit-terminus': 'Municipal Transit and District Connectivity',
     'metro-station': 'Municipal Transit and District Connectivity',
-    'urban-district-module': 'Municipal Land & Citizen Capacity Expansion',
-    'district-expansion': 'Municipal Land & Citizen Capacity Expansion',
+    'urban-district-module': 'Regional Land & Citizen Capacity Expansion',
+    'district-expansion': 'Regional Land & Citizen Capacity Expansion',
     'transit-hyperloop':
         'High-Speed Logistics & Public Passenger Dividends',
     'hyperloop-terminal':
@@ -63,7 +63,7 @@ class EarthBuildingMeta {
     'spaceport':
         'Orbital Shuttles, Off-World Mining Logistics & High Prestige',
     'planetary-freight-terminal':
-        'Heavy Inter-City Freight Logistics & Commercial Dividends',
+    'Heavy Inter-Region Freight Logistics & Commercial Dividends',
     'orbital-communications-array':
         'Orbital Satellite Relay & Telecommunication Dividends',
     'civic-housing-authority':
@@ -71,7 +71,7 @@ class EarthBuildingMeta {
     'public-education-campus':
         'Workforce Skill Development & Research Capability',
     'emergency-response-command':
-        'City Emergency Command & Disaster Resilience',
+    'Regional Emergency Command & Disaster Resilience',
     'municipal-resource-exchange':
         'District Resource Clearing & Commodity Balancing',
     'atmospheric-processing-station':
@@ -190,4 +190,3 @@ class EarthBuildingMeta {
     }
   }
 }
-

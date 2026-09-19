@@ -1,16 +1,6 @@
 part of 'earth_api.dart';
 
 extension EarthApiRealEstate on EarthApi {
-  Future<Map<String, dynamic>> territoryRights({required String territoryId}) async {
-    final response = await _request('/api/territories/${Uri.encodeComponent(territoryId)}/rights');
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> commonsStatement({required String territoryId}) async {
-    final response = await _request('/api/territories/${Uri.encodeComponent(territoryId)}/commons');
-    return Map<String, dynamic>.from(response as Map);
-  }
-
   Future<Map<String, dynamic>> getBuildingCapitalOptions({required String buildingId}) async {
     final response = await _request('/api/v5/buildings/$buildingId/capital-options');
     return Map<String, dynamic>.from(response as Map);

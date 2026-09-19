@@ -8,8 +8,6 @@ import {
   listCorporationBuildingResearch,
 } from './corporation-building-research-postgres.ts';
 import { getBuildingCapitalOptions, startBuildingCapitalProject } from './building-age-postgres.ts';
-import { acquireTerritoryRight, listTerritoryRights, releaseTerritoryRight } from './territory-rights-postgres.ts';
-import { declareCommonsDividend, getCommonsStatement } from './commons-dividends-postgres.ts';
 import { decommissionBuilding, quoteBuildingDemolition, quoteBuildingOperatingMode, quoteBuildingUpgrade, setBuildingOperatingMode, upgradeBuilding } from './building-investment-postgres.ts';
 import { purchaseV5Building, quoteV5Building } from './v5-building-postgres.ts';
 import { isSettlementBarrierError } from './settlement-barrier-postgres.ts';
@@ -145,44 +143,11 @@ export async function handleRealEstateRoutes(
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building demolition quote unavailable' }, { status: 409 }); }
   }
   const territoryRightsMatch = url.pathname.match(/^\/api\/territories\/([^/]+)\/rights$/);
-  if (territoryRightsMatch && request.method === 'GET') {
-    try {
-      const result = await withRepository(env, (repository) => listTerritoryRights(repository, { territoryId: territoryRightsMatch[1], humanId: viewer.id }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Territory rights unavailable' }, { status: 400 }); }
-  }
+  if (territoryRightsMatch) return Response.json({ ok: false, error: 'Territory use-rights are retired in V5; physical capacity is derived from House and Corporation assets.' }, { status: 410 });
   const commonsMatch = url.pathname.match(/^\/api\/territories\/([^/]+)\/commons$/);
-  if (commonsMatch && request.method === 'GET') {
-    try {
-      const result = await withRepository(env, (repository) => getCommonsStatement(repository, commonsMatch[1]));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commons statement unavailable' }, { status: 400 }); }
-  }
-  if (commonsMatch && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId) return Response.json({ ok: false, error: 'Idempotency key is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => declareCommonsDividend(repository, { humanId: viewer.id, territoryId: commonsMatch[1], correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) {
-      if (isSettlementBarrierError(error)) return error.toResponse();
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commons dividend declaration failed' }, { status: 409 });
-    }
-  }
+  if (commonsMatch) return Response.json({ ok: false, error: 'Territory commons governance is retired in V5; use Earth and Corporation governance.' }, { status: 410 });
   if (url.pathname === '/api/real-estate/rights' && request.method === 'GET') {
-    try {
-      const result = await withRepository(env, (repository) => listTerritoryRights(repository, { humanId: viewer.id }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      if (isSettlementBarrierError(error)) return error.toResponse();
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Lease portfolio unavailable' }, { status: 400 });
-    }
+    return Response.json({ ok: false, error: 'Territory use-rights are retired in V5; physical capacity is derived from House and Corporation assets.' }, { status: 410 });
   }
   if (url.pathname === '/api/real-estate/rights' && request.method === 'POST') {
     return Response.json({ ok: false, error: 'Territory use-right acquisition is retired in V5; use pooled capacity construction.' }, { status: 410 });

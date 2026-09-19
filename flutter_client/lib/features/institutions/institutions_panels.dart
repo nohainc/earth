@@ -643,6 +643,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               ...rightColumn,
             ],
             const SizedBox(height: 8),
+            Text('PHYSICAL CAPACITY', style: context.captionStyle),
+            const SizedBox(height: 6),
             _buildAttributeRow(context,
                 icon: Icons.location_on_outlined,
                 label: 'PRIMARY TERRITORY',
@@ -661,6 +663,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                     : 'Not reported',
                 accentColor: context.goldColor),
             if (v5Occupied != null) ...[
+              _buildAttributeRow(context,
+                  icon: Icons.stacked_bar_chart_outlined,
+                  label: 'CAPACITY USED / STANDARD',
+                  value: '$v5Occupied / ${v5Standard ?? 'Not reported'}',
+                  accentColor: context.primaryColor),
               _buildAttributeRow(context,
                   icon: Icons.stacked_bar_chart_outlined,
                   label: 'POOLED CAPACITY',
@@ -1028,10 +1035,10 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       statusColor: context.primaryColor,
       infoTitle: 'HOW CORPORATIONS WORK',
       infoDescription:
-          'Corporations are local economic communities. They manage membership, pooled capacity, infrastructure, technology adoption, and Corporation policy.',
+          'Corporations are chartered economic organizations. They coordinate enterprise equity, public capacity, research patents, and corporate governance policy across Earth.',
       title: 'CORPORATION DIRECTORY',
       subtitle:
-          'Compare local policies, Territories, technology, and membership conditions.',
+          'Compare corporate policies, shared technology, and membership conditions.',
       metrics: [
         CockpitMetric(
           label: 'Corporations',
@@ -1104,7 +1111,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(context.radiusCard),
-        border: Border.all(color: context.primaryColor.withValues(alpha: .3)),
+        border: Border.all(color: context.primaryColor.withValues(alpha: .35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1190,11 +1197,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           );
           final search = EarthSearchInput(
             controller: _search,
-            hintText: 'Search corporations by name or Territory...',
+            hintText: 'Search corporations by name...',
             onChanged: (_) => _scheduleSearch(),
             onClear: _load,
           );
-          if (constraints.maxWidth < 620) {
+          if (constraints.maxWidth < 460) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [search, const SizedBox(height: 10), action],
@@ -1285,7 +1292,7 @@ typedef CivicRankingsPanel = WorldRankingsPanel;
 class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
   int _singleTab = 0; // Legacy compatibility view.
   int _leftTab = 0; // 0: Citizens, 1: Houses
-  int _rightTab = 0; // 0: Corps, 1: Cities
+  int _rightTab = 0; // 0: Corporations, 1: Territories
   int _metricTab = 0;
   int _citizenPage = 0;
   int _housePage = 0;
@@ -1480,12 +1487,12 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
           cityToCorpMap: cityToCorpMap,
           myAffiliationId: myCorpId,
           formulaInfo:
-              'Corporation Ranking Index (0–100):\n\n• 1. Total Enterprise Capitalization: 45%\n  Corporate treasury + sum of constituent city valuations.\n\n• 2. Productive Ecosystem: 30%\n  Active businesses operating across constituent cities.\n\n• 3. Municipal Excellence: 15%\n  Average ranking score across constituent cities.\n\n• 4. Total Population: 10%\n  Aggregated workforce and residents.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\n2nd Line: Cap · Biz · Res (Capitalization · Businesses · Population).',
+              'Corporation Ranking Index (0–100):\n\n• 1. Total Enterprise Capitalization: 45%\n  Corporate treasury + sum of affiliated Territory valuations.\n\n• 2. Productive Ecosystem: 30%\n  Active businesses operating across affiliated Territories.\n\n• 3. Regional Excellence: 15%\n  Average ranking score across affiliated Territories.\n\n• 4. Total Population: 10%\n  Aggregated workforce and residents.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\n2nd Line: Cap · Biz · Res (Capitalization · Businesses · Population).',
         );
 
         final colCities = _rankingColumn(
           context,
-          'CITIES',
+          'TERRITORIES',
           cities,
           Icons.location_city_outlined,
           'residents',
@@ -1496,7 +1503,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
           cityToCorpMap: cityToCorpMap,
           myAffiliationId: myCityId,
           formulaInfo:
-              'City Ranking Index (0–100):\n\n• 1. City Capitalization: 35%\n  Municipal treasury + real estate & infrastructure equity.\n\n• 2. Infrastructure Coverage: 35%\n  Housing, energy, connectivity & health vs population.\n\n• 3. Commercial Vitality: 20%\n  Active local operating businesses.\n\n• 4. Demographic Population: 10%\n  Settled active residents.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\n2nd Line: Cap · Biz · Res (Capitalization · Businesses · Residents).\n\n3rd Line: Affiliated Corporation.',
+              'Territory Ranking Index (0–100):\n\n• 1. Territory Capitalization: 35%\n  Physical capacity and infrastructure equity.\n\n• 2. Infrastructure Coverage: 35%\n  Housing, energy, connectivity & health vs population.\n\n• 3. Commercial Vitality: 20%\n  Active local operating businesses.\n\n• 4. Demographic Population: 10%\n  Settled active residents.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\n2nd Line: Cap · Biz · Res (Capacity · Businesses · Residents).\n\n3rd Line: Affiliated Corporation.',
         );
 
         final cockpit = EarthPageCockpit(
@@ -4595,24 +4602,40 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
           value: '${activeCommunities.length}',
           icon: Icons.groups_outlined,
           color: context.primaryColor,
+          onTap: () => setState(() {
+            _activeFilter = 'ALL';
+            _page = 0;
+          }),
         ),
         CockpitMetric(
           label: 'My Communities',
           value: '$myCount',
           icon: Icons.how_to_reg_outlined,
           color: context.secondaryColor,
+          onTap: () => setState(() {
+            _activeFilter = _activeFilter == 'MY_COMMUNITIES' ? 'ALL' : 'MY_COMMUNITIES';
+            _page = 0;
+          }),
         ),
         CockpitMetric(
           label: 'Pending',
           value: '$pendingCount',
           icon: Icons.hourglass_top_outlined,
           color: context.warningColor,
+          onTap: () => setState(() {
+            _activeFilter = _activeFilter == 'PENDING' ? 'ALL' : 'PENDING';
+            _page = 0;
+          }),
         ),
         CockpitMetric(
           label: 'Open to Join',
           value: '$openCount',
           icon: Icons.lock_open_outlined,
           color: context.successColor,
+          onTap: () => setState(() {
+            _activeFilter = _activeFilter == 'OPEN_TO_JOIN' ? 'ALL' : 'OPEN_TO_JOIN';
+            _page = 0;
+          }),
         ),
       ],
     );
@@ -4648,10 +4671,10 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                         : () => showCommunityComposer(context, widget.action,
                             api: widget.communityApi),
                   );
-                  if (constraints.maxWidth < 560) {
+                  if (constraints.maxWidth < 460) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [search, const SizedBox(height: 8), found],
+                      children: [search, const SizedBox(height: 10), found],
                     );
                   }
                   return Row(children: [
@@ -4675,22 +4698,6 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                     }),
                   ),
                   _filterChip(
-                    label: 'MY COMMUNITIES ($myCount)',
-                    isSelected: _activeFilter == 'MY_COMMUNITIES',
-                    onTap: () => setState(() {
-                      _activeFilter = 'MY_COMMUNITIES';
-                      _page = 0;
-                    }),
-                  ),
-                  _filterChip(
-                    label: 'PENDING ($pendingCount)',
-                    isSelected: _activeFilter == 'PENDING',
-                    onTap: () => setState(() {
-                      _activeFilter = 'PENDING';
-                      _page = 0;
-                    }),
-                  ),
-                  _filterChip(
                     label: 'OPEN TO JOIN ($openCount)',
                     isSelected: _activeFilter == 'OPEN_TO_JOIN',
                     onTap: () => setState(() {
@@ -4698,6 +4705,24 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                       _page = 0;
                     }),
                   ),
+                  if (_activeFilter == 'MY_COMMUNITIES')
+                    _filterChip(
+                      label: 'MY COMMUNITIES ($myCount)',
+                      isSelected: true,
+                      onTap: () => setState(() {
+                        _activeFilter = 'ALL';
+                        _page = 0;
+                      }),
+                    ),
+                  if (_activeFilter == 'PENDING')
+                    _filterChip(
+                      label: 'PENDING ($pendingCount)',
+                      isSelected: true,
+                      onTap: () => setState(() {
+                        _activeFilter = 'ALL';
+                        _page = 0;
+                      }),
+                    ),
                 ],
               ),
               SizedBox(height: context.spacingControl),

@@ -25,11 +25,9 @@ export type TerritoryCapacity = {
 
 export async function getTerritoryCapacity(repository: PostgresRepository, territoryId: string): Promise<Record<string, unknown>> {
   const territory = await repository.query(`SELECT t.id, t.corporation_id, t.name, t.territory_type, t.status, t.is_primary,
-    COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id,
-    i.name AS governing_institution_name
+    i.name AS corporation_name
     FROM territories t
-    LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE'
-    LEFT JOIN institutions i ON i.id = COALESCE(g.governing_institution_id, t.corporation_id)
+    LEFT JOIN institutions i ON i.id = t.corporation_id
     WHERE t.id = $1`, [territoryId]);
   if (!territory.rows[0]) throw new Error('Territory not found');
   const state = await repository.query<TerritoryCapacity>('SELECT * FROM territory_capacity_state WHERE territory_id = $1', [territoryId]);

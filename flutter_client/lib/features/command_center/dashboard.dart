@@ -32,7 +32,6 @@ import '../world/world_conditions_panel.dart';
 import '../../core/navigation_registry.dart';
 import '../world/initiatives_panel.dart';
 import '../institutions/mutual_credit_panel.dart';
-import '../institutions/territory_overview_panel.dart';
 import '../house/house_policy_panel.dart';
 
 String dashboardSectionTitle(String section, [EarthState? state]) =>
@@ -61,7 +60,6 @@ class Dashboard extends StatelessWidget {
   final Map<String, dynamic> pantheon;
   final Map<String, dynamic> personalFinanceData;
   final Map<String, dynamic> mutualCreditData;
-  final Map<String, dynamic> territoryCommonsData;
   final bool isLiveConnected;
   final bool isReconnecting;
   final LiveConnectionStatus? connectionStatus;
@@ -72,7 +70,6 @@ class Dashboard extends StatelessWidget {
   final ValueChanged<String>? onNavigate;
   final Future<void> Function(Future<EarthState> Function()) action;
   final VoidCallback? onRefreshEvents;
-  final Future<void> Function()? onRefreshTerritoryCommons;
   final Future<void> Function(String)? onMarkNotificationRead;
   final Future<void> Function()? onMarkAllNotificationsRead;
   final VoidCallback? onLogout;
@@ -96,7 +93,6 @@ class Dashboard extends StatelessWidget {
     this.pantheon = const {},
     this.personalFinanceData = const {},
     this.mutualCreditData = const {},
-    this.territoryCommonsData = const {},
     this.isLiveConnected = true,
     this.isReconnecting = false,
     this.connectionStatus,
@@ -107,7 +103,6 @@ class Dashboard extends StatelessWidget {
     this.onNavigate,
     required this.action,
     this.onRefreshEvents,
-    this.onRefreshTerritoryCommons,
     this.onMarkNotificationRead,
     this.onMarkAllNotificationsRead,
     this.onLogout,
@@ -305,13 +300,10 @@ class Dashboard extends StatelessWidget {
       case 'territories':
       case 'territory':
       case 'city':
-        return [
-          TerritoryOverviewPanel(
-            state: state,
-            commonsData: territoryCommonsData,
-            onNavigate: onNavigate,
-          ),
-        ];
+      case 'territory-commons':
+        // Territory remains a contextual attribute, not a standalone player
+        // system. Legacy routes land on the canonical world context screen.
+        return [WorldConditionsPanel(state: state)];
       case 'contracts':
         return [
           OrganizationContractsPanel(
@@ -407,11 +399,6 @@ class Dashboard extends StatelessWidget {
         ];
       case 'mutual-credit':
         return [MutualCreditPanel(data: mutualCreditData)];
-      case 'territory-commons':
-        return [
-          TerritoryOverviewPanel(
-              state: state, commonsData: territoryCommonsData)
-        ];
       case 'news':
         return [
           NewsPanel(

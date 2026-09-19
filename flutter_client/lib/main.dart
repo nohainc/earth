@@ -16,11 +16,18 @@ export 'features/command_center/hero_card.dart';
 export 'shared/widgets/earth_primitives.dart';
 export 'shared/widgets/format_helpers.dart';
 
+bool _isDisposedEngineViewError(Object error) =>
+    error.toString().contains('Trying to render a disposed EngineFlutterView');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UiStyleTokens.load();
 
   FlutterError.onError = (details) {
+    // Flutter Web can deliver one final frame callback after a browser view
+    // has been detached during reload, tab close, or hot restart. The engine
+    // assertion is a teardown signal, not an actionable application failure.
+    if (_isDisposedEngineViewError(details.exception)) return;
     FlutterError.presentError(details);
     EarthApiTransport().reportClientError(
       message: details.exceptionAsString(),
@@ -30,6 +37,7 @@ Future<void> main() async {
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
+    if (_isDisposedEngineViewError(error)) return true;
     EarthApiTransport().reportClientError(
       message: error.toString(),
       stack: stack.toString(),

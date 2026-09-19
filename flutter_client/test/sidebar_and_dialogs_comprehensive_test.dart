@@ -121,7 +121,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('My Corporation'), findsNothing);
     expect(find.text('Corporations'), findsOneWidget);
-    expect(find.text('Territories'), findsOneWidget);
+    expect(find.text('Territories'), findsNothing);
     expect(find.text('Communities'), findsOneWidget);
     expect(find.text('Governance'), findsOneWidget);
   });
@@ -164,7 +164,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Aether Dynamics'), findsOneWidget);
     expect(find.text('Corporations'), findsOneWidget);
-    expect(find.text('Territories'), findsOneWidget);
+    expect(find.text('Territories'), findsNothing);
     expect(find.text('Communities'), findsOneWidget);
     expect(find.text('Governance'), findsOneWidget);
 

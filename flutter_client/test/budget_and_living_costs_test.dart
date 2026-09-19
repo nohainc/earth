@@ -4,11 +4,11 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/command_center/dashboard.dart';
 import 'package:earth_client/features/finance/personal_finance_panel.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
-import 'package:earth_client/features/institutions/territory_overview_panel.dart';
+import 'package:earth_client/features/world/world_conditions_panel.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 
 void main() {
-  group('Living Costs, City Budget & Corporate Budget Suite', () {
+  group('Living Costs, Territory Context & Corporate Budget Suite', () {
     testWidgets('Personal Living Costs displays maintenance deltas, protected reserve, and alert banner on unpaid shortfall', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -262,9 +262,9 @@ void main() {
       await tester.pumpWidget(buildDashboardRoute('finance'));
       expect(find.byType(PersonalFinancePanel), findsOneWidget);
 
-      // 2. Test 'city' route
+      // 2. Legacy geographic route lands on contextual World Conditions.
       await tester.pumpWidget(buildDashboardRoute('city'));
-      expect(find.byType(TerritoryOverviewPanel), findsOneWidget);
+      expect(find.byType(WorldConditionsPanel), findsOneWidget);
 
       // 3. Test 'corporation' route
       await tester.pumpWidget(buildDashboardRoute('corporation'));

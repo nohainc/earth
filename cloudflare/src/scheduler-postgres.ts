@@ -20,8 +20,6 @@ import { refreshOrganizationFinancialStates } from './organization-stress-postgr
 import { executeDueOrganizationResolutions } from './organization-stress-postgres.ts';
 import { settleDuePublicProjectsInTransaction } from './public-projects-postgres.ts';
 import { refreshRankingSnapshots } from './rankings-postgres.ts';
-import { settleTerritoryLeases } from './territory-rights-postgres.ts';
-import { settleCommonsDividends } from './commons-dividends-postgres.ts';
 import { settlePublicTaxesInTransaction } from './tax-settlement-postgres.ts';
 import { refreshInstitutionFinancialSnapshots } from './institution-financial-settlement-postgres.ts';
 import { refreshPostSuccessionAccess } from './post-succession-access-postgres.ts';
@@ -98,8 +96,6 @@ const settlementPhases = createDailySettlementPhaseRegistry({
   houseNeedsServices: async ({ tx, day, shard, shardCount }) => settleHouseNeedsAndServices(tx, day, shard, shardCount),
   perishableResourceDecay: async ({ tx, day, shard, shardCount }) => settlePerishableResourceDecay(tx, day, shard, shardCount),
   constructionCompletion: async ({ tx, day, shard, shardCount }) => completeDueConstructionProjects(tx, day, shard, shardCount),
-  territoryLeaseSettlement: async ({ tx, day, shard, shardCount }) => settleTerritoryLeases(tx, day, shard, shardCount),
-  commonsDividendSettlement: async ({ tx, day }) => settleCommonsDividends(tx, day),
   budgetDividendEligibility: noOpPhase,
   patentExpirations: async ({ tx, day }) => settlePatentExpirations(tx, day),
   researchAndProgress: async ({ tx, day }) => ({

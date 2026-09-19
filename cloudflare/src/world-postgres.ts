@@ -107,12 +107,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                                        ORDER BY asset.id, a.account_type`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     viewerHouseId ? repository.query(`SELECT r.territory_id, r.residency_class, r.status, r.effective_from_game_day,
                                              t.name AS territory_name, t.corporation_id,
-                                             COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id,
                                              i.name AS corporation_name
                                         FROM house_residencies r
                                         JOIN territories t ON t.id = r.territory_id
-                                        LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE'
-                                        LEFT JOIN institutions i ON i.id = COALESCE(g.governing_institution_id, t.corporation_id)
+                                        LEFT JOIN institutions i ON i.id = t.corporation_id
                                        WHERE r.house_id = $1 AND r.status = 'ACTIVE'
                                        ORDER BY r.effective_from_game_day DESC`, [viewerHouseId]) : Promise.resolve({ rows: [] }),
     viewerHouseId ? repository.query(`SELECT id, obligation_type, principal_due_units::TEXT AS principal_due_units,
@@ -170,12 +168,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     repository.query(`SELECT t.id, t.corporation_id, t.name, t.territory_type, t.status, t.is_primary, t.created_game_day,
                              s.house_capacity, s.active_house_count,
                              s.private_slot_capacity, s.private_slots_used,
-                             COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id,
-                             i.name AS governing_authority_name
+                             i.name AS corporation_name
                         FROM territories t
                         LEFT JOIN territory_capacity_state s ON s.territory_id = t.id
-                        LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE'
-                        LEFT JOIN institutions i ON i.id = COALESCE(g.governing_institution_id, t.corporation_id)
+                        LEFT JOIN institutions i ON i.id = t.corporation_id
                        WHERE t.status IN ('ACTIVE', 'UNGOVERNED')
                        ORDER BY t.corporation_id, t.is_primary DESC, t.id`),
     viewerHouseId

@@ -2,7 +2,7 @@
 /// vs personal (activity panel) buckets — ensuring zero duplication.
 library;
 
-/// Returns `true` if the notification is a corporate or city type
+/// Returns `true` if the notification is a corporate or Territory type.
 /// that should appear on the News page instead of the Notifications page.
 bool isCorpOrTerritoryNotification(Map<String, dynamic> n) {
   final type =

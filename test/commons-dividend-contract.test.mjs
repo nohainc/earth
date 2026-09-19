@@ -2,10 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-test('commons dividends are declared from lease revenue and paid from real cash', () => {
+test('historical commons dividend structures are retired from V5 runtime', () => {
   const migration = fs.readFileSync('db/migrations/052_commons_revenue_dividend_policy.sql', 'utf8');
   const service = fs.readFileSync('cloudflare/src/commons-dividends-postgres.ts', 'utf8');
-  const scheduler = fs.readFileSync('cloudflare/src/scheduler-postgres.ts', 'utf8');
   const routes = fs.readFileSync('cloudflare/src/real-estate-routes.ts', 'utf8');
   assert.match(migration, /commons_dividend_policies/);
   assert.match(migration, /commons_dividend_declarations/);
@@ -16,12 +15,10 @@ test('commons dividends are declared from lease revenue and paid from real cash'
   assert.match(service, /BigInt\(source\.balance_units\) < distributable/);
   assert.match(service, /COMMONS_DIVIDEND/);
   assert.match(service, /remainder_units/);
-  assert.match(scheduler, /settleCommonsDividends/);
-  assert.match(routes, /getCommonsStatement/);
-  assert.match(routes, /declareCommonsDividend/);
+  assert.doesNotMatch(routes, /getCommonsStatement|declareCommonsDividend/);
 });
 
-test('commons allocation cannot mint CREDIT when the beneficiary lacks cash', () => {
+test('historical commons allocation code remains isolated for audit only', () => {
   const service = fs.readFileSync('cloudflare/src/commons-dividends-postgres.ts', 'utf8');
   assert.match(service, /status = 'BLOCKED'/);
   assert.doesNotMatch(service, /global.*issu/i);

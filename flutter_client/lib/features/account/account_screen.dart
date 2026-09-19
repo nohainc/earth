@@ -296,6 +296,13 @@ class _AccountScreenState extends State<AccountScreen> {
         widget.state.residency['territory_name']?.toString() ??
             widget.state.membership?['territory_name']?.toString() ??
             'UNAVAILABLE';
+    final corporationName =
+        widget.state.membership?['corporation_name']?.toString() ??
+            (widget.state.institutions['corporation'] is Map
+                ? (widget.state.institutions['corporation'] as Map)['name']
+                    ?.toString()
+                : null) ??
+        'INDEPENDENT';
     final standing = human['standing']?.toString() ?? 'UNAVAILABLE';
 
     final cockpit = EarthPageCockpit(
@@ -402,10 +409,25 @@ class _AccountScreenState extends State<AccountScreen> {
                 value: houseName,
               ),
               const Divider(height: 20),
+              const Divider(height: 20),
+              Text('RESIDENCE', style: context.captionStyle),
+              const SizedBox(height: 8),
               _buildInfoRow(
                 context,
-                label: 'Jurisdiction & Standing',
-                value: 'Territory: $territoryName · Standing $standing',
+                label: 'Region / Territory',
+                value: territoryName,
+              ),
+              const Divider(height: 20),
+              _buildInfoRow(
+                context,
+                label: 'Corporation',
+                value: corporationName,
+              ),
+              const Divider(height: 20),
+              _buildInfoRow(
+                context,
+                label: 'Civic Standing',
+                value: standing,
               ),
             ],
           ),

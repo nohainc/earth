@@ -9,6 +9,7 @@ class CockpitMetric {
   final IconData? icon;
   final Color? color;
   final String? subtitle;
+  final VoidCallback? onTap;
 
   const CockpitMetric({
     required this.label,
@@ -16,6 +17,7 @@ class CockpitMetric {
     this.icon,
     this.color,
     this.subtitle,
+    this.onTap,
   });
 }
 
@@ -247,7 +249,7 @@ class EarthPageCockpit extends StatelessWidget {
   Widget _buildMetricItem(BuildContext context, CockpitMetric m) {
     final accentColor = m.color ?? context.primaryColor;
 
-    return Container(
+    final item = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
         color: context.surfaceColor.withValues(alpha: 0.65),
@@ -296,5 +298,17 @@ class EarthPageCockpit extends StatelessWidget {
         ],
       ),
     );
+
+    if (m.onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: m.onTap,
+          child: item,
+        ),
+      );
+    }
+    return item;
   }
 }

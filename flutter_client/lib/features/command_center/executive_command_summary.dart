@@ -134,13 +134,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
     final capacity =
         asInt(business['workforceCapacity'] ?? business['staffCapacity']);
-    final territory = widget.state.residency['territory'] ??
-        widget.state.institutions['territory'];
-    final territoryMap = territory is Map
-        ? Map<String, dynamic>.from(territory)
-        : const <String, dynamic>{};
-    final territoryPressure = asDouble(
-        territoryMap['service_pressure'] ?? territoryMap['servicePressure']);
     final buildings = widget.state.buildings;
 
     return EarthMetricGrid(
@@ -200,22 +193,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           onTap: () {
             EarthAudioEngine.instance.playClick();
             widget.onNavigate?.call('buildings');
-          },
-        ),
-        EarthMetricTile(
-          label: 'TERRITORY EFFECT',
-          value:
-              territoryMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
-          subtitle: territoryPressure == null
-              ? 'Pressure unavailable'
-              : 'Pressure ${territoryPressure.toStringAsFixed(0)}%',
-          icon: Icons.location_city_outlined,
-          accentColor: territoryPressure != null && territoryPressure > 70
-              ? context.warningColor
-              : context.successColor,
-          onTap: () {
-            EarthAudioEngine.instance.playClick();
-            widget.onNavigate?.call('territory-commons');
           },
         ),
       ],

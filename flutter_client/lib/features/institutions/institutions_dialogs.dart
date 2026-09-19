@@ -62,37 +62,43 @@ class _FormationComposerDialogState extends State<_FormationComposerDialog> {
         'Form a Corporation',
         style: context.topicTitleStyle.copyWith(color: context.primaryColor),
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-              'Founding creates a Corporation, assigns you its initial executive and treasurer roles, and provisions pooled capacity automatically.',
-              style: context.widgetFooterStyle),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _nameController,
-            autofocus: true,
-            style: context.bodyStyle.copyWith(color: context.inkColor),
-            decoration: InputDecoration(
-              labelText: 'Corporation name',
-              labelStyle: context.widgetFooterStyle,
-            ),
-          ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            value: _admissionPolicy,
-            decoration: InputDecoration(
-              labelText: 'Admission policy',
-              labelStyle: context.widgetFooterStyle,
-            ),
-            items: const [
-              DropdownMenuItem(value: 'OPEN', child: Text('Open')),
-              DropdownMenuItem(value: 'APPROVAL', child: Text('Approval')),
-              DropdownMenuItem(value: 'INVITE_ONLY', child: Text('Invite only')),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                  'Founding creates a Corporation, assigns you its initial executive and treasurer roles, and provisions pooled capacity automatically.',
+                  style: context.widgetFooterStyle),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _nameController,
+                autofocus: true,
+                style: context.bodyStyle.copyWith(color: context.inkColor),
+                decoration: InputDecoration(
+                  labelText: 'Corporation name',
+                  labelStyle: context.widgetFooterStyle,
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: _admissionPolicy,
+                decoration: InputDecoration(
+                  labelText: 'Admission policy',
+                  labelStyle: context.widgetFooterStyle,
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'OPEN', child: Text('Open')),
+                  DropdownMenuItem(value: 'APPROVAL', child: Text('Approval')),
+                  DropdownMenuItem(value: 'INVITE_ONLY', child: Text('Invite only')),
+                ],
+                onChanged: _busy ? null : (value) => setState(() => _admissionPolicy = value ?? 'OPEN'),
+              ),
             ],
-            onChanged: _busy ? null : (value) => setState(() => _admissionPolicy = value ?? 'OPEN'),
           ),
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -1614,7 +1620,7 @@ Future<void> showAdmissionPolicyDialog(
               activeColor: context.primaryColor,
               onChanged: (value) => setState(() => policy = value!),
               title: Text('Open membership', style: context.widgetValueStyle),
-              subtitle: Text('New members join the capital city immediately.',
+              subtitle: Text('New members join the Corporation\'s primary Territory immediately.',
                   style: context.widgetFooterStyle),
             ),
             RadioListTile<String>(

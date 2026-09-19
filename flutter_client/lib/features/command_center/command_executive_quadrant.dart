@@ -21,17 +21,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
           'active';
     }).length;
 
-    final territoryRaw =
-        state.residency['territory'] ?? state.institutions['territory'];
-    final territory = territoryRaw is Map
-        ? Map<String, dynamic>.from(territoryRaw)
-        : <String, dynamic>{};
-    final territoryName =
-        (state.residency['territory_name'] ?? territory['name'])
-                ?.toString()
-                .toUpperCase() ??
-            'TERRITORY UNAVAILABLE';
-
     final marketProducts = state.market;
     String formatPrice(dynamic val) {
       if (val is Map) return formatPrice(val['price']);
@@ -132,41 +121,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   onTap: () => onNavigate?.call('buildings'),
                 ),
 
-                // 3. TERRITORY COMMONS CARD
-                _ExecutiveCard(
-                  width: cardWidth,
-                  icon: '⊙',
-                  iconColor: Colors.amberAccent,
-                  title: territoryName,
-                  subtitle: 'CURRENT RESIDENCY',
-                  infoDescription:
-                      'Current physical capacity-container facts available to this House. Open the overview to inspect capacity and residency context.',
-                  body: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _rowMetric(
-                          'Energy coverage',
-                          _formatPercent(territory['power_grid_stability'] ??
-                              territory['energy_coverage']),
-                          cyanAccentColor),
-                      const SizedBox(height: 5),
-                      _rowMetric(
-                          'Available capacity',
-                          _formatPercent(territory['slot_capacity_available'] ??
-                              territory['available_capacity']),
-                          mutedColor),
-                      const SizedBox(height: 5),
-                      _rowMetric(
-                          'Commons dividend',
-                          territory['commons_dividend']?.toString() ??
-                              'UNAVAILABLE',
-                          Colors.greenAccent),
-                    ],
-                  ),
-                  onTap: () => onNavigate?.call('territory-commons'),
-                ),
-
-                // 4. FINANCE CARD
+                // 3. FINANCE CARD
                 _ExecutiveCard(
                   width: cardWidth,
                   icon: '§',
@@ -219,10 +174,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
         ],
       );
 
-  String _formatPercent(dynamic value) {
-    final parsed = asDouble(value);
-    return parsed == null ? 'UNAVAILABLE' : '${parsed.toStringAsFixed(0)}%';
-  }
 }
 
 class _ExecutiveCard extends StatelessWidget {

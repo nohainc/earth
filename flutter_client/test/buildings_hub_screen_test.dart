@@ -511,9 +511,9 @@ void main() {
       expect(find.text('CATALOG'), findsWidgets);
 
       // Open spaces shows 9 (10 from default Tier 1 estate deed minus 1 slot used)
-      expect(find.text('OPEN SPACES'), findsOneWidget);
+      expect(find.text('AVAILABLE'), findsOneWidget);
       expect(find.text('9'), findsWidgets);
-      expect(find.text('SPACES USED'), findsOneWidget);
+      expect(find.text('USED'), findsOneWidget);
       expect(find.text('1'), findsWidgets);
 
       // District zoning & capacity widget is not displayed

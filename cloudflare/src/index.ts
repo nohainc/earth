@@ -229,7 +229,7 @@ const worker = {
       const response = await handleOrganizationRoutes(request, env, url, viewer);
       if (response) return response;
     }
-    if (url.pathname.startsWith('/api/corporations')) {
+    if (url.pathname.startsWith('/api/corporations') || url.pathname.startsWith('/api/v5/corporations')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const response = await handleInstitutionRoutes(request, env, url, viewer);

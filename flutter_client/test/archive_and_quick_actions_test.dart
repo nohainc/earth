@@ -67,7 +67,7 @@ void main() {
     expect(find.text('QUICK ACTIONS'), findsOneWidget);
     expect(find.text('RUN THE BUSINESS'), findsOneWidget);
     expect(find.text('DIRECT RESEARCH'), findsOneWidget);
-    await tester.tap(find.text('CHECK TERRITORY SERVICES'));
-    expect(destination, 'territory-commons');
+    expect(find.text('CHECK TERRITORY SERVICES'), findsNothing);
+    expect(destination, isNull);
   });
 }

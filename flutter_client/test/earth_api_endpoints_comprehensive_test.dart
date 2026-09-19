@@ -109,7 +109,6 @@ void main() {
     await api.disbandCommunity('COM-1');
     await api.listOrganizations();
     await api.listCorporations();
-    await api.getHouseResidency();
     await api.moveHouseResidence(territoryId: 'T-1');
     await api.joinCorporation();
     await api.leaveCorporation();

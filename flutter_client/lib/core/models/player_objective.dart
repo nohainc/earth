@@ -207,7 +207,7 @@ class PlayerObjective {
         metricLabel: '8.5 / 25.0 Voting Weight',
         status: 'in_progress',
         rewardDescription:
-            'Title: "Grand Tribune" · Veto Injunction Power on City Budgets · +350 Standing',
+            'Title: "Grand Tribune" · Veto Injunction Power on Territory Budgets · +350 Standing',
         targetSection: 'civic',
       ),
       PlayerObjective(
@@ -332,7 +332,7 @@ class PlayerObjective {
             : 'in_progress',
         rewardDescription:
             'Title: "Planetary Benefactor" · Memorial Monument in Pantheon of Living Legends · +1000 Civic Trust',
-        targetSection: 'city',
+        targetSection: 'civic',
       ),
     ];
   }

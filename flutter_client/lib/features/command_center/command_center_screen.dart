@@ -72,7 +72,6 @@ class _CommandCenterState extends State<CommandCenter>
   Map<String, dynamic> pantheon = const {};
   Map<String, dynamic> personalFinanceData = const {};
   Map<String, dynamic> mutualCreditData = const {};
-  Map<String, dynamic> territoryCommonsData = const {};
   int unreadNotifications = 0;
   int unreadCommMessages = 0;
   String selectedSection = 'command';
@@ -603,26 +602,6 @@ class _CommandCenterState extends State<CommandCenter>
         if (mounted) setState(() => mutualCreditData = data);
       });
     }
-    if (selectedSection == 'territory-commons') {
-      _loadPanel('territory-commons', () async {
-        final residency = await api.getHouseResidency();
-        final territoryId =
-            (residency['currentTerritoryId'] ?? residency['territoryId'])
-                ?.toString();
-        if (territoryId == null || territoryId.isEmpty) return;
-        final rights = await api.territoryRights(territoryId: territoryId);
-        final commons = await api.commonsStatement(territoryId: territoryId);
-        if (mounted) {
-          setState(() => territoryCommonsData = {
-                'residency': residency,
-                'rights': rights['rights'] ?? const [],
-                'rentPolicy': rights['rentPolicy'] ?? const {},
-                'territories': value.territories,
-                'commons': commons,
-              });
-        }
-      });
-    }
   }
 
   Future<void> _loadPanel(String panel, Future<void> Function() action) async {
@@ -695,8 +674,7 @@ class _CommandCenterState extends State<CommandCenter>
       if (current != null &&
           (section == 'market' ||
               section == 'life' ||
-              section == 'mutual-credit' ||
-              section == 'territory-commons')) {
+              section == 'mutual-credit')) {
         unawaited(_loadSecondaryPanels(current));
       }
     }
@@ -951,8 +929,6 @@ class _CommandCenterState extends State<CommandCenter>
                                             personalFinanceData:
                                                 personalFinanceData,
                                             mutualCreditData: mutualCreditData,
-                                            territoryCommonsData:
-                                                territoryCommonsData,
                                             isLiveConnected: _isLiveConnected,
                                             isReconnecting:
                                                 liveReconnectTimer?.isActive ==
@@ -963,8 +939,6 @@ class _CommandCenterState extends State<CommandCenter>
                                             sectionKeys: _sectionKeys,
                                             action: _run,
                                             onRefreshEvents: _refreshEvents,
-                                            onRefreshTerritoryCommons: () =>
-                                                _loadSecondaryPanels(current),
                                             onMarkNotificationRead: (id) async {
                                               await api
                                                   .markNotificationRead(id);

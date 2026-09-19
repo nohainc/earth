@@ -969,11 +969,10 @@ test('V5 cutover rehearsal is fail-closed and produces evidence', async () => {
   assert.match(script, /db:verify:readiness/);
 });
 
-test('V5 Territory view is read-only physical capacity context', async () => {
-  const panel = await readFile(new URL('../flutter_client/lib/features/institutions/territory_overview_panel.dart', import.meta.url), 'utf8');
-  assert.match(panel, /Read-only physical capacity-container overview/);
-  assert.match(panel, /does not create a political or placement choice/);
-  assert.doesNotMatch(panel, /MANAGE USE RIGHTS|Acquire or release use rights/);
+test('V5 retires the standalone Territory overview panel', async () => {
+  const dashboard = await readFile(new URL('../flutter_client/lib/features/command_center/dashboard.dart', import.meta.url), 'utf8');
+  assert.doesNotMatch(dashboard, /TerritoryOverviewPanel|territory_overview_panel/);
+  assert.match(dashboard, /WorldConditionsPanel/);
 });
 
 test('V5 command overview converts PostgreSQL bigint values at the JSON boundary', async () => {
@@ -1155,11 +1154,10 @@ test('Legacy Corporation mutation endpoints are retired after V5 cutover', async
 test('V5 House UI and routes do not offer Territory-specific residence changes', async () => {
   const routes = await readFile(new URL('../cloudflare/src/house-routes.ts', import.meta.url), 'utf8');
   const registry = await readFile(new URL('../cloudflare/src/api-registry.ts', import.meta.url), 'utf8');
-  const panel = await readFile(new URL('../flutter_client/lib/features/institutions/territory_commons_panel.dart', import.meta.url), 'utf8');
-  const renderedPanel = panel.slice(panel.indexOf('  @override\n  Widget build'));
   assert.match(routes, /Territory-specific residence moves are retired in V5/);
   assert.match(registry, /path: '\/api\/house\/residency\/move'.*status: 'RETIRED'/);
-  assert.doesNotMatch(renderedPanel, /ACQUIRE USE RIGHT|RELOCATE RESIDENCE|RELEASE USE RIGHT/);
+  const dashboard = await readFile(new URL('../flutter_client/lib/features/command_center/dashboard.dart', import.meta.url), 'utf8');
+  assert.doesNotMatch(dashboard, /TerritoryCommonsPanel|territory_commons_panel/);
 });
 
 test('V5 retires Territory use-right mutation endpoints while preserving history reads', async () => {
@@ -1169,7 +1167,7 @@ test('V5 retires Territory use-right mutation endpoints while preserving history
   assert.match(routes, /Territory use-right release is retired in V5/);
   assert.match(registry, /path: '\/api\/real-estate\/rights'.*status: 'RETIRED'/);
   assert.match(registry, /path: '\/api\/real-estate\/rights\/\{id\}\/release'.*status: 'RETIRED'/);
-  assert.match(registry, /path: '\/api\/real-estate\/rights'.*service: 'listTerritoryRights'.*status: 'ACTIVE'/);
+  assert.match(registry, /path: '\/api\/real-estate\/rights'.*service: 'listTerritoryRights'.*status: 'RETIRED'/);
 });
 
 test('V5 operations UI has no dead legacy real-estate dialog path', async () => {

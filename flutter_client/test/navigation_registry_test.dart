@@ -31,6 +31,8 @@ void main() {
       expect(NavigationRegistry.normalizeRoute('pantheon'), 'history');
       expect(NavigationRegistry.normalizeRoute('memorial'), 'history');
       expect(NavigationRegistry.normalizeRoute('history'), 'history');
+      expect(NavigationRegistry.normalizeRoute('territory'), 'territories');
+      expect(NavigationRegistry.normalizeRoute('territory-commons'), 'territories');
     });
 
     test('resolves correct group index for section', () {
@@ -49,7 +51,8 @@ void main() {
 
       expect(NavigationRegistry.groupIndexForSection('corporation'), 3); // SOCIETY
       expect(NavigationRegistry.groupIndexForSection('corporations'), 3);
-      expect(NavigationRegistry.groupIndexForSection('territories'), 3);
+      // Hidden routes remain deep-linkable but do not open a primary group.
+      expect(NavigationRegistry.groupIndexForSection('territories'), -1);
       expect(NavigationRegistry.groupIndexForSection('communities'), 3);
       expect(NavigationRegistry.groupIndexForSection('civic'), 3);
 
@@ -95,7 +98,7 @@ void main() {
       );
       expect(
         societyItemsWithCorp.map((i) => i.id).toList(),
-        ['corporation', 'corporations', 'territories', 'communities', 'civic'],
+        ['corporation', 'corporations', 'communities', 'civic'],
       );
 
       // Society group items without corporation membership
@@ -110,8 +113,12 @@ void main() {
       );
       expect(
         societyItemsWithoutCorp.map((i) => i.id).toList(),
-        ['corporations', 'territories', 'communities', 'civic'],
+        ['corporations', 'communities', 'civic'],
       );
+
+      final territoryItem = NavigationRegistry.findItem('territories');
+      expect(territoryItem, isNotNull);
+      expect(territoryItem!.isPrimary, isFalse);
     });
 
     test('resolves page titles uniformly', () {

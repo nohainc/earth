@@ -32,6 +32,21 @@ class WorldConditionsPanel extends StatelessWidget {
         state.membership?['territory_name']?.toString() ??
         state.residency['territory_name']?.toString();
     final affectedCount = exposure['activeConditionCount'];
+    final territoryRows = state.territories.whereType<Map>();
+    final population = territoryRows.fold<int>(
+      0,
+      (sum, row) => sum + _number(row['population'] ?? row['resident_count']),
+    );
+    final capacityUsed = territoryRows.fold<int>(
+      0,
+      (sum, row) => sum +
+          _number(row['active_house_count'] ?? row['private_slots_used']),
+    );
+    final capacityTotal = territoryRows.fold<int>(
+      0,
+      (sum, row) => sum +
+          _number(row['house_capacity'] ?? row['private_slot_capacity']),
+    );
 
     final cockpit = EarthPageCockpit(
       status: !available
@@ -87,6 +102,14 @@ class WorldConditionsPanel extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             _buildExposure(context, territoryName, affectedCount),
+            const SizedBox(height: 24),
+            _buildWorldGeography(
+              context,
+              available: available,
+              population: population,
+              capacityUsed: capacityUsed,
+              capacityTotal: capacityTotal,
+            ),
             const SizedBox(height: 24),
             _buildTelemetryPlaceholder(context),
           ],
@@ -284,4 +307,55 @@ class WorldConditionsPanel extends StatelessWidget {
           icon: Icons.insights_outlined,
         ),
       );
+
+  Widget _buildWorldGeography(
+    BuildContext context, {
+    required bool available,
+    required int population,
+    required int capacityUsed,
+    required int capacityTotal,
+  }) {
+    final hasCapacity = capacityTotal > 0;
+    return EarthSection(
+      title: 'WORLD CONDITIONS',
+      showSurface: false,
+      child: _buildMetricGrid(context, [
+        ('POPULATION', population > 0 ? '$population' : '—'),
+        (
+          'CAPACITY PRESSURE',
+          hasCapacity ? '$capacityUsed / $capacityTotal' : '—',
+        ),
+        (
+          'RESOURCE AVAILABILITY',
+          'NOT PUBLISHED',
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildMetricGrid(
+      BuildContext context, List<(String, String)> metrics) {
+    return Wrap(
+      spacing: 24,
+      runSpacing: 12,
+      children: metrics
+          .map((metric) => SizedBox(
+                width: 190,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(metric.$1, style: context.captionStyle),
+                    const SizedBox(height: 4),
+                    Text(metric.$2, style: context.widgetValueStyle),
+                  ],
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  static int _number(dynamic value) {
+    if (value is num) return value.round();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
 }

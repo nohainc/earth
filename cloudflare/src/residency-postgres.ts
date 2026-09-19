@@ -14,14 +14,14 @@ async function worldDay(tx: PostgresRepository): Promise<number> {
 
 export async function getHouseResidency(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const house = await activeHouse(repository, humanId);
-  const result = await repository.query(`SELECT r.*, t.name AS territory_name, t.status AS territory_status, COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id FROM house_residencies r JOIN territories t ON t.id = r.territory_id LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE' WHERE r.house_id = $1 ORDER BY r.status, r.residency_class, r.effective_from_game_day DESC`, [house.houseId]);
+  const result = await repository.query(`SELECT r.*, t.name AS territory_name, t.status AS territory_status, t.corporation_id FROM house_residencies r JOIN territories t ON t.id = r.territory_id WHERE r.house_id = $1 ORDER BY r.status, r.residency_class, r.effective_from_game_day DESC`, [house.houseId]);
   return { houseId: house.houseId, primaryTerritoryId: house.currentTerritoryId, residencies: result.rows, generatedFrom: 'postgres-canonical-facts' };
 }
 
 export async function quoteHouseMove(repository: PostgresRepository, humanId: string, territoryId: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const house = await activeHouse(tx, humanId);
-    const territory = (await tx.query(`SELECT t.id, t.name, t.status, s.house_capacity, s.active_house_count, COALESCE(g.governing_institution_id, t.corporation_id) AS governing_institution_id FROM territories t LEFT JOIN territory_capacity_state s ON s.territory_id = t.id LEFT JOIN territory_governance g ON g.territory_id = t.id AND g.status = 'ACTIVE' WHERE t.id = $1`, [territoryId])).rows[0];
+    const territory = (await tx.query(`SELECT t.id, t.name, t.status, t.corporation_id, s.house_capacity, s.active_house_count FROM territories t LEFT JOIN territory_capacity_state s ON s.territory_id = t.id WHERE t.id = $1`, [territoryId])).rows[0];
     if (!territory || territory.status !== 'ACTIVE') throw new Error('Target Territory is unavailable');
     const available = BigInt(String(territory.house_capacity ?? 0)) - BigInt(String(territory.active_house_count ?? 0));
     const economicOwner = (await tx.query<{ economic_id: string }>('SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = \'HOUSE\'', [house.houseId])).rows[0];

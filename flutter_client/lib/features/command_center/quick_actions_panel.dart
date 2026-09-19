@@ -11,7 +11,6 @@ class QuickActionsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final membership = state.membership ?? const <String, dynamic>{};
     final research = state.technology['research'] is Map
         ? Map<String, dynamic>.from(state.technology['research'] as Map)
         : state.technology;
@@ -31,15 +30,6 @@ class QuickActionsPanel extends StatelessWidget {
         section: 'buildings',
         icon: Icons.storefront_outlined,
         color: context.primaryColor,
-      ),
-      (
-        label: 'CHECK TERRITORY SERVICES',
-        detail: membership['territory_id'] == null
-            ? 'No physical capacity context available'
-            : 'Review local capacity and infrastructure',
-        section: 'territory-commons',
-        icon: Icons.location_city_outlined,
-        color: context.successColor,
       ),
       (
         label: 'DIRECT RESEARCH',

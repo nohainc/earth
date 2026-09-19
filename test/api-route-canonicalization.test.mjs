@@ -20,6 +20,11 @@ test('canonical market and research routes have no runtime aliases', () => {
   assert.match(realEstateApi, /['"]\/api\/research\/contribute['"]/);
 });
 
+test('V5 Corporation routes reach the institution router', () => {
+  const index = read('cloudflare/src/index.ts');
+  assert.match(index, /url\.pathname\.startsWith\('\/api\/corporations'\) \|\| url\.pathname\.startsWith\('\/api\/v5\/corporations'\)/);
+});
+
 test('canonical cancellation and research operations are registered once', () => {
   const keys = new Set(API_ROUTES.map(routeKey));
   for (const key of [

@@ -880,11 +880,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           Text('PRIVATE BUILDINGS', style: context.topicTitleStyle),
         SizedBox(height: context.spacingControl),
         // Private stat header
+        Text('CAPACITY', style: context.captionStyle),
+        SizedBox(height: context.spacingControl / 2),
         _buildAttributeGrid(
           context,
           [
             (
-              'OPEN SPACES',
+              'AVAILABLE',
               '$availablePrivateSlots',
               Icons.domain_add_outlined,
               availablePrivateSlots > 0
@@ -892,7 +894,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   : context.dangerColor
             ),
             (
-              'SPACES USED',
+              'USED',
               '$usedPrivateSlots',
               Icons.pie_chart_outline,
               context.warningColor
@@ -2005,7 +2007,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           if (reqPop > 0)
                             _buildRequirementItem(
                               context,
-                              'City Population ($population / $reqPop)',
+                              'Population ($population / $reqPop)',
                               hasEnoughPop,
                             ),
                         ],

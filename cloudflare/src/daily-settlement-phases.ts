@@ -29,8 +29,6 @@ export type DailySettlementPhaseHandlers = {
   ipLicenseBilling: (context: DailySettlementPhaseContext) => Promise<unknown>;
   buildingSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
   constructionCompletion: (context: DailySettlementPhaseContext) => Promise<unknown>;
-  territoryLeaseSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
-  commonsDividendSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
   corporationIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
   publicTaxAssessment: (context: DailySettlementPhaseContext) => Promise<unknown>;
   taxReconciliation: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -88,8 +86,6 @@ export function createDailySettlementPhaseRegistry(
     required('ip_license_billing', 65, 'all', handlers.ipLicenseBilling),
     required('life_maintenance', 70, 'all', handlers.lifeMaintenance),
     required('construction_completion', 72, 'owner-shards', handlers.constructionCompletion),
-    required('territory_lease_settlement', 73, 'owner-shards', handlers.territoryLeaseSettlement),
-    required('commons_dividend_settlement', 74, 'all', handlers.commonsDividendSettlement),
     required('building_settlement', 75, 'owner-shards', handlers.buildingSettlement),
     deferred('basic_levy', 76, 'all', handlers.basicLevy),
     required('corporation_income_tax', 90, 'all', handlers.corporationIncomeTax),

@@ -157,7 +157,7 @@ class EarthButton extends StatelessWidget {
   }
 }
 
-/// Standardized search & text input control conforming to height 42px and token radius.
+/// Standardized search & text input control conforming to token button height and radius.
 class EarthSearchInput extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String>? onChanged;
@@ -166,6 +166,7 @@ class EarthSearchInput extends StatelessWidget {
   final double? fontSize;
   final FocusNode? focusNode;
   final bool autofocus;
+  final double? height;
 
   const EarthSearchInput({
     super.key,
@@ -176,6 +177,7 @@ class EarthSearchInput extends StatelessWidget {
     this.fontSize,
     this.focusNode,
     this.autofocus = false,
+    this.height,
   });
 
   @override
@@ -189,7 +191,7 @@ class EarthSearchInput extends StatelessWidget {
     );
 
     return Container(
-      height: context.inputHeight,
+      height: height ?? context.buttonHeight,
       decoration: BoxDecoration(
         color: context.surfaceColor,
         borderRadius: BorderRadius.circular(context.radiusControl),
@@ -203,16 +205,19 @@ class EarthSearchInput extends StatelessWidget {
           focusNode: focusNode,
           autofocus: autofocus,
           onChanged: onChanged,
+          textAlignVertical: TextAlignVertical.center,
           style: effectiveStyle,
           decoration: InputDecoration(
+            isDense: true,
             hintText: hintText,
             hintStyle: effectiveHintStyle,
+            prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             prefixIcon: Icon(Icons.search, size: 16, color: context.mutedColor),
             suffixIcon: controller.text.isNotEmpty
                 ? IconButton(
                     icon: Icon(Icons.close, size: 14, color: context.mutedColor),
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                     onPressed: () {
                       controller.clear();
                       onClear?.call();
@@ -221,7 +226,7 @@ class EarthSearchInput extends StatelessWidget {
                   )
                 : null,
             border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           ),
         ),
       ),
