@@ -3,11 +3,8 @@ import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { currentHuman } from './auth-session.ts';
 import {
-  getHouseOverview,
-  unlockHousePerk,
-  equipHouseHeirloom,
-  forgeHouseHeirloom,
-  updateHouseMotto,
+  getHouseProfile,
+  updateHouseProfile,
 } from './house-postgres.ts';
 import { getHouseDailySummary } from './house-daily-summary-postgres.ts';
 import { getHouseAutomation, listHousePolicies, saveHouseAutomation, saveHousePolicy } from './house-policy-postgres.ts';
@@ -15,6 +12,7 @@ import { advanceHouseOnboarding, getHouseOnboarding } from './house-onboarding-p
 import { getHouseResidency, moveHouseResidence, quoteHouseMove } from './residency-postgres.ts';
 import { claimHouseEntrySupport, getHouseEntrySupport } from './catch-up-postgres.ts';
 import { getHouseCatchUpTargets } from './catch-up-targets-postgres.ts';
+import { registerSuccessor as registerSuccessorPostgres } from './lifecycle-postgres.ts';
 
 /**
  * Canonical routes for the generational house system.
@@ -27,6 +25,21 @@ export async function handleHouseRoutes(
 
   const isHousePath = url.pathname.startsWith('/api/house');
   if (!isHousePath) return null;
+
+  if (
+    request.method === 'POST' &&
+    (url.pathname === '/api/house/perks/unlock' ||
+      url.pathname === '/api/house/heirlooms/equip' ||
+      url.pathname === '/api/house/heirlooms/forge')
+  ) {
+    return Response.json(
+      {
+        ok: false,
+        error: 'House perks and heirlooms are retired in V5 and are not available.',
+      },
+      { status: 410 },
+    );
+  }
 
   if (url.pathname === '/api/house/catch-up-targets' && request.method === 'GET') {
     const viewer = await currentHuman(request, env);
@@ -81,6 +94,24 @@ export async function handleHouseRoutes(
     const result = await withRepository(env, (repository) => getHouseOnboarding(repository, viewer.house_id));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/api/house/succession' && request.method === 'POST') {
+    const viewer = await currentHuman(request, env, true);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ name?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    try {
+      const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, {
+        humanId: viewer.id,
+        successorName: (parsed.value.name ?? '').trim(),
+        currentLifeStatus: viewer.life_status,
+      }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Succession plan failed' }, { status: 409 });
+    }
   }
 
   if (url.pathname === '/api/house/onboarding/advance' && request.method === 'POST') {
@@ -198,12 +229,12 @@ export async function handleHouseRoutes(
     }
   }
 
-  // GET /api/house — overview of lineage, perks, and heirlooms
+  // GET /api/house — canonical House identity, succession, and lineage
   if (url.pathname === '/api/house' && request.method === 'GET') {
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     try {
-      const result = await withRepository(env, (repository) => getHouseOverview(repository, viewer.house_id, viewer.id, viewer.display_name));
+      const result = await withRepository(env, (repository) => getHouseProfile(repository, viewer.house_id, viewer.id));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -212,124 +243,28 @@ export async function handleHouseRoutes(
     }
   }
 
-  // POST /api/house/perks/unlock
+  // PATCH /api/house/profile
   if (
-    url.pathname === '/api/house/perks/unlock' &&
-    request.method === 'POST'
+    url.pathname === '/api/house/profile' &&
+    request.method === 'PATCH'
   ) {
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ perkKey?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const perkKey = parsed.value.perkKey?.trim() ?? '';
-    if (!perkKey) return Response.json({ ok: false, error: 'Perk key is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) =>
-        unlockHousePerk(repository, viewer.house_id, perkKey, 1, resolveIdempotencyKey(request, parsed.value.correlationId)),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Perk unlock failed';
-      return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-    }
-  }
-
-  // POST /api/house/heirlooms/equip
-  if (
-    url.pathname === '/api/house/heirlooms/equip' &&
-    request.method === 'POST'
-  ) {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ heirloomId?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const heirloomId = parsed.value.heirloomId?.trim() ?? '';
-    if (!heirloomId) return Response.json({ ok: false, error: 'Heirloom ID is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) =>
-        equipHouseHeirloom(
-          repository,
-          viewer.house_id,
-          heirloomId,
-          viewer.id,
-          resolveIdempotencyKey(request, parsed.value.correlationId),
-        ),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Equip failed';
-      return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-    }
-  }
-
-  // POST /api/house/heirlooms/forge
-  if (
-    url.pathname === '/api/house/heirlooms/forge' &&
-    request.method === 'POST'
-  ) {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{
-      name?: string;
-      heirloomType?: string;
-      inscription?: string;
-      correlationId?: string;
-    }>(request);
-    if (!parsed.ok) return parsed.response;
-    const name = parsed.value.name?.trim() ?? '';
-    const heirloomType = parsed.value.heirloomType?.trim() ?? 'house_standard';
-    const inscription = parsed.value.inscription?.trim() ?? 'Forged by the house patriarch.';
-    if (!name) return Response.json({ ok: false, error: 'Heirloom name is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) =>
-        forgeHouseHeirloom(
-          repository,
-          viewer.house_id,
-          name,
-          heirloomType,
-          inscription,
-          '',
-          resolveIdempotencyKey(request, parsed.value.correlationId),
-        ),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Heirloom forge failed';
-      return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-    }
-  }
-
-  // POST /api/house/motto
-  if (
-    url.pathname === '/api/house/motto' &&
-    request.method === 'POST'
-  ) {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ motto?: string; houseName?: string; dynastyName?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ motto?: string; houseName?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const motto = parsed.value.motto?.trim() ?? '';
-    const houseName = parsed.value.houseName?.trim() ?? parsed.value.dynastyName?.trim();
+    const houseName = parsed.value.houseName?.trim();
     if (houseName !== undefined && houseName.length < 2) {
       return Response.json({ ok: false, error: 'House name must be at least 2 characters' }, { status: 400 });
     }
     try {
       const result = await withRepository(env, (repository) =>
-        updateHouseMotto(
-          repository,
-          viewer.house_id,
-          motto,
-          houseName,
-          resolveIdempotencyKey(request, parsed.value.correlationId),
-        ),
+        updateHouseProfile(repository, viewer.house_id, { motto, houseName }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Motto update failed';
+      const message = error instanceof Error ? error.message : 'House profile update failed';
       return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
     }
   }

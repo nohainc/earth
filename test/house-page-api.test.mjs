@@ -22,42 +22,42 @@ before(async () => {
 });
 after(() => server?.kill());
 
-test('Tier 1 house API returns lineage, perks, heirlooms, and redacted data', async () => {
+test('Tier 1 house API returns canonical lineage and redacted data', async () => {
   const { response, body } = await request('/api/house');
   assert.equal(response.status, 200);
-  assert.equal(body.house.house_name, 'House Vance');
-  assert.ok(Array.isArray(body.lineage));
-  assert.ok(Array.isArray(body.heirlooms));
+  assert.equal(body.houseProfile.identity.name, 'House Vance');
+  assert.equal(body.house, undefined);
+  assert.equal(body.perks, undefined);
+  assert.equal(body.heirlooms, undefined);
   assert.doesNotMatch(JSON.stringify(body), /password|password_hash|session_token/i);
 });
 
 test('Tier 2 house mutations require authentication', async () => {
-  const result = await request('/api/house/motto', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({ motto: 'A valid creed' }) });
+  const result = await request('/api/house/profile', { method: 'PATCH', headers: {'content-type': 'application/json'}, body: JSON.stringify({ motto: 'A valid creed' }) });
   assert.equal(result.response.status, 401);
 });
 
-test('Tier 3 authenticated house actions unlock perks and toggle heirlooms', async () => {
+test('Tier 3 retired House perk and heirloom mutations return Gone', async () => {
   const login = await request('/api/auth/login', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({email: 'amara@earthuc.com', password: 'password123456'}) });
   cookie = login.response.headers.get('set-cookie')?.split(';')[0];
   assert.ok(cookie);
   const perk = await request('/api/house/perks/unlock', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({perkKey: 'diplomatic_house'}) });
-  assert.equal(perk.response.status, 200, JSON.stringify(perk.body));
+  assert.equal(perk.response.status, 410, JSON.stringify(perk.body));
   const equipped = await request('/api/house/heirlooms/equip', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({heirloomId: 'HLM-001'}) });
-  assert.equal(equipped.response.status, 200);
-  assert.equal(equipped.body.isEquipped, false);
+  assert.equal(equipped.response.status, 410);
 });
 
-test('Tier 4 house API validates motto and heirloom inputs', async () => {
-  const motto = await request('/api/house/motto', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({ motto: 'x', houseName: 'House Vance' }) });
+test('Tier 4 House API validates motto while retired heirloom forge is Gone', async () => {
+  const motto = await request('/api/house/profile', { method: 'PATCH', headers: {'content-type': 'application/json'}, body: JSON.stringify({ motto: 'x', houseName: 'House Vance' }) });
   assert.equal(motto.response.status, 400);
   const heirloom = await request('/api/house/heirlooms/forge', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({ name: 'x' }) });
-  assert.equal(heirloom.response.status, 400);
+  assert.equal(heirloom.response.status, 410);
 });
 
 test('Tier 5 house page journey updates creed and reloads overview', async () => {
-  const updated = await request('/api/house/motto', { method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({ motto: 'From memory we build', houseName: 'House Vance Neo' }) });
+  const updated = await request('/api/house/profile', { method: 'PATCH', headers: {'content-type': 'application/json'}, body: JSON.stringify({ motto: 'From memory we build', houseName: 'House Vance Neo' }) });
   assert.equal(updated.response.status, 200, JSON.stringify(updated.body));
   const overview = await request('/api/house');
-  assert.equal(overview.body.house.motto, 'From memory we build');
-  assert.equal(overview.body.house.house_name, 'House Vance Neo');
+  assert.equal(overview.body.houseProfile.identity.motto, 'From memory we build');
+  assert.equal(overview.body.houseProfile.identity.name, 'House Vance Neo');
 });

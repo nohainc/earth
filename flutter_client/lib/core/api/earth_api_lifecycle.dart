@@ -11,7 +11,7 @@ extension EarthApiLifecycle on EarthApi {
   Future<EarthState> registerSuccessor(
     String name,
   ) async {
-    await _request('/api/life/successor', method: 'POST', body: {
+    await _request('/api/house/succession', method: 'POST', body: {
       'name': name.trim(),
     });
     return world();

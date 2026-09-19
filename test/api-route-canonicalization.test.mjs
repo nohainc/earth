@@ -68,3 +68,10 @@ test('House API resolves the authenticated House principal and ignores client he
   assert.doesNotMatch(routes, /statBuff/);
   assert.match(house, /SELECT \* FROM houses WHERE id = \$1 LIMIT 1/);
 });
+
+test('retired House perk and heirloom mutations fail explicitly without database access', () => {
+  const routes = read('cloudflare/src/house-routes.ts');
+  assert.match(routes, /House perks and heirlooms are retired in V5/);
+  assert.match(routes, /status: 410/);
+  assert.doesNotMatch(routes, /unlockHousePerk|equipHouseHeirloom|forgeHouseHeirloom/);
+});

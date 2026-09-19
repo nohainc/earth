@@ -55,10 +55,6 @@ class HouseLineageDialog extends StatelessWidget {
     final heir = (house['active_heir'] ?? house['heir'])?.toString();
     final motto =
         house['motto']?.toString() ?? house['description']?.toString();
-    final seat = house['seat']?.toString() ??
-        house['seat_city']?.toString() ??
-        house['city_name']?.toString();
-
     final gen = int.tryParse(
         (house['generation'] ?? house['generations'] ?? '').toString());
     final ancestors = int.tryParse(
@@ -66,12 +62,6 @@ class HouseLineageDialog extends StatelessWidget {
     final legacy = int.tryParse(
         (house['total_legacy'] ?? house['peak_legacy'] ?? house['legacy'] ?? '')
             .toString());
-    final standing = int.tryParse((house['peak_standing'] ??
-            house['house_standing'] ??
-            house['dynastic_standing'] ??
-            house['standing'] ??
-            '')
-        .toString());
 
     final isExtinct = house['is_extinct'] == true ||
         house['status'] == 'extinct' ||
@@ -94,11 +84,6 @@ class HouseLineageDialog extends StatelessWidget {
         (foundedDayNum != null && extinctDayNum != null
             ? (extinctDayNum - foundedDayNum).clamp(0, 9999999)
             : null);
-    final houseScore = house['historical_score'] ??
-        house['house_score'] ??
-        house['dynasty_score'] ??
-        house['score'];
-
     // Build visual generational tree nodes
     final treeNodes = <Map<String, dynamic>>[];
 
@@ -325,33 +310,6 @@ class HouseLineageDialog extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (seat != null && seat.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: EarthColors.cardSurface,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white12),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.location_city,
-                                size: 14, color: Colors.white54),
-                            const SizedBox(width: 8),
-                            const Text('Seat Territory: ',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.white54)),
-                            Text(seat,
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white)),
-                          ],
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 16),
 
                     // Top Metric Grid
@@ -359,15 +317,8 @@ class HouseLineageDialog extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _metricChip(
-                            'HISTORICAL SCORE',
-                            houseScore != null ? '$houseScore PTS' : '—',
-                            const Color(0xffeab308),
-                            Icons.emoji_events_outlined),
                         _metricChip('HOUSE LEGACY', '${legacy ?? '—'} LP',
                             cyanAccentColor, Icons.stars_outlined),
-                        _metricChip('HOUSE STANDING', '${standing ?? '—'} Std',
-                            Colors.tealAccent, Icons.shield_outlined),
                         _metricChip(
                             'ANCESTORS',
                             '${ancestors ?? '—'} Inscribed',

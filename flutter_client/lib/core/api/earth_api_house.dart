@@ -1,12 +1,20 @@
 part of 'earth_api.dart';
 
 extension EarthApiHouse on EarthApi {
-  Future<Map<String, dynamic>> houseOverview() async {
+  Future<HouseProfile> houseProfile() async {
     final response = await _request('/api/house');
-    if (response is Map<String, dynamic>) {
-      return response;
+    if (response is Map<String, dynamic> && response['houseProfile'] is Map) {
+      return HouseProfile.fromJson(
+          Map<String, dynamic>.from(response['houseProfile'] as Map));
     }
-    return <String, dynamic>{'ok': true};
+    throw Exception('House profile unavailable');
+  }
+
+  Future<HouseProfile> registerHouseSuccessor(String name) async {
+    final response = await _request('/api/house/succession',
+        method: 'POST', body: {'name': name.trim()});
+    if (response is Map<String, dynamic>) return houseProfile();
+    throw Exception('Succession plan could not be saved');
   }
 
   Future<Map<String, dynamic>> listHousePolicies() async {
@@ -84,59 +92,13 @@ extension EarthApiHouse on EarthApi {
           };
   }
 
-  Future<Map<String, dynamic>> unlockHousePerk(String perkKey) async {
-    final response = await _request(
-      '/api/house/perks/unlock',
-      method: 'POST',
-      body: {'perkKey': perkKey},
-    );
-    if (response is Map<String, dynamic>) {
-      return response;
-    }
-    return <String, dynamic>{'ok': true};
-  }
-
-  Future<Map<String, dynamic>> equipHouseHeirloom(String heirloomId) async {
-    final response = await _request(
-      '/api/house/heirlooms/equip',
-      method: 'POST',
-      body: {'heirloomId': heirloomId},
-    );
-    if (response is Map<String, dynamic>) {
-      return response;
-    }
-    return <String, dynamic>{'ok': true};
-  }
-
-  Future<Map<String, dynamic>> forgeHouseHeirloom({
-    required String name,
-    required String heirloomType,
-    required String inscription,
-    required String statBuff,
-  }) async {
-    final response = await _request(
-      '/api/house/heirlooms/forge',
-      method: 'POST',
-      body: {
-        'name': name,
-        'heirloomType': heirloomType,
-        'inscription': inscription,
-        'statBuff': statBuff,
-      },
-    );
-    if (response is Map<String, dynamic>) {
-      return response;
-    }
-    return <String, dynamic>{'ok': true};
-  }
-
-  Future<Map<String, dynamic>> updateHouseMotto({
+  Future<Map<String, dynamic>> updateHouseProfile({
     required String motto,
     String? houseName,
   }) async {
     final response = await _request(
-      '/api/house/motto',
-      method: 'POST',
+      '/api/house/profile',
+      method: 'PATCH',
       body: {
         'motto': motto,
         if (houseName != null) 'houseName': houseName,

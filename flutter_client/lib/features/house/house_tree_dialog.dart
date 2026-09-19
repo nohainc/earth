@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/house_profile.dart';
 import '../../core/ui_style_tokens.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
@@ -63,33 +64,20 @@ class HouseTreeDialog extends StatefulWidget {
   State<HouseTreeDialog> createState() => _HouseTreeDialogState();
 }
 
-class _HouseTreeDialogState extends State<HouseTreeDialog>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _HouseTreeDialogState extends State<HouseTreeDialog> {
   bool _loading = true;
   String? _error;
   String? _successMessage;
 
-  Map<String, dynamic> _house = {};
-  List<Map<String, dynamic>> _lineage = [];
-  List<Map<String, dynamic>> _perks = [];
-  List<Map<String, dynamic>> _heirlooms = [];
-  List<Map<String, dynamic>> _catalogPerks = [];
+  HouseProfile? _profile;
+  List<HouseLineageEntry> _lineage = [];
 
-  Map<String, dynamic>? _selectedMember;
-  bool _isActionInProgress = false;
+  HouseLineageEntry? _selectedMember;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadHouseData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadHouseData() async {
@@ -99,27 +87,28 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     });
 
     try {
-      final res = await widget.api.houseOverview();
-      final houseData = Map<String, dynamic>.from(
-          (res['house'] ?? res['dynasty']) as Map? ?? {});
-      final lineageList = ((res['lineage'] as List<dynamic>?) ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      final perksList = ((res['perks'] as List<dynamic>?) ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      final heirloomsList = ((res['heirlooms'] as List<dynamic>?) ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      final catalogList = ((res['catalogPerks'] as List<dynamic>?) ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-
-      Map<String, dynamic>? selected;
+      final profile = await widget.api.houseProfile();
+      final lineageList = profile.lineage;
+      HouseLineageEntry? selected;
       if (widget.initialMemberId != null) {
         selected = lineageList.firstWhere(
-          (m) => m['id'] == widget.initialMemberId,
-          orElse: () => lineageList.isNotEmpty ? lineageList.first : {},
+          (m) => m.humanId == widget.initialMemberId,
+          orElse: () => lineageList.isNotEmpty
+              ? lineageList.first
+              : const HouseLineageEntry(
+                  humanId: '',
+                  displayName: '',
+                  generation: 0,
+                  birthGameDay: 0,
+                  deathGameDay: null,
+                  status: 'UNKNOWN',
+                  standing: '0',
+                  finalLegacy: '0',
+                  relationship: 'UNLINKED',
+                  relatedHumanId: null,
+                  successionEventId: null,
+                  successionStatus: null,
+                  effectiveGameDay: null),
         );
       } else {
         selected = lineageList.isNotEmpty ? lineageList.first : null;
@@ -127,13 +116,10 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
 
       if (mounted) {
         setState(() {
-          _house = houseData;
+          _profile = profile;
           _lineage = lineageList;
-          _perks = perksList;
-          _heirlooms = heirloomsList;
-          _catalogPerks = catalogList;
           _selectedMember =
-              selected != null && selected.isNotEmpty ? selected : null;
+              selected?.humanId.isNotEmpty == true ? selected : null;
           _loading = false;
         });
       }
@@ -142,74 +128,6 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         setState(() {
           _error = e.toString().replaceFirst('Exception: ', '');
           _loading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _unlockPerk(String perkKey, String perkName) async {
-    setState(() {
-      _isActionInProgress = true;
-      _error = null;
-    });
-    try {
-      final res = await widget.api.unlockHousePerk(perkKey);
-      if (mounted) {
-        final remaining = res['remainingPoints'] ?? '';
-        setState(() {
-          _isActionInProgress = false;
-          _successMessage =
-              'Hereditary Trait "$perkName" unlocked! ($remaining LP remaining)';
-        });
-        await _loadHouseData();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isActionInProgress = false;
-          _error = e.toString().replaceFirst('Exception: ', '');
-        });
-      }
-    }
-  }
-
-  Future<void> _equipHeirloom(String heirloomId, String name) async {
-    setState(() {
-      _isActionInProgress = true;
-      _error = null;
-    });
-    try {
-      final res = await widget.api.equipHouseHeirloom(heirloomId);
-      if (mounted) {
-        final isEquipped = res['isEquipped'] == true ||
-            res['isEquipped'] == 'true' ||
-            res['is_equipped'] == true ||
-            res['is_equipped'] == 'true';
-        final equippedBy = res['equippedBy'] ?? res['equipped_by_human_id'];
-        setState(() {
-          _isActionInProgress = false;
-          _successMessage = isEquipped
-              ? '$name equipped to current Head of House.'
-              : '$name returned to the Heritage Vault.';
-          _heirlooms = _heirlooms.map((h) {
-            if (h['id']?.toString() == heirloomId) {
-              final copy = Map<String, dynamic>.from(h);
-              copy['is_equipped'] = isEquipped;
-              copy['isEquipped'] = isEquipped;
-              copy['equipped_by_human_id'] = isEquipped ? equippedBy : null;
-              copy['equippedBy'] = isEquipped ? equippedBy : null;
-              return copy;
-            }
-            return h;
-          }).toList();
-        });
-        await _loadHouseData();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isActionInProgress = false;
-          _error = e.toString().replaceFirst('Exception: ', '');
         });
       }
     }
@@ -222,8 +140,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final inkColor = theme.colorScheme.onSurface;
     final canvasColor = theme.colorScheme.surface;
-    final nameCtrl =
-        TextEditingController(text: _house['house_name']?.toString() ?? '');
+    final nameCtrl = TextEditingController(text: _profile?.identity.name ?? '');
 
     showDialog(
       context: context,
@@ -280,8 +197,8 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                 if (nameCtrl.text.trim().length < 2) return;
                 Navigator.of(ctx).pop();
                 try {
-                  await widget.api.updateHouseMotto(
-                    motto: _house['motto']?.toString() ?? '',
+                  await widget.api.updateHouseProfile(
+                    motto: _profile?.identity.motto ?? '',
                     houseName: nameCtrl.text.trim(),
                   );
                   if (mounted) {
@@ -326,26 +243,12 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final dialogWidth = math.min(1060.0, screenSize.width - 24);
     final dialogHeight = math.min(840.0, screenSize.height - 24);
 
-    final houseName = (_house['house_name'] ??
-            _house['dynasty_name'] ??
-            'House')
-        .toString()
+    final houseName = (_profile?.identity.name ?? 'House')
         .replaceFirst(RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
         .replaceFirst(RegExp(r'^of\s+', caseSensitive: false), '');
-    final legacy = _parseNum(_house['legacy_points'] ?? _house['total_legacy']);
-    final rawScore =
-        _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
-    final houseScore = rawScore == null ? null : _parseNum(rawScore);
-    final successor = widget.state?.life['successor'];
-    final successorName = successor is Map
-        ? (successor['successor_name'] ?? successor['name'])?.toString()
-        : null;
-    final activeHeir =
-        (_house['active_heir'] ?? _house['heir_name'] ?? successorName)
-            ?.toString();
-    final generation = _parseInt(
-        _house['current_generation'] ?? _house['generation'],
-        fallback: 0);
+    final legacy = _parseNum(_profile?.economics.dynastyLegacyUnits);
+    final activeHeir = _profile?.succession?.successorName;
+    final generation = _profile?.identity.generation ?? 0;
 
     final cockpit = EarthPageCockpit(
       status: 'ANCESTRAL HERITAGE',
@@ -400,20 +303,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       metrics: [
         CockpitMetric(
           label: 'Legacy',
-          value:
-              _house['legacy_points'] == null && _house['total_legacy'] == null
-                  ? 'UNAVAILABLE'
-                  : formatWholeNumber(legacy),
+          value: formatWholeNumber(legacy),
           icon: Icons.auto_awesome_outlined,
           color: context.secondaryColor,
-        ),
-        CockpitMetric(
-          label: 'Prestige',
-          value: houseScore == null
-              ? 'UNAVAILABLE'
-              : formatWholeNumber(houseScore),
-          icon: Icons.emoji_events_outlined,
-          color: context.goldColor,
         ),
         CockpitMetric(
           label: 'Generation',
@@ -432,7 +324,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
           if (!_loading) ...[
             _buildHouseIdentitySection(houseName),
             const SizedBox(height: 24),
-            _buildPerksSection(),
+            _buildCapacitySection(),
           ],
         ];
 
@@ -440,9 +332,11 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
           if (!_loading) ...[
             _buildSuccessionSection(activeHeir),
             const SizedBox(height: 24),
+            _buildNavigationSection(),
+            const SizedBox(height: 24),
             _buildLineageSection(),
             const SizedBox(height: 24),
-            _buildHeirloomsSection(),
+            _buildHistorySection(),
           ],
         ];
 
@@ -497,7 +391,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: .85),
+                  color: context.canvasColor.withValues(alpha: .85),
                   blurRadius: 36,
                   spreadRadius: 8,
                 ),
@@ -559,7 +453,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: context.surfaceColor,
-        border: const Border(bottom: BorderSide(color: Colors.white12)),
+        border: Border(bottom: BorderSide(color: context.subtleBorderColor)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -593,7 +487,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
             ],
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 18, color: Colors.white70),
+            icon: Icon(Icons.close, size: 18, color: context.mutedColor),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).pop(),
@@ -604,44 +498,17 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
   }
 
   Widget _buildHouseIdentitySection(String rawHouseName) {
-    final tokens = UiStyleTokens.current;
     final houseName = rawHouseName.trim().toUpperCase();
-    final initials = houseName.length >= 2 ? houseName.substring(0, 2) : 'HO';
-
-    final gen1Member = _lineage.firstWhere(
-      (m) => _parseInt(m['generation'], fallback: 0) == 1,
-      orElse: () =>
-          _lineage.isNotEmpty ? _lineage.first : const <String, dynamic>{},
-    );
-    final founder =
-        (_house['founder_name'] ?? _house['founder'] ?? gen1Member['name'])
-            ?.toString();
-    final rawFoundedDay = _parseInt(
-        _house['founded_game_day'] ??
-            _house['founded_day'] ??
-            gen1Member['birth_game_day'],
-        fallback: 0);
-    final foundedText =
-        rawFoundedDay > 0 ? _formatGameDay(rawFoundedDay) : 'UNAVAILABLE';
-
-    final rawStanding = _house['standing'] ??
-        _house['civic_standing'] ??
-        _house['peak_standing'] ??
-        widget.state?.human['civic_standing'] ??
-        widget.state?.json['civic_standing'];
-    final standing = rawStanding == null ? null : _parseNum(rawStanding);
-    final rawScore =
-        _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
-    final houseScore = rawScore == null ? null : _parseNum(rawScore);
+    final profile = _profile!;
+    final affiliation = profile.affiliation;
 
     return EarthSection(
       title: 'HOUSE IDENTITY',
       showSurface: false,
       showHeader: false,
       infoBulletPoints: const [
-        'The foundational identity and generational prestige of your House.',
-        'Legacy Points (LP) measure permanent cultural influence passed across successions.',
-        'House score aggregates total wealth, enacted proposals, and historic achievements across all generations.',
+        'The foundational identity and generational continuity of your House.',
+        'Only canonical House identity facts are shown here.',
       ],
       child: Container(
         width: double.infinity,
@@ -653,69 +520,128 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 2-Column Key-Value Attribute Table (4 attributes, 2x2)
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 450;
-                final leftColumn = [
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.person_outline,
-                    label: 'FOUNDER',
-                    value: founder ?? 'UNAVAILABLE',
-                    accentColor: context.primaryColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.cake_outlined,
-                    label: 'FOUNDED',
-                    value: foundedText,
-                    accentColor: context.primaryColor,
-                  ),
-                ];
-
-                final rightColumn = [
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.emoji_events_outlined,
-                    label: 'HOUSE SCORE',
-                    value: houseScore == null
-                        ? 'UNAVAILABLE'
-                        : '${formatWholeNumber(houseScore)} PTS',
-                    accentColor: context.secondaryColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.verified_user_outlined,
-                    label: 'HOUSE STANDING',
-                    value: standing == null
-                        ? 'UNAVAILABLE'
-                        : '${formatWholeNumber(standing)} Std',
-                    accentColor: context.primaryColor,
-                  ),
-                ];
-
-                if (isWide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: Column(children: leftColumn)),
-                      const SizedBox(width: 24),
-                      Expanded(child: Column(children: rightColumn)),
-                    ],
-                  );
-                }
-
-                return Column(
-                  children: [
-                    ...leftColumn,
-                    ...rightColumn,
-                  ],
-                );
-              },
-            ),
+            _buildAttributeRow(context,
+                icon: Icons.shield_outlined,
+                label: 'HOUSE',
+                value: houseName,
+                accentColor: context.primaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.info_outline,
+                label: 'STATUS',
+                value: profile.identity.status,
+                accentColor: context.successColor),
+            _buildAttributeRow(context,
+                icon: Icons.layers_outlined,
+                label: 'GENERATION',
+                value: '${profile.identity.generation}',
+                accentColor: context.secondaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.person_outline,
+                label: 'CURRENT HUMAN',
+                value: profile.currentHuman.displayName,
+                accentColor: context.primaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.business_outlined,
+                label: 'CORPORATION',
+                value: affiliation?.corporationName.isNotEmpty == true
+                    ? affiliation!.corporationName
+                    : 'INDEPENDENT',
+                accentColor: context.primaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.auto_awesome_outlined,
+                label: 'DYNASTY LEGACY',
+                value: formatWholeNumber(
+                    _parseNum(profile.economics.dynastyLegacyUnits)),
+                accentColor: context.secondaryColor),
+            if (profile.identity.motto?.trim().isNotEmpty == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text('“${profile.identity.motto}”',
+                    style: context.bodyStyle.copyWith(
+                        color: context.mutedColor,
+                        fontStyle: FontStyle.italic)),
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCapacitySection() {
+    final profile = _profile!;
+    final capacity = profile.settlementProfile;
+    return EarthSection(
+      title: 'CAPACITY & ESTATE',
+      showSurface: false,
+      infoBulletPoints: const [
+        'Capacity values are the latest server-derived V5 settlement profile for this House.',
+        'Building count reflects active buildings included in that profile.',
+      ],
+      child: Container(
+        padding: EdgeInsets.all(context.cardPadding),
+        decoration: BoxDecoration(
+          color: context.surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(context.radiusCard),
+          border: Border.all(color: context.subtleBorderColor),
+        ),
+        child: Column(children: [
+          _buildAttributeRow(context,
+              icon: Icons.home_work_outlined,
+              label: 'RESIDENTIAL CAPACITY',
+              value: capacity?.residentialCapacityUnits ?? 'UNAVAILABLE',
+              accentColor: context.primaryColor),
+          _buildAttributeRow(context,
+              icon: Icons.factory_outlined,
+              label: 'PRODUCTIVE CAPACITY',
+              value: capacity?.productiveCapacityUnits ?? 'UNAVAILABLE',
+              accentColor: context.secondaryColor),
+          _buildAttributeRow(context,
+              icon: Icons.stacked_bar_chart_outlined,
+              label: 'TOTAL CAPACITY',
+              value: capacity?.totalCapacityUnits ?? 'UNAVAILABLE',
+              accentColor: context.successColor),
+          _buildAttributeRow(context,
+              icon: Icons.apartment_outlined,
+              label: 'ACTIVE BUILDINGS',
+              value: capacity == null
+                  ? 'UNAVAILABLE'
+                  : '${capacity.activeBuildingCount}',
+              accentColor: context.primaryColor),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildNavigationSection() {
+    final links = <({String label, String route, IconData icon})>[
+      (label: 'CITIZEN', route: 'life', icon: Icons.person_outline),
+      (
+        label: 'MY CORPORATION',
+        route: 'my-corporation',
+        icon: Icons.business_outlined
+      ),
+      (label: 'BUILDINGS', route: 'buildings', icon: Icons.domain_outlined),
+      (
+        label: 'FINANCE',
+        route: 'finance',
+        icon: Icons.account_balance_wallet_outlined
+      ),
+    ];
+    return EarthSection(
+      title: 'HOUSE SERVICES',
+      showSurface: false,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: links
+            .map((link) => OutlinedButton.icon(
+                  onPressed: widget.onNavigate == null
+                      ? null
+                      : () => widget.onNavigate!(link.route),
+                  icon: Icon(link.icon, size: 15),
+                  label: Text(link.label),
+                ))
+            .toList(),
       ),
     );
   }
@@ -747,7 +673,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               value,
               textAlign: TextAlign.right,
               style: context.bodyStyle.copyWith(
-                color: Colors.white,
+                color: context.inkColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -762,7 +688,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
   Widget _buildAlertBanner(String message, {required bool isError}) {
     final tokens = UiStyleTokens.current;
     final themeColor = Theme.of(context).colorScheme.primary;
-    final color = isError ? Colors.redAccent : themeColor;
+    final color = isError ? context.errorColor : themeColor;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(
@@ -801,17 +727,11 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
   }
 
   Widget _buildSuccessionSection(String? successorName) {
-    final currentHead = (_house['current_head_name'] ??
-            _house['head_of_house'] ??
-            _house['current_human_name'] ??
-            widget.state?.human['display_name'] ??
-            widget.state?.human['name'])
-        ?.toString();
-    final status = (_house['succession_status'] ??
-            _house['succession_state'] ??
-            (successorName == null ? null : 'DESIGNATED'))
-        ?.toString()
-        .toUpperCase();
+    final profile = _profile!;
+    final currentHead = _profile?.currentHuman.displayName;
+    final status = _profile?.succession?.status.toUpperCase();
+    final policy = profile.successionPolicy;
+    final quote = profile.successionQuote;
 
     return EarthSection(
       title: 'SUCCESSION & CURRENT HEAD',
@@ -851,10 +771,95 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
               value: status ?? 'UNAVAILABLE',
               accentColor: context.secondaryColor,
             ),
+            const SizedBox(height: 10),
+            _buildAttributeRow(context,
+                icon: Icons.payments_outlined,
+                label: 'FIXED COST',
+                value: formatCreditUnits(policy.fixedCostUnits),
+                accentColor: context.secondaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.percent,
+                label: 'PERCENTAGE COST',
+                value: _formatRateBps(policy.percentageCostBps),
+                accentColor: context.secondaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.hourglass_bottom_outlined,
+                label: 'TRANSITION',
+                value: '${policy.transitionDays} GAME DAYS',
+                accentColor: context.secondaryColor),
+            _buildAttributeRow(context,
+                icon: Icons.request_quote_outlined,
+                label: 'ESTIMATED COST',
+                value: formatCreditUnits(quote.estimatedCostUnits),
+                accentColor: quote.affordable
+                    ? context.successColor
+                    : context.errorColor),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'The House, its capacity, buildings, economic balances, and Corporation affiliation persist. The Human, personal offices, and personal status do not transfer automatically; the successor becomes the House representative when succession is activated.',
+                style: context.bodyStyle
+                    .copyWith(color: context.mutedColor, fontSize: 11),
+              ),
+            ),
+            if (widget.onNavigate != null)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _showSuccessionDialog,
+                  icon: const Icon(Icons.edit_outlined, size: 15),
+                  label: Text(successorName == null
+                      ? 'DESIGNATE SUCCESSOR'
+                      : 'UPDATE SUCCESSOR'),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _showSuccessionDialog() async {
+    final controller =
+        TextEditingController(text: _profile?.succession?.successorName ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('HOUSE SUCCESSION'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Successor name',
+            hintText: 'Leave blank to clear the plan',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCEL')),
+          FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controller.text.trim()),
+              child: const Text('SAVE')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || !mounted) return;
+    try {
+      await widget.api.registerHouseSuccessor(name);
+      if (mounted) {
+        setState(() => _successMessage = 'House succession plan updated.');
+        await _loadHouseData();
+        await widget.onRefresh?.call();
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+            () => _error = error.toString().replaceFirst('Exception: ', ''));
+      }
+    }
   }
 
   Widget _buildLineageSection() {
@@ -862,9 +867,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
       title: 'LINEAGE & HEIRS',
       showSurface: false,
       infoBulletPoints: const [
-        'Ancestral tree tracking all generations of your House across world history.',
-        'Tap any generation record to expand its full chronicle, lifetime wealth, and historical milestones.',
-        'The active head inherits all equipped heirlooms and carries your House forward.',
+        'Immutable generational history is reconstructed from canonical Humans and succession events.',
+        'Each record includes birth, death, standing, final legacy, and its succession relationship.',
+        'Tap any generation record to inspect the authoritative history.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -877,13 +882,13 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                 ),
               ]
             : _lineage.map((member) {
-                final isExpanded = _selectedMember?['id'] == member['id'];
+                final isExpanded = _selectedMember?.humanId == member.humanId;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(context.radiusCard),
                     onTap: () => setState(() {
-                      if (_selectedMember?['id'] == member['id']) {
+                      if (_selectedMember?.humanId == member.humanId) {
                         _selectedMember = null;
                       } else {
                         _selectedMember = member;
@@ -897,33 +902,68 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     );
   }
 
-  Widget _buildMemberNodeCard(Map<String, dynamic> member, bool isExpanded) {
+  Widget _buildHistorySection() {
+    final history = _profile?.history ?? const <HouseHistoryEntry>[];
+    return EarthSection(
+      title: 'HOUSE HISTORY',
+      showSurface: false,
+      infoBulletPoints: const [
+        'Read-only milestones are taken from the authoritative game event journal.',
+        'No milestone is inferred from counters or displayed when the underlying event is unavailable.',
+      ],
+      child: history.isEmpty
+          ? const EarthEmptyState(
+              message: 'No canonical House milestones are recorded yet.',
+              icon: Icons.history_outlined,
+            )
+          : Column(
+              children: history.map((event) {
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(_historyIcon(event.category),
+                      color: context.primaryColor, size: 18),
+                  title: Text(event.title,
+                      style: context.bodyStyle.copyWith(
+                          color: context.inkColor,
+                          fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                      'Day ${event.gameDay} · ${event.category} · ${event.eventType}',
+                      style: context.bodyStyle
+                          .copyWith(color: context.mutedColor, fontSize: 10)),
+                );
+              }).toList(),
+            ),
+    );
+  }
+
+  static IconData _historyIcon(String category) {
+    switch (category.toUpperCase()) {
+      case 'LIFECYCLE':
+        return Icons.autorenew_outlined;
+      case 'BUILDING':
+        return Icons.domain_outlined;
+      case 'AFFILIATION':
+        return Icons.link_outlined;
+      case 'INSTITUTION':
+        return Icons.groups_outlined;
+      case 'RESEARCH':
+        return Icons.biotech_outlined;
+      default:
+        return Icons.history_outlined;
+    }
+  }
+
+  Widget _buildMemberNodeCard(HouseLineageEntry member, bool isExpanded) {
     final tokens = UiStyleTokens.current;
     final themeColor = Theme.of(context).colorScheme.primary;
     final secondaryColor = tokens.color('colors.secondary', violetColor);
     final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
-    final gen = member['generation']?.toString() ?? '—';
-    final isIncumbent = member['is_incumbent'] == true;
-    final activeHumanName = (widget.state?.human['display_name'] ??
-            widget.state?.human['name'] ??
-            '')
-        .toString()
-        .trim();
-    final name = (isIncumbent && activeHumanName.isNotEmpty)
-        ? activeHumanName
-        : (member['name'] ?? 'House Heir').toString();
-    final birth = member['birth_game_day']?.toString() ?? '—';
-    final death = member['death_game_day'] != null
-        ? _parseInt(member['death_game_day'])
-        : null;
-    final wealth = _parseNum(member['lifetime_wealth'] ??
-        member['capital_generated'] ??
-        member['total_wealth']);
-    final legacy = _parseNum(member['legacy_score']);
-    final standing = member['standing'] ?? member['final_standing'];
-    final age = member['age_years'];
-
-    final epitaph = (member['epitaph'] ?? '').toString().trim();
+    final gen = member.generation.toString();
+    final isIncumbent = member.relationship == 'CURRENT';
+    final name = member.displayName;
+    final birth = member.birthGameDay.toString();
+    final death = member.deathGameDay;
 
     final cardBorderColor = isExpanded
         ? themeColor.withValues(alpha: .6)
@@ -1041,31 +1081,14 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                           ),
                       ],
                     ),
-                    if (epitaph.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        epitaph,
-                        style: TextStyle(
-                          color: context.mutedColor,
-                          fontSize: 11,
-                          fontStyle: FontStyle.italic,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: tokens.number('spacing.titleOffset', 12),
                       runSpacing: 4,
                       children: [
-                        _nodeMiniStat('Age', age?.toString() ?? '—'),
-                        _nodeMiniStat(
-                            'Standing',
-                            standing == null
-                                ? '—'
-                                : formatWholeNumber(_parseNum(standing))),
-                        _nodeMiniStat(
-                            'Legacy', '${formatWholeNumber(legacy)} LP'),
+                        _nodeMiniStat('Standing', member.standing),
+                        _nodeMiniStat('Final legacy', member.finalLegacy),
+                        _nodeMiniStat('Relation', member.relationship),
                       ],
                     ),
                   ],
@@ -1119,66 +1142,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     );
   }
 
-  Widget _buildMemberInspectorContent(Map<String, dynamic> member) {
-    final isIncumbent = member['is_incumbent'] == true;
-    final birth = _parseInt(member['birth_game_day'], fallback: 0);
+  Widget _buildMemberInspectorContent(HouseLineageEntry member) {
+    final birth = member.birthGameDay;
     final birthDayFormatted = birth > 0 ? _formatGameDay(birth) : 'UNAVAILABLE';
-
-    final wealth = _parseNum(member['lifetime_wealth'] ??
-        member['capital_generated'] ??
-        member['total_wealth']);
-    final legacy = _parseNum(member['legacy_score']);
-
-    final activeTerritoryName =
-        widget.state?.residency['territory_name']?.toString().toUpperCase() ??
-            (widget.state?.institutions['territory'] is Map
-                ? (widget.state!.institutions['territory'] as Map)['name']
-                    ?.toString()
-                    .toUpperCase()
-                : null);
-    final activeCorporationName =
-        (widget.state?.institutions['corporation'] is Map
-                ? (widget.state!.institutions['corporation'] as Map)['name']
-                    ?.toString()
-                    .toUpperCase()
-                : null) ??
-            (widget.state?.membership?['corporation_name']
-                ?.toString()
-                .toUpperCase()) ??
-            (widget.state?.membership?['name']?.toString().toUpperCase());
-
-    final rawTerritory = isIncumbent
-        ? (activeTerritoryName ??
-            widget.state?.membership?['territory_name'] ??
-            widget.state?.membership?['territory_id'])
-        : (member['territory_name'] ?? member['territory_id']);
-    final rawCorp = isIncumbent
-        ? (activeCorporationName ??
-            widget.state?.human['corporation_name'] ??
-            widget.state?.human['corporation_id'])
-        : (member['corporation_name'] ?? member['corporation']);
-
-    final territory = (rawTerritory != null &&
-            rawTerritory.toString().trim().isNotEmpty &&
-            rawTerritory.toString() != 'null')
-        ? rawTerritory
-            .toString()
-            .replaceAll('territory-', '')
-            .replaceAll('-', ' ')
-            .toUpperCase()
-        : 'INDEPENDENT';
-    final corporation = (rawCorp != null &&
-            rawCorp.toString().trim().isNotEmpty &&
-            rawCorp.toString() != 'null')
-        ? rawCorp
-            .toString()
-            .replaceAll('corp-', '')
-            .replaceAll('-', ' ')
-            .toUpperCase()
-        : 'INDEPENDENT';
-
-    final businesses = member['operations_completed'] ?? 0;
-    final proposals = member['proposals_authored'] ?? 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1192,75 +1158,33 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         ),
         _buildAttributeRow(
           context,
-          icon: Icons.location_city_outlined,
-          label: 'TERRITORY',
-          value: territory,
-          accentColor: context.secondaryColor,
-        ),
-        _buildAttributeRow(
-          context,
-          icon: Icons.corporate_fare_outlined,
-          label: 'CORPORATION',
-          value: corporation,
+          icon: Icons.flag_outlined,
+          label: 'STATUS',
+          value: member.status,
           accentColor: context.primaryColor,
         ),
-        const SizedBox(height: 14),
-        Text(
-          'HISTORICAL MILESTONES & ACHIEVEMENTS',
-          style: TextStyle(
-            color: context.mutedColor,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.4,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          decoration: BoxDecoration(
-            color: context.surfaceColor,
-            borderRadius: BorderRadius.circular(context.radiusCard),
-            border: Border.all(color: context.subtleBorderColor),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              _milestoneTileRow(
-                'Total Capital & Wealth Generated',
-                member['lifetime_wealth'] == null &&
-                        member['capital_generated'] == null &&
-                        member['total_wealth'] == null
-                    ? 'UNAVAILABLE'
-                    : '${formatWholeNumber(wealth)} CR',
-                Icons.account_balance,
-                isLast: false,
-              ),
-              _milestoneTileRow(
-                'Corporations & Enterprises Founded',
-                member['operations_completed'] == null
-                    ? 'UNAVAILABLE'
-                    : '$businesses Enterprises',
-                Icons.business,
-                isLast: false,
-              ),
-              _milestoneTileRow(
-                'World Senate Proposals Passed',
-                member['proposals_authored'] == null
-                    ? 'UNAVAILABLE'
-                    : '$proposals Enacted',
-                Icons.gavel,
-                isLast: false,
-              ),
-              _milestoneTileRow(
-                'Generational Legacy Contribution',
-                member['legacy_score'] == null
-                    ? 'UNAVAILABLE'
-                    : '${formatWholeNumber(legacy)} LP',
-                Icons.auto_awesome,
-                isLast: true,
-              ),
-            ],
-          ),
-        ),
+        _buildAttributeRow(context,
+            icon: Icons.how_to_reg_outlined,
+            label: 'STANDING',
+            value: member.standing,
+            accentColor: context.secondaryColor),
+        _buildAttributeRow(context,
+            icon: Icons.auto_awesome_outlined,
+            label: 'FINAL LEGACY',
+            value: member.finalLegacy,
+            accentColor: context.secondaryColor),
+        if (member.relatedHumanId != null)
+          _buildAttributeRow(context,
+              icon: Icons.swap_horiz_outlined,
+              label: member.relationship,
+              value: member.relatedHumanId!,
+              accentColor: context.successColor),
+        if (member.effectiveGameDay != null)
+          _buildAttributeRow(context,
+              icon: Icons.event_outlined,
+              label: 'EFFECTIVE DAY',
+              value: 'Day ${member.effectiveGameDay}',
+              accentColor: context.successColor),
       ],
     );
   }
@@ -1298,361 +1222,17 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     );
   }
 
-  Widget _milestoneTileRow(String label, String value, IconData icon,
-      {required bool isLast}) {
-    final tokens = UiStyleTokens.current;
-    final themeColor = Theme.of(context).colorScheme.primary;
-    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
-    return Container(
-      padding: EdgeInsets.symmetric(
-          horizontal: tokens.number('pageTopics.cardPadding', 10),
-          vertical: tokens.number('spacing.inline', 8)),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: isLast
-              ? BorderSide.none
-              : const BorderSide(color: Colors.white10),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon,
-              size: tokens.number('controls.iconSize', 16) - 2,
-              color: themeColor),
-          SizedBox(width: tokens.number('spacing.inline', 8)),
-          Expanded(
-            child: Text(label,
-                style: TextStyle(
-                    color: mutedColor,
-                    fontSize: tokens.number('typography.widgetFooter.size', 10),
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: tokens.number(
-                        'typography.widgetFooter.letterSpacing', 1.0))),
-          ),
-          Text(value,
-              style: TextStyle(
-                  color: inkColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: tokens.number('typography.widgetValue.size', 12),
-                  letterSpacing: tokens.number(
-                      'typography.widgetValue.letterSpacing', 1.4))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPerksSection() {
-    final themeColor = Theme.of(context).colorScheme.primary;
-    final userPoints = _parseInt(_house['legacy_points'], fallback: 0);
-
-    return EarthSection(
-      title: 'HEREDITARY PERKS',
-      showSurface: false,
-      infoBulletPoints: const [
-        'Hereditary traditions provide permanent passive advantages across generations.',
-        'Unlock new traits using accumulated House Legacy Points (LP).',
-        'Traits remain permanently bound to your House lineage.',
-      ],
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.surfaceColor.withValues(alpha: .75),
-          borderRadius: BorderRadius.circular(context.radiusCard),
-          border: Border.all(color: context.subtleBorderColor),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: _catalogPerks.indexed.map((indexed) {
-            final perk = indexed.$2;
-            final isLast = indexed.$1 == _catalogPerks.length - 1;
-            final perkKey = perk['key']?.toString() ?? '';
-            final name = perk['name']?.toString() ?? 'Trait';
-            final category = perk['category']?.toString() ?? 'Operations';
-            final cost = _parseInt(perk['cost'], fallback: 0);
-            final desc = perk['description']?.toString() ?? '';
-
-            final isUnlocked = _perks.any((p) => p['perk_key'] == perkKey);
-            final canAfford = userPoints >= cost;
-
-            return Container(
-              key: Key('perk-card-$perkKey'),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: isLast
-                      ? BorderSide.none
-                      : BorderSide(color: context.subtleBorderColor),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isUnlocked
-                          ? themeColor.withValues(alpha: .2)
-                          : context.surfaceColor,
-                      border: Border.all(
-                        color:
-                            isUnlocked ? themeColor : context.subtleBorderColor,
-                      ),
-                    ),
-                    child: Icon(
-                      isUnlocked ? Icons.check_circle : Icons.lock_outline,
-                      color: isUnlocked ? themeColor : context.mutedColor,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            Text(
-                              name,
-                              style: context.bodyStyle.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: themeColor.withValues(alpha: .15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                category.toUpperCase(),
-                                style: TextStyle(
-                                  color: themeColor,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          desc,
-                          style: context.bodyStyle.copyWith(
-                            color: context.mutedColor,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  if (isUnlocked)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: context.successColor.withValues(alpha: .15),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                            color: context.successColor.withValues(alpha: .35)),
-                      ),
-                      child: Text(
-                        'UNLOCKED',
-                        style: TextStyle(
-                          color: context.successColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 10,
-                        ),
-                      ),
-                    )
-                  else
-                    EarthButton(
-                      buttonKey: Key('btn-unlock-perk-$perkKey'),
-                      label: _isActionInProgress
-                          ? 'UNLOCKING...'
-                          : (cost > 0
-                              ? 'UNLOCK ($cost LP)'
-                              : 'COST UNAVAILABLE'),
-                      variant: EarthButtonVariant.ghost,
-                      isLoading: _isActionInProgress,
-                      onPressed:
-                          (cost <= 0 || !canAfford || _isActionInProgress)
-                              ? null
-                              : () => _unlockPerk(perkKey, name),
-                    ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeirloomsSection() {
-    final tokens = UiStyleTokens.current;
-    final themeColor = Theme.of(context).colorScheme.primary;
-
-    return EarthSection(
-      title: 'SHARED HEIRLOOMS & RELICS',
-      showSurface: false,
-      infoBulletPoints: const [
-        'Ancestral relics passed across generations providing active buffs to the incumbent.',
-        'Equip relics to the Head of House to gain their stat bonuses.',
-        'Preserve heirlooms across succession cycles to retain dynastic power.',
-      ],
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.surfaceColor.withValues(alpha: .75),
-          borderRadius: BorderRadius.circular(context.radiusCard),
-          border: Border.all(color: context.subtleBorderColor),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: _heirlooms.indexed.map((indexed) {
-            final h = indexed.$2;
-            final isLast = indexed.$1 == _heirlooms.length - 1;
-            final id = h['id']?.toString() ?? '';
-            final name = h['name']?.toString() ?? 'Heirloom';
-            final quality = h['quality_tier']?.toString() ??
-                h['quality']?.toString() ??
-                'Common';
-            final statBuff = h['stat_buff']?.toString() ?? 'None';
-            final inscription = h['inscription']?.toString() ?? '';
-            final isEquipped = h['is_equipped'] == true ||
-                h['isEquipped'] == true ||
-                (h['equipped_by_human_id'] != null &&
-                    h['equipped_by_human_id'].toString().isNotEmpty &&
-                    h['equipped_by_human_id'].toString() != 'null') ||
-                (h['equippedBy'] != null &&
-                    h['equippedBy'].toString().isNotEmpty &&
-                    h['equippedBy'].toString() != 'null');
-
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: isLast
-                      ? BorderSide.none
-                      : BorderSide(color: context.subtleBorderColor),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.amber.withValues(alpha: .15),
-                      border:
-                          Border.all(color: Colors.amber.withValues(alpha: .5)),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.shield_outlined,
-                        color: Colors.amber,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: [
-                            Text(
-                              name,
-                              style: context.bodyStyle.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.withValues(alpha: .15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                quality.toUpperCase(),
-                                style: const TextStyle(
-                                  color: Colors.amber,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            if (isEquipped)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: context.primaryColor
-                                      .withValues(alpha: .15),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                      color: context.primaryColor
-                                          .withValues(alpha: .4)),
-                                ),
-                                child: Text(
-                                  'EQUIPPED TO HEAD',
-                                  style: TextStyle(
-                                    color: context.primaryColor,
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Buff: $statBuff · Inscription: $inscription',
-                          style: context.bodyStyle.copyWith(
-                            color: context.mutedColor,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  EarthButton(
-                    buttonKey: Key('btn-equip-heirloom-$id'),
-                    label: isEquipped ? 'UNEQUIP' : 'EQUIP TO HEAD',
-                    variant: isEquipped
-                        ? EarthButtonVariant.secondary
-                        : EarthButtonVariant.primary,
-                    onPressed: _isActionInProgress
-                        ? null
-                        : () => _equipHeirloom(id, name),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
   static double _parseNum(dynamic val, {double fallback = 0.0}) {
     if (val is num) return val.toDouble();
     if (val is String) return double.tryParse(val) ?? fallback;
     return fallback;
+  }
+
+  static String _formatRateBps(String value) {
+    final bps = BigInt.tryParse(value) ?? BigInt.zero;
+    final whole = bps ~/ BigInt.from(100);
+    final fraction = (bps % BigInt.from(100)).toString().padLeft(2, '0');
+    return '$whole.$fraction%';
   }
 
   static String _formatGameDay(int day) {

@@ -1,382 +1,236 @@
 import type { PostgresRepository } from './repository.ts';
+import type { HouseProfile } from './house-profile.ts';
 
 async function transactional<T>(repository: PostgresRepository, work: () => Promise<T>): Promise<T> {
   return repository.transaction(async () => work());
 }
 
-export interface HouseRecord {
-  id: string;
-  email: string;
-  house_name: string;
-  motto: string;
-  founder_human_id: string | null;
-  legacy_points: number;
-  total_wealth_generated: string | number;
-  created_at: string;
-}
-
-export interface LineageRecord {
-  id: string;
-  house_id: string;
-  human_id: string;
-  predecessor_human_id: string | null;
-  successor_human_id: string | null;
-  generation: number;
-  name: string;
-  title: string;
-  birth_game_day: number;
-  death_game_day: number | null;
-  is_incumbent: boolean;
-  cause_of_death: string | null;
-  epitaph: string | null;
-  lifetime_wealth: string | number;
-  operations_completed: number;
-  proposals_authored: number;
-  legacy_score: number;
-  created_at: string;
-}
-
-export interface HousePerk {
-  id: string;
-  house_id: string;
-  perk_key: string;
-  perk_name: string;
-  perk_category: string;
-  tier: number;
-  unlocked_game_day: number;
-}
-
-export interface HouseHeirloom {
-  id: string;
-  house_id: string;
-  name: string;
-  heirloom_type: string;
-  quality_tier: string;
-  stat_buff: string;
-  equipped_by_human_id: string | null;
-  inscription: string;
-  created_at: string;
-}
-
-export const HOUSE_PERK_CATALOG = [
-  {
-    key: 'industrialist_lineage',
-    name: 'Industrialist Lineage',
-    category: 'Operations',
-    cost: 100,
-    description: '+10% Building Construction Speed & -15% Business Startup Fees',
-  },
-  {
-    key: 'diplomatic_house',
-    name: 'Diplomatic House',
-    category: 'Governance',
-    cost: 100,
-    description: '+15% Senate & City Council Voting Influence',
-  },
-  {
-    key: 'financial_magnate',
-    name: 'Financial Magnate',
-    category: 'Finance',
-    cost: 120,
-    description: '+8% Corporate Dividend Yields & -20% Loan Margins',
-  },
-  {
-    key: 'technological_pioneers',
-    name: 'Technological Pioneers',
-    category: 'Research',
-    cost: 150,
-    description: '+15% Compute Research Efficiency & +25% Patent Royalties',
-  },
-  {
-    key: 'planetary_agronomists',
-    name: 'Planetary Agronomists',
-    category: 'Resources',
-    cost: 120,
-    description: '+20% Food Production Efficiency',
-  },
-];
-
-export async function getHouseOverview(
+export async function getHouseProfile(
   client: PostgresRepository,
   houseId: string,
   humanId: string,
-  humanName: string
 ): Promise<{
   ok: boolean;
-  house: HouseRecord;
-  lineage: LineageRecord[];
-  perks: HousePerk[];
-  heirlooms: HouseHeirloom[];
-  catalogPerks: typeof HOUSE_PERK_CATALOG;
+  houseProfile: HouseProfile;
 }> {
   return transactional(client, async () => {
-    const founder = await client.query(
-      "SELECT id FROM humans WHERE id = $1 AND status = 'ACTIVE'",
-      [humanId],
-    );
-    if (!founder.rows[0]) throw new Error('Human account not found or inactive');
+    const [houseRes, humanRes, affiliationRes, successionRes, settlementRes, walletRes, rulesRes, lineageHumansRes, lineageEventsRes, historyRes] = await Promise.all([
+      client.query<{
+        id: string;
+        current_human_id: string | null;
+        house_name: string;
+        motto: string | null;
+        status: string;
+        generation: number;
+        dynasty_legacy: string;
+        created_at: string;
+      }>(`SELECT id, current_human_id, house_name, motto, status, generation, dynasty_legacy::TEXT, created_at
+            FROM houses WHERE id = $1 LIMIT 1`, [houseId]),
+      client.query<{
+        id: string;
+        display_name: string;
+        birth_game_day: number;
+        age_years: number;
+        status: string;
+        standing: string;
+        final_legacy: string;
+      }>(`SELECT id, display_name, birth_game_day, age_years, status, standing::TEXT, final_legacy::TEXT
+            FROM humans WHERE id = $1 AND house_id = $2`, [humanId, houseId]),
+      client.query<{ corporation_id: string; corporation_name: string; joined_game_day: number; status: string }>(
+        `SELECT ha.corporation_id, i.name AS corporation_name, ha.joined_game_day, ha.status
+           FROM house_affiliations ha
+           JOIN institutions i ON i.id = ha.corporation_id
+          WHERE ha.house_id = $1 AND ha.status = 'ACTIVE'
+          ORDER BY ha.joined_game_day DESC, ha.id DESC LIMIT 1`, [houseId]),
+      client.query<{ successor_name: string; registered_game_day: number; status: string }>(
+        `SELECT successor_name, registered_game_day, status
+           FROM house_succession_plans
+          WHERE house_id = $1 AND status = 'ACTIVE' LIMIT 1`, [houseId]),
+      client.query<{
+        corporation_id: string | null;
+        residential_capacity_units: string;
+        productive_capacity_units: string;
+        total_capacity_units: string;
+        active_building_count: number;
+        profile_version: string;
+        source_game_day: number;
+        dirty: boolean;
+      }>(`SELECT corporation_id, residential_capacity_units::TEXT, productive_capacity_units::TEXT,
+                total_capacity_units::TEXT, active_building_count, profile_version, source_game_day, dirty
+           FROM v5_house_settlement_profiles WHERE house_id = $1`, [houseId]),
+      client.query<{ wallet_units: string }>(
+        `SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS wallet_units
+           FROM economic_accounts a
+           JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+          WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = 1
+            AND a.account_type = 'WALLET' AND a.status = 'ACTIVE'`, [houseId]),
+      client.query<{ rule_code: string; value: string; rule_id: string }>(
+        `SELECT DISTINCT ON (rule_code)
+                rule_code, value_json->>'value' AS value, id AS rule_id
+           FROM constitutional_rule_versions_v5
+          WHERE authority_type = 'EARTH' AND authority_id = 'EARTH'
+            AND rule_code = ANY($1::TEXT[])
+            AND status IN ('ACTIVE', 'RETIRED')
+            AND effective_from_game_day <= (
+              SELECT COALESCE(MAX(game_day), 1) FROM world_state
+            )
+            AND (effective_to_game_day IS NULL OR effective_to_game_day >= (
+              SELECT COALESCE(MAX(game_day), 1) FROM world_state
+            ))
+          ORDER BY rule_code, effective_from_game_day DESC, version DESC`,
+        [['EARTH.SUCCESSION.COST_UNITS', 'EARTH.SUCCESSION.COST_BPS', 'EARTH.SUCCESSION.TRANSITION_DAYS']],
+      ),
+      client.query<{
+        id: string; display_name: string; birth_game_day: number; death_game_day: number | null;
+        status: string; standing: string; final_legacy: string;
+      }>(`SELECT id, display_name, birth_game_day, death_game_day, status,
+                  standing::TEXT, final_legacy::TEXT
+             FROM humans WHERE house_id = $1
+            ORDER BY birth_game_day ASC, id ASC`, [houseId]),
+      client.query<{
+        id: string; predecessor_human_id: string; successor_human_id: string | null;
+        death_game_day: number; effective_game_day: number; generation: number; status: string;
+      }>(`SELECT id::TEXT, predecessor_human_id, successor_human_id, death_game_day,
+                  effective_game_day, generation, status
+             FROM succession_events WHERE house_id = $1
+            ORDER BY generation ASC, id ASC`, [houseId]),
+      client.query<{
+        id: string; game_day: number; game_minute: number | null; category: string;
+        event_type: string; title: string; subject_type: string | null; subject_id: string | null;
+      }>(`SELECT id, game_day, game_minute, category, event_type, title, subject_type, subject_id
+             FROM game_events
+            WHERE (actor_house_id = $1
+               OR (subject_type = 'HOUSE' AND subject_id = $1)
+               OR actor_human_id IN (SELECT id FROM humans WHERE house_id = $1))
+              AND category IN ('LIFECYCLE', 'BUILDING', 'AFFILIATION', 'INSTITUTION', 'RESEARCH')
+            ORDER BY game_day DESC, game_minute DESC NULLS LAST, created_at DESC
+            LIMIT 25`, [houseId]),
+    ]);
 
-    // Ensure house exists or create initial one
-    let houseRes = await client.query(
-      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
-      [houseId]
-    );
-
-    // Registration creates the House before this read. A missing House is a
-    // data-integrity error; never recreate it through the removed V1 schema.
-    if (houseRes.rows.length === 0) throw new Error('House not found for authenticated account');
-
-    let house: HouseRecord;
-    if (houseRes.rows.length === 0) {
-      const houseId = `HSE-${humanId}`;
-      const surname = humanName.split(' ').pop() || 'Pioneer';
-      const houseName = `House of ${surname}`;
-      const insertRes = await client.query(
-        `INSERT INTO houses (id, email, house_name, motto, founder_human_id, legacy_points, total_wealth_generated)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
-        [
-          houseId,
-          email,
-          houseName,
-          'From the Red Dust We Build Eternity',
-          humanId,
-          0,
-          0.0,
-        ]
-      );
-      house = insertRes.rows[0];
-
-      // Seed initial founder & incumbent
-      await client.query(
-        `INSERT INTO house_lineage_records (
-           id, house_id, human_id, predecessor_human_id, generation, name, title,
-           birth_game_day, death_game_day, is_incumbent, cause_of_death, epitaph,
-           lifetime_wealth, operations_completed, proposals_authored, legacy_score
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          `LIN-${houseId}-1`,
-          houseId,
-          humanId,
-          null,
-          1,
-          humanName,
-          'Founding House Head',
-          1,
-          null,
-          true,
-          null,
-          'Pioneering the dawn of the United Corporations era.',
-          0.0,
-          0,
-          0,
-          0,
-        ]
-      );
-
-      // Seed starter heirloom
-      await client.query(
-        `INSERT INTO house_heirlooms (
-           id, house_id, name, heirloom_type, quality_tier, stat_buff, equipped_by_human_id, inscription
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          `HLM-${houseId}-1`,
-          houseId,
-          `${houseName} Founding Seal`,
-          'founder_seal',
-          'Legendary',
-          '+10% Machine Build Speed & -15% Business Startup Fees',
-          humanId,
-          'Awarded to the founder upon pioneering planetary settlement.',
-        ]
-      );
-    } else {
-      house = houseRes.rows[0];
-    }
-
-    return {
-      ok: true,
-      house,
-      lineage: [],
-      perks: [],
-      heirlooms: [],
-      catalogPerks: HOUSE_PERK_CATALOG,
-    };
-  });
-}
-
-export async function unlockHousePerk(
-  client: PostgresRepository,
-  houseId: string,
-  perkKey: string,
-  gameDay: number = 1,
-  correlationId?: string
-): Promise<{ ok: boolean; perkKey: string; remainingPoints: number; perkName: string }> {
-  const catalogItem = HOUSE_PERK_CATALOG.find((p) => p.key === perkKey);
-  if (!catalogItem) {
-    throw new Error(`Invalid or unknown house perk key '${perkKey}'.`);
-  }
-
-  return transactional(client, async () => {
-    const houseRes = await client.query(
-      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
-      [houseId]
-    );
-    if (houseRes.rows.length === 0) {
-      throw new Error('House not found for this account.');
-    }
     const house = houseRes.rows[0];
+    const human = humanRes.rows[0];
+    if (!house) throw new Error('House not found for authenticated account');
+    if (!human || human.status !== 'ACTIVE') throw new Error('Human account not found or inactive');
 
-    if (house.legacy_points < catalogItem.cost) {
-      throw new Error(
-        `Insufficient house legacy points. Required: ${catalogItem.cost} LP, available: ${house.legacy_points} LP.`
-      );
+    const affiliation = affiliationRes.rows[0];
+    const succession = successionRes.rows[0];
+    const settlement = settlementRes.rows[0];
+    const ruleValues = new Map(rulesRes.rows.map((row) => [row.rule_code, row.value]));
+    const fixedCostUnits = ruleValues.get('EARTH.SUCCESSION.COST_UNITS') ?? '0';
+    const percentageCostBps = ruleValues.get('EARTH.SUCCESSION.COST_BPS') ?? '0';
+    const transitionDays = Math.max(0, Math.min(7, Math.trunc(Number(ruleValues.get('EARTH.SUCCESSION.TRANSITION_DAYS') ?? 1))));
+    const walletUnits = walletRes.rows[0]?.wallet_units ?? '0';
+    const wallet = BigInt(walletUnits);
+    const fixed = BigInt(fixedCostUnits);
+    const percentage = (wallet * BigInt(percentageCostBps)) / 10000n;
+    const estimated = fixed > 0n ? fixed : percentage;
+    const rulesVersion = rulesRes.rows.map((row) => row.rule_id).sort().join('|') || null;
+    const eventsByPredecessor = new Map<string, typeof lineageEventsRes.rows[number]>();
+    const eventsBySuccessor = new Map<string, typeof lineageEventsRes.rows[number]>();
+    for (const event of lineageEventsRes.rows) {
+      eventsByPredecessor.set(event.predecessor_human_id, event);
+      if (event.successor_human_id) eventsBySuccessor.set(event.successor_human_id, event);
     }
-
-    const existingPerk = await client.query(
-      `SELECT * FROM house_perks WHERE house_id = $1 AND perk_key = $2`,
-      [house.id, perkKey]
-    );
-    if (existingPerk.rows.length > 0) {
-      throw new Error(`House perk '${catalogItem.name}' is already unlocked.`);
-    }
-
-    const perkId = `PRK-${house.id}-${perkKey}`;
-    await client.query(
-      `INSERT INTO house_perks (id, house_id, perk_key, perk_name, perk_category, tier, unlocked_game_day)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        perkId,
-        house.id,
-        perkKey,
-        catalogItem.name,
-        catalogItem.category.toLowerCase(),
-        1,
-        gameDay,
-      ]
-    );
-
-    const updateRes = await client.query(
-      `UPDATE houses
-       SET legacy_points = legacy_points - $1
-       WHERE id = $2
-       RETURNING legacy_points`,
-      [catalogItem.cost, house.id]
-    );
-
-    const remaining = updateRes.rows[0].legacy_points;
+    const lineage = lineageHumansRes.rows.map((entry) => {
+      const predecessorEvent = eventsBySuccessor.get(entry.id);
+      const successorEvent = eventsByPredecessor.get(entry.id);
+      const isCurrent = entry.id === house.current_human_id;
+      return {
+        humanId: entry.id,
+        displayName: entry.display_name,
+        generation: predecessorEvent ? Number(predecessorEvent.generation) : successorEvent ? Math.max(1, Number(successorEvent.generation) - 1) : (isCurrent ? Number(house.generation) : 1),
+        birthGameDay: Number(entry.birth_game_day),
+        deathGameDay: entry.death_game_day == null ? null : Number(entry.death_game_day),
+        status: entry.status,
+        standing: String(entry.standing),
+        finalLegacy: String(entry.final_legacy),
+        relationship: isCurrent ? 'CURRENT' : predecessorEvent ? 'SUCCESSOR' : successorEvent ? 'PREDECESSOR' : 'UNLINKED',
+        relatedHumanId: predecessorEvent?.predecessor_human_id ?? successorEvent?.successor_human_id ?? null,
+        successionEventId: predecessorEvent?.id ?? successorEvent?.id ?? null,
+        successionStatus: predecessorEvent?.status ?? successorEvent?.status ?? null,
+        effectiveGameDay: predecessorEvent?.effective_game_day == null ? (successorEvent?.effective_game_day == null ? null : Number(successorEvent.effective_game_day)) : Number(predecessorEvent.effective_game_day),
+      };
+    });
 
     return {
       ok: true,
-      perkKey,
-      perkName: catalogItem.name,
-      remainingPoints: remaining,
+      houseProfile: {
+        profileVersion: 'V5-HOUSE-PROFILE-1',
+        identity: {
+          id: house.id,
+          name: house.house_name,
+          motto: house.motto,
+          status: house.status,
+          generation: Number(house.generation),
+          createdAt: house.created_at,
+        },
+        currentHuman: {
+          id: human.id,
+          displayName: human.display_name,
+          birthGameDay: Number(human.birth_game_day),
+          ageYears: Number(human.age_years),
+          status: human.status,
+          standing: String(human.standing),
+          finalLegacy: String(human.final_legacy),
+        },
+        affiliation: affiliation ? {
+          corporationId: affiliation.corporation_id,
+          corporationName: affiliation.corporation_name,
+          joinedGameDay: Number(affiliation.joined_game_day),
+          status: affiliation.status,
+        } : null,
+        succession: succession ? {
+          successorName: succession.successor_name,
+          registeredGameDay: Number(succession.registered_game_day),
+          status: succession.status,
+        } : null,
+        successionPolicy: {
+          fixedCostUnits,
+          percentageCostBps,
+          transitionDays,
+          rulesVersion,
+        },
+        successionQuote: {
+          houseWalletUnits: walletUnits,
+          estimatedCostUnits: estimated.toString(),
+          calculation: fixed > 0n ? 'FIXED' : percentage > 0n ? 'PERCENTAGE' : 'NONE',
+          affordable: estimated <= wallet,
+        },
+        lineage,
+        history: historyRes.rows.map((event) => ({
+          id: event.id,
+          gameDay: Number(event.game_day),
+          gameMinute: event.game_minute == null ? null : Number(event.game_minute),
+          category: event.category,
+          eventType: event.event_type,
+          title: event.title,
+          subjectType: event.subject_type,
+          subjectId: event.subject_id,
+        })),
+        settlementProfile: settlement ? {
+          corporationId: settlement.corporation_id,
+          residentialCapacityUnits: settlement.residential_capacity_units,
+          productiveCapacityUnits: settlement.productive_capacity_units,
+          totalCapacityUnits: settlement.total_capacity_units,
+          activeBuildingCount: Number(settlement.active_building_count),
+          profileVersion: settlement.profile_version,
+          sourceGameDay: Number(settlement.source_game_day),
+          dirty: settlement.dirty,
+        } : null,
+        economics: {
+          walletUnits,
+          dynastyLegacyUnits: String(house.dynasty_legacy),
+        },
+        generatedFrom: 'postgres-canonical-facts-v5',
+      },
     };
   });
 }
 
-export async function equipHouseHeirloom(
+export async function updateHouseProfile(
   client: PostgresRepository,
   houseId: string,
-  heirloomId: string,
-  humanId: string,
-  correlationId?: string
-): Promise<{ ok: boolean; heirloomId: string; isEquipped: boolean; equippedBy: string | null }> {
-  return transactional(client, async () => {
-    const houseRes = await client.query(
-      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
-      [houseId]
-    );
-    if (houseRes.rows.length === 0) {
-      throw new Error('House not found for this account.');
-    }
-    const house = houseRes.rows[0];
-
-    const hRes = await client.query(
-      `SELECT * FROM house_heirlooms WHERE id = $1 AND house_id = $2 LIMIT 1`,
-      [heirloomId, house.id]
-    );
-    if (hRes.rows.length === 0) {
-      throw new Error('Heirloom not found or does not belong to your house.');
-    }
-    const heirloom = hRes.rows[0];
-
-    const currentlyEquipped = heirloom.equipped_by_human_id === humanId;
-    const newEquipped = currentlyEquipped ? null : humanId;
-
-    await client.query(
-      `UPDATE house_heirlooms SET equipped_by_human_id = $1 WHERE id = $2`,
-      [newEquipped, heirloomId]
-    );
-
-    return {
-      ok: true,
-      heirloomId,
-      isEquipped: newEquipped !== null,
-      equippedBy: newEquipped,
-    };
-  });
-}
-
-export async function forgeHouseHeirloom(
-  client: PostgresRepository,
-  houseId: string,
-  name: string,
-  heirloomType: string,
-  inscription: string,
-  statBuff: string,
-  correlationId?: string
-): Promise<{ ok: boolean; heirloom: HouseHeirloom }> {
-  return transactional(client, async () => {
-    const houseRes = await client.query(
-      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
-      [houseId]
-    );
-    if (houseRes.rows.length === 0) {
-      throw new Error('House not found for this account.');
-    }
-    const house = houseRes.rows[0];
-
-    const allowedTypes = ['founder_seal', 'senate_gavel', 'quantum_cipher', 'pioneer_chronometer', 'house_standard'];
-    if (!allowedTypes.includes(heirloomType)) {
-      throw new Error(`Invalid heirloom type. Allowed: ${allowedTypes.join(', ')}`);
-    }
-
-    const heirloomId = correlationId
-      ? `HLM-${house.id}-${correlationId}`
-      : `HLM-${house.id}-${crypto.randomUUID()}`;
-    const insertRes = await client.query(
-      `INSERT INTO house_heirlooms (id, house_id, name, heirloom_type, quality_tier, stat_buff, equipped_by_human_id, inscription)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (id) DO UPDATE SET id = house_heirlooms.id
-       RETURNING *`,
-      [
-        heirloomId,
-        house.id,
-        name.trim(),
-        heirloomType,
-        'Legendary',
-        ({ founder_seal: '+10% Machine Build Speed', senate_gavel: '+10% Governance Influence', quantum_cipher: '+10% Research Security', pioneer_chronometer: '+5% Succession Stability', house_standard: '+5% House Prestige' } as Record<string, string>)[heirloomType],
-        null,
-        inscription.trim(),
-      ]
-    );
-
-    return {
-      ok: true,
-      heirloom: insertRes.rows[0],
-    };
-  });
-}
-
-export async function updateHouseMotto(
-  client: PostgresRepository,
-  houseId: string,
-  motto: string,
-  houseName?: string,
-  correlationId?: string
+  input: { motto?: string; houseName?: string },
 ): Promise<{ ok: boolean; motto: string; houseName: string }> {
   return transactional(client, async () => {
     const houseRes = await client.query(
@@ -388,8 +242,8 @@ export async function updateHouseMotto(
     }
     const house = houseRes.rows[0];
 
-    const newMotto = motto.trim() || house.motto;
-    const newName = houseName && houseName.trim() ? houseName.trim() : house.house_name;
+    const newMotto = input.motto?.trim() || house.motto;
+    const newName = input.houseName?.trim() ? input.houseName.trim() : house.house_name;
 
     await client.query(
       `UPDATE houses SET motto = $1, house_name = $2 WHERE id = $3`,

@@ -13,15 +13,58 @@ void main() {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
-    final client = MockClient((_) async => http.Response(NanoMarkupHelper.encode({
-      'house': {'id': 'HOUSE-01', 'house_name': 'House of Vance', 'motto': 'From memory we build', 'legacy_points': 350, 'total_wealth_generated': 450000},
-      'lineage': [{'id': 'LIN-01', 'name': 'Amara Vance', 'generation': 1, 'is_incumbent': true, 'legacy_score': 840}],
-      'perks': [{'perk_key': 'industrialist_lineage', 'perk_name': 'Industrialist Lineage', 'perk_category': 'Operations', 'tier': 1}],
-      'heirlooms': [{'id': 'HLM-01', 'name': 'Founding Signet', 'quality_tier': 'Legendary', 'stat_buff': '+10% Legacy', 'equipped_by_human_id': null}],
-      'catalogPerks': [],
-    }), 200, headers: {'content-type': 'application/nanomarkup'}));
-    final api = EarthApi(transport: EarthApiTransport(baseUrl: 'http://earth.test', client: client));
-    await tester.pumpWidget(MaterialApp(theme: createEarthTheme(), home: Scaffold(body: HouseTreeDialog(api: api))));
+    final client = MockClient((_) async => http.Response(
+        NanoMarkupHelper.encode({
+          'houseProfile': {
+            'profileVersion': 'V5-HOUSE-PROFILE-1',
+            'identity': {
+              'id': 'HOUSE-01',
+              'name': 'House of Vance',
+              'motto': 'From memory we build',
+              'status': 'ACTIVE',
+              'generation': 1,
+              'founderHumanId': 'H-0044',
+              'createdAt': '2026-01-01T00:00:00Z',
+            },
+            'currentHuman': {
+              'id': 'H-0044',
+              'displayName': 'Amara Vance',
+              'birthGameDay': 1,
+              'ageYears': 30,
+              'status': 'ACTIVE',
+              'standing': '0',
+              'finalLegacy': '0',
+            },
+            'affiliation': {
+              'corporationId': 'CORP-NOVA',
+              'corporationName': 'Nova',
+              'joinedGameDay': 140,
+              'status': 'ACTIVE',
+            },
+            'settlementProfile': {
+              'corporationId': 'CORP-NOVA',
+              'residentialCapacityUnits': '82',
+              'productiveCapacityUnits': '74',
+              'totalCapacityUnits': '156',
+              'activeBuildingCount': 4,
+              'profileVersion': 'V5-HOUSE-SETTLEMENT-1',
+              'sourceGameDay': 184,
+              'dirty': false,
+            },
+            'economics': {
+              'walletUnits': '0',
+              'dynastyLegacyUnits': '350',
+            },
+          },
+        }),
+        200,
+        headers: {'content-type': 'application/nanomarkup'}));
+    final api = EarthApi(
+        transport:
+            EarthApiTransport(baseUrl: 'http://earth.test', client: client));
+    await tester.pumpWidget(MaterialApp(
+        theme: createEarthTheme(),
+        home: Scaffold(body: HouseTreeDialog(api: api))));
     await tester.pumpAndSettle();
     expect(find.byType(HouseTreeDialog), findsOneWidget);
   });
