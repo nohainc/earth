@@ -39,7 +39,7 @@ test('budget accounting separates internal allocation from actual spending', () 
   const spending = read('cloudflare/src/institution-spending.ts');
   assert.match(fiscal, /CORPORATION_INTERNAL/);
   assert.match(spending, /spent_units = spent_units \+ \$1/);
-  assert.match(spending, /earth_post_transaction/);
+  assert.match(spending, /postEconomicTransaction/);
 });
 
 test('idempotency and integer CREDIT units are present at the canonical boundary', () => {

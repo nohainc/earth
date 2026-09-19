@@ -129,31 +129,13 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
   }
 
   String? get _walletAccountId {
-    final accounts = widget.personalFinanceData['accounts'];
-    if (accounts is! List) return null;
-    for (final raw in accounts) {
-      if (raw is! Map) continue;
-      final code = '${raw['asset_code'] ?? raw['assetCode']}'.toUpperCase();
-      final type = '${raw['account_type'] ?? raw['accountType']}'.toUpperCase();
-      if (code == 'CREDIT' && type == 'WALLET') {
-        return raw['account_id']?.toString();
-      }
-    }
-    return null;
+    final wallet = widget.personalFinanceData['wallet'];
+    return wallet is Map ? wallet['accountId']?.toString() : null;
   }
 
   String? get _walletBalance {
-    final accounts = widget.personalFinanceData['accounts'];
-    if (accounts is! List) return null;
-    for (final raw in accounts) {
-      if (raw is! Map) continue;
-      final code = '${raw['asset_code'] ?? raw['assetCode']}'.toUpperCase();
-      final type = '${raw['account_type'] ?? raw['accountType']}'.toUpperCase();
-      if (code == 'CREDIT' && type == 'WALLET') {
-        return (raw['balance_units'] ?? raw['balanceUnits'])?.toString();
-      }
-    }
-    return null;
+    final wallet = widget.personalFinanceData['wallet'];
+    return wallet is Map ? wallet['balanceUnits']?.toString() : null;
   }
 
   @override

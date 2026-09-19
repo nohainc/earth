@@ -453,7 +453,7 @@ class _CommandCenterState extends State<CommandCenter>
         api.notifications(),
         api.commandCenter().catchError((_) => <String, dynamic>{}),
         api.v5Overview().catchError((_) => <String, dynamic>{}),
-        api.personalFinance().catchError((_) => personalFinanceData),
+        api.houseFinanceOverview().catchError((_) => personalFinanceData),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
       ]);
       final latest = results[0] as List<dynamic>;

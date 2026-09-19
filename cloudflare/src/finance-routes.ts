@@ -4,7 +4,8 @@ import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { getCorporationFiscalState, spendCorporationBudget } from './corporation-fiscal-postgres.ts';
 import { getNetWorthHistory } from './net-worth-postgres.ts';
-import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
+import { createBankDeposit, getBankDepositQuote, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
+import { parseCreditAmount } from './money.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { getFinancialQuote } from './financial-quotes.ts';
 import { getHouseFinancialProjection, getInstitutionFinancialProjection } from './financial-projections.ts';
@@ -15,6 +16,7 @@ import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
 import { listV5CapacityResolutionCases, liquidateV5HouseBuilding, openV5CapacityResolutionCase } from './v5-capacity-resolution-postgres.ts';
 import { listV5CorporationReceivershipCases, submitV5CorporationRestructuringPlan } from './v5-corporation-receivership-postgres.ts';
 import { isSettlementBarrierError } from './settlement-barrier-postgres.ts';
+import { getHouseFinanceOverview } from './house-finance-overview-postgres.ts';
 
 export async function handleFinanceRoutes(
   request: Request,
@@ -110,6 +112,20 @@ export async function handleFinanceRoutes(
       return Response.json({ quote: result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Financial quote unavailable' }, { status: 400 }); }
   }
+  if ((url.pathname === '/api/finance/overview' || url.pathname === '/api/finance/me' || url.pathname === '/api/finance/personal') && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => getHouseFinanceOverview(repository, viewer.house_id, viewer.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      if (url.pathname !== '/api/finance/overview') {
+        headers.set('Deprecation', 'true');
+        headers.set('Link', '</api/finance/overview>; rel="successor-version"');
+      }
+      return new Response(JSON.stringify({ ...result, persistence: 'planetscale-postgres' }), { headers });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'House finance overview unavailable' }, { status: 400 });
+    }
+  }
   if (url.pathname === '/api/finance/me' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
       const [accounts, deposits, entries, taxStatement] = await Promise.all([
@@ -138,8 +154,6 @@ export async function handleFinanceRoutes(
       return {
         accounts: accounts.rows,
         summary: projection,
-        state: null,
-        obligations: [],
         deposits: deposits.rows,
         transactions: entries.rows,
         taxes: {
@@ -206,26 +220,35 @@ export async function handleFinanceRoutes(
     const result = await withRepository(env, (repository) => listBankLoans(repository, viewer.id));
     return Response.json({ ...(result ?? { loans: [] }), persistence: 'planetscale-postgres' });
   }
-  if (url.pathname === '/api/finance/bank/loan-quote' && request.method === 'GET') {
-    const requestedUnits = url.searchParams.get('requestedUnits')?.trim() ?? '';
+  if (url.pathname === '/api/finance/bank/deposit-quote' && request.method === 'GET') {
+    const amount = url.searchParams.get('amount')?.trim() ?? '';
     const termDays = Number(url.searchParams.get('termDays') ?? 30);
-    if (!/^\d+$/.test(requestedUnits) || !Number.isInteger(termDays) || termDays <= 0) return Response.json({ ok: false, error: 'requestedUnits and positive termDays are required' }, { status: 400 });
+    if (!amount || !Number.isInteger(termDays) || termDays <= 0) return Response.json({ ok: false, error: 'decimal amount and positive termDays are required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => getBankLoanQuote(repository, { humanId: viewer.id, requestedUnits: BigInt(requestedUnits), termDays }));
+      const result = await withRepository(env, (repository) => getBankDepositQuote(repository, { amount, termDays }));
+      return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Deposit quote unavailable' }, { status: 400 }); }
+  }
+  if (url.pathname === '/api/finance/bank/loan-quote' && request.method === 'GET') {
+    const amount = url.searchParams.get('amount')?.trim() ?? '';
+    const termDays = Number(url.searchParams.get('termDays') ?? 30);
+    if (!amount || !Number.isInteger(termDays) || termDays <= 0) return Response.json({ ok: false, error: 'decimal amount and positive termDays are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => getBankLoanQuote(repository, { humanId: viewer.id, requestedUnits: parseCreditAmount(amount), termDays }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Loan quote unavailable' }, { status: 400 }); }
   }
   if (url.pathname === '/api/finance/bank/loan' && request.method === 'POST') {
     if (!featureEnabled(env, 'bankLoans')) return featureDisabledResponse('bankLoans');
-    const parsed = await parseJsonBody<{ requestedUnits?: string; termDays?: number; amountUnits?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ amount?: string; termDays?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
-    const requestedUnits = parsed.value.requestedUnits?.trim() ?? '';
+    const amount = parsed.value.amount?.trim() ?? '';
     const termDays = Number(parsed.value.termDays ?? 30);
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!/^\d+$/.test(requestedUnits) || !Number.isInteger(termDays) || termDays <= 0 || !correlationId) return Response.json({ ok: false, error: 'requestedUnits, positive termDays, and correlation ID are required' }, { status: 400 });
+    if (!amount || !Number.isInteger(termDays) || termDays <= 0 || !correlationId) return Response.json({ ok: false, error: 'decimal amount, positive termDays, and correlation ID are required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => originateBankLoan(repository, { humanId: viewer.id, requestedUnits: BigInt(requestedUnits), termDays, correlationId }));
+      const result = await withRepository(env, (repository) => originateBankLoan(repository, { humanId: viewer.id, requestedUnits: parseCreditAmount(amount), termDays, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
     } catch (error) {
@@ -236,14 +259,14 @@ export async function handleFinanceRoutes(
   const bankLoanRepayMatch = url.pathname.match(/^\/api\/finance\/bank\/loan\/([^/]+)\/repay$/);
   if (bankLoanRepayMatch && request.method === 'POST') {
     if (!featureEnabled(env, 'bankLoans')) return featureDisabledResponse('bankLoans');
-    const parsed = await parseJsonBody<{ amountUnits?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ amount?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId) return Response.json({ ok: false, error: 'Correlation ID is required' }, { status: 400 });
     try {
-      const amountUnits = parsed.value.amountUnits?.trim();
-      if (amountUnits !== undefined && !/^\d+$/.test(amountUnits)) return Response.json({ ok: false, error: 'amountUnits must be a non-negative integer' }, { status: 400 });
-      const result = await withRepository(env, (repository) => repayBankLoan(repository, { humanId: viewer.id, loanId: bankLoanRepayMatch[1], amountUnits: amountUnits === undefined ? undefined : BigInt(amountUnits), correlationId }));
+      const amount = parsed.value.amount?.trim();
+      const amountUnits = amount === undefined ? undefined : parseCreditAmount(amount);
+      const result = await withRepository(env, (repository) => repayBankLoan(repository, { humanId: viewer.id, loanId: bankLoanRepayMatch[1], amountUnits, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -270,12 +293,14 @@ export async function handleFinanceRoutes(
   }
   if (url.pathname === '/api/finance/bank/deposit' && request.method === 'POST') {
     if (!featureEnabled(env, 'bankDeposits')) return featureDisabledResponse('bankDeposits');
-    const parsed = await parseJsonBody<{ amount?: number; termDays?: number; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ amount?: string; termDays?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
     if (!correlationId) return Response.json({ ok: false, error: 'Correlation ID is required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => createBankDeposit(repository, { humanId: viewer.id, amount: Number(parsed.value.amount ?? 0), termDays: Number(parsed.value.termDays ?? 7), correlationId }));
+      const amount = parsed.value.amount?.trim() ?? '';
+      if (!amount) return Response.json({ ok: false, error: 'decimal amount is required' }, { status: 400 });
+      const result = await withRepository(env, (repository) => createBankDeposit(repository, { humanId: viewer.id, amount, termDays: Number(parsed.value.termDays ?? 7), correlationId }));
       return Response.json({ ...(result ?? { ok: false }), persistence: 'planetscale-postgres' }, { status: result?.alreadyProcessed ? 200 : 201 });
     } catch (error) {
       if (isSettlementBarrierError(error)) return error.toResponse();
@@ -329,21 +354,9 @@ export async function handleFinanceRoutes(
                            WHERE o.house_id = $1 ORDER BY o.game_day DESC, o.created_at DESC LIMIT 100`, [viewer.house_id]).catch(() => ({ rows: [] })),
         getTaxStatement(repository, viewer.id).catch(() => null),
       ]);
-      const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
-      const resident = context.rows[0];
       const walletUnits = BigInt(account.rows[0]?.balance_units ?? 0);
-      const protectedUnits = BigInt(stateRow.protected_credits ?? 0);
-      const availableToSpendUnits = walletUnits > protectedUnits
-        ? walletUnits - protectedUnits
-        : 0n;
       return {
         account: account.rows[0] ?? null,
-        state: stateRow,
-        liquidatableAssets: { buildings: buildings.rows, businesses: [] },
-        protectedMinimum: {
-          credits: stateRow.protected_credits == null ? null : Number(stateRow.protected_credits),
-        },
-        lifeMaintenance: { lastSettlement: latestMaintenance.rows[0] ?? null, unpaidTotal: Number(arrears.rows[0]?.total ?? 0), corporationId: resident?.corporation_id ?? null },
         taxes: {
           rules: canonicalTaxStatement?.activeRules ?? [],
           constitutionalRules: canonicalTaxStatement?.constitutionalTaxRules ?? {},
@@ -354,8 +367,7 @@ export async function handleFinanceRoutes(
         capacity: { summary: v5Capacity, obligations: v5Obligations.rows },
         liquidity: {
           walletUnits: walletUnits.toString(),
-          protectedReserveUnits: protectedUnits.toString(),
-          availableToSpendUnits: availableToSpendUnits.toString(),
+          availableToSpendUnits: walletUnits.toString(),
           nextSettlementGameDay: (await readAuthoritativeGameTime(repository)).gameDay + 1,
           generatedFrom: 'postgres-canonical-facts-v5',
         },

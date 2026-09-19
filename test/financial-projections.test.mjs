@@ -27,3 +27,13 @@ test('House projections include the canonical V5 capacity fiscal read model', ()
   assert.match(source, /capacitySource/);
   assert.match(source, /unavailable-canonical-capacity-read-model/);
 });
+
+test('House next-settlement projection is separate from historical ledger totals', () => {
+  assert.match(source, /getHouseNextSettlementProjection/);
+  assert.match(source, /KNOWN_OBLIGATIONS_AND_PREDICTABLE_FLOWS/);
+  for (const table of ['financial_obligations', 'v5_capacity_obligations', 'bank_loan_schedules', 'technology_license_contracts', 'bank_deposits']) {
+    assert.match(source, new RegExp(table));
+  }
+  assert.match(source, /BUILDING_OPERATING_EXPENSE/);
+  assert.match(source, /otherObligations/);
+});

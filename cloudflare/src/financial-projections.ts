@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
+import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 
 type FlowRow = { transaction_kind: string; inflow_units: string; outflow_units: string };
 
@@ -47,6 +48,104 @@ export async function getHouseFinancialProjection(repository: PostgresRepository
     netCashFlowUnits: (BigInt(income) - BigInt(expenses)).toString(), byTransactionKind: flows,
     capacity,
     capacitySource: capacity ? 'postgres-v5-structural-settlement-profile' : 'unavailable-canonical-capacity-read-model',
+  });
+}
+
+type SettlementItem = {
+  category: string;
+  direction: 'INFLOW' | 'OUTFLOW';
+  amountUnits: string;
+  sourceType: string;
+  sourceId: string | null;
+  status: string;
+};
+
+/**
+ * Forecasts the next closed-day settlement from facts that are already known.
+ * This is deliberately separate from ledgerFlows(): it must never present
+ * historical totals as if they were a one-day forecast.
+ */
+export async function getHouseNextSettlementProjection(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
+  const owner = (await repository.query<{ economic_id: string }>(
+    "SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'HOUSE'", [houseId],
+  )).rows[0];
+  if (!owner) throw new Error('House financial owner not found');
+  const clock = await readAuthoritativeGameTime(repository);
+  const settlementGameDay = clock.gameDay + 1;
+
+  const [taxes, otherObligations, capacity, buildings, loanSchedules, licenses, deposits] = await Promise.all([
+    repository.query<{ id: string; amount_units: string; paid_units: string }>(
+      `SELECT id, principal_due_units::TEXT AS amount_units, paid_units::TEXT
+         FROM financial_obligations
+        WHERE debtor_economic_id = $1 AND obligation_type = 'TAX'
+          AND due_game_day = $2 AND status IN ('DUE','PARTIAL','ARREARS')`, [owner.economic_id, settlementGameDay],
+    ),
+    repository.query<{ id: string; obligation_type: string; principal_due_units: string; interest_due_units: string; paid_units: string }>(
+      `SELECT id, obligation_type, principal_due_units::TEXT, interest_due_units::TEXT, paid_units::TEXT
+         FROM financial_obligations
+        WHERE debtor_economic_id = $1 AND obligation_type NOT IN ('TAX')
+          AND due_game_day = $2 AND status IN ('DUE','PARTIAL','ARREARS')`, [owner.economic_id, settlementGameDay],
+    ),
+    repository.query<{ id: string; assessed_units: string; paid_units: string }>(
+      `SELECT id, assessed_units::TEXT, paid_units::TEXT
+         FROM v5_capacity_obligations
+        WHERE house_id = $1 AND game_day = $2 AND status IN ('DUE','PARTIAL','ARREARS')`, [houseId, settlementGameDay],
+    ),
+    repository.query<{ id: string; operating_credit_units: string }>(
+      `SELECT b.id, c.operating_credit_units::TEXT
+         FROM buildings b
+         JOIN building_catalog c ON c.id = b.catalog_id
+         JOIN owner_registry o ON o.economic_id = b.owner_economic_id
+        WHERE o.id = $1 AND b.status IN ('ACTIVE','COMPLETED')`, [houseId],
+    ),
+    repository.query<{ id: string; principal_due_units: string; interest_due_units: string; paid_units: string }>(
+      `SELECT s.id, s.principal_due_units::TEXT, s.interest_due_units::TEXT, s.paid_units::TEXT
+         FROM bank_loan_schedules s
+         JOIN bank_loans l ON l.id = s.loan_id
+        WHERE l.borrower_economic_id = $1 AND s.due_game_day = $2
+          AND s.status IN ('DUE','PARTIAL','ARREARS')`, [owner.economic_id, settlementGameDay],
+    ),
+    repository.query<{ id: string; daily_fee_units: string }>(
+      `SELECT id, daily_fee_units::TEXT
+         FROM technology_license_contracts
+        WHERE licensee_economic_id = $1 AND status = 'ACTIVE'
+          AND effective_from_game_day <= $2
+          AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)
+          AND paid_through_game_day < $2`, [owner.economic_id, settlementGameDay],
+    ),
+    repository.query<{ id: string; principal_units: string; rate_bps: string }>(
+      `SELECT id, principal_units::TEXT, rate_bps::TEXT
+         FROM bank_deposits
+        WHERE depositor_economic_id = $1 AND status IN ('ACTIVE','MATURED')`, [owner.economic_id],
+    ),
+  ]);
+
+  const items: SettlementItem[] = [];
+  const addOutflow = (category: string, amount: bigint, sourceType: string, sourceId: string | null, status = 'KNOWN') => {
+    if (amount > 0n) items.push({ category, direction: 'OUTFLOW', amountUnits: amount.toString(), sourceType, sourceId, status });
+  };
+  const addInflow = (category: string, amount: bigint, sourceType: string, sourceId: string | null, status = 'ESTIMATED') => {
+    if (amount > 0n) items.push({ category, direction: 'INFLOW', amountUnits: amount.toString(), sourceType, sourceId, status });
+  };
+
+  for (const row of taxes.rows) addOutflow('TAX', BigInt(row.amount_units ?? 0) - BigInt(row.paid_units ?? 0), 'TAX_OBLIGATION', row.id);
+  for (const row of otherObligations.rows) addOutflow(String(row.obligation_type), BigInt(row.principal_due_units ?? 0) + BigInt(row.interest_due_units ?? 0) - BigInt(row.paid_units ?? 0), 'FINANCIAL_OBLIGATION', row.id);
+  for (const row of capacity.rows) addOutflow('CAPACITY_RENT', BigInt(row.assessed_units ?? 0) - BigInt(row.paid_units ?? 0), 'CAPACITY_OBLIGATION', row.id);
+  for (const row of buildings.rows) addOutflow('BUILDING_OPERATING_EXPENSE', BigInt(row.operating_credit_units ?? 0), 'BUILDING', row.id, 'BASE_ESTIMATE');
+  for (const row of loanSchedules.rows) addOutflow('DEBT_SERVICE', BigInt(row.principal_due_units ?? 0) + BigInt(row.interest_due_units ?? 0) - BigInt(row.paid_units ?? 0), 'BANK_LOAN_SCHEDULE', row.id);
+  for (const row of licenses.rows) addOutflow('LICENSE', BigInt(row.daily_fee_units ?? 0), 'TECHNOLOGY_LICENSE', row.id);
+  for (const row of deposits.rows) addInflow('BANK_INTEREST', (BigInt(row.principal_units ?? 0) * BigInt(row.rate_bps ?? 0)) / 36500n, 'BANK_DEPOSIT', row.id);
+
+  const inflows = items.filter((item) => item.direction === 'INFLOW').reduce((sum, item) => sum + BigInt(item.amountUnits), 0n);
+  const outflows = items.filter((item) => item.direction === 'OUTFLOW').reduce((sum, item) => sum + BigInt(item.amountUnits), 0n);
+  return toJsonSafe({
+    gameDay: settlementGameDay,
+    basis: 'KNOWN_OBLIGATIONS_AND_PREDICTABLE_FLOWS',
+    inflowsUnits: inflows.toString(),
+    outflowsUnits: outflows.toString(),
+    netCashflowUnits: (inflows - outflows).toString(),
+    items,
+    generatedFrom: 'postgres-next-settlement-facts-v5',
   });
 }
 

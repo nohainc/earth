@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import 'net_worth_chart_widget.dart';
 
 void showNetWorthAnalyticsDialog(BuildContext context, {required EarthApi api}) {
@@ -213,7 +214,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                     context,
                     title: 'PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS',
                     description:
-                        '• 4-Pillar Portfolio Valuation: Real-time accounting across Liquid Cash, Commodities, Equity, and Capital Machinery.\n\n• Solvency & Wealth Index: Continuous valuation history tracking wealth trajectory across World eras.',
+                    '• House portfolio valuation: wallet, deposits, commodities, Buildings/Productive Assets, and debt.\n\n• Valuation policy is server-defined and preserved across Human succession; Corporation equity is excluded.',
                   ),
                 ),
               ],
@@ -251,10 +252,8 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
   }
 
   Widget _buildKpiSummaryRow() {
-    final curTot = _parseNum(_summary['currentNetWorth']);
     final growth = _parseNum(_summary['growthRatePct']);
-    final peak = _parseNum(_summary['peakNetWorth']);
-    final peakDay = _summary['peakDay'] ?? 185;
+    final peakDay = _summary['peakDay'] ?? 1;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -269,7 +268,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
             _kpiCard(
               cardW,
               'TOTAL NET WORTH',
-              '${curTot.toStringAsFixed(2)} CR',
+              formatCreditUnits(_summary['currentNetWorthUnits']),
               '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(2)}% (30D)',
               growth >= 0 ? const Color(0xFF00E676) : const Color(0xFFFF5252),
               EarthThemeController.instance.primaryAccent,
@@ -278,7 +277,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
             _kpiCard(
               cardW,
               'ALL-TIME PEAK WEALTH',
-              '${peak.toStringAsFixed(2)} CR',
+              formatCreditUnits(_summary['peakNetWorthUnits']),
               'Recorded on Day $peakDay',
               EarthColors.textMuted,
               EarthThemeController.instance.goldMetallic,
@@ -288,16 +287,16 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
               cardW,
               'LIQUID CASH RATIO',
               '${_parseNum(_summary['assetAllocation']?['cashPct']).toStringAsFixed(1)}%',
-              '${_parseNum(_summary['liquidCredits']).toStringAsFixed(0)} CR Liquid',
+              '${formatCreditUnits(_summary['liquidCreditsUnits'])} Liquid',
               EarthColors.textMuted,
               const Color(0xFF38BDF8),
               Icons.savings_outlined,
             ),
             _kpiCard(
               cardW,
-              'EQUITY & OTHER ASSETS',
-              '${(_parseNum(_summary['assetAllocation']?['equityPct']) + _parseNum(_summary['assetAllocation']?['realEstatePct'])).toStringAsFixed(1)}%',
-              'Productive Capital Assets',
+              'BUILDINGS / PRODUCTIVE ASSETS',
+              '${_parseNum(_summary['assetAllocation']?['buildingsPct']).toStringAsFixed(1)}%',
+              'Buildings / Productive Assets',
               EarthColors.textMuted,
               const Color(0xFFC084FC),
               Icons.pie_chart_outline,
@@ -361,13 +360,14 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
     final alloc = _summary['assetAllocation'] as Map<String, dynamic>? ?? {};
     final cashPct = _parseNum(alloc['cashPct']);
     final commPct = _parseNum(alloc['commodityPct']);
-    final eqPct = _parseNum(alloc['equityPct']);
-    final rePct = _parseNum(alloc['realEstatePct']);
+    final buildingsPct = _parseNum(alloc['buildingsPct']);
+    final debtPct = _parseNum(alloc['debtPct']);
 
-    final cashVal = _parseNum(_summary['liquidCredits']);
-    final commVal = _parseNum(_summary['commodityValuation']);
-    final eqVal = _parseNum(_summary['equityValuation']);
-    final reVal = _parseNum(_summary['realEstateValuation']);
+    final cashVal = _summary['liquidCreditsUnits'];
+    final depositsVal = _summary['depositPrincipalUnits'];
+    final commVal = _summary['commodityValuationUnits'];
+    final buildingsVal = _summary['buildingsValuationUnits'];
+    final debtVal = _summary['debtUnits'];
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -387,7 +387,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                 style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
               ),
               Text(
-                '4 Pillars Diversification',
+                'HOUSE VALUATION POLICY',
                 style: TextStyle(color: EarthColors.textMuted, fontSize: 10),
               ),
             ],
@@ -406,19 +406,24 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                       flex: (cashPct * 10).round().clamp(1, 1000),
                       child: Container(color: EarthThemeController.instance.goldMetallic),
                     ),
+                  if (_parseNum(alloc['depositsPct']) > 0)
+                    Expanded(
+                      flex: (_parseNum(alloc['depositsPct']) * 10).round().clamp(1, 1000),
+                      child: Container(color: Colors.lightBlueAccent),
+                    ),
                   if (commPct > 0)
                     Expanded(
                       flex: (commPct * 10).round().clamp(1, 1000),
                       child: Container(color: EarthThemeController.instance.primaryAccent),
                     ),
-                  if (eqPct > 0)
+                  if (buildingsPct > 0)
                     Expanded(
-                      flex: (eqPct * 10).round().clamp(1, 1000),
+                      flex: (buildingsPct * 10).round().clamp(1, 1000),
                       child: Container(color: const Color(0xFFC084FC)),
                     ),
-                  if (rePct > 0)
+                  if (debtPct > 0)
                     Expanded(
-                      flex: (rePct * 10).round().clamp(1, 1000),
+                      flex: (debtPct * 10).round().clamp(1, 1000),
                       child: Container(color: const Color(0xFFFB923C)),
                     ),
                 ],
@@ -437,10 +442,11 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'LIQUID CREDITS', '${cashVal.toStringAsFixed(0)} CR', '$cashPct%', EarthThemeController.instance.goldMetallic),
-                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'COMMODITIES', '${commVal.toStringAsFixed(0)} CR', '$commPct%', EarthThemeController.instance.primaryAccent),
-                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'CORPORATE EQUITY', '${eqVal.toStringAsFixed(0)} CR', '$eqPct%', const Color(0xFFC084FC)),
-                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'OTHER ASSETS', '${reVal.toStringAsFixed(0)} CR', '$rePct%', const Color(0xFFFB923C)),
+                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'LIQUID CREDITS', formatCreditUnits(cashVal), '$cashPct%', EarthThemeController.instance.goldMetallic),
+                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'DEPOSITS', formatCreditUnits(depositsVal), '${_parseNum(alloc['depositsPct']).toStringAsFixed(1)}%', Colors.lightBlueAccent),
+                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'COMMODITIES', formatCreditUnits(commVal), '$commPct%', EarthThemeController.instance.primaryAccent),
+                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'BUILDINGS / PRODUCTIVE', formatCreditUnits(buildingsVal), '${buildingsPct.toStringAsFixed(1)}%', const Color(0xFFC084FC)),
+                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'DEBT', formatCreditUnits(debtVal), '${debtPct.toStringAsFixed(1)}%', const Color(0xFFFB923C)),
                 ],
               );
             },

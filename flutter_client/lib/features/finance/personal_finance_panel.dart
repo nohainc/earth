@@ -3,11 +3,57 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/house_finance_models.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
-import '../../shared/widgets/credit_income_summary_card.dart';
+
+BigInt? _creditUnits(dynamic value) {
+  if (value == null) return null;
+  final raw = value.toString().trim();
+  if (raw.isEmpty) return null;
+  return BigInt.tryParse(raw);
+}
+
+String _creditText(dynamic value, {String fallback = 'UNAVAILABLE'}) =>
+    formatCreditUnits(value, fallback: fallback);
+
+String _signedCreditText(BigInt value) {
+  final sign = value > BigInt.zero ? '+' : value < BigInt.zero ? '-' : '';
+  return '$sign${formatCreditUnits(value.abs())}';
+}
+
+BigInt? _parseCreditInput(String value) {
+  final raw = value.trim();
+  final match = RegExp(r'^(\d+)(?:\.(\d{1,2}))?$').firstMatch(raw);
+  if (match == null) return null;
+  final whole = BigInt.parse(match.group(1)!);
+  final fraction = (match.group(2) ?? '').padRight(2, '0');
+  return whole * BigInt.from(100) + BigInt.parse(fraction.isEmpty ? '0' : fraction);
+}
+
+String _creditDecimal(BigInt units) {
+  final absolute = units.abs();
+  final whole = absolute ~/ BigInt.from(100);
+  final cents = (absolute % BigInt.from(100)).toString().padLeft(2, '0');
+  return '${units.isNegative ? '-' : ''}$whole.$cents';
+}
+
+BigInt? _forecastCategoryUnits(Map<String, dynamic> forecast, String category) {
+  final rows = forecast['items'];
+  if (rows is! List) return null;
+  var total = BigInt.zero;
+  var found = false;
+  for (final raw in rows.whereType<Map>()) {
+    if (raw['category']?.toString() != category) continue;
+    final units = _creditUnits(raw['amountUnits']);
+    if (units == null) continue;
+    total += units;
+    found = true;
+  }
+  return found ? total : BigInt.zero;
+}
 
 class PersonalFinancePanel extends StatelessWidget {
   final EarthState state;
@@ -26,34 +72,21 @@ class PersonalFinancePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maintenance = _map(personalFinanceData['lifeMaintenance']);
-    final bank = _map(personalFinanceData['bank']);
-    final bankDeposits = (bank['deposits'] as List? ?? const [])
-        .whereType<Map>()
-        .map((deposit) => Map<String, dynamic>.from(deposit))
-        .toList();
-    final projection = _map(
-        personalFinanceData['summary'] ?? personalFinanceData['projection']);
-    final dailyProfileCredits =
-        asDouble(_map(personalFinanceData['dailyProfile'])['credits']);
-    final projectedIncome = _creditUnits(projection['incomeUnits']) ??
-        dailyProfileCredits;
-    final projectedTax = _creditUnits(projection['taxUnits']);
+    final finance = HouseFinanceOverview.fromJson(personalFinanceData);
+    final obligations = finance.obligations;
+    final maintenance = obligations.dailyNeeds;
+    final nextSettlement = finance.cashflow.nextSettlement;
+    final projectedIncome = _creditUnits(nextSettlement['inflowsUnits']);
+    final projectedTax = _forecastCategoryUnits(nextSettlement, 'TAX');
     final grossCredits = projectedIncome;
     final incomeTax = projectedTax;
-    final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
-    final protected =
-        asDouble(_map(personalFinanceData['protectedMinimum'])['credits']);
-    final statusColor = unpaid > 0 ? Colors.orangeAccent : cyanAccentColor;
+    final foodShortfall = _creditUnits(maintenance['food_shortfall_units']) ?? BigInt.zero;
+    final needsAttention = foodShortfall > BigInt.zero;
 
-    final liquidity = _map(personalFinanceData['liquidity']);
-    final serverAvailableToSpend = asDouble(liquidity['availableToSpendUnits']);
-    final availableToSpend = serverAvailableToSpend ?? 0.0;
+    final serverAvailableToSpend = finance.liquidity.availableToSpendUnits;
+    final availableToSpend = serverAvailableToSpend ?? BigInt.zero;
     final availableToSpendKnown = serverAvailableToSpend != null;
-    final netDailyCredits = grossCredits != null && incomeTax != null
-        ? grossCredits - incomeTax
-        : null;
-    final netSign = netDailyCredits != null && netDailyCredits >= 0 ? '+' : '';
+    final netDailyCredits = _creditUnits(nextSettlement['netCashflowUnits']);
 
     final rawClock = state.clock;
     final parsedDay = asInt(rawClock['day']) ??
@@ -67,43 +100,37 @@ class PersonalFinancePanel extends StatelessWidget {
     final currentMinute = parsedMinute;
 
     final cockpit = EarthPageCockpit(
-      status: unpaid > 0 ? 'NEEDS ATTENTION' : 'ON TRACK',
-      statusColor: unpaid > 0 ? context.warningColor : context.successColor,
+      status: needsAttention ? 'NEEDS ATTENTION' : 'ON TRACK',
+      statusColor: needsAttention ? context.warningColor : context.successColor,
       infoTitle: 'HOUSE FINANCE & TREASURY',
       infoDescription:
-          'Manage House liquidity, the next settlement, obligations, savings and borrowing. The protected reserve is excluded from discretionary spending.',
+          'Manage House liquidity, the next settlement, obligations, savings and borrowing.',
       title: 'HOUSE FINANCE',
       subtitle: 'Liquidity, obligations, savings and borrowing for your House',
       metrics: [
         CockpitMetric(
           label: 'Available to Spend',
           value: availableToSpendKnown
-              ? formatWholeNumber(availableToSpend)
+              ? _creditText(availableToSpend)
               : 'UNAVAILABLE',
           icon: Icons.account_balance_wallet_outlined,
           color: context.primaryColor,
         ),
         CockpitMetric(
-          label: 'Daily Cashflow',
+          label: 'Next Settlement',
           value: netDailyCredits == null
               ? 'UNAVAILABLE'
-              : '$netSign${formatWholeNumber(netDailyCredits)}',
+              : _signedCreditText(netDailyCredits),
           icon: Icons.trending_up_outlined,
-          color: netDailyCredits != null && netDailyCredits >= 0
+          color: netDailyCredits != null && netDailyCredits >= BigInt.zero
               ? context.successColor
               : context.warningColor,
         ),
         CockpitMetric(
-          label: 'Daily Tax',
-          value: incomeTax == null ? 'UNAVAILABLE' : formatWholeNumber(incomeTax),
+          label: 'Next Tax',
+          value: incomeTax == null ? 'UNAVAILABLE' : _creditText(incomeTax),
           icon: Icons.receipt_long_outlined,
           color: context.secondaryColor,
-        ),
-        CockpitMetric(
-          label: 'Protected Reserve',
-          value: protected == null ? '—' : formatWholeNumber(protected),
-          icon: Icons.shield_outlined,
-          color: violetColor,
         ),
       ],
     );
@@ -121,51 +148,43 @@ class PersonalFinancePanel extends StatelessWidget {
         const SizedBox(height: 28),
         const Text('NEXT SETTLEMENT', style: _sectionStyle),
         const SizedBox(height: 12),
-        if (liquidity['nextSettlementGameDay'] != null)
-          Text('Scheduled game day ${liquidity['nextSettlementGameDay']}',
+        if (finance.liquidity.nextSettlementGameDay != null)
+          Text('Scheduled game day ${finance.liquidity.nextSettlementGameDay}',
               style: context.widgetFooterStyle),
-        if (liquidity['nextSettlementGameDay'] != null)
+        if (finance.liquidity.nextSettlementGameDay != null)
           const SizedBox(height: 8),
         if (netDailyCredits == null)
-          const Text('The authoritative ledger statement is unavailable.',
+          const Text('The next settlement forecast is unavailable.',
               style: TextStyle(color: mutedColor, fontSize: 11))
         else
           _creditStatementLine(netDailyCredits, emphasize: true),
         const SizedBox(height: 24),
         _CreditIncomeSummaryCard(
-          grossCredits: grossCredits,
-          taxAmount: incomeTax,
-          personalFinanceData: personalFinanceData,
+          nextSettlement: nextSettlement,
         ),
         const SizedBox(height: 24),
+        _ObligationsCard(obligations: obligations, action: action),
+        const SizedBox(height: 24),
+        _BankSummaryCard(bank: finance.bank),
+        const SizedBox(height: 24),
         _BankDepositsCard(
-          deposits: bankDeposits,
+          deposits: finance.bank.deposits,
           liquidCredits: availableToSpend,
           currentDay: currentDay ?? 0,
           currentMinute: currentMinute ?? 0,
           action: action,
         ),
         const SizedBox(height: 24),
-        _BankCreditCard(action: action, availableToSpend: availableToSpend),
+        _BankCreditCard(action: action, availableToSpend: availableToSpend, currentDay: currentDay ?? 0),
         const SizedBox(height: 24),
-        if (unpaid > 0) ...[
+        if (needsAttention) ...[
           _notice(Icons.warning_amber_rounded, Colors.orangeAccent,
-              '${_credits(unpaid)} of essential costs remain unpaid.'),
+              '${formatAssetQuantity('FOOD', foodShortfall)} of required food was not consumed at the last settlement.'),
           const SizedBox(height: 24),
         ],
-        _notice(
-            Icons.shield_outlined,
-            violetColor,
-            protected == null
-                ? 'Protected reserve is unavailable until the active financial rule is published.'
-                : 'Protected reserve: ${_credits(protected)}. Essential shortfalls are recorded; they do not remove you from the game.'),
-        const SizedBox(height: 24),
         _FinanceActivityCard(
             transactions:
-                (personalFinanceData['transactions'] as List? ?? const [])
-                    .whereType<Map>()
-                    .map((row) => Map<String, dynamic>.from(row))
-                    .toList()),
+                finance.cashflow.recentTransactions),
       ]),
     );
   }
@@ -178,70 +197,11 @@ class PersonalFinancePanel extends StatelessWidget {
   static Map<String, dynamic> _map(dynamic value) => value is Map
       ? Map<String, dynamic>.from(value)
       : const <String, dynamic>{};
-  static double? _creditUnits(dynamic value) {
-    final units = asDouble(value);
-    return units == null ? null : units / 100;
-  }
-
-  static String _number(double value) => value.abs() >= 100
-      ? value.abs().toStringAsFixed(0)
-      : value
-          .abs()
-          .toStringAsFixed(2)
-          .replaceFirst(RegExp(r'0+$'), '')
-          .replaceFirst(RegExp(r'\.$'), '');
-  static String _credits(double value) => '${_number(value)} C';
-
-  static Widget _creditRow(String label, double value,
-          {required bool positive,
-          bool emphasis = false,
-          bool displayAsWhole = false}) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 7),
-        child: Row(children: [
-          Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                      color: emphasis ? inkColor : mutedColor,
-                      fontSize: emphasis ? 13 : 11,
-                      fontWeight:
-                          emphasis ? FontWeight.w800 : FontWeight.w600))),
-          Icon(Icons.account_balance_wallet_outlined,
-              size: emphasis ? 17 : 15, color: EarthResourceColors.credits),
-          const SizedBox(width: 5),
-          Text(
-              '${positive && value > 0 ? '+' : value < 0 ? '-' : ''}${displayAsWhole ? value.abs().round() : _number(value)} C',
-              style: TextStyle(
-                  color: value < 0
-                      ? Colors.redAccent
-                      : value > 0
-                          ? Colors.tealAccent
-                          : mutedColor,
-                  fontSize: emphasis ? 14 : 12,
-                  fontWeight: FontWeight.w800)),
-        ]),
-      );
-
-  static Widget _taxRow(double rate, double amount) => Row(children: [
-        const Expanded(
-            child: Text('Basic income tax',
-                style: TextStyle(color: mutedColor, fontSize: 11))),
-        Text('${(rate * 100).toStringAsFixed(2)}%',
-            style: const TextStyle(color: mutedColor, fontSize: 11)),
-        const SizedBox(width: 14),
-        Text('−${_credits(amount)}',
-            style: const TextStyle(
-                color: Colors.redAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.w800)),
-      ]);
-
-  static Widget _creditStatementLine(double value, {bool emphasize = false}) {
-    final sign = value > 0 ? '+' : value < 0 ? '-' : '';
+  static Widget _creditStatementLine(BigInt value, {bool emphasize = false}) {
     return Center(
-      child: Text('$sign${_number(value)} C recorded net ledger flow',
+      child: Text('${_signedCreditText(value)} recorded net ledger flow',
           style: TextStyle(
-              color: value < 0 ? Colors.redAccent : Colors.tealAccent,
+              color: value < BigInt.zero ? Colors.redAccent : Colors.tealAccent,
               fontSize: emphasize ? 14 : 12,
               fontWeight: FontWeight.w800)),
     );
@@ -278,7 +238,7 @@ class PersonalFinancePanel extends StatelessWidget {
                     size: emphasize ? 18 : 16,
                     color: EarthResourceMeta.forCommodity(entry.key).color),
                 Text(
-                    '${value > 0 ? '+' : value < 0 ? '-' : ''}${_number(value)}',
+                    '${value > 0 ? '+' : value < 0 ? '-' : ''}${value.toStringAsFixed(2)}',
                     style: TextStyle(
                         color: color,
                         fontSize: emphasize ? 13 : 12,
@@ -316,10 +276,135 @@ class PersonalFinancePanel extends StatelessWidget {
       ]));
 }
 
+class _ObligationsCard extends StatelessWidget {
+  final HouseObligations obligations;
+  final Future<void> Function(Future<EarthState> Function()) action;
+
+  const _ObligationsCard({required this.obligations, required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = <({String title, HouseObligationSection data})>[
+      (title: 'CAPACITY OBLIGATION', data: obligations.capacity),
+      (title: 'TAXES', data: obligations.taxes),
+      (title: 'LOAN SCHEDULES', data: obligations.loans),
+      (title: 'OTHER MANDATORY CLAIMS', data: obligations.other),
+    ];
+    return EarthSection(
+      title: 'OBLIGATIONS',
+      showSurface: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Authoritative House claims and their settlement status.',
+              style: TextStyle(color: mutedColor, fontSize: 11)),
+          const SizedBox(height: 12),
+          for (final section in sections)
+            _obligationRow(context, section.title, section.data),
+          if (obligations.capacity.status == 'ARREARS' || obligations.capacity.status == 'DELINQUENT') ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.warningColor.withValues(alpha: .10),
+                border: Border.all(color: context.warningColor.withValues(alpha: .35)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: context.warningColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Capacity distress is ${obligations.capacity.status}. Use the V5 resolution flow to review available remedies.',
+                      style: const TextStyle(fontSize: 11, height: 1.35),
+                    ),
+                  ),
+                  EarthButton(
+                    label: 'OPEN RESOLUTION',
+                    icon: Icons.support_agent_outlined,
+                    onPressed: () => action(() => const EarthApi()
+                        .openCapacityResolution(reason: 'Finance review requested')
+                        .then((_) => const EarthApi().world())),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _obligationRow(BuildContext context, String title, HouseObligationSection data) {
+    final status = data.status;
+    final remaining = _creditText(data.totalRemainingUnits);
+    final statusColor = switch (status) {
+      'CURRENT' => context.successColor,
+      'DUE' => context.secondaryColor,
+      'ARREARS' || 'DELINQUENT' => context.warningColor,
+      _ => mutedColor,
+    };
+    final claims = data.claims.length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Row(
+        children: [
+          Expanded(child: Text('$title · $claims claim${claims == 1 ? '' : 's'}')),
+          Text(remaining, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(width: 10),
+          _statusPill(status, statusColor),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .14),
+          border: Border.all(color: color.withValues(alpha: .35)),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(label, style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.w800)),
+      );
+
+}
+
+class _BankSummaryCard extends StatelessWidget {
+  final HouseBankSummary bank;
+  const _BankSummaryCard({required this.bank});
+
+  @override
+  Widget build(BuildContext context) => EarthSection(
+        title: 'BANKING SUMMARY',
+        showSurface: true,
+        child: Row(
+          children: [
+            Expanded(child: _metric(context, 'Deposits', bank.depositPrincipalUnits, Icons.savings_outlined)),
+            const SizedBox(width: 12),
+            Expanded(child: _metric(context, 'Outstanding debt', bank.loanOutstandingUnits, Icons.account_balance_outlined)),
+          ],
+        ),
+      );
+
+  Widget _metric(BuildContext context, String label, BigInt units, IconData icon) =>
+      Row(children: [
+        Icon(icon, size: 18, color: context.primaryColor),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: context.widgetFooterStyle),
+          Text(formatCreditUnits(units), style: context.widgetTitleStyle),
+        ])),
+      ]);
+}
+
 class _BankCreditCard extends StatefulWidget {
   final Future<void> Function(Future<EarthState> Function()) action;
-  final double availableToSpend;
-  const _BankCreditCard({required this.action, required this.availableToSpend});
+  final BigInt availableToSpend;
+  final int currentDay;
+  const _BankCreditCard({required this.action, required this.availableToSpend, required this.currentDay});
 
   @override
   State<_BankCreditCard> createState() => _BankCreditCardState();
@@ -328,7 +413,7 @@ class _BankCreditCard extends StatefulWidget {
 class _BankCreditCardState extends State<_BankCreditCard> {
   bool _loading = true;
   String? _error;
-  List<Map<String, dynamic>> _loans = const [];
+  List<HouseLoan> _loans = const [];
 
   @override
   void initState() {
@@ -345,7 +430,7 @@ class _BankCreditCardState extends State<_BankCreditCard> {
         _loans = rawLoans is List
             ? rawLoans
                 .whereType<Map>()
-                .map((r) => Map<String, dynamic>.from(r))
+                .map((r) => HouseLoan.fromJson(Map<String, dynamic>.from(r)))
                 .toList()
             : const [];
         _loading = false;
@@ -366,7 +451,7 @@ class _BankCreditCardState extends State<_BankCreditCard> {
     if (result == null || !mounted) return;
     try {
       final quote = await const EarthApi().bankLoanQuote(
-          requestedUnits: result['amount']!,
+          amount: result['amount']!,
           termDays: int.parse(result['term']!));
       final quoteData = quote['quote'] is Map
           ? Map<String, dynamic>.from(quote['quote'] as Map)
@@ -383,7 +468,7 @@ class _BankCreditCardState extends State<_BankCreditCard> {
       if (accepted != true || !mounted) return;
       await widget.action(() => const EarthApi()
           .originateBankLoan(
-              requestedUnits: result['amount']!,
+              amount: result['amount']!,
               termDays: int.parse(result['term']!))
           .then((_) => const EarthApi().world()));
       await _load();
@@ -392,9 +477,9 @@ class _BankCreditCardState extends State<_BankCreditCard> {
     }
   }
 
-  Future<void> _repay(Map<String, dynamic> loan) async {
-    final principal = asDoubleOr(loan['outstanding_principal_units'], 0);
-    final interest = asDoubleOr(loan['accrued_interest_units'], 0);
+  Future<void> _repay(HouseLoan loan) async {
+    final principal = loan.outstandingPrincipalUnits;
+    final interest = loan.accruedInterestUnits;
     final total = principal + interest;
     final amount = await showDialog<String>(
       context: context,
@@ -404,7 +489,7 @@ class _BankCreditCardState extends State<_BankCreditCard> {
     if (amount == null || !mounted) return;
     try {
       await widget.action(() => const EarthApi()
-          .repayBankLoan(loan['id'].toString(), amountUnits: amount)
+          .repayBankLoan(loan.id, amount: amount)
           .then((_) => const EarthApi().world()));
       await _load();
     } catch (error) {
@@ -437,9 +522,9 @@ class _BankCreditCardState extends State<_BankCreditCard> {
                     children: [
                       Expanded(
                           child: Text(
-                              '${loan['status'] ?? 'UNKNOWN'} · principal ${loan['outstanding_principal_units'] ?? '0'} C\nInterest ${loan['accrued_interest_units'] ?? '0'} C · ${(loan['rate_bps'] ?? '—')} bps · due day ${loan['maturity_game_day'] ?? '—'}')),
+                              '${loan.status} · principal ${_creditText(loan.outstandingPrincipalUnits)}\nInterest ${_creditText(loan.accruedInterestUnits)} · ${_countdown(loan.nextPaymentGameDay ?? loan.maturityGameDay, widget.currentDay)}')),
                       TextButton(
-                          onPressed: loan['status'] == 'PAID'
+                          onPressed: loan.status == 'PAID'
                               ? null
                               : () => _repay(loan),
                           child: const Text('REPAY'))
@@ -454,6 +539,12 @@ class _BankCreditCardState extends State<_BankCreditCard> {
                   onPressed: _loading ? null : _borrow)),
         ]),
       );
+
+  String _countdown(int? dueDay, int currentDay) {
+    if (dueDay == null) return 'payment date unavailable';
+    if (dueDay <= currentDay) return 'DUE NOW';
+    return 'due in ${dueDay - currentDay} game day${dueDay - currentDay == 1 ? '' : 's'}';
+  }
 }
 
 class _LoanDialog extends StatefulWidget {
@@ -480,7 +571,7 @@ class _LoanDialogState extends State<_LoanDialog> {
               controller: _amount,
               keyboardType: TextInputType.number,
               decoration:
-                  const InputDecoration(labelText: 'Requested CREDIT units')),
+                  const InputDecoration(labelText: 'Requested amount (CREDIT)')),
           TextField(
               controller: _term,
               keyboardType: TextInputType.number,
@@ -492,7 +583,7 @@ class _LoanDialogState extends State<_LoanDialog> {
               child: const Text('CANCEL')),
           FilledButton(
               onPressed: () {
-                if (RegExp(r'^\d+$').hasMatch(_amount.text.trim()) &&
+                if (RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(_amount.text.trim()) &&
                     RegExp(r'^\d+$').hasMatch(_term.text.trim())) {
                   Navigator.pop(context, {
                     'amount': _amount.text.trim(),
@@ -518,9 +609,9 @@ class _LoanOfferDialog extends StatelessWidget {
     return AlertDialog(
       title: const Text('LOAN OFFER'),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
-        _offerRow('You receive', '$requested C'),
-        _offerRow('Estimated financing cost', '$interest C'),
-        _offerRow('Estimated total repayment', '$total C'),
+        _offerRow('You receive', _creditText(requested)),
+        _offerRow('Estimated financing cost', _creditText(interest)),
+        _offerRow('Estimated total repayment', _creditText(total)),
         _offerRow('Rate', '$rate bps'),
         _offerRow('Term', '${quote['termDays'] ?? '—'} game days'),
         _offerRow('Maturity', 'Day ${quote['maturityGameDay'] ?? '—'}'),
@@ -550,8 +641,8 @@ class _LoanOfferDialog extends StatelessWidget {
 }
 
 class _LoanRepaymentDialog extends StatefulWidget {
-  final double totalDue;
-  final double availableToSpend;
+  final BigInt totalDue;
+  final BigInt availableToSpend;
   const _LoanRepaymentDialog(
       {required this.totalDue, required this.availableToSpend});
 
@@ -565,7 +656,7 @@ class _LoanRepaymentDialogState extends State<_LoanRepaymentDialog> {
   @override
   void initState() {
     super.initState();
-    _amount = TextEditingController(text: widget.totalDue.toStringAsFixed(0));
+    _amount = TextEditingController(text: _creditDecimal(widget.totalDue));
   }
 
   @override
@@ -576,16 +667,16 @@ class _LoanRepaymentDialogState extends State<_LoanRepaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final value = double.tryParse(_amount.text.trim()) ?? 0;
-    final valid = value > 0 &&
+    final value = _parseCreditInput(_amount.text.trim());
+    final valid = value != null && value > BigInt.zero &&
         value <= widget.totalDue &&
         value <= widget.availableToSpend;
     return AlertDialog(
       title: const Text('REPAY LOAN'),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(
-            'Available to spend: ${formatWholeNumber(widget.availableToSpend)} C'),
-        Text('Total due: ${formatWholeNumber(widget.totalDue)} C'),
+            'Available to spend: ${formatCreditUnits(widget.availableToSpend)}'),
+        Text('Total due: ${formatCreditUnits(widget.totalDue)}'),
         TextField(
           controller: _amount,
           onChanged: (_) => setState(() {}),
@@ -607,7 +698,7 @@ class _LoanRepaymentDialogState extends State<_LoanRepaymentDialog> {
             child: const Text('CANCEL')),
         FilledButton(
             onPressed: valid
-                ? () => Navigator.pop(context, value.toStringAsFixed(0))
+                ? () => Navigator.pop(context, _creditDecimal(value!))
                 : null,
             child: const Text('CONFIRM PAYMENT')),
       ],
@@ -622,17 +713,17 @@ class _FinanceActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return EarthSection(
-      title: 'ACTIVITY',
+      title: 'HISTORICAL CASHFLOW',
       showSurface: true,
       child: transactions.isEmpty
           ? const Text('No recorded House transactions yet.',
               style: TextStyle(color: mutedColor))
           : Column(
               children: transactions.take(20).map((tx) {
-                final delta = asDouble(tx['delta_units']);
+                final delta = _creditUnits(tx['delta_units']);
                 final display = delta == null
                     ? '—'
-                    : '${delta >= 0 ? '+' : ''}${(delta / 100).toStringAsFixed(2)} C';
+                    : _signedCreditText(delta);
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -641,7 +732,7 @@ class _FinanceActivityCard extends StatelessWidget {
                   subtitle: Text('Day ${tx['game_day'] ?? '—'}'),
                   trailing: Text(display,
                       style: TextStyle(
-                          color: delta != null && delta < 0
+                          color: delta != null && delta < BigInt.zero
                               ? Colors.redAccent
                               : Colors.tealAccent)),
                 );
@@ -652,8 +743,8 @@ class _FinanceActivityCard extends StatelessWidget {
 }
 
 class _BankDepositsCard extends StatefulWidget {
-  final List<Map<String, dynamic>> deposits;
-  final double liquidCredits;
+  final List<HouseDeposit> deposits;
+  final BigInt liquidCredits;
   final int currentDay;
   final int currentMinute;
   final Future<void> Function(Future<EarthState> Function()) action;
@@ -684,15 +775,29 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     super.dispose();
   }
 
-  double get _enteredAmount =>
-      double.tryParse(_amountController.text.trim()) ?? 0.0;
+  BigInt? get _enteredAmount => _parseCreditInput(_amountController.text);
   Future<void> _showDepositReviewDialog(BuildContext context) async {
     final amount = _enteredAmount;
+    if (amount == null || amount <= BigInt.zero) return;
     final termDays = _selectedTermDays;
+    Map<String, dynamic> quote = const {};
+    try {
+      final response = await const EarthApi().bankDepositQuote(
+          amount: _creditDecimal(amount), termDays: termDays);
+      quote = response['quote'] is Map
+          ? Map<String, dynamic>.from(response['quote'] as Map)
+          : const <String, dynamic>{};
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('The bank could not provide an authoritative quote.')));
+      }
+      return;
+    }
     final maturityDay = widget.currentDay + termDays;
-    final remainingCredits = widget.liquidCredits - amount;
-    final isAffordable = widget.liquidCredits >= amount && amount > 0;
-    final deficit = amount - widget.liquidCredits;
+    final remainingCredits = amount == null ? null : widget.liquidCredits - amount;
+    final isAffordable = amount != null && amount > BigInt.zero && remainingCredits! >= BigInt.zero;
+    final deficit = amount == null ? BigInt.zero : amount - widget.liquidCredits;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -726,6 +831,14 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   style: context.bodyStyle.copyWith(color: context.mutedColor),
                 ),
                 const SizedBox(height: 16),
+                _reviewRow(dialogContext, 'Estimated interest',
+                    quote['estimatedInterest']?.toString() ?? 'UNAVAILABLE'),
+                _reviewRow(dialogContext, 'Estimated payout',
+                    quote['estimatedPayout']?.toString() ?? 'UNAVAILABLE',
+                    isBold: true),
+                _reviewRow(dialogContext, 'Rate',
+                    '${quote['rateBps'] ?? 'UNAVAILABLE'} bps'),
+                const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -736,12 +849,12 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   child: Column(
                     children: [
                       _reviewRow(dialogContext, 'Deposit amount',
-                          '${formatWholeNumber(amount)} C',
+                          _creditText(amount),
                           isBold: true),
                       const SizedBox(height: 8),
                       _reviewRow(dialogContext, 'Available after deposit',
-                          '${formatWholeNumber(remainingCredits < 0 ? 0 : remainingCredits)} C',
-                          color: remainingCredits < 0
+                          _creditText(remainingCredits == null || remainingCredits < BigInt.zero ? BigInt.zero : remainingCredits),
+                          color: remainingCredits != null && remainingCredits < BigInt.zero
                               ? context.errorColor
                               : context.inkColor),
                       const SizedBox(height: 8),
@@ -784,9 +897,9 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            amount <= 0
+                            amount == null || amount <= BigInt.zero
                                 ? 'Please enter a valid deposit amount greater than 0.'
-                                : 'Insufficient available CREDIT. You need ${formatWholeNumber(deficit)} more C.',
+                                : 'Insufficient available CREDIT. You need ${_creditText(deficit)} more.',
                             style: context.captionStyle
                                 .copyWith(color: context.errorColor),
                           ),
@@ -826,25 +939,25 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
       },
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && amount != null) {
       await _executeDeposit(amount, termDays);
     }
   }
 
-  Future<void> _executeDeposit(double amount, int termDays) async {
+  Future<void> _executeDeposit(BigInt amount, int termDays) async {
     setState(() => _submitting = true);
     try {
       EarthAudioEngine.instance.playCash();
       await widget.action(() async {
-        await const EarthApi()
-            .createBankDeposit(amount: amount, termDays: termDays);
+        await const EarthApi().createBankDeposit(
+            amount: _creditDecimal(amount), termDays: termDays);
         return const EarthApi().world();
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                'Successfully deposited ${formatWholeNumber(amount)} C for $termDays days.'),
+                'Successfully deposited ${_creditText(amount)} for $termDays days.'),
             backgroundColor: context.successColor,
           ),
         );
@@ -863,10 +976,10 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     }
   }
 
-  Future<void> _promptWithdraw(Map<String, dynamic> deposit) async {
-    final depositId = deposit['id']?.toString() ?? '';
-    final principal = asDoubleOr(deposit['principal'], 0);
-    final interest = asDoubleOr(deposit['accrued_interest'], 0);
+  Future<void> _promptWithdraw(HouseDeposit deposit) async {
+    final depositId = deposit.id;
+    final principal = deposit.principalUnits;
+    final interest = deposit.accruedInterestUnits;
     final totalPayout = principal + interest;
 
     final confirmed = await showDialog<bool>(
@@ -913,16 +1026,16 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                       _reviewRow(dialogContext, 'Deposit ID', depositId),
                       const SizedBox(height: 8),
                       _reviewRow(dialogContext, 'Principal return',
-                          '${formatWholeNumber(principal)} C'),
+                          _creditText(principal)),
                       const SizedBox(height: 8),
                       _reviewRow(dialogContext, 'Realized interest',
-                          '${interest.toStringAsFixed(2)} C',
+                          _signedCreditText(interest),
                           color: context.successColor),
                       const Divider(height: 18, color: Colors.white10),
                       _reviewRow(
                         dialogContext,
                         'Total Liquid Credit Payout',
-                        '${totalPayout.toStringAsFixed(2)} C',
+                        _creditText(totalPayout),
                         isBold: true,
                         color: EarthResourceColors.credits,
                       ),
@@ -964,7 +1077,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  'Successfully withdrawn ${totalPayout.toStringAsFixed(2)} C to your liquid balance.'),
+                  'Successfully withdrawn ${_creditText(totalPayout)} to your liquid balance.'),
               backgroundColor: context.successColor,
             ),
           );
@@ -1008,18 +1121,17 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
   @override
   Widget build(BuildContext context) {
     final activeDeposits = widget.deposits.where((d) {
-      final status = d['status']?.toString().toLowerCase() ?? '';
-      final maturityDay =
-          asIntOr(d['maturity_game_day'], widget.currentDay + 1);
+      final status = d.status.toLowerCase();
+      final maturityDay = d.maturityGameDay ?? widget.currentDay + 1;
       return status == 'active' && widget.currentDay < maturityDay;
     }).toList();
-    final activePrincipal = activeDeposits.fold<double>(
-        0.0, (sum, d) => sum + asDoubleOr(d['principal'], 0));
-    final activeAccruedInterest = activeDeposits.fold<double>(
-        0.0, (sum, d) => sum + asDoubleOr(d['accrued_interest'], 0));
+    final activePrincipal = activeDeposits.fold<BigInt>(
+        BigInt.zero, (sum, d) => sum + d.principalUnits);
+    final activeAccruedInterest = activeDeposits.fold<BigInt>(
+        BigInt.zero, (sum, d) => sum + d.accruedInterestUnits);
     final maturedAwaitingWithdrawal = widget.deposits.where((d) {
-      return d['status']?.toString().toLowerCase() == 'matured';
-    }).fold<double>(0.0, (sum, d) => sum + asDoubleOr(d['principal'], 0));
+      return d.status.toLowerCase() == 'matured';
+    }).fold<BigInt>(BigInt.zero, (sum, d) => sum + d.principalUnits);
 
     return EarthPanel(
       title: 'GLOBAL CORPORATE BANK',
@@ -1057,10 +1169,10 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
 
   Widget _buildOverviewSection(
     BuildContext context, {
-    required double liquidCredits,
-    required double totalPrincipal,
-    required double accruedInterest,
-    required double maturedAwaitingWithdrawal,
+    required BigInt liquidCredits,
+    required BigInt totalPrincipal,
+    required BigInt accruedInterest,
+    required BigInt maturedAwaitingWithdrawal,
     required int activeDepositCount,
   }) {
     return Column(
@@ -1085,25 +1197,25 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
               _metricBox(
                   context,
                   'Available to spend',
-                  '${formatWholeNumber(liquidCredits)} C',
+                  _creditText(liquidCredits),
                   Icons.account_balance_wallet_outlined,
                   EarthResourceColors.credits),
               _metricBox(
                   context,
                   'Active principal',
-                  '${formatWholeNumber(totalPrincipal)} C',
+                  _creditText(totalPrincipal),
                   Icons.lock_clock_outlined,
                   context.primaryColor),
               _metricBox(
                   context,
                   'Active accrued interest',
-                  '${accruedInterest >= 0 ? '+' : ''}${accruedInterest.toStringAsFixed(2)} C',
+                  _signedCreditText(accruedInterest),
                   Icons.trending_up,
                   context.successColor),
               _metricBox(
                   context,
                   'Matured awaiting withdrawal',
-                  '${formatWholeNumber(maturedAwaitingWithdrawal)} C',
+                  _creditText(maturedAwaitingWithdrawal),
                   Icons.download_done_outlined,
                   context.secondaryColor),
               _metricBox(context, 'Active deposits', '$activeDepositCount',
@@ -1276,7 +1388,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                               icon: Icons.add_circle_outline,
                               variant: EarthButtonVariant.primary,
                               isLoading: _submitting,
-                              onPressed: _submitting || amount <= 0
+                              onPressed: _submitting || amount == null || amount <= BigInt.zero
                                   ? null
                                   : () => _showDepositReviewDialog(context),
                             ),
@@ -1321,7 +1433,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                               icon: Icons.add_circle_outline,
                               variant: EarthButtonVariant.primary,
                               isLoading: _submitting,
-                              onPressed: _submitting || amount <= 0
+                              onPressed: _submitting || amount == null || amount <= BigInt.zero
                                   ? null
                                   : () => _showDepositReviewDialog(context),
                             ),
@@ -1502,15 +1614,14 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     );
   }
 
-  Widget _buildDepositRow(BuildContext context, Map<String, dynamic> deposit) {
-    final principal = asDoubleOr(deposit['principal'], 0);
-    final interest = asDoubleOr(deposit['accrued_interest'], 0);
-    final startDay = asIntOr(deposit['start_game_day'], 1);
-    final startMinute = asIntOr(deposit['start_game_minute'], 0);
-    final maturityDay = asIntOr(deposit['maturity_game_day'], startDay + 1);
-    final maturityMinute =
-        asIntOr(deposit['maturity_game_minute'], startMinute);
-    final rawStatus = deposit['status']?.toString().toLowerCase() ?? 'active';
+  Widget _buildDepositRow(BuildContext context, HouseDeposit deposit) {
+    final principal = deposit.principalUnits;
+    final interest = deposit.accruedInterestUnits;
+    final startDay = deposit.startGameDay ?? 1;
+    final startMinute = deposit.startGameMinute ?? 0;
+    final maturityDay = deposit.maturityGameDay ?? startDay + 1;
+    final maturityMinute = deposit.maturityGameMinute ?? startMinute;
+    final rawStatus = deposit.status.toLowerCase();
 
     final isMaturedByTime =
         (widget.currentDay - 1) * 1440 + widget.currentMinute >=
@@ -1563,7 +1674,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${formatWholeNumber(principal)} C',
+                      _creditText(principal),
                       style: context.widgetTitleStyle
                           .copyWith(fontWeight: FontWeight.bold),
                     ),
@@ -1575,7 +1686,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                         children: [
                           TextSpan(
                             text:
-                                '${interest >= 0 ? '+' : ''}${interest.toStringAsFixed(2)} C',
+                                _signedCreditText(interest),
                             style: context.captionStyle.copyWith(
                                 color: context.successColor, fontSize: 11),
                           ),
@@ -1609,7 +1720,7 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
             ClipRRect(
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
-                key: ValueKey('deposit-progress-${deposit['id'] ?? 'unknown'}'),
+                key: ValueKey('deposit-progress-${deposit.id}'),
                 value: progress,
                 minHeight: 4,
                 backgroundColor: Colors.white.withValues(alpha: .08),
@@ -1657,61 +1768,82 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
 }
 
 class _CreditIncomeSummaryCard extends StatelessWidget {
-  final double? grossCredits;
-  final double? taxAmount;
-  final Map<String, dynamic> personalFinanceData;
+  final Map<String, dynamic> nextSettlement;
 
   const _CreditIncomeSummaryCard({
-    required this.grossCredits,
-    required this.taxAmount,
-    this.personalFinanceData = const {},
+    required this.nextSettlement,
   });
 
   @override
   Widget build(BuildContext context) {
-    final assetIncome = PersonalFinancePanel._map(personalFinanceData['assetIncome']);
-    final buildingCredits = asDouble(assetIncome['businessProfit']) ??
-        asDouble(assetIncome['buildingCredits']) ??
-        0.0;
-    final investmentDividend = asDouble(assetIncome['civicDividends']) ??
-        asDouble(assetIncome['investmentDividend']) ??
-        0.0;
-    final bankInterest = asDouble(assetIncome['bankInterest']) ??
-        asDouble(assetIncome['depositInterest']) ??
-        0.0;
-
-    final taxes = PersonalFinancePanel._map(personalFinanceData['taxes']);
-    final rawTaxRules = taxes['rules'];
-    final taxRules = (rawTaxRules is List ? rawTaxRules : const [])
+    final rows = (nextSettlement['items'] as List? ?? const [])
         .whereType<Map>()
-        .map((r) => Map<String, dynamic>.from(r))
+        .map((raw) => Map<String, dynamic>.from(raw))
         .toList();
-    final basicLevy = PersonalFinancePanel._map(personalFinanceData['basicLevy']);
-    final taxRate = asDouble(taxRules.isNotEmpty ? taxRules.first['rate'] : basicLevy['rate']);
+    final inflow = _creditUnits(nextSettlement['inflowsUnits']);
+    final outflow = _creditUnits(nextSettlement['outflowsUnits']);
+    final net = _creditUnits(nextSettlement['netCashflowUnits']);
 
-    final grossItems = <CreditIncomeLineItem>[];
-    if (personalFinanceData.containsKey('assetIncome') || buildingCredits > 0 || investmentDividend > 0) {
-      grossItems.add(CreditIncomeLineItem('Private buildings', buildingCredits));
-      if (investmentDividend > 0) {
-        grossItems.add(CreditIncomeLineItem('Investment dividend', investmentDividend));
-      }
-      grossItems.add(CreditIncomeLineItem('Bank deposit interest', bankInterest));
-    } else if (grossCredits != null) {
-      grossItems.add(CreditIncomeLineItem('Recorded ledger income', grossCredits!));
-    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.surfaceColor.withValues(alpha: .75),
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('NEXT SETTLEMENT FORECAST', style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
+        const SizedBox(height: 12),
+        _row(context, 'Predictable inflows', inflow),
+        ...rows.where((row) => row['direction'] == 'INFLOW').map((row) => _row(
+              context,
+              _label(row['category']),
+              _creditUnits(row['amountUnits']),
+              detail: true,
+            )),
+        _row(context, 'Known outflows', outflow, negative: true),
+        ...rows.where((row) => row['direction'] == 'OUTFLOW').map((row) => _row(
+              context,
+              _label(row['category']),
+              _creditUnits(row['amountUnits']),
+              detail: true,
+              negative: true,
+            )),
+        const Divider(height: 20),
+        _row(context, 'Net', net, bold: true),
+      ]),
+    );
+  }
 
-    final deductionItems = <CreditIncomeLineItem>[];
-    if (taxRate != null) {
-      final pct = (taxRate * 100).toStringAsFixed((taxRate * 100) == (taxRate * 100).roundToDouble() ? 0 : 1);
-      final effTax = taxAmount ?? ((grossCredits ?? 0) * taxRate);
-      deductionItems.add(CreditIncomeLineItem('Income tax $pct%', effTax));
-    } else if (taxAmount != null) {
-      deductionItems.add(CreditIncomeLineItem('Recorded taxes', taxAmount!));
-    }
+  String _label(dynamic value) => switch (value?.toString()) {
+        'TAX' => 'Taxes',
+        'CAPACITY_RENT' => 'Capacity rent',
+        'BUILDING_OPERATING_EXPENSE' => 'Building operations',
+        'DEBT_SERVICE' => 'Debt service',
+        'BANK_INTEREST' => 'Bank interest',
+        'LICENSE' => 'Licenses',
+        _ => value?.toString() ?? 'Scheduled item',
+      };
 
-    return CreditIncomeSummaryCard(
-      grossItems: grossItems,
-      deductionItems: deductionItems,
+  Widget _row(BuildContext context, String label, BigInt? value,
+      {bool detail = false, bool negative = false, bool bold = false}) {
+    final display = value == null
+        ? 'UNAVAILABLE'
+        : '${negative ? '-' : ''}${formatCreditUnits(value.abs())}';
+    return Padding(
+      padding: EdgeInsets.only(bottom: detail ? 6 : 8),
+      child: Row(children: [
+        Expanded(child: Text(label, style: context.bodyStyle.copyWith(
+          color: detail ? context.mutedColor : context.inkColor,
+          fontSize: detail ? 11 : 13,
+          fontWeight: bold || !detail ? FontWeight.w800 : FontWeight.w600,
+        ))),
+        Text(display, style: context.bodyStyle.copyWith(
+          color: negative ? context.errorColor : context.inkColor,
+          fontWeight: FontWeight.w800,
+        )),
+      ]),
     );
   }
 }

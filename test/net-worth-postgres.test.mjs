@@ -2,87 +2,44 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from '../cloudflare/src/net-worth-postgres.ts';
 
-test('Net Worth PostgreSQL Module: queries history and aggregates summary accurately', async () => {
-  const mockSnapshots = [
-    {
-      id: 'NW-H0044-155',
-      human_id: 'H-0044',
-      game_day: 155,
-      liquid_credits: '15000.00',
-      commodity_valuation: '8000.00',
-      equity_valuation: '25000.00',
-      real_estate_valuation: '12000.00',
-      total_net_worth: '60000.00',
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: 'NW-H0044-185',
-      human_id: 'H-0044',
-      game_day: 185,
-      liquid_credits: '40000.00',
-      commodity_valuation: '20000.00',
-      equity_valuation: '68000.00',
-      real_estate_valuation: '30000.00',
-      total_net_worth: '158000.00',
-      created_at: new Date().toISOString(),
-    },
-  ];
-
-  const mockClient = {
-    query: async (sql, params) => {
-      if (sql.includes('FROM net_worth_snapshots')) {
-        return { rows: mockSnapshots };
-      }
-      return { rows: [] };
-    },
-  };
-
-  const result = await getNetWorthHistory(mockClient, 'H-0044');
-  assert.equal(result.ok, true);
-  assert.equal(result.snapshots.length, 2);
-  assert.equal(result.summary.currentNetWorth, 158000);
-  assert.equal(result.summary.liquidCredits, 40000);
-  assert.equal(result.summary.peakNetWorth, 158000);
-  assert.equal(result.summary.peakDay, 185);
-  assert.equal(result.summary.growthRatePct > 100, true);
-  assert.equal(typeof result.summary.assetAllocation.cashPct, 'number');
+test('House net worth history is keyed by House and preserves exact units', async () => {
+  const snapshots = [{
+    id: 'NW-HOUSE-1-185', house_id: 'HOUSE-1', current_human_id: 'H-0044', game_day: 185,
+    liquid_credits_units: '900719925474099300', deposit_principal_units: '2500',
+    commodity_valuation_units: '8000', buildings_valuation_units: '12000', debt_units: '500',
+    total_net_worth_units: '900719925474121300', valuation_policy: 'HOUSE_NET_WORTH_V5_COST_BASIS_MARKET_INVENTORY',
+    created_at: new Date().toISOString(),
+  }];
+  const client = { query: async (sql) => {
+    if (sql.includes('FROM humans')) return { rows: [{ house_id: 'HOUSE-1' }] };
+    if (sql.includes('FROM net_worth_snapshots')) return { rows: snapshots };
+    return { rows: [] };
+  } };
+  const result = await getNetWorthHistory(client, 'H-0044');
+  assert.equal(result.houseId, 'HOUSE-1');
+  assert.equal(result.snapshots[0].house_id, 'HOUSE-1');
+  assert.equal(result.summary.currentNetWorthUnits, '900719925474121300');
+  assert.equal(result.summary.liquidCreditsUnits, '900719925474099300');
+  assert.match(result.valuationPolicy.description, /Corporation equity is excluded/);
 });
 
-test('Net Worth PostgreSQL Module: recordDailyNetWorthSnapshot creates and stores snapshot', async () => {
-  const mockClient = {
+test('House net worth snapshot uses exact unit arithmetic and debt subtraction', async () => {
+  const client = {
     query: async (sql, params) => {
-      if (sql.includes('account_balances')) {
-        return { rows: [{ balance: '35000.00' }] };
-      }
-      if (sql.includes('resource_balances')) {
-        return { rows: [{ resource: 'energy', amount: '100' }, { resource: 'compute', amount: '50' }] };
-      }
-      if (sql.includes('INSERT INTO net_worth_snapshots')) {
-        return {
-          rows: [
-            {
-              id: params[0],
-              human_id: params[1],
-              game_day: params[2],
-              liquid_credits: params[3],
-              commodity_valuation: params[4],
-              equity_valuation: params[5],
-              real_estate_valuation: params[6],
-              total_net_worth: params[7],
-              created_at: new Date().toISOString(),
-            },
-          ],
-        };
-      }
+      if (sql.includes('FROM humans')) return { rows: [{ house_id: 'HOUSE-1' }] };
+      if (sql.includes('FROM net_worth_snapshots')) return { rows: [] };
+      if (sql.includes('INSERT INTO net_worth_snapshots')) return { rows: [{ house_id: params[1], game_day: params[3], total_net_worth_units: params[9], liquid_credits_units: params[4], deposit_principal_units: params[5], commodity_valuation_units: params[6], buildings_valuation_units: params[7], debt_units: params[8] }] };
+      if (sql.includes('economic_assets')) return { rows: [{ resource: 'energy', quantity_units: '10' }] };
+      if (sql.includes('economic_accounts')) return { rows: [{ units: '900719925474099300' }] };
+      if (sql.includes('bank_deposits')) return { rows: [{ units: '2500' }] };
+      if (sql.includes('bank_loans')) return { rows: [{ units: '500' }] };
+      if (sql.includes('market_instruments')) return { rows: [{ resource: 'energy', price_units: '30' }] };
+      if (sql.includes('building_catalog')) return { rows: [{ units: '12000' }] };
       return { rows: [] };
     },
+    transaction: async (work) => work(client),
   };
-  mockClient.transaction = async (work) => work(mockClient);
-
-  const res = await recordDailyNetWorthSnapshot(mockClient, 'H-0044', 186);
-  assert.equal(res.ok, true);
-  assert.equal(res.snapshot.human_id, 'H-0044');
-  assert.equal(res.snapshot.game_day, 186);
-  assert.equal(Number(res.snapshot.liquid_credits), 35000);
-  assert.equal(Number(res.snapshot.commodity_valuation), 6000); // 100*30 + 50*60
+  const result = await recordDailyNetWorthSnapshot(client, 'H-0044', 186);
+  assert.equal(result.snapshot.house_id, 'HOUSE-1');
+  assert.equal(result.snapshot.total_net_worth_units, '900719925474113600');
 });

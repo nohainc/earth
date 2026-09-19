@@ -494,6 +494,20 @@ export const REQUIRED_SCHEMA_TABLES = {
     "capital_ratio",
     "status"
   ],
+  "net_worth_snapshots": [
+    "id",
+    "house_id",
+    "current_human_id",
+    "game_day",
+    "liquid_credits_units",
+    "deposit_principal_units",
+    "commodity_valuation_units",
+    "buildings_valuation_units",
+    "debt_units",
+    "total_net_worth_units",
+    "valuation_policy",
+    "created_at"
+  ],
   "tax_governance_rules": [
     "scope",
     "category",

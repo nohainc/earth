@@ -89,7 +89,6 @@ class EarthState {
       buildingPortfolio?.corporationPublicAssets ?? const [];
   Map<String, dynamic> get districtZoning => _toMap(json['districtZoning']);
   List<dynamic> get investmentShares => _toList(json['investmentShares']);
-  List<dynamic> get civicDividends => _toList(json['civicDividends']);
   List<dynamic> get corporateResearch => _toList(json['corporateResearch']);
   Map<String, dynamic> get corporationBuildingResearch =>
       _toMap(json['corporationBuildingResearch']);

@@ -68,19 +68,8 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
   }
 
   String? get _walletAccountId {
-    final accounts = widget.personalFinanceData['accounts'];
-    if (accounts is! List) return null;
-    for (final raw in accounts) {
-      if (raw is! Map) continue;
-      final code =
-          (raw['asset_code'] ?? raw['assetCode'])?.toString().toUpperCase();
-      final type =
-          (raw['account_type'] ?? raw['accountType'])?.toString().toUpperCase();
-      if (code == 'CREDIT' && type == 'WALLET') {
-        return raw['account_id']?.toString();
-      }
-    }
-    return null;
+    final wallet = widget.personalFinanceData['wallet'];
+    return wallet is Map ? wallet['accountId']?.toString() : null;
   }
 
   Future<void> _contribute(Map<String, dynamic> project) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/audio/earth_audio_engine.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 class NetWorthChartWidget extends StatefulWidget {
   final List<Map<String, dynamic>> snapshots;
@@ -43,11 +44,7 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
             ? widget.snapshots[_hoveredIndex!]
             : latest;
 
-    final tot = _parseNum(inspected['total_net_worth']);
-    final cash = _parseNum(inspected['liquid_credits']);
-    final comm = _parseNum(inspected['commodity_valuation']);
-    final eq = _parseNum(inspected['equity_valuation']);
-    final re = _parseNum(inspected['real_estate_valuation']);
+    final tot = _parseNum(inspected['total_net_worth_units']);
     final day = inspected['game_day']?.toString() ?? '-';
 
     return Container(
@@ -90,7 +87,7 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '${tot.toStringAsFixed(2)} CR',
+                      formatCreditUnits(inspected['total_net_worth_units']),
                       style: TextStyle(
                         color: EarthThemeController.instance.primaryAccent,
                         fontWeight: FontWeight.bold,
@@ -109,20 +106,21 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
                       children: [
                         _statBadge('DAY', day, Colors.white),
                         const SizedBox(width: 8),
-                        _statBadge('CASH', '${cash.toStringAsFixed(0)} CR',
+                        _statBadge('CASH', formatCreditUnits(inspected['liquid_credits_units']),
                             EarthThemeController.instance.goldMetallic),
+                        const SizedBox(width: 8),
+                        _statBadge('DEPOSITS', formatCreditUnits(inspected['deposit_principal_units']),
+                            Colors.lightBlueAccent),
                         const SizedBox(width: 8),
                         _statBadge(
                             'COMMODITIES',
-                            '${comm.toStringAsFixed(0)} CR',
+                            formatCreditUnits(inspected['commodity_valuation_units']),
                             EarthThemeController.instance.primaryAccent),
                         const SizedBox(width: 8),
-                        _statBadge('EQUITY', '${eq.toStringAsFixed(0)} CR',
+                        _statBadge('BUILDINGS', formatCreditUnits(inspected['buildings_valuation_units']),
                             const Color(0xFFC084FC)),
                         const SizedBox(width: 8),
-                        _statBadge(
-                            'OTHER ASSETS',
-                            '${re.toStringAsFixed(0)} CR',
+                        _statBadge('DEBT', formatCreditUnits(inspected['debt_units']),
                             const Color(0xFFFB923C)),
                       ],
                     ),
@@ -228,7 +226,7 @@ class _NetWorthChartPainter extends CustomPainter {
     double maxVal = 1000.0;
 
     for (final s in snapshots) {
-      final t = _val(s['total_net_worth']);
+      final t = _val(s['total_net_worth_units']);
       if (t > maxVal) maxVal = t;
     }
     maxVal *= 1.12;
@@ -279,11 +277,11 @@ class _NetWorthChartPainter extends CustomPainter {
       final x =
           n > 1 ? padLeft + (chartW * (i / (n - 1))) : padLeft + chartW / 2;
 
-      final t = _val(s['total_net_worth']);
-      final c = _val(s['liquid_credits']);
-      final m = _val(s['commodity_valuation']);
-      final e = _val(s['equity_valuation']);
-      final r = _val(s['real_estate_valuation']);
+      final t = _val(s['total_net_worth_units']);
+      final c = _val(s['liquid_credits_units']);
+      final m = _val(s['commodity_valuation_units']);
+      final e = _val(s['buildings_valuation_units']);
+      final r = _val(s['debt_units']);
 
       final yTot = padTop + chartH * (1.0 - (t / maxVal)).clamp(0.0, 1.0);
       final yCash = padTop + chartH * (1.0 - (c / maxVal)).clamp(0.0, 1.0);

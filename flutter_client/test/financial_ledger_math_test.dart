@@ -12,6 +12,10 @@ void main() {
       expect(formatWholeNumber(-450.2), '-450');
       expect(formatCreditsAmount(15000), '15000 C');
       expect(formatCreditUnits('12500'), '125.00 C');
+      expect(formatCreditUnits('100'), '1.00 C');
+      expect(formatCreditUnits('1'), '0.01 C');
+      expect(formatCreditUnits('900719925474099300'), '9007199254740993.00 C');
+      expect(formatCreditUnits('-250'), '-2.50 C');
       expect(formatPercent(0.125), '13%');
       expect(formatPercent(0.50), '50%');
       expect(formatPercent(1.0), '100%');

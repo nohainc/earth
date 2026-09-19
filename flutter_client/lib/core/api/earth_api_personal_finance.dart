@@ -6,10 +6,23 @@ extension EarthApiPersonalFinance on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> personalFinance() async {
-    final response = await _request('/api/finance/me');
+  Future<Map<String, dynamic>> houseFinanceOverview() async {
+    final response = await _request('/api/finance/overview');
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
+
+  Future<Map<String, dynamic>> openCapacityResolution({String? reason}) async {
+    final response = await _request('/api/v5/house/capacity-resolution',
+        method: 'POST',
+        body: {
+          'correlationId': newClientCorrelationId('V5-CAPACITY-RESOLUTION'),
+          if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        });
+    return response is Map<String, dynamic> ? response : <String, dynamic>{};
+  }
+
+  @Deprecated('Use houseFinanceOverview')
+  Future<Map<String, dynamic>> personalFinance() => houseFinanceOverview();
 
   /// Canonical Economy V2 balances in display units. Storage precision stays
   /// entirely behind the API boundary.
@@ -50,13 +63,20 @@ extension EarthApiPersonalFinance on EarthApi {
   }
 
   Future<Map<String, dynamic>> createBankDeposit(
-      {required double amount, required int termDays}) async {
+      {required String amount, required int termDays}) async {
     final response =
         await _request('/api/finance/bank/deposit', method: 'POST', body: {
       'amount': amount,
       'termDays': termDays,
       'correlationId': newClientCorrelationId('BANK-DEP'),
     });
+    return response is Map<String, dynamic> ? response : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> bankDepositQuote(
+      {required String amount, int termDays = 30}) async {
+    final response = await _request(
+        '/api/finance/bank/deposit-quote?amount=${Uri.encodeQueryComponent(amount)}&termDays=$termDays');
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
@@ -70,17 +90,17 @@ extension EarthApiPersonalFinance on EarthApi {
   }
 
   Future<Map<String, dynamic>> bankLoanQuote(
-      {required String requestedUnits, int termDays = 30}) async {
+      {required String amount, int termDays = 30}) async {
     final response = await _request(
-        '/api/finance/bank/loan-quote?requestedUnits=$requestedUnits&termDays=$termDays');
+        '/api/finance/bank/loan-quote?amount=${Uri.encodeQueryComponent(amount)}&termDays=$termDays');
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> originateBankLoan(
-      {required String requestedUnits, int termDays = 30}) async {
+      {required String amount, int termDays = 30}) async {
     final response =
         await _request('/api/finance/bank/loan', method: 'POST', body: {
-      'requestedUnits': requestedUnits,
+      'amount': amount,
       'termDays': termDays,
       'correlationId': newClientCorrelationId('BANK-LOAN'),
     });
@@ -88,11 +108,11 @@ extension EarthApiPersonalFinance on EarthApi {
   }
 
   Future<Map<String, dynamic>> repayBankLoan(String loanId,
-      {String? amountUnits}) async {
+      {String? amount}) async {
     final response = await _request('/api/finance/bank/loan/$loanId/repay',
         method: 'POST',
         body: {
-          if (amountUnits != null) 'amountUnits': amountUnits,
+          if (amount != null) 'amount': amount,
           'correlationId': newClientCorrelationId('BANK-REPAY'),
         });
     return response is Map<String, dynamic> ? response : <String, dynamic>{};

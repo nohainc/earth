@@ -23,7 +23,7 @@ test('banking migration preserves collateral, guarantees, payments, and resoluti
 test('bank loan origination is exposed as a protected, idempotent canonical path', () => {
   const service = fs.readFileSync('cloudflare/src/banking-postgres.ts', 'utf8');
   const routes = fs.readFileSync('cloudflare/src/api-registry.ts', 'utf8');
-  assert.match(service, /earth_post_transaction/);
+  assert.match(service, /postEconomicTransaction/);
   assert.match(service, /WHERE correlation_id = \$1/);
   assert.match(routes, /POST.*\/api\/finance\/bank\/loan/);
   assert.match(routes, /getBankLoanQuote/);

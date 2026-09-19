@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { quoteLoan } from './banking.ts';
 import { runEconomicMutation, postEconomicTransaction, postSettlementTransaction } from './settlement-barrier-postgres.ts';
+import { formatCreditUnits } from './money.ts';
 
 type CreditFacts = { borrowerEconomicId: string; walletId: string; walletBalance: bigint; reserveId: string; reserveBalance: bigint; operationsId: string; cashflow: bigint; policy: any; day: number };
 
@@ -24,7 +25,12 @@ export async function listBankLoans(repository: PostgresRepository, humanId: str
     WHERE h.id = $1 AND h.status = 'ACTIVE'`, [humanId])).rows[0];
   if (!owner) return { loans: [], generatedFrom: 'postgres-canonical-facts' };
   const loans = await repository.query(`SELECT id, original_principal_units::TEXT, outstanding_principal_units::TEXT, accrued_interest_units::TEXT, rate_bps, term_days, origination_game_day, maturity_game_day, next_payment_game_day, status FROM bank_loans WHERE borrower_economic_id = $1 ORDER BY origination_game_day DESC, id`, [owner.economic_id]);
-  return { loans: loans.rows, generatedFrom: 'postgres-canonical-facts' };
+  return { loans: loans.rows.map((row) => {
+    const principalUnits = String(row.outstanding_principal_units ?? '0');
+    const interestUnits = String(row.accrued_interest_units ?? '0');
+    const totalUnits = (BigInt(principalUnits) + BigInt(interestUnits)).toString();
+    return { ...row, outstandingPrincipalUnits: principalUnits, accruedInterestUnits: interestUnits, totalDueUnits: totalUnits, outstandingPrincipal: formatCreditUnits(BigInt(principalUnits)), accruedInterest: formatCreditUnits(BigInt(interestUnits)), totalDue: formatCreditUnits(BigInt(totalUnits)), display: { unitCode: 'CREDIT', scale: 2 } };
+  }), generatedFrom: 'postgres-canonical-facts' };
 }
 
 function quoteFromFacts(facts: CreditFacts, requestedUnits: bigint, termDays: number) {
@@ -36,7 +42,7 @@ export async function getBankLoanQuote(repository: PostgresRepository, input: { 
   const facts = await creditFacts(repository, input.humanId);
   const quote = quoteFromFacts(facts, input.requestedUnits, input.termDays);
   const interest = (input.requestedUnits * BigInt(quote.rateBps) * BigInt(input.termDays)) / 36500n;
-  return { quote: { ...quote, requestedUnits: input.requestedUnits.toString(), termDays: input.termDays, estimatedInterestUnits: interest.toString(), estimatedTotalRepaymentUnits: (input.requestedUnits + interest).toString(), maturityGameDay: facts.day + input.termDays, policyVersion: facts.policy.policy_version }, generatedFrom: 'postgres-canonical-facts' };
+  return { quote: { eligible: quote.eligible, approvedUnits: quote.approvedUnits.toString(), approvedAmount: formatCreditUnits(quote.approvedUnits), requestedUnits: input.requestedUnits.toString(), requestedAmount: formatCreditUnits(input.requestedUnits), termDays: input.termDays, rateBps: quote.rateBps.toString(), estimatedInterestUnits: interest.toString(), estimatedInterest: formatCreditUnits(interest), estimatedTotalRepaymentUnits: (input.requestedUnits + interest).toString(), estimatedTotalRepayment: formatCreditUnits(input.requestedUnits + interest), maturityGameDay: facts.day + input.termDays, policyVersion: facts.policy.policy_version, reason: quote.reason, display: { unitCode: 'CREDIT', scale: 2 } }, generatedFrom: 'postgres-canonical-facts' };
 }
 
 export async function originateBankLoan(repository: PostgresRepository, input: { humanId: string; requestedUnits: bigint; termDays: number; correlationId: string }): Promise<Record<string, unknown>> {
@@ -70,7 +76,7 @@ export async function originateBankLoan(repository: PostgresRepository, input: {
     await tx.query(`INSERT INTO bank_loans (id, borrower_economic_id, bank_economic_id, original_principal_units, outstanding_principal_units, accrued_interest_units, rate_bps, credit_limit_units, term_days, origination_game_day, maturity_game_day, next_payment_game_day, status, origination_transaction_id, correlation_id) VALUES ($1,$2,'ECON-GLOBAL-BANK-001',$3,$3,0,$4,$3,$5,$6,$7,$7,'PERFORMING',$8,$9)`, [loanId, facts.borrowerEconomicId, input.requestedUnits.toString(), quote.rateBps.toString(), input.termDays, day, maturity, posted.transactionId, input.correlationId]);
     await tx.query(`INSERT INTO bank_loan_collateral (id, loan_id, owner_economic_id, collateral_type, reference_id, valuation_units, haircut_bps, pledged_game_day, correlation_id) VALUES ($1,$2,$3,'CASH',$4,$5,0,$6,$7)`, [`COLLATERAL-${loanId}`, loanId, facts.borrowerEconomicId, facts.walletId, input.requestedUnits.toString(), day, `collateral:${input.correlationId}`]);
     await tx.query(`INSERT INTO bank_loan_schedules (id, loan_id, installment_no, due_game_day, principal_due_units, interest_due_units, correlation_id) VALUES ($1,$2,1,$3,$4,$5,$6)`, [`SCHEDULE-${loanId}`, loanId, maturity, input.requestedUnits.toString(), interest.toString(), `schedule:${input.correlationId}`]);
-    return { ok: true, loanId, principalUnits: input.requestedUnits.toString(), interestUnits: interest.toString(), rateBps: quote.rateBps.toString(), maturityGameDay: maturity, correlationId: input.correlationId };
+    return { ok: true, loanId, principalUnits: input.requestedUnits.toString(), principal: formatCreditUnits(input.requestedUnits), interestUnits: interest.toString(), interest: formatCreditUnits(interest), totalRepaymentUnits: (input.requestedUnits + interest).toString(), totalRepayment: formatCreditUnits(input.requestedUnits + interest), rateBps: quote.rateBps.toString(), maturityGameDay: maturity, display: { unitCode: 'CREDIT', scale: 2 }, correlationId: input.correlationId };
   });
 }
 
@@ -110,7 +116,7 @@ export async function repayBankLoan(repository: PostgresRepository, input: { hum
     await tx.query("UPDATE bank_loan_schedules SET paid_units = LEAST(principal_due_units + interest_due_units, paid_units + $1), status = CASE WHEN paid_units + $1 >= principal_due_units + interest_due_units THEN 'PAID' ELSE 'PARTIAL' END, payment_transaction_id = $2 WHERE loan_id = $3 AND status IN ('DUE','PARTIAL','ARREARS')", [payment.toString(), posted.transactionId, input.loanId]);
     if (remainingClaim === 0n) await tx.query("UPDATE bank_loan_collateral SET status = 'RELEASED', released_game_day = $1 WHERE loan_id = $2 AND status = 'PLEDGED'", [facts.day, input.loanId]);
     await tx.query("UPDATE bank_loans SET outstanding_principal_units = outstanding_principal_units - $1, accrued_interest_units = GREATEST(0, accrued_interest_units - $2), status = CASE WHEN outstanding_principal_units - $1 = 0 AND accrued_interest_units - $2 <= 0 THEN 'PAID' WHEN status = 'DELINQUENT' THEN 'DELINQUENT' ELSE 'PERFORMING' END WHERE id = $3", [principalPayment.toString(), interest.toString(), input.loanId]);
-    return { ok: true, paymentId, loanId: input.loanId, principalUnits: principalPayment.toString(), interestUnits: interest.toString(), totalUnits: payment.toString(), remainingUnits: remainingClaim.toString(), correlationId: input.correlationId };
+    return { ok: true, paymentId, loanId: input.loanId, principalUnits: principalPayment.toString(), principal: formatCreditUnits(principalPayment), interestUnits: interest.toString(), interest: formatCreditUnits(interest), totalUnits: payment.toString(), total: formatCreditUnits(payment), remainingUnits: remainingClaim.toString(), remaining: formatCreditUnits(remainingClaim), display: { unitCode: 'CREDIT', scale: 2 }, correlationId: input.correlationId };
   });
 }
 
