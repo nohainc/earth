@@ -14,8 +14,8 @@ extension EarthApiAuth on EarthApi {
   }
 
   Future<EarthState> updateEpitaph(String epitaph) async {
-    await _request('/api/auth/profile', method: 'PATCH', body: {
-      'epitaph': epitaph.trim(),
+    await _request('/api/life/testament', method: 'PATCH', body: {
+      'testament': epitaph.trim(),
     });
     return world();
   }

@@ -1,6 +1,7 @@
 class HumanProfile {
   final String id;
   final String displayName;
+  final String? epitaph;
   final String houseId;
   final String houseName;
   final int? birthGameDay;
@@ -14,6 +15,7 @@ class HumanProfile {
   const HumanProfile({
     required this.id,
     required this.displayName,
+    required this.epitaph,
     required this.houseId,
     required this.houseName,
     required this.birthGameDay,
@@ -33,6 +35,7 @@ class HumanProfile {
     return HumanProfile(
       id: json['id']?.toString() ?? '',
       displayName: json['displayName']?.toString() ?? '',
+      epitaph: json['epitaph']?.toString(),
       houseId: json['houseId']?.toString() ?? '',
       houseName: json['houseName']?.toString() ?? '',
       birthGameDay: _int(json['birthGameDay']),

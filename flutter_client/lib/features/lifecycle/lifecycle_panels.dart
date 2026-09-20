@@ -199,6 +199,38 @@ class LifeTodayPanel extends StatelessWidget {
                       child: const Text('VIEW CORPORATION'),
                     ),
                   ),
+                const SizedBox(height: 12),
+                _lifecycleTopicHeading(
+                  context,
+                  'TESTAMENT',
+                  description:
+                      'An optional short plain-text inscription written by the active Human. It is frozen into the Memorial record when this Human dies.',
+                ),
+                Text(
+                  profile?.epitaph?.isNotEmpty == true
+                      ? '“${profile!.epitaph}”'
+                      : 'No testament recorded.',
+                  style: context.bodyStyle.copyWith(
+                    color: context.inkColor,
+                    fontStyle: profile?.epitaph?.isNotEmpty == true
+                        ? FontStyle.italic
+                        : FontStyle.normal,
+                  ),
+                ),
+                if (action != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.edit_outlined, size: 15),
+                      label: const Text('EDIT TESTAMENT'),
+                      onPressed: busy
+                          ? null
+                          : () => _editTestament(
+                                context,
+                                profile?.epitaph ?? '',
+                              ),
+                    ),
+                  ),
                 if (state.humanAuthoritySummary.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   _lifecycleTopicHeading(context, 'ROLES & OFFICES',
@@ -270,6 +302,45 @@ class LifeTodayPanel extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _editTestament(BuildContext context, String current) async {
+    final controller = TextEditingController(text: current);
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Edit testament'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 240,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Testament / Memorial Inscription',
+              hintText: 'Leave a short inscription for the historical record',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final save = action;
+                if (save == null) return;
+                Navigator.of(dialogContext).pop();
+                await save(() => const EarthApi().updateEpitaph(controller.text));
+              },
+              child: const Text('SAVE'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Widget _buildAttributeRow(
@@ -1768,6 +1839,10 @@ class HistoryArchivePanel extends StatelessWidget {
   }
 }
 
+/// Legacy compatibility surface. The player-facing historical archive is
+/// `HistoricalArchivePanel`; this adapter is retained only for old callers
+/// while they migrate and must not be added to navigation.
+@Deprecated('Use HistoricalArchivePanel backed by the canonical Memorial API.')
 class PantheonPanel extends StatelessWidget {
   final Map<String, dynamic> pantheon;
 

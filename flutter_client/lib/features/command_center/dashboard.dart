@@ -35,6 +35,7 @@ import '../world/initiatives_panel.dart';
 import '../institutions/mutual_credit_panel.dart';
 import '../house/house_policy_panel.dart';
 import '../../core/models/news_story.dart';
+import '../../core/models/memorial_models.dart';
 
 String dashboardSectionTitle(String section, [EarthState? state]) =>
     NavigationRegistry.pageTitle(section, state);
@@ -61,7 +62,8 @@ class Dashboard extends StatelessWidget {
   final List<dynamic> decisionQueue;
   final List<dynamic> ownershipEvents;
   final List<dynamic> membershipEvents;
-  final Map<String, dynamic> pantheon;
+  final MemorialArchivePage? memorialArchive;
+  final EarthApi? api;
   final Map<String, dynamic> personalFinanceData;
   final Map<String, dynamic> mutualCreditData;
   final bool isLiveConnected;
@@ -96,7 +98,8 @@ class Dashboard extends StatelessWidget {
     this.decisionQueue = const [],
     required this.ownershipEvents,
     required this.membershipEvents,
-    this.pantheon = const {},
+    this.memorialArchive,
+    this.api,
     this.personalFinanceData = const {},
     this.mutualCreditData = const {},
     this.isLiveConnected = true,
@@ -364,7 +367,7 @@ class Dashboard extends StatelessWidget {
       case 'history':
       case 'pantheon':
       case 'memorial':
-        return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
+        return [HistoricalArchivePanel(archive: memorialArchive, events: events, api: api)];
       case 'world':
       case 'conditions':
         return [WorldConditionsPanel(state: state)];

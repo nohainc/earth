@@ -243,7 +243,7 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
                 Navigator.of(ctx).pop();
                 showHouseLineageDialog(
                   context,
-                  house: entity,
+                  houseId: (entity['id'] ?? entity['house_id'] ?? '').toString(),
                   state: widget.state,
                   api: widget.api,
                 );

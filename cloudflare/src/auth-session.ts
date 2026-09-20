@@ -12,6 +12,7 @@ export interface AuthenticatedHuman {
   house_id: string;
   account_id: string;
   display_name: string;
+  epitaph: string | null;
   email: string;
   life_status: string;
 }
@@ -81,7 +82,7 @@ export async function currentHuman(
     const result = await withRepository(env, (repository) =>
       repository.query<AuthenticatedHuman>(
         `SELECT humans.id, humans.house_id, auth_sessions.account_id,
-                humans.display_name, humans.status AS life_status, auth_accounts.email
+                humans.display_name, humans.epitaph, humans.status AS life_status, auth_accounts.email
          FROM auth_sessions
          JOIN auth_accounts ON auth_accounts.id = auth_sessions.account_id
          JOIN houses ON houses.id = auth_accounts.house_id

@@ -216,17 +216,49 @@ export async function getServiceStatus(repository: PostgresRepository, humanId: 
 }
 
 /** Public legacy read model. It deliberately exposes only memorial facts, never account data. */
-export async function listPantheonOfAchievements(repository: PostgresRepository, query: { search?: string; limit?: number } = {}): Promise<Record<string, unknown>> {
+function decodeMemorialCursor(value: string | undefined): { day: number; id: string } | null {
+  if (!value) return null;
+  try {
+    const [day, ...idParts] = decodeURIComponent(value).split('|');
+    const parsedDay = Number(day);
+    const id = idParts.join('|');
+    return Number.isInteger(parsedDay) && id ? { day: parsedDay, id } : null;
+  } catch {
+    return null;
+  }
+}
+
+function encodeMemorialCursor(day: number | null, id: string): string {
+  return encodeURIComponent(`${day ?? 0}|${id}`);
+}
+
+export async function listPantheonOfAchievements(repository: PostgresRepository, query: {
+  search?: string;
+  limit?: number;
+  citizenCursor?: string;
+  houseCursor?: string;
+  houseStatus?: string;
+} = {}): Promise<Record<string, unknown>> {
   const search = query.search?.trim() ?? '';
+  const houseStatus = ['ACTIVE', 'SUSPENDED', 'EXTINCT'].includes(String(query.houseStatus ?? '').toUpperCase())
+    ? String(query.houseStatus).toUpperCase() : '';
   const requestedLimit = Number(query.limit ?? 100);
-  const limit = Number.isFinite(requestedLimit) ? Math.min(100, Math.max(1, Math.trunc(requestedLimit))) : 100;
+  const limit = Number.isFinite(requestedLimit) ? Math.min(50, Math.max(1, Math.trunc(requestedLimit))) : 20;
+  const citizenCursor = decodeMemorialCursor(query.citizenCursor);
+  const houseCursor = decodeMemorialCursor(query.houseCursor);
   const [deceased, living, houses] = await Promise.all([
-    repository.query(`SELECT h.id AS human_id, h.display_name, h.house_id, d.house_name,
-                             h.birth_game_day, h.death_game_day, h.age_years,
-                             h.final_legacy, h.standing AS final_standing,
-                             NULL::TEXT AS cause_of_death, NULL::TEXT AS epitaph,
-                             successor.display_name AS successor_name
+    repository.query(`SELECT h.id AS human_id, COALESCE(mem.display_name, h.display_name) AS display_name, h.house_id, COALESCE(mem.house_name_at_death, d.house_name) AS house_name,
+                             COALESCE(mem.birth_game_day, h.birth_game_day) AS birth_game_day,
+                             COALESCE(mem.death_game_day, h.death_game_day) AS death_game_day,
+                             COALESCE(mem.age_years, h.age_years) AS age_years,
+                             COALESCE(mem.final_legacy, h.final_legacy) AS final_legacy,
+                             COALESCE(mem.final_standing, h.standing) AS final_standing,
+                             COALESCE(mem.generation, h.generation) AS generation,
+                             mem.cause_code AS cause_of_death, mem.epitaph,
+                             mem.corporation_id, mem.corporation_name,
+                             COALESCE(mem.successor_name, successor.display_name) AS successor_name
                         FROM humans h JOIN houses d ON d.id = h.house_id
+                        LEFT JOIN human_memorial_records mem ON mem.human_id = h.id
                         LEFT JOIN LATERAL (
                           SELECT successor_h.display_name
                             FROM succession_events se
@@ -237,8 +269,9 @@ export async function listPantheonOfAchievements(repository: PostgresRepository,
                         ) successor ON TRUE
                        WHERE h.status = 'DECEASED'
                          AND ($1 = '' OR h.display_name ILIKE '%' || $1 || '%' OR d.house_name ILIKE '%' || $1 || '%')
+                         AND ($3::INTEGER IS NULL OR (COALESCE(h.death_game_day, 0), h.id) < ($3, $4))
                        ORDER BY h.death_game_day DESC NULLS LAST, h.id
-                       LIMIT $2`, [search, limit]),
+                       LIMIT $2`, [search, limit + 1, citizenCursor?.day ?? null, citizenCursor?.id ?? null]),
     repository.query(`SELECT h.id, h.display_name, h.house_id, d.house_name, h.age_years,
                              h.standing, h.final_legacy AS legacy,
                              (h.final_legacy + h.standing) AS composite_legacy_score
@@ -248,27 +281,261 @@ export async function listPantheonOfAchievements(repository: PostgresRepository,
                        LIMIT 100`),
     repository.query(`SELECT houses.id, houses.house_name, houses.motto, houses.dynasty_legacy, houses.generation, houses.status,
                              (SELECT MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = houses.id) AS founded_game_day,
-                             (SELECT MAX(hum.death_game_day) FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'DECEASED') AS extinct_game_day,
+                             houses.extinction_game_day,
                              (SELECT MAX(hum.death_game_day) - MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = houses.id) AS lifespan_days,
                              (SELECT COUNT(*)::INTEGER FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'DECEASED') AS deceased_count,
-                             0::INTEGER AS active_member_count,
-                             TRUE AS is_extinct
-                        FROM houses WHERE status IN ('ACTIVE', 'SUSPENDED')
+                             (SELECT COUNT(*)::INTEGER FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'ACTIVE') AS active_member_count,
+                             (houses.status = 'EXTINCT') AS is_extinct,
+                             COALESCE(houses.extinction_game_day, (SELECT MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = houses.id), 0) AS archive_sort_day
+                       FROM houses WHERE status IN ('ACTIVE', 'SUSPENDED', 'EXTINCT')
                          AND EXISTS (SELECT 1 FROM humans hum WHERE hum.house_id = houses.id)
-                         AND NOT EXISTS (SELECT 1 FROM humans hum WHERE hum.house_id = houses.id AND hum.status = 'ACTIVE')
                          AND ($1 = '' OR houses.house_name ILIKE '%' || $1 || '%')
-                       ORDER BY extinct_game_day DESC NULLS LAST, houses.id
-                       LIMIT $2`, [search, limit]),
+                         AND ($3::INTEGER IS NULL OR (COALESCE(houses.extinction_game_day, (SELECT MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = houses.id), 0), houses.id) < ($3, $4))
+                         AND ($5 = '' OR houses.status = $5)
+                       ORDER BY archive_sort_day DESC, houses.id
+                       LIMIT $2`, [search, limit + 1, houseCursor?.day ?? null, houseCursor?.id ?? null, houseStatus]),
   ]);
+  const [deceasedCount, houseCount] = await Promise.all([
+    repository.query(`SELECT COUNT(*)::INTEGER AS total_count
+                        FROM humans h JOIN houses d ON d.id = h.house_id
+                       WHERE h.status = 'DECEASED'
+                         AND ($1 = '' OR h.display_name ILIKE '%' || $1 || '%' OR d.house_name ILIKE '%' || $1 || '%')`, [search]),
+    repository.query(`SELECT COUNT(*)::INTEGER AS total_count
+                        FROM houses
+                       WHERE status IN ('ACTIVE', 'SUSPENDED', 'EXTINCT')
+                         AND EXISTS (SELECT 1 FROM humans hum WHERE hum.house_id = houses.id)
+                         AND ($1 = '' OR houses.house_name ILIKE '%' || $1 || '%')
+                         AND ($2 = '' OR houses.status = $2)`, [search, houseStatus]),
+  ]);
+  const deceasedHasMore = deceased.rows.length > limit;
+  const houseHasMore = houses.rows.length > limit;
+  const deceasedRows = deceasedHasMore ? deceased.rows.slice(0, limit) : deceased.rows;
+  const houseRows = houseHasMore ? houses.rows.slice(0, limit) : houses.rows;
+  const lastDeceased = deceasedRows[deceasedRows.length - 1] as Record<string, unknown> | undefined;
+  const lastHouse = houseRows[houseRows.length - 1] as Record<string, unknown> | undefined;
   return {
-    deceasedPantheon: deceased.rows,
+    deceasedPantheon: deceasedRows,
     livingLeaders: living.rows,
-    houses: houses.rows,
-    dynasticHouses: houses.rows,
+    houses: houseRows,
+    deceasedTotalCount: Number(deceasedCount.rows[0]?.total_count ?? 0),
+    houseTotalCount: Number(houseCount.rows[0]?.total_count ?? 0),
+    totalCount: {
+      citizens: Number(deceasedCount.rows[0]?.total_count ?? 0),
+      houses: Number(houseCount.rows[0]?.total_count ?? 0),
+    },
+    deceasedNextCursor: deceasedHasMore && lastDeceased ? encodeMemorialCursor(Number(lastDeceased.death_game_day ?? 0), String(lastDeceased.human_id)) : null,
+    houseNextCursor: houseHasMore && lastHouse ? encodeMemorialCursor(Number(lastHouse.archive_sort_day ?? 0), String(lastHouse.id)) : null,
     game_day: (await readAuthoritativeGameTime(repository)).gameDay,
     search,
     limit,
     generatedFrom: 'postgres-canonical-facts',
+  };
+}
+
+/** Canonical V5 Memorial read model. `/api/pantheon` adapts this data for legacy clients. */
+export async function listMemorialArchive(repository: PostgresRepository, query: {
+  search?: string;
+  limit?: number;
+  citizenCursor?: string;
+  houseCursor?: string;
+  houseStatus?: string;
+} = {}): Promise<Record<string, unknown>> {
+  const legacy = await listPantheonOfAchievements(repository, query);
+  const citizens = (legacy.deceasedPantheon as Array<Record<string, unknown>>).map((row) => ({
+    humanId: row.human_id,
+    displayName: row.display_name,
+    houseId: row.house_id,
+    houseName: row.house_name,
+    birthGameDay: row.birth_game_day,
+    deathGameDay: row.death_game_day,
+    ageYears: row.age_years,
+    finalLegacy: row.final_legacy,
+    finalStanding: row.final_standing,
+    successorName: row.successor_name,
+    generation: row.generation ?? null,
+    epitaph: row.epitaph ?? null,
+  }));
+  const houses = (legacy.houses as Array<Record<string, unknown>>).map((row) => ({
+    houseId: row.id,
+    houseName: row.house_name,
+    motto: row.motto,
+    status: row.status,
+    generation: row.generation,
+    foundedGameDay: row.founded_game_day,
+    extinctGameDay: row.extinct_game_day,
+    lifespanDays: row.lifespan_days,
+    deceasedCount: row.deceased_count,
+    isExtinct: row.is_extinct,
+  }));
+  return {
+    citizens,
+    houses,
+    citizenTotalCount: legacy.deceasedTotalCount,
+    houseTotalCount: legacy.houseTotalCount,
+    totalCount: legacy.totalCount,
+    citizenNextCursor: legacy.deceasedNextCursor,
+    houseNextCursor: legacy.houseNextCursor,
+    generatedFrom: 'v5-memorial-canonical-read-model',
+  };
+}
+
+export async function getMemorialHouseLineage(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown> | null> {
+  const [house, members, successions] = await Promise.all([
+    repository.query(`SELECT h.id, h.house_name, h.motto, h.status, h.generation,
+                             (SELECT MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = h.id) AS founded_game_day,
+                             h.extinction_game_day,
+                             (SELECT MAX(hum.death_game_day) - MIN(hum.birth_game_day) FROM humans hum WHERE hum.house_id = h.id) AS lifespan_days,
+                             (SELECT COUNT(*)::INTEGER FROM humans hum WHERE hum.house_id = h.id AND hum.status = 'DECEASED') AS deceased_count,
+                             (h.status = 'EXTINCT') AS is_extinct
+                        FROM houses h WHERE h.id = $1`, [houseId]),
+    repository.query(`SELECT h.id AS human_id, COALESCE(mem.display_name, h.display_name) AS display_name, h.house_id,
+                             COALESCE(mem.birth_game_day, h.birth_game_day) AS birth_game_day,
+                             COALESCE(mem.death_game_day, h.death_game_day) AS death_game_day,
+                             COALESCE(mem.age_years, h.age_years) AS age_years,
+                             COALESCE(mem.final_legacy, h.final_legacy) AS final_legacy,
+                             COALESCE(mem.final_standing, h.standing) AS final_standing,
+                             h.status, COALESCE(mem.generation, h.generation) AS generation
+                        FROM humans h
+                        LEFT JOIN human_memorial_records mem ON mem.human_id = h.id
+                       WHERE h.house_id = $1
+                       ORDER BY COALESCE(mem.generation, h.generation, 1), h.birth_game_day, h.id`, [houseId]),
+    repository.query(`SELECT se.predecessor_human_id, predecessor.display_name AS predecessor_name,
+                             se.successor_human_id, successor.display_name AS successor_name,
+                             se.death_game_day, se.effective_game_day, se.generation, se.status
+                        FROM succession_events se
+                        JOIN humans predecessor ON predecessor.id = se.predecessor_human_id
+                        LEFT JOIN humans successor ON successor.id = se.successor_human_id
+                       WHERE se.house_id = $1
+                       ORDER BY se.generation, se.effective_game_day, se.id`, [houseId]),
+  ]);
+  if (!house.rows[0]) return null;
+  const houseRow = house.rows[0] as Record<string, unknown>;
+  return {
+    house: {
+      houseId: houseRow.id,
+      houseName: houseRow.house_name,
+      motto: houseRow.motto,
+      status: houseRow.status,
+      generation: houseRow.generation,
+      foundedGameDay: houseRow.founded_game_day,
+      extinctGameDay: houseRow.extinct_game_day,
+      lifespanDays: houseRow.lifespan_days,
+      deceasedCount: houseRow.deceased_count,
+      isExtinct: houseRow.is_extinct,
+      members: members.rows.map((row) => ({
+        humanId: row.human_id,
+        displayName: row.display_name,
+        houseId: row.house_id,
+        birthGameDay: row.birth_game_day,
+        deathGameDay: row.death_game_day,
+        ageYears: row.age_years,
+        finalLegacy: row.final_legacy,
+        finalStanding: row.final_standing,
+        status: row.status,
+        generation: row.generation,
+      })),
+      successions: successions.rows.map((row) => ({
+        predecessorHumanId: row.predecessor_human_id,
+        predecessorName: row.predecessor_name,
+        successorHumanId: row.successor_human_id,
+        successorName: row.successor_name,
+        gameDay: row.death_game_day,
+        effectiveGameDay: row.effective_game_day,
+        generation: row.generation,
+        status: row.status,
+      })),
+    },
+    generatedFrom: 'v5-memorial-house-lineage-canonical-read-model',
+  };
+}
+
+/**
+ * Returns a bounded biography assembled from the immutable death snapshot and
+ * selected canonical journal records. It deliberately does not read the
+ * economic ledger or infer facts from the current Human row.
+ */
+export async function getMemorialCitizenBiography(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown> | null> {
+  const snapshot = await repository.query(`
+    SELECT human_id, house_id, house_name_at_death, generation, display_name,
+           birth_game_day, death_game_day, age_years, final_standing::TEXT,
+           final_legacy::TEXT, cause_code, cause_details,
+           corporation_id, corporation_name, successor_human_id, successor_name,
+           major_offices_snapshot, epitaph, record_version, created_game_day
+      FROM human_memorial_records
+     WHERE human_id = $1`, [humanId]);
+  const record = snapshot.rows[0] as Record<string, unknown> | undefined;
+  if (!record) return null;
+
+  const deathDay = Number(record.death_game_day);
+  const [achievements, totals] = await Promise.all([
+    repository.query(`
+      SELECT id, category, event_type, title, game_day, game_minute,
+             subject_type, subject_id
+        FROM game_events
+       WHERE actor_human_id = $1
+         AND category IN ('GOVERNANCE', 'RESEARCH', 'BUILDING', 'INITIATIVE')
+         AND game_day <= $2
+         AND event_type IN (
+           'PROPOSAL_EXECUTED', 'V5_POLICY_PROPOSAL_CREATED',
+           'RESEARCH_STARTED', 'RESEARCH_COMPLETED',
+           'CONSTRUCTION_COMPLETED', 'BUILDING_ACQUIRED',
+           'BUILDING_TIER_UPGRADE_STARTED', 'BUILDING_RETROFIT_STARTED',
+           'V5_INITIATIVE_ACTIVATED', 'INITIATIVE_EXECUTION_COMPLETED'
+         )
+       ORDER BY game_day, game_minute NULLS LAST, created_at, id
+       LIMIT 30`, [humanId, deathDay]),
+    repository.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE category = 'GOVERNANCE')::INTEGER AS governance_event_count,
+        COUNT(*) FILTER (WHERE category = 'RESEARCH')::INTEGER AS research_event_count,
+        COUNT(*) FILTER (WHERE category = 'BUILDING')::INTEGER AS building_event_count,
+        COUNT(*) FILTER (WHERE category = 'INITIATIVE')::INTEGER AS initiative_event_count
+       FROM game_events
+       WHERE actor_human_id = $1
+         AND category IN ('GOVERNANCE', 'RESEARCH', 'BUILDING', 'INITIATIVE')
+         AND game_day <= $2`, [humanId, deathDay]),
+  ]);
+
+  return {
+    citizen: {
+      humanId: record.human_id,
+      displayName: record.display_name,
+      houseId: record.house_id,
+      houseName: record.house_name_at_death,
+      generation: record.generation,
+      birthGameDay: record.birth_game_day,
+      deathGameDay: record.death_game_day,
+      ageYears: record.age_years,
+      finalStanding: record.final_standing,
+      finalLegacy: record.final_legacy,
+      causeCode: record.cause_code,
+      causeDetails: record.cause_details,
+      corporationId: record.corporation_id,
+      corporationName: record.corporation_name,
+      successorHumanId: record.successor_human_id,
+      successorName: record.successor_name,
+      epitaph: record.epitaph,
+      recordVersion: record.record_version,
+      memorialCreatedGameDay: record.created_game_day,
+    },
+    offices: Array.isArray(record.major_offices_snapshot) ? record.major_offices_snapshot : [],
+    achievements: achievements.rows.map((row) => ({
+      id: row.id,
+      category: row.category,
+      eventType: row.event_type,
+      title: row.title,
+      gameDay: row.game_day,
+      gameMinute: row.game_minute,
+      subjectType: row.subject_type,
+      subjectId: row.subject_id,
+    })),
+    lifetimeSummary: {
+      governanceEventCount: Number(totals.rows[0]?.governance_event_count ?? 0),
+      researchEventCount: Number(totals.rows[0]?.research_event_count ?? 0),
+      buildingEventCount: Number(totals.rows[0]?.building_event_count ?? 0),
+      initiativeEventCount: Number(totals.rows[0]?.initiative_event_count ?? 0),
+    },
+    generatedFrom: 'human_memorial_records+game_events',
   };
 }
 

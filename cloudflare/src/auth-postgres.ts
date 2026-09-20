@@ -48,9 +48,21 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
 
 export async function updateDisplayName(repository: PostgresRepository, input: { humanId: string; displayName?: string; epitaph?: string }): Promise<Record<string, unknown>> {
   if (input.displayName) await repository.query('UPDATE humans SET display_name = $1 WHERE id = $2', [input.displayName, input.humanId]);
-  const human = (await repository.query('SELECT id, display_name FROM humans WHERE id = $1', [input.humanId])).rows[0];
+  const human = (await repository.query('SELECT id, display_name, epitaph FROM humans WHERE id = $1 AND status = \'ACTIVE\'', [input.humanId])).rows[0];
   if (!human) throw new Error('Human not found');
-  return { ok: true, human, epitaph: input.epitaph };
+  return { ok: true, human };
+}
+
+export async function updateHumanTestament(repository: PostgresRepository, input: { humanId: string; testament: string }): Promise<Record<string, unknown>> {
+  const result = await repository.query<{ id: string; epitaph: string | null }>(
+    `UPDATE humans
+        SET epitaph = NULLIF($1, '')
+      WHERE id = $2 AND status = 'ACTIVE'
+      RETURNING id, epitaph`,
+    [input.testament, input.humanId],
+  );
+  if (!result.rows[0]) throw new Error('Only the active Human may edit a testament');
+  return { ok: true, humanId: result.rows[0].id, testament: result.rows[0].epitaph };
 }
 
 export async function loginIdentity(repository: PostgresRepository, input: { email: string; password: string; otp: string; validTotp: (secret: string, code: string) => Promise<boolean> }): Promise<Record<string, unknown>> {

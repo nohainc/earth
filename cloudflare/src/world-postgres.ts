@@ -41,7 +41,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     listCommunities(repository, viewerHouseId),
     viewerHouseId ? repository.query<{ need_code: string; risk_level: string; game_day: number }>(`SELECT need_code, risk_level, game_day FROM house_need_assessments WHERE house_id = $1 ORDER BY game_day DESC, need_code`, [viewerHouseId]) : Promise.resolve({ rows: [] as { need_code: string; risk_level: string; game_day: number }[] }),
     listWorldConditions(repository, clock.gameDay),
-    viewerId ? repository.query(`SELECT h.id, h.house_id, h.display_name, h.birth_game_day, h.age_years, h.standing, h.final_legacy, h.status,
+    viewerId ? repository.query(`SELECT h.id, h.house_id, h.display_name, h.epitaph, h.birth_game_day, h.age_years, h.standing, h.final_legacy, h.status,
                                         hs.house_name, hs.motto, hs.generation, hs.dynasty_legacy
                                    FROM humans h JOIN houses hs ON hs.id = h.house_id
                                   WHERE h.id = $1`, [viewerId]) : Promise.resolve({ rows: [] }),
@@ -318,6 +318,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     ? {
         id: String(house.id),
         displayName: String(house.display_name ?? ''),
+        epitaph: house.epitaph == null ? null : String(house.epitaph),
         houseId: String(house.house_id),
         houseName: String(house.house_name ?? ''),
         birthGameDay: house.birth_game_day == null ? null : Number(house.birth_game_day),

@@ -2865,9 +2865,10 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
               secondarySubtitle: secondarySubtitle,
               isHighlight: isMyAffiliation,
               onTap: isHouse
+                  && entityId != null
                   ? () => showHouseLineageDialog(
                         context,
-                        house: row,
+                        houseId: entityId!,
                         state: widget.state,
                       )
                   : null,

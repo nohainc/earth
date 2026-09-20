@@ -2,7 +2,7 @@ import { bytesToBase32, validTotp, digest } from './auth-crypto';
 import { cookieValue, extractToken, currentHuman, sessionCookie } from './auth-session';
 import { parseJsonBody } from './request-validation';
 import { withRepository } from './repository';
-import { rebornIdentity, claimHeirIdentity, updateDisplayName, deleteAccount } from './auth-postgres';
+import { rebornIdentity, claimHeirIdentity, updateDisplayName, updateHumanTestament, deleteAccount } from './auth-postgres';
 
 export async function authenticatedAuthRoute(request: Request, env: Env, url: URL): Promise<Response | null> {
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {
@@ -21,17 +21,28 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
   if (url.pathname === '/api/auth/profile' && request.method === 'PATCH') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ displayName?: string; epitaph?: string }>(request);
+    const parsed = await parseJsonBody<{ displayName?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const displayName = parsed.value.displayName !== undefined ? parsed.value.displayName.trim() : undefined;
     if (displayName !== undefined && (displayName.length < 2 || displayName.length > 80)) {
       return Response.json({ ok: false, error: 'Name must be 2–80 characters' }, { status: 400 });
     }
-    const epitaph = parsed.value.epitaph !== undefined ? parsed.value.epitaph.trim() : undefined;
-    if (epitaph !== undefined && epitaph.length > 200) {
-      return Response.json({ ok: false, error: 'Epitaph cannot exceed 200 characters' }, { status: 400 });
+    const result = await withRepository(env, (repository) => updateDisplayName(repository, { humanId: human.id, displayName }));
+    return Response.json(result);
+  }
+  if (url.pathname === '/api/life/testament' && request.method === 'PATCH') {
+    const human = await currentHuman(request, env);
+    if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ testament?: unknown }>(request);
+    if (!parsed.ok) return parsed.response;
+    if (typeof parsed.value.testament !== 'string') {
+      return Response.json({ ok: false, error: 'Testament must be plain text' }, { status: 400 });
     }
-    const result = await withRepository(env, (repository) => updateDisplayName(repository, { humanId: human.id, displayName, epitaph }));
+    const testament = parsed.value.testament.trim();
+    if (testament.length > 240 || /[\u0000-\u001F\u007F<>]/.test(testament)) {
+      return Response.json({ ok: false, error: 'Testament must be plain text and at most 240 characters' }, { status: 400 });
+    }
+    const result = await withRepository(env, (repository) => updateHumanTestament(repository, { humanId: human.id, testament }));
     return Response.json(result);
   }
   if (url.pathname === '/api/auth/mfa/enroll' && request.method === 'POST') {

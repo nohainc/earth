@@ -1,16 +1,25 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
+import '../../core/api/earth_api.dart';
+import '../../core/models/memorial_models.dart';
 
 import '../house/house_lineage_dialog.dart';
+import 'memorial_citizen_biography_dialog.dart';
 
 class HistoricalArchivePanel extends StatefulWidget {
+  final MemorialArchivePage? archive;
+  @Deprecated('Use archive for the canonical V5 Memorial model.')
   final Map<String, dynamic> pantheon;
+  final EarthApi? api;
   final List<dynamic> events;
 
   const HistoricalArchivePanel({
     super.key,
-    required this.pantheon,
+    this.archive,
+    this.pantheon = const <String, dynamic>{},
+    this.api,
     this.events = const [],
   });
 
@@ -20,14 +29,84 @@ class HistoricalArchivePanel extends StatefulWidget {
 
 class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
   int _selectedTab = 0; // 0: Archived Citizens, 1: Recorded Houses
-  int _deceasedPage = 0;
-  int _housePage = 0;
-  static const int _pageSize = 10;
+  int _deceasedPage = 1;
+  int _housePage = 1;
+  static const int _pageSize = 20;
+  List<MemorialCitizenSummary> _deceased = const [];
+  List<MemorialHouseSummary> _houses = const [];
+  int _deceasedTotal = 0;
+  int _houseTotal = 0;
+  String? _deceasedNextCursor;
+  String? _houseNextCursor;
+  String? _deceasedPageCursor;
+  String? _housePageCursor;
+  final List<String?> _deceasedCursorHistory = <String?>[];
+  final List<String?> _houseCursorHistory = <String?>[];
+  bool _archiveLoading = false;
 
   final _citizenSearchController = TextEditingController();
   final _houseSearchController = TextEditingController();
   String _citizenSearch = '';
   String _houseSearch = '';
+  String _houseStatus = 'ALL';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.archive != null) {
+      _deceased = widget.archive!.citizens;
+      _houses = widget.archive!.houses;
+      _deceasedTotal = widget.archive!.citizenTotalCount;
+      _houseTotal = widget.archive!.houseTotalCount;
+      _deceasedNextCursor = widget.archive!.citizenNextCursor;
+      _houseNextCursor = widget.archive!.houseNextCursor;
+    } else {
+      _applyPantheon(widget.pantheon);
+    }
+  }
+
+  void _applyPantheon(Map<String, dynamic> data) {
+    final page = MemorialArchivePage.fromJson(data);
+    _deceased = page.citizens;
+    _houses = page.houses;
+    _deceasedTotal = int.tryParse('${data['deceasedTotalCount'] ?? _deceased.length}') ?? _deceased.length;
+    _houseTotal = int.tryParse('${data['houseTotalCount'] ?? _houses.length}') ?? _houses.length;
+    _deceasedNextCursor = data['deceasedNextCursor']?.toString();
+    _houseNextCursor = data['houseNextCursor']?.toString();
+  }
+
+  Future<void> _loadArchivePage({required bool citizens, String? cursor, bool next = false}) async {
+    final client = widget.api;
+    if (client == null || _archiveLoading) return;
+    setState(() => _archiveLoading = true);
+    try {
+      final page = await client.memorial(
+        search: citizens ? _citizenSearch : _houseSearch,
+        houseStatus: citizens ? null : _houseStatus,
+        citizenCursor: citizens ? cursor : null,
+        houseCursor: citizens ? null : cursor,
+        limit: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (citizens) {
+          if (next) _deceasedCursorHistory.add(_deceasedPageCursor);
+          _deceasedPageCursor = cursor;
+          _deceased = page.citizens;
+          _deceasedTotal = page.citizenTotalCount;
+          _deceasedNextCursor = page.citizenNextCursor;
+        } else {
+          if (next) _houseCursorHistory.add(_housePageCursor);
+          _housePageCursor = cursor;
+          _houses = page.houses;
+          _houseTotal = page.houseTotalCount;
+          _houseNextCursor = page.houseNextCursor;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _archiveLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -36,25 +115,14 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
     super.dispose();
   }
 
-  List<dynamic> _list(dynamic value) => value is List ? value : const [];
-
   @override
   Widget build(BuildContext context) {
-    final deceased = _list(
-        widget.pantheon['deceasedPantheon'] ?? widget.pantheon['deceased']);
-    final rawHouses = _list(widget.pantheon['houses'] ??
-        widget.pantheon['dynasties'] ??
-        widget.pantheon['dynasticHouses']);
-    final houses = rawHouses.where((item) {
-      if (item is! Map) return false;
-      final isExtinct = item['is_extinct'] == true ||
-          item['status'] == 'extinct' ||
-          item['status'] == 'deceased' ||
-          item['status'] == 'historical';
-      return isExtinct;
-    }).toList();
+    // House continuity is the V5 default. A House is extinct only when the
+    // backend explicitly records status=EXTINCT; it is not inferred from a
+    // temporary lifecycle transition between Humans.
+    final houses = _houses;
 
-    final deceasedCol = _buildDeceasedSection(context, deceased, rawHouses);
+    final deceasedCol = _buildDeceasedSection(context, _deceased, _houses);
     final housesCol = _buildHousesSection(context, houses);
 
     final cockpit = EarthPageCockpit(
@@ -62,20 +130,20 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
       statusColor: context.goldColor,
       infoTitle: 'MEMORIAL ARCHIVE',
       infoDescription:
-          'The Memorial is a permanent record of concluded lives and extinct Houses. Every displayed fact comes from the canonical historical read model; missing facts are shown as unavailable and are never reconstructed in the client.',
+          'The Memorial is a permanent record of concluded lives and recorded Houses. Only facts published by the canonical historical read model are shown.',
       title: 'MEMORIAL',
       subtitle:
-          'Permanent record of concluded lives and extinct Houses across Earth',
+          'Permanent record of concluded lives and Houses across Earth',
       metrics: [
         CockpitMetric(
           label: 'Archived Citizens',
-          value: '${deceased.length}',
+          value: '$_deceasedTotal',
           icon: Icons.people_outline,
           color: context.primaryColor,
         ),
         CockpitMetric(
-          label: 'Extinct Houses',
-          value: '${houses.length}',
+          label: 'Recorded Houses',
+          value: '$_houseTotal',
           icon: Icons.shield_outlined,
           color: context.warningColor,
         ),
@@ -108,7 +176,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
               Expanded(
                 child: _buildNarrowTabButton(
                   context,
-                  title: 'EXTINCT HOUSES',
+                  title: 'HOUSES',
                   icon: Icons.shield_outlined,
                   isSelected: _selectedTab == 1,
                   onTap: () => setState(() => _selectedTab = 1),
@@ -233,48 +301,10 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
   }
 
   Widget _buildDeceasedSection(
-      BuildContext context, List<dynamic> deceased, List<dynamic> houses) {
-    final query = _citizenSearch.trim().toLowerCase();
-    final filteredDeceased = query.isEmpty
-        ? deceased
-        : deceased.where((item) {
-            if (item is! Map) return false;
-            final name = (item['display_name'] ?? item['name'] ?? '')
-                .toString()
-                .toLowerCase();
-            final origHouse = (item['original_house_name'] ??
-                    item['house_name'] ??
-                    item['original_dynasty_name'] ??
-                    item['dynasty_name'] ??
-                    item['dynasty'] ??
-                    '')
-                .toString()
-                .toLowerCase();
-            final currHouse = (item['current_house_name'] ??
-                    item['active_house_name'] ??
-                    item['current_dynasty_name'] ??
-                    item['active_dynasty_name'] ??
-                    '')
-                .toString()
-                .toLowerCase();
-            final city = (item['city_name'] ?? item['city'] ?? '')
-                .toString()
-                .toLowerCase();
-            final succ = (item['successor_name'] ?? item['successor'] ?? '')
-                .toString()
-                .toLowerCase();
-            return name.contains(query) ||
-                origHouse.contains(query) ||
-                currHouse.contains(query) ||
-                city.contains(query) ||
-                succ.contains(query);
-          }).toList();
-
-    final totalPages =
-        (filteredDeceased.length / _pageSize).ceil().clamp(1, 9999);
-    final currentPage = _deceasedPage.clamp(0, totalPages - 1);
-    final pageItems =
-        filteredDeceased.skip(currentPage * _pageSize).take(_pageSize).toList();
+      BuildContext context, List<MemorialCitizenSummary> deceased, List<MemorialHouseSummary> houses) {
+    final filteredDeceased = deceased;
+    final currentPage = _deceasedPage;
+    final pageItems = deceased;
 
     return EarthSection(
       title: 'MEMORIAL CITIZENS',
@@ -287,10 +317,14 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
             _buildSearchBar(
               context: context,
               controller: _citizenSearchController,
-              hintText: 'Search citizens by name, house, city, or successor...',
+              hintText: 'Search citizens by name, House, or successor...',
               onChanged: (val) => setState(() {
                 _citizenSearch = val;
-                _deceasedPage = 0;
+                _deceasedPage = 1;
+                _deceasedPageCursor = null;
+                _deceasedNextCursor = null;
+                _deceasedCursorHistory.clear();
+                unawaited(_loadArchivePage(citizens: true));
               }),
             ),
           if (deceased.isEmpty)
@@ -305,27 +339,11 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
             )
           else ...[
             ...pageItems.indexed.map((indexed) {
-              final raw = indexed.$2;
-              final row = raw is Map
-                  ? Map<String, dynamic>.from(raw)
-                  : const <String, dynamic>{};
-              final name =
-                  (row['display_name'] ?? row['name'] ?? 'Archived citizen')
-                      .toString();
-              final gen = row['generation'] ??
-                  row['gen'] ??
-                  row['generation_number'] ??
-                  1;
-              final day =
-                  (row['death_game_day'] ?? row['game_day'] ?? '—').toString();
-              final deathDayNum = int.tryParse(day);
-              final birthDayRaw = row['birth_game_day'] ??
-                  row['birth_day'] ??
-                  row['birthDay'] ??
-                  row['born_day'];
-              final int? birthDayNum = birthDayRaw == null
-                  ? null
-                  : int.tryParse(birthDayRaw.toString());
+              final citizen = indexed.$2;
+              final name = citizen.displayName;
+              final gen = citizen.generation;
+              final deathDayNum = citizen.deathGameDay;
+              final birthDayNum = citizen.birthGameDay;
 
               String? bornLabel;
               if (birthDayNum != null) {
@@ -341,61 +359,18 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                 final ageD = totalDays % 365;
                 ageLabel =
                     ageD > 0 ? 'Age: $ageY yrs, $ageD days' : 'Age: $ageY yrs';
-              } else if (row['age_years'] != null || row['age'] != null) {
-                final ageY = int.tryParse(row['age_years']?.toString() ??
-                        row['age']?.toString() ??
-                        '0') ??
-                    0;
-                ageLabel = 'Age: $ageY yrs';
+              } else if (citizen.ageYears != null) {
+                ageLabel = 'Age: ${citizen.ageYears} yrs';
               }
 
-              final originalHouse = (row['original_house_name'] ??
-                      row['house_name'] ??
-                      row['original_dynasty_name'] ??
-                      row['dynasty_name'] ??
-                      row['dynasty'] ??
-                      'Unknown house')
-                  .toString();
-              final houseId =
-                  (row['house_id'] ?? row['dynasty_id'])?.toString();
-              String? currentHouseFromMap;
-              if (houseId != null) {
-                for (final d in houses) {
-                  if (d is Map &&
-                      (d['id']?.toString() == houseId ||
-                          d['house_id']?.toString() == houseId ||
-                          d['dynasty_id']?.toString() == houseId)) {
-                    currentHouseFromMap =
-                        (d['house_name'] ?? d['dynasty_name'])?.toString();
-                    break;
-                  }
-                }
-              }
-              final currentHouse = row['current_house_name'] ??
-                  row['active_house_name'] ??
-                  row['current_dynasty_name'] ??
-                  row['active_dynasty_name'] ??
-                  currentHouseFromMap;
-
-              final legacyValue =
-                  row['final_legacy'] ?? row['legacy_points'] ?? row['legacy'];
-              final legNum = legacyValue == null
+              final houseName = citizen.houseName;
+              final legNum = citizen.finalLegacy == null
                   ? null
-                  : int.tryParse(legacyValue.toString());
-              final standing = row['final_standing']?.toString() ??
-                  row['standing']?.toString();
-              final stdNum = standing == null ? null : int.tryParse(standing);
-              final historicalScore =
-                  row['historical_score'] ?? row['composite_legacy_score'];
-
-              final city =
-                  row['city_name']?.toString() ?? row['city']?.toString();
-              final estate = row['lifetime_wealth'] ?? row['estate_credits'];
-              final cause =
-                  row['cause_of_death']?.toString() ?? row['cause']?.toString();
-              final successor = row['successor_name']?.toString() ??
-                  row['successor']?.toString();
-              final epitaph = row['epitaph']?.toString();
+                  : int.tryParse(citizen.finalLegacy!);
+              final stdNum = citizen.finalStanding == null
+                  ? null
+                  : int.tryParse(citizen.finalStanding!);
+              final successor = citizen.successorName;
 
               return Padding(
                 padding: EdgeInsets.only(
@@ -403,14 +378,17 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                       ? 0
                       : context.spacingControl,
                 ),
-                child: Container(
-                  padding: EdgeInsets.all(context.cardPadding),
-                  decoration: BoxDecoration(
-                    color: context.surfaceColor,
-                    borderRadius: BorderRadius.circular(context.radiusCard),
-                    border: Border.all(color: context.subtleBorderColor),
-                  ),
-                  child: Column(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(context.radiusCard),
+                  onTap: widget.api == null ? null : () => showMemorialCitizenBiographyDialog(context, humanId: citizen.humanId, api: widget.api!),
+                  child: Container(
+                    padding: EdgeInsets.all(context.cardPadding),
+                    decoration: BoxDecoration(
+                      color: context.surfaceColor,
+                      borderRadius: BorderRadius.circular(context.radiusCard),
+                      border: Border.all(color: context.subtleBorderColor),
+                    ),
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
@@ -432,43 +410,27 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                                   name,
                                   style: context.widgetValueStyle,
                                 ),
-                                Text(
-                                  '· Gen $gen of ${currentHouse ?? originalHouse}',
-                                  style: context.widgetValueStyle.copyWith(
-                                    color: context.mutedColor,
+                                if (gen != null)
+                                  Text(
+                                    '· Generation $gen',
+                                    style: context.widgetValueStyle.copyWith(
+                                      color: context.mutedColor,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
                           SizedBox(width: context.spacingInline),
-                          EarthStatusPill(
-                            label: 'HISTORICAL SCORE',
-                            value: historicalScore?.toString() ?? '—',
-                            color: context.primaryColor,
-                          ),
                         ],
                       ),
-                      if (epitaph != null && epitaph.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          '“$epitaph”',
-                          style: context.widgetFooterStyle.copyWith(
-                            color: context.primaryColor,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
                       SizedBox(height: context.spacingInline),
                       Wrap(
                         spacing: 12,
                         runSpacing: 6,
                         children: [
-                          if (currentHouse != null &&
-                              currentHouse.toString().isNotEmpty &&
-                              currentHouse != originalHouse)
-                            _badge(context, Icons.history_edu,
-                                'Original House: $originalHouse'),
+                          if (houseName != null && houseName.isNotEmpty)
+                            _badge(context, Icons.shield_outlined,
+                                'House: $houseName'),
                           if (bornLabel != null)
                             _badge(context, Icons.cake_outlined, bornLabel),
                           if (ageLabel != null)
@@ -479,16 +441,6 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                           if (stdNum != null)
                             _badge(context, Icons.shield,
                                 'Final Standing: $stdNum pts'),
-                          if (city != null && city.isNotEmpty && city != '—')
-                            _badge(context, Icons.location_city, 'City: $city'),
-                          if (estate != null && estate != 0 && estate != '0')
-                            _badge(
-                                context,
-                                Icons.account_balance_wallet_outlined,
-                                'Estate: $estate C'),
-                          if (cause != null && cause.isNotEmpty && cause != '—')
-                            _badge(context, Icons.favorite_border,
-                                'Cause: $cause'),
                           if (successor != null &&
                               successor.isNotEmpty &&
                               successor != '—')
@@ -496,18 +448,29 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                                 'Successor: $successor'),
                         ],
                       ),
+                      if (citizen.epitaph?.isNotEmpty == true) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          '“${citizen.epitaph}”',
+                          style: context.bodyStyle.copyWith(
+                            color: context.mutedColor,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
                     ],
+                    ),
                   ),
                 ),
               );
             }),
-            if (filteredDeceased.length > _pageSize) ...[
+            if (_deceasedNextCursor != null || _deceasedCursorHistory.isNotEmpty) ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'PAGE ${currentPage + 1} OF $totalPages (${filteredDeceased.length} TOTAL)',
+                    'PAGE $currentPage ($_deceasedTotal TOTAL)',
                     style: context.captionStyle
                         .copyWith(color: context.mutedColor),
                   ),
@@ -517,18 +480,23 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                       EarthButton(
                         label: 'PREVIOUS',
                         icon: Icons.chevron_left_rounded,
-                        onPressed: currentPage > 0
-                            ? () =>
-                                setState(() => _deceasedPage = currentPage - 1)
+                        onPressed: _deceasedCursorHistory.isNotEmpty && !_archiveLoading
+                            ? () async {
+                                final previous = _deceasedCursorHistory.removeLast();
+                                await _loadArchivePage(citizens: true, cursor: previous);
+                                if (mounted) setState(() => _deceasedPage = currentPage - 1);
+                              }
                             : null,
                       ),
                       const SizedBox(width: 8),
                       EarthButton(
                         label: 'NEXT',
                         icon: Icons.chevron_right_rounded,
-                        onPressed: currentPage < totalPages - 1
-                            ? () =>
-                                setState(() => _deceasedPage = currentPage + 1)
+                        onPressed: _deceasedNextCursor != null && !_archiveLoading
+                            ? () async {
+                                await _loadArchivePage(citizens: true, cursor: _deceasedNextCursor, next: true);
+                                if (mounted) setState(() => _deceasedPage = currentPage + 1);
+                              }
                             : null,
                       ),
                     ],
@@ -542,39 +510,10 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
     );
   }
 
-  Widget _buildHousesSection(BuildContext context, List<dynamic> houses) {
-    final dQuery = _houseSearch.trim().toLowerCase();
-    final filteredHouses = dQuery.isEmpty
-        ? houses
-        : houses.where((item) {
-            if (item is! Map) return false;
-            final houseName = (item['house_name'] ??
-                    item['dynasty_name'] ??
-                    item['name'] ??
-                    '')
-                .toString()
-                .toLowerCase();
-            final heir = (item['active_heir'] ?? item['heir'] ?? '')
-                .toString()
-                .toLowerCase();
-            final seat =
-                (item['seat'] ?? item['seat_city'] ?? item['city_name'] ?? '')
-                    .toString()
-                    .toLowerCase();
-            final founder = (item['founder_name'] ?? item['founder'] ?? '')
-                .toString()
-                .toLowerCase();
-            return houseName.contains(dQuery) ||
-                heir.contains(dQuery) ||
-                seat.contains(dQuery) ||
-                founder.contains(dQuery);
-          }).toList();
-
-    final totalPages =
-        (filteredHouses.length / _pageSize).ceil().clamp(1, 9999);
-    final currentPage = _housePage.clamp(0, totalPages - 1);
-    final pageItems =
-        filteredHouses.skip(currentPage * _pageSize).take(_pageSize).toList();
+  Widget _buildHousesSection(BuildContext context, List<MemorialHouseSummary> houses) {
+    final filteredHouses = houses;
+    final currentPage = _housePage;
+    final pageItems = houses;
 
     return EarthSection(
       title: 'HISTORICAL HOUSES',
@@ -587,16 +526,54 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
             _buildSearchBar(
               context: context,
               controller: _houseSearchController,
-              hintText: 'Search extinct houses by name, founder, or seat...',
+              hintText: 'Search recorded Houses by name...',
               onChanged: (val) => setState(() {
                 _houseSearch = val;
-                _housePage = 0;
+                _housePage = 1;
+                _housePageCursor = null;
+                _houseNextCursor = null;
+                _houseCursorHistory.clear();
+                unawaited(_loadArchivePage(citizens: false));
               }),
+            ),
+          if (houses.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(bottom: context.spacingControl),
+              child: DropdownButtonFormField<String>(
+                value: _houseStatus,
+                decoration: InputDecoration(
+                  labelText: 'HOUSE STATUS',
+                  labelStyle: context.captionStyle.copyWith(color: context.mutedColor),
+                  filled: true,
+                  fillColor: context.surfaceColor,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(context.radiusCard),
+                    borderSide: BorderSide(color: context.subtleBorderColor),
+                  ),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'ALL', child: Text('All Houses')),
+                  DropdownMenuItem(value: 'ACTIVE', child: Text('Active')),
+                  DropdownMenuItem(value: 'SUSPENDED', child: Text('Suspended')),
+                  DropdownMenuItem(value: 'EXTINCT', child: Text('Extinct')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _houseStatus = value;
+                    _housePage = 1;
+                    _housePageCursor = null;
+                    _houseNextCursor = null;
+                    _houseCursorHistory.clear();
+                  });
+                  unawaited(_loadArchivePage(citizens: false));
+                },
+              ),
             ),
           if (houses.isEmpty)
             const EarthEmptyState(
               message:
-                  'No extinct houses in the archive. All active houses continue to thrive and govern their lineages across Earth.',
+                  'No recorded Houses are available in the archive.',
               icon: Icons.shield_outlined,
             )
           else if (filteredHouses.isEmpty)
@@ -606,84 +583,23 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
             )
           else ...[
             ...pageItems.indexed.map((indexed) {
-              final raw = indexed.$2;
-              final row = raw is Map
-                  ? Map<String, dynamic>.from(raw)
-                  : const <String, dynamic>{};
-              final houseName = (row['house_name'] ??
-                      row['dynasty_name'] ??
-                      row['name'] ??
-                      'House')
-                  .toString();
-              final gen = row['generation'] ??
-                  row['generations'] ??
-                  row['generation_number'] ??
-                  row['gen'] ??
-                  1;
-              final count = (row['deceased_count'] ??
-                      row['ancestors_count'] ??
-                      row['deceased'] ??
-                      '1')
-                  .toString();
-              final totalLegacy = row['total_legacy'] ??
-                  row['house_legacy'] ??
-                  row['dynasty_legacy'] ??
-                  row['peak_legacy'] ??
-                  row['legacy_points'] ??
-                  row['legacy'];
-              final peakStanding = row['peak_standing'] ??
-                  row['standing'] ??
-                  row['house_standing'] ??
-                  row['dynastic_standing'] ??
-                  0;
-              final founder = row['founder_name']?.toString() ??
-                  row['founder']?.toString() ??
-                  row['progenitor_name']?.toString();
-              final heir =
-                  row['active_heir']?.toString() ?? row['heir']?.toString();
-              final motto = row['motto']?.toString() ??
-                  row['description']?.toString() ??
-                  row['epitaph']?.toString();
-              final seat = row['seat']?.toString() ??
-                  row['seat_city']?.toString() ??
-                  row['city_name']?.toString();
-              final vault =
-                  row['trust_credits'] ?? row['vault'] ?? row['estate_credits'];
+              final house = indexed.$2;
+              final houseName = house.houseName;
+              final gen = house.generation;
+              final count = house.deceasedCount?.toString();
+              final motto = house.motto;
 
-              final foundedRaw = row['founded_game_day'] ??
-                  row['birth_game_day'] ??
-                  row['founded_day'] ??
-                  row['start_day'];
-              final foundedDayNum = foundedRaw == null
-                  ? null
-                  : int.tryParse(foundedRaw.toString());
-              final extinctDayNum = int.tryParse(
-                  (row['extinct_game_day'] ?? row['extinction_game_day'] ?? '')
-                      .toString());
+              final foundedDayNum = house.foundedGameDay;
               final foundedLabel = foundedDayNum == null
                   ? 'Founded: UNAVAILABLE'
                   : 'Founded: ${_formatGameDay(foundedDayNum)}';
-              final lifespanDays = row['lifespan_days'] == null
-                  ? (foundedDayNum != null && extinctDayNum != null
-                      ? (extinctDayNum - foundedDayNum).clamp(0, 9999999)
-                      : null)
-                  : int.tryParse(row['lifespan_days'].toString());
+              final lifespanDays = house.lifespanDays;
               final ageLabel = lifespanDays == null
                   ? 'Lifespan: UNAVAILABLE'
                   : 'Lifespan: ${_formatDuration(lifespanDays)}';
 
-              final standingNum = int.tryParse(peakStanding.toString()) ?? 0;
-              final historicalScore = row['historical_score'] ??
-                  row['house_score'] ??
-                  row['dynasty_score'] ??
-                  row['score'];
-
-              final isExtinct = row['is_extinct'] == true ||
-                  row['status'] == 'extinct' ||
-                  row['status'] == 'deceased' ||
-                  false;
-              final statusLabel =
-                  !isExtinct ? 'Active (Gen $gen)' : 'Extinct (Gen $gen)';
+              final isExtinct = house.isExtinct;
+              final statusLabel = isExtinct ? 'Extinct' : house.status;
 
               return Padding(
                 padding: EdgeInsets.only(
@@ -695,7 +611,9 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                   borderRadius: BorderRadius.circular(context.radiusCard),
                   onTap: () => showHouseLineageDialog(
                     context,
-                    house: Map<String, dynamic>.from(row),
+                    houseId: house.houseId,
+                    houseModel: house,
+                    api: widget.api,
                   ),
                   child: Container(
                     padding: EdgeInsets.all(context.cardPadding),
@@ -736,11 +654,6 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                               ),
                             ),
                             SizedBox(width: context.spacingInline),
-                            EarthStatusPill(
-                              label: 'SCORE',
-                              value: historicalScore?.toString() ?? '—',
-                              color: context.primaryColor,
-                            ),
                             const SizedBox(width: 6),
                             Icon(
                               Icons.account_tree_outlined,
@@ -764,37 +677,17 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                           spacing: 12,
                           runSpacing: 6,
                           children: [
-                            if (founder != null &&
-                                founder.isNotEmpty &&
-                                founder != '—')
-                              _badge(
-                                  context, Icons.history, 'Founder: $founder'),
-                            if (!isExtinct &&
-                                heir != null &&
-                                heir.isNotEmpty &&
-                                heir != '—')
-                              _badge(context, Icons.person_pin, 'Heir: $heir')
-                            else if (isExtinct)
-                              _badge(context, Icons.hourglass_disabled,
-                                  'Lineage: Extinct'),
                             _badge(context, Icons.cake_outlined, foundedLabel),
                             _badge(context, Icons.timelapse, ageLabel),
-                            _badge(context, Icons.account_box_outlined,
-                                'Ancestors: $count'),
-                            if (totalLegacy != null)
-                              _badge(context, Icons.stars_outlined,
-                                  'House Legacy: $totalLegacy LP'),
-                            if (standingNum > 0)
-                              _badge(context, Icons.shield,
-                                  'House Standing: $standingNum pts'),
-                            if (seat != null && seat.isNotEmpty && seat != '—')
-                              _badge(
-                                  context, Icons.location_city, 'Seat: $seat'),
-                            if (vault != null && vault != 0 && vault != '0')
-                              _badge(
-                                  context,
-                                  Icons.account_balance_wallet_outlined,
-                                  'Vault: $vault C'),
+                            if (count != null)
+                              _badge(context, Icons.account_box_outlined,
+                                  'Deceased Humans: $count'),
+                            if (gen != null)
+                              _badge(context, Icons.account_tree_outlined,
+                                  'Generation: $gen'),
+                            if (motto != null && motto.isNotEmpty)
+                              _badge(context, Icons.format_quote,
+                                  'Motto: $motto'),
                             _badge(context, Icons.account_tree_outlined,
                                 'View Lineage Tree'),
                           ],
@@ -805,13 +698,13 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                 ),
               );
             }),
-            if (filteredHouses.length > _pageSize) ...[
+            if (_houseNextCursor != null || _houseCursorHistory.isNotEmpty) ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'PAGE ${currentPage + 1} OF $totalPages (${filteredHouses.length} TOTAL)',
+                    'PAGE $currentPage ($_houseTotal TOTAL)',
                     style: context.captionStyle
                         .copyWith(color: context.mutedColor),
                   ),
@@ -821,16 +714,23 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                       EarthButton(
                         label: 'PREVIOUS',
                         icon: Icons.chevron_left_rounded,
-                        onPressed: currentPage > 0
-                            ? () => setState(() => _housePage = currentPage - 1)
+                        onPressed: _houseCursorHistory.isNotEmpty && !_archiveLoading
+                            ? () async {
+                                final previous = _houseCursorHistory.removeLast();
+                                await _loadArchivePage(citizens: false, cursor: previous);
+                                if (mounted) setState(() => _housePage = currentPage - 1);
+                              }
                             : null,
                       ),
                       const SizedBox(width: 8),
                       EarthButton(
                         label: 'NEXT',
                         icon: Icons.chevron_right_rounded,
-                        onPressed: currentPage < totalPages - 1
-                            ? () => setState(() => _housePage = currentPage + 1)
+                        onPressed: _houseNextCursor != null && !_archiveLoading
+                            ? () async {
+                                await _loadArchivePage(citizens: false, cursor: _houseNextCursor, next: true);
+                                if (mounted) setState(() => _housePage = currentPage + 1);
+                              }
                             : null,
                       ),
                     ],

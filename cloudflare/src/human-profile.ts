@@ -1,6 +1,7 @@
 export type HumanProfile = {
   id: string;
   displayName: string;
+  epitaph: string | null;
   houseId: string;
   houseName: string;
   birthGameDay: number | null;

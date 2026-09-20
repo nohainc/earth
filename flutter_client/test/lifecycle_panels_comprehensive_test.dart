@@ -5,7 +5,7 @@ import 'package:earth_client/features/lifecycle/lifecycle_panels.dart';
 
 void main() {
   testWidgets(
-      'Lifecycle panels render V5 profile-adjacent world panels, liquidity, pantheon, history and rankings',
+      'Lifecycle panels render V5 profile-adjacent world panels, liquidity, memorial, history and rankings',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -164,35 +164,6 @@ void main() {
       },
     ];
 
-    final pantheonData = {
-      'deceasedPantheon': [
-        {
-          'display_name': 'Founder Marcus Vance',
-          'avatarInitials': 'MV',
-          'lifespanYears': 82,
-          'houseName': 'House of Vance',
-          'final_legacy': 942,
-          'bio':
-              'Pioneered zero-loss geothermal conversion grids across District 4.',
-          'majorAchievements': [
-            'Architect of the Geothermal Charter',
-            'Philanthropic Trust Founder'
-          ],
-        },
-      ],
-      'livingLeaders': [
-        {
-          'display_name': 'Senator Elena Rostova',
-          'roleTitle': 'High Chancellor',
-          'age': 67,
-          'wisdomBonus': 25,
-          'composite_legacy_score': 875,
-          'tenure': 'Game Day 42 - Present',
-          'icon': Icons.account_balance,
-        },
-      ],
-    };
-
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -222,7 +193,6 @@ void main() {
                 CivicMembershipHistoryPanel(membershipEvents: membershipEvents),
                 const WorldRankingsPanel(state: state),
                 const HistoryArchivePanel(state: state),
-                PantheonPanel(pantheon: pantheonData),
               ],
             ),
           ),
@@ -248,9 +218,7 @@ void main() {
     // HumanServicesPanel
     expect(find.text('HUMAN SERVICES / CURRENT ACCESS'), findsOneWidget);
 
-    // Pantheon
-    expect(find.text('PANTHEON / HOUSE ARCHIVE & LEGACY'), findsOneWidget);
-    expect(find.textContaining('Founder Marcus Vance'), findsWidgets);
-    expect(find.textContaining('Senator Elena Rostova'), findsWidgets);
+    // Historical archive ownership belongs to the canonical Memorial page.
+    expect(find.text('PANTHEON / HOUSE ARCHIVE & LEGACY'), findsNothing);
   });
 }

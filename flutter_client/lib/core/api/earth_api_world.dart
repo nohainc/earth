@@ -67,8 +67,64 @@ extension EarthApiWorld on EarthApi {
     return response is List<dynamic> ? response : const [];
   }
 
-  Future<Map<String, dynamic>> pantheon() async =>
-      (await _request('/api/pantheon')) as Map<String, dynamic>;
+  @Deprecated('Use memorial() for the canonical V5 Memorial archive.')
+  Future<Map<String, dynamic>> pantheon({
+    String? search,
+    String? citizenCursor,
+    String? houseCursor,
+    int limit = 20,
+  }) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (citizenCursor != null && citizenCursor.isNotEmpty)
+        'citizenCursor': citizenCursor,
+      if (houseCursor != null && houseCursor.isNotEmpty)
+        'houseCursor': houseCursor,
+    };
+    final response = await _request(
+        Uri(path: '/api/pantheon', queryParameters: params).toString());
+    return response is Map<String, dynamic> ? response : <String, dynamic>{};
+  }
+
+  Future<MemorialArchivePage> memorial({
+    String? search,
+    String? houseStatus,
+    String? citizenCursor,
+    String? houseCursor,
+    int limit = 20,
+  }) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (houseStatus != null && houseStatus.trim().isNotEmpty && houseStatus != 'ALL') 'houseStatus': houseStatus,
+      if (citizenCursor != null && citizenCursor.isNotEmpty)
+        'citizenCursor': citizenCursor,
+      if (houseCursor != null && houseCursor.isNotEmpty)
+        'houseCursor': houseCursor,
+    };
+    final response = await _request(
+        Uri(path: '/api/memorial', queryParameters: params).toString());
+    return MemorialArchivePage.fromJson(
+        response is Map<String, dynamic> ? response : const {});
+  }
+
+  Future<HouseLineage> memorialHouseLineage(String houseId) async {
+    final response = await _request('/api/memorial/houses/${Uri.encodeComponent(houseId)}/lineage');
+    return HouseLineage.fromJson(
+        response is Map<String, dynamic> ? response : const {});
+  }
+
+  Future<MemorialCitizenDetail> memorialCitizenBiography(String humanId) async {
+    final response = await _request('/api/memorial/citizens/${Uri.encodeComponent(humanId)}');
+    final raw = response is Map<String, dynamic> ? response : const <String, dynamic>{};
+    final citizen = raw['citizen'] is Map
+        ? Map<String, dynamic>.from(raw['citizen'] as Map)
+        : <String, dynamic>{};
+    final payload = <String, dynamic>{...raw, ...citizen};
+    return MemorialCitizenDetail.fromJson(
+        payload);
+  }
 
   Future<Map<String, dynamic>> worldConditions({int? day}) async {
     final suffix = day == null ? '' : '?day=$day';
@@ -76,6 +132,7 @@ extension EarthApiWorld on EarthApi {
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 
+  @Deprecated('Use memorial() for the canonical V5 Memorial archive.')
   Future<Map<String, dynamic>> cemetery(
       {String? search, String? house, String? dynasty, int limit = 50}) async {
     final houseFilter = house?.trim() ?? dynasty?.trim();

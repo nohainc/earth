@@ -1,130 +1,132 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/memorial_models.dart';
+import '../../shared/design_system/design_system.dart';
 import 'house_tree_dialog.dart';
 
 void showHouseLineageDialog(
   BuildContext context, {
-  required Map<String, dynamic> house,
+  required String houseId,
+  MemorialHouseSummary? houseModel,
   EarthState? state,
   EarthApi? api,
 }) {
+  final client = api ?? const EarthApi();
   showDialog<void>(
     context: context,
     barrierDismissible: true,
     builder: (ctx) => HouseLineageDialog(
-      house: house,
+      houseId: houseId,
+      houseModel: houseModel,
       state: state,
-      api: api,
+      api: client,
+      lineageFuture: client.memorialHouseLineage(houseId),
     ),
   );
 }
 
-// Backwards compatibility alias
-void showDynastyLineageDialog(
-  BuildContext context, {
-  required Map<String, dynamic> dynasty,
-  EarthState? state,
-  EarthApi? api,
-}) =>
-    showHouseLineageDialog(context, house: dynasty, state: state, api: api);
-
-typedef DynastyLineageDialog = HouseLineageDialog;
-
 class HouseLineageDialog extends StatelessWidget {
-  final Map<String, dynamic> house;
+  final String houseId;
+  final MemorialHouseSummary? houseModel;
   final EarthState? state;
   final EarthApi? api;
+  final Future<HouseLineage>? lineageFuture;
 
   const HouseLineageDialog({
     super.key,
-    required this.house,
+    required this.houseId,
+    this.houseModel,
     this.state,
     this.api,
+    this.lineageFuture,
   });
 
   @override
   Widget build(BuildContext context) {
-    final name = (house['house_name'] ??
-            house['dynasty_name'] ??
-            house['name'] ??
-            'House')
-        .toString();
-    final founder = (house['founder_name'] ?? house['founder'])?.toString();
-    final heir = (house['active_heir'] ?? house['heir'])?.toString();
-    final motto =
-        house['motto']?.toString() ?? house['description']?.toString();
-    final gen = int.tryParse(
-        (house['generation'] ?? house['generations'] ?? '').toString());
-    final ancestors = int.tryParse(
-        (house['deceased_count'] ?? house['ancestors_count'] ?? '').toString());
-    final legacy = int.tryParse(
-        (house['total_legacy'] ?? house['peak_legacy'] ?? house['legacy'] ?? '')
-            .toString());
+    if (lineageFuture != null) {
+      return FutureBuilder<HouseLineage>(
+        future: lineageFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Dialog(
+              child: SizedBox(
+                width: 320,
+                height: 180,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            );
+          }
+          if (snapshot.hasError || !snapshot.hasData) {
+            return AlertDialog(
+              title: const Text('Lineage unavailable'),
+              content: Text('The canonical lineage for House $houseId could not be loaded.'),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('CLOSE')),
+              ],
+            );
+          }
+          return _buildContent(context, snapshot.data!.house);
+        },
+      );
+    }
+    return _buildContent(context, null);
+  }
 
-    final isExtinct = house['is_extinct'] == true ||
-        house['status'] == 'extinct' ||
-        house['status'] == 'deceased' ||
-        house['status'] == 'historical' ||
-        false;
+  Widget _buildContent(BuildContext context, MemorialHouseDetail? detail) {
+    final summary = detail ?? houseModel;
+    final name = summary?.houseName ?? 'House';
+    final gen = summary?.generation;
+    final recordedHumans = summary?.deceasedCount;
+    final isExtinct = summary?.isExtinct == true;
 
-    final foundedDayNum = int.tryParse((house['founded_game_day'] ??
-            house['birth_game_day'] ??
-            house['founded_day'] ??
-            '')
-        .toString());
-    final extinctDayNum = int.tryParse(
-        (house['extinct_game_day'] ?? house['extinction_game_day'] ?? '')
-            .toString());
+    final foundedDayNum = summary?.foundedGameDay;
     final foundedLabel = foundedDayNum == null
         ? 'Founded: UNAVAILABLE'
         : 'Founded: ${_formatGameDay(foundedDayNum)}';
-    final lifespanDays = house['lifespan_days'] ??
-        (foundedDayNum != null && extinctDayNum != null
-            ? (extinctDayNum - foundedDayNum).clamp(0, 9999999)
-            : null);
-    // Build visual generational tree nodes
-    final treeNodes = <Map<String, dynamic>>[];
+    final lifespanDays = summary?.lifespanDays;
 
-    final rawMembers = house['members'];
-    if (rawMembers is List) {
-      for (final rawMember in rawMembers) {
-        if (rawMember is! Map) continue;
-        final member = Map<String, dynamic>.from(rawMember);
-        treeNodes.add({
-          'gen': member['generation'] ?? '—',
-          'name': member['display_name'] ??
-              member['name'] ??
-              'Historical record unavailable',
-          'title': member['title'] ?? 'Historical House member',
-          'isFounder': member['is_founder'] == true,
-          'isLiving': member['status'] == 'ACTIVE',
-          'period': member['period'] ??
-              member['life_span'] ??
-              'Historical dates unavailable',
-          'legacy': member['legacy'] ?? member['final_legacy'] ?? '—',
-          'role': member['historical_role'] ??
-              'Recorded House member; further details unavailable.',
-        });
+    final members = detail?.members ?? const <MemorialCitizenSummary>[];
+    final successions = detail?.successions ?? const <MemorialSuccession>[];
+    final treeNodes = <Map<String, dynamic>>[];
+    for (final member in members) {
+      MemorialSuccession? incoming;
+      MemorialSuccession? outgoing;
+      for (final edge in successions) {
+        if (edge.successorHumanId == member.humanId) incoming = edge;
+        if (edge.predecessorHumanId == member.humanId) outgoing = edge;
       }
+      final period = member.birthGameDay == null
+          ? 'Historical dates unavailable'
+          : 'Day ${member.birthGameDay}${member.deathGameDay == null ? ' – present' : ' – Day ${member.deathGameDay}'}';
+      final relationship = member.status == 'ACTIVE'
+          ? 'Current House representative.'
+          : outgoing?.successorHumanId != null
+              ? 'Predecessor in the recorded succession chain.'
+              : incoming?.predecessorHumanId != null
+                  ? 'Successor in the recorded succession chain.'
+                  : 'Recorded House member.';
+      treeNodes.add({
+        'gen': member.generation ?? '—',
+        'name': member.displayName,
+        'title': member.status == 'ACTIVE' ? 'Current House representative' : 'Historical House member',
+        'isLiving': member.status == 'ACTIVE',
+        'period': period,
+        'role': relationship,
+      });
     }
 
     final isMyHouse = state != null &&
-        ((state!.human['house_name']?.toString() == name) ||
-            (state!.human['houseName']?.toString() == name) ||
-            (state!.human['dynasty_name']?.toString() == name) ||
-            (state!.human['dynastyName']?.toString() == name) ||
-            (state!.life['house'] is Map &&
-                state!.life['house']['house_name']?.toString() == name) ||
-            (state!.life['dynasty'] is Map &&
-                state!.life['dynasty']['dynasty_name']?.toString() == name));
+        state!.human['house_name']?.toString() == name;
+
+    final accent = isExtinct ? context.mutedColor : context.primaryColor;
+    final historicalText = context.mutedColor;
 
     return Dialog(
-      backgroundColor: EarthColors.panelSurface,
+      backgroundColor: context.panelColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Colors.white12),
+        side: BorderSide(color: context.subtleBorderColor),
       ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
@@ -135,8 +137,8 @@ class HouseLineageDialog extends StatelessWidget {
             // Header Banner
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.white12)),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: context.subtleBorderColor)),
               ),
               child: Row(
                 children: [
@@ -145,18 +147,18 @@ class HouseLineageDialog extends StatelessWidget {
                     height: 48,
                     decoration: BoxDecoration(
                       color: isExtinct
-                          ? Colors.grey.withValues(alpha: .15)
-                          : const Color(0xffeab308).withValues(alpha: .15),
+                          ? context.mutedColor.withValues(alpha: .15)
+                          : context.primarySubtle,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isExtinct
-                            ? Colors.grey.withValues(alpha: .3)
-                            : const Color(0xffeab308).withValues(alpha: .3),
+                            ? context.mutedColor.withValues(alpha: .3)
+                            : context.primaryColor.withValues(alpha: .3),
                       ),
                     ),
                     child: Icon(
                       isExtinct ? Icons.account_balance : Icons.shield_outlined,
-                      color: isExtinct ? Colors.grey : const Color(0xffeab308),
+                      color: accent,
                       size: 26,
                     ),
                   ),
@@ -170,10 +172,10 @@ class HouseLineageDialog extends StatelessWidget {
                             Flexible(
                               child: Text(
                                 name,
-                                style: const TextStyle(
+                                style: context.widgetValueStyle.copyWith(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  color: context.inkColor,
                                   letterSpacing: 0.5,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -184,15 +186,10 @@ class HouseLineageDialog extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: isExtinct
-                                    ? Colors.redAccent.withValues(alpha: .15)
-                                    : Colors.greenAccent.withValues(alpha: .15),
+                                color: accent.withValues(alpha: .15),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: isExtinct
-                                      ? Colors.redAccent.withValues(alpha: .3)
-                                      : Colors.greenAccent
-                                          .withValues(alpha: .3),
+                                  color: accent.withValues(alpha: .3),
                                 ),
                               ),
                               child: Text(
@@ -201,9 +198,7 @@ class HouseLineageDialog extends StatelessWidget {
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.5,
-                                  color: isExtinct
-                                      ? Colors.redAccent
-                                      : Colors.greenAccent,
+                                  color: accent,
                                 ),
                               ),
                             ),
@@ -211,18 +206,18 @@ class HouseLineageDialog extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Generation ${gen ?? '—'} · $foundedLabel · ${ancestors ?? '—'} Inscribed Ancestors',
-                          style: const TextStyle(
+                          'Generation ${gen ?? '—'} · $foundedLabel · ${recordedHumans ?? '—'} Recorded Humans',
+                          style: context.bodyStyle.copyWith(
                             fontSize: 12,
-                            color: Colors.white70,
+                            color: historicalText,
                           ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close,
-                        color: Colors.white54, size: 20),
+                    icon: Icon(Icons.close,
+                        color: context.mutedColor, size: 20),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -236,119 +231,33 @@ class HouseLineageDialog extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Founder & Seat Summary
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: EarthColors.cardSurface,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.white12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'FOUNDER',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                    color: Colors.white54,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  founder ?? 'UNAVAILABLE',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: EarthColors.cardSurface,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.white12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'ACTIVE HEIR',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                    color: Colors.white54,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  heir ?? 'UNDESIGNATED',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: isExtinct
-                                        ? Colors.white54
-                                        : cyanAccentColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
                     // Top Metric Grid
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _metricChip('HOUSE LEGACY', '${legacy ?? '—'} LP',
-                            cyanAccentColor, Icons.stars_outlined),
-                        _metricChip(
-                            'ANCESTORS',
-                            '${ancestors ?? '—'} Inscribed',
-                            Colors.orangeAccent,
-                            Icons.history_edu),
-                        _metricChip(
-                            'LIFESPAN',
-                            lifespanDays == null
-                                ? '—'
-                                : _formatDuration(
-                                    int.tryParse(lifespanDays.toString()) ?? 0),
-                            Colors.purpleAccent,
-                            Icons.timelapse),
+                        _metricChip(context, 'RECORDED HUMANS',
+                            '${recordedHumans ?? '—'}', context.secondaryColor, Icons.history_edu),
+                        _metricChip(context, 'ARCHIVE SPAN',
+                            lifespanDays == null ? 'UNAVAILABLE' : _formatDuration(int.tryParse(lifespanDays.toString()) ?? 0),
+                            context.primaryColor, Icons.timelapse),
                       ],
                     ),
                     const SizedBox(height: 20),
 
-                    // House Succession Lineage Section
-                    const Row(
+                    // Canonical House Lineage
+                    Row(
                       children: [
                         Icon(Icons.account_tree_outlined,
-                            size: 16, color: cyanAccentColor),
+                            size: 16, color: context.primaryColor),
                         SizedBox(width: 8),
                         Text(
-                          'HOUSE SUCCESSION & LINEAGE TREE',
+                          'HOUSE LINEAGE',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.8,
-                            color: cyanAccentColor,
+                            color: context.primaryColor,
                           ),
                         ),
                       ],
@@ -361,8 +270,6 @@ class HouseLineageDialog extends StatelessWidget {
                       final node = indexed.$2;
                       final isLast = idx == treeNodes.length - 1;
                       final isLiving = node['isLiving'] == true;
-                      final isFounder = node['isFounder'] == true;
-
                       return IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -377,19 +284,9 @@ class HouseLineageDialog extends StatelessWidget {
                                     height: 28,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: isFounder
-                                          ? const Color(0xffeab308)
-                                              .withValues(alpha: .2)
-                                          : (isLiving
-                                              ? cyanAccentColor.withValues(
-                                                  alpha: .2)
-                                              : Colors.white10),
+                                      color: (isLiving ? context.primaryColor : context.mutedColor).withValues(alpha: .2),
                                       border: Border.all(
-                                        color: isFounder
-                                            ? const Color(0xffeab308)
-                                            : (isLiving
-                                                ? cyanAccentColor
-                                                : Colors.white30),
+                                        color: isLiving ? context.primaryColor : context.mutedColor,
                                         width: 1.5,
                                       ),
                                     ),
@@ -399,11 +296,7 @@ class HouseLineageDialog extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
-                                        color: isFounder
-                                            ? const Color(0xffeab308)
-                                            : (isLiving
-                                                ? cyanAccentColor
-                                                : Colors.white70),
+                                        color: isLiving ? context.primaryColor : context.mutedColor,
                                       ),
                                     ),
                                   ),
@@ -413,10 +306,7 @@ class HouseLineageDialog extends StatelessWidget {
                                         width: 2,
                                         margin: const EdgeInsets.symmetric(
                                             vertical: 4),
-                                        color: isFounder
-                                            ? const Color(0xffeab308)
-                                                .withValues(alpha: .3)
-                                            : Colors.white12,
+                                        color: context.subtleBorderColor,
                                       ),
                                     ),
                                 ],
@@ -431,16 +321,10 @@ class HouseLineageDialog extends StatelessWidget {
                                     EdgeInsets.only(bottom: isLast ? 0 : 16),
                                 padding: const EdgeInsets.all(14),
                                 decoration: BoxDecoration(
-                                  color: EarthColors.cardSurface,
+                                  color: context.cardColor,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: isFounder
-                                        ? const Color(0xffeab308)
-                                            .withValues(alpha: .3)
-                                        : (isLiving
-                                            ? cyanAccentColor.withValues(
-                                                alpha: .3)
-                                            : Colors.white12),
+                                    color: (isLiving ? context.primaryColor : context.mutedColor).withValues(alpha: .3),
                                   ),
                                 ),
                                 child: Column(
@@ -456,11 +340,7 @@ class HouseLineageDialog extends StatelessWidget {
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.bold,
-                                              color: isFounder
-                                                  ? const Color(0xffeab308)
-                                                  : (isLiving
-                                                      ? Colors.white
-                                                      : Colors.white70),
+                                              color: isLiving ? context.inkColor : context.mutedColor,
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -469,10 +349,7 @@ class HouseLineageDialog extends StatelessWidget {
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: isLiving
-                                                ? Colors.greenAccent
-                                                    .withValues(alpha: .1)
-                                                : Colors.white10,
+                                            color: (isLiving ? context.primaryColor : context.mutedColor).withValues(alpha: .1),
                                             borderRadius:
                                                 BorderRadius.circular(4),
                                           ),
@@ -480,9 +357,7 @@ class HouseLineageDialog extends StatelessWidget {
                                             node['period'].toString(),
                                             style: TextStyle(
                                               fontSize: 10,
-                                              color: isLiving
-                                                  ? Colors.greenAccent
-                                                  : Colors.white54,
+                                              color: isLiving ? context.primaryColor : context.mutedColor,
                                             ),
                                           ),
                                         ),
@@ -494,38 +369,17 @@ class HouseLineageDialog extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w500,
-                                        color: isFounder
-                                            ? const Color(0xffeab308)
-                                                .withValues(alpha: .8)
-                                            : (isLiving
-                                                ? cyanAccentColor
-                                                : Colors.white54),
+                                        color: isLiving ? context.primaryColor : context.mutedColor,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
                                     Text(
                                       node['role'].toString(),
-                                      style: const TextStyle(
+                                      style: context.bodyStyle.copyWith(
                                         fontSize: 12,
-                                        color: Colors.white70,
+                                        color: context.mutedColor,
                                         height: 1.3,
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.stars_outlined,
-                                            size: 12, color: cyanAccentColor),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '${node['legacy']} Legacy Generated',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: cyanAccentColor,
-                                          ),
-                                        ),
-                                      ],
                                     ),
                                   ],
                                 ),
@@ -543,8 +397,8 @@ class HouseLineageDialog extends StatelessWidget {
             // Footer Actions
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.white12)),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: context.subtleBorderColor)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -552,8 +406,8 @@ class HouseLineageDialog extends StatelessWidget {
                   if (isMyHouse && api != null) ...[
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xffeab308),
-                        side: const BorderSide(color: Color(0xffeab308)),
+                        foregroundColor: context.primaryColor,
+                        side: BorderSide(color: context.primaryColor),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
                       ),
@@ -568,8 +422,8 @@ class HouseLineageDialog extends StatelessWidget {
                   ],
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('CLOSE',
-                        style: TextStyle(color: cyanAccentColor)),
+                    child: Text('CLOSE',
+                        style: context.controlStyle.copyWith(color: context.primaryColor)),
                   ),
                 ],
               ),
@@ -580,7 +434,7 @@ class HouseLineageDialog extends StatelessWidget {
     );
   }
 
-  Widget _metricChip(String label, String value, Color color, IconData icon) {
+  Widget _metricChip(BuildContext context, String label, String value, Color color, IconData icon) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -608,10 +462,10 @@ class HouseLineageDialog extends StatelessWidget {
               ),
               Text(
                 value,
-                style: const TextStyle(
+                style: context.widgetValueStyle.copyWith(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: context.inkColor,
                 ),
               ),
             ],

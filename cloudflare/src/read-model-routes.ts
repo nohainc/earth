@@ -7,6 +7,9 @@ import {
   listCemeteryProfiles as listCemeteryProfilesPostgres,
   listInstitutions as listInstitutionsPostgres,
   listMarketPriceHistory as listMarketPriceHistoryPostgres,
+  listMemorialArchive as listMemorialArchivePostgres,
+  getMemorialCitizenBiography as getMemorialCitizenBiographyPostgres,
+  getMemorialHouseLineage as getMemorialHouseLineagePostgres,
   listPantheonOfAchievements as listPantheonOfAchievementsPostgres,
   listRankings as listRankingsPostgres,
 } from './read-postgres.ts';
@@ -39,7 +42,7 @@ function toJsonSafe<T>(value: T): T {
 
 /**
  * Read-model routes: notifications, events, history, rankings, institutions,
- * audit, pantheon/cemetery, market history, admin email deliveries,
+ * audit, deprecated pantheon/cemetery compatibility adapters, market history, admin email deliveries,
  * and world activity.
  *
  * These are all GET (or simple POST mark-read) routes that call read-only
@@ -520,12 +523,51 @@ export async function handleReadModelRoutes(
   if (url.pathname === '/api/pantheon' && request.method === 'GET') {
     try {
       const search = url.searchParams.get('search')?.trim();
-      const limit = Number(url.searchParams.get('limit') ?? 100);
-      const result = await withRepository(env, (repository) => listPantheonOfAchievementsPostgres(repository, { search, limit }));
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      const citizenCursor = url.searchParams.get('citizenCursor')?.trim() || undefined;
+      const houseCursor = url.searchParams.get('houseCursor')?.trim() || undefined;
+      const result = await withRepository(env, (repository) => listPantheonOfAchievementsPostgres(repository, { search, limit, citizenCursor, houseCursor }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Pantheon fetch failed' }, { status: 500 });
+    }
+  }
+
+  if (url.pathname === '/api/memorial' && request.method === 'GET') {
+    try {
+      const search = url.searchParams.get('search')?.trim();
+      const limit = Number(url.searchParams.get('limit') ?? 20);
+      const citizenCursor = url.searchParams.get('citizenCursor')?.trim() || undefined;
+      const houseCursor = url.searchParams.get('houseCursor')?.trim() || undefined;
+      const houseStatus = url.searchParams.get('houseStatus')?.trim() || undefined;
+      const result = await withRepository(env, (repository) => listMemorialArchivePostgres(repository, { search, limit, citizenCursor, houseCursor, houseStatus }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Memorial fetch failed' }, { status: 500 });
+    }
+  }
+
+  const memorialLineageMatch = url.pathname.match(/^\/api\/memorial\/houses\/([^/]+)\/lineage$/);
+  if (memorialLineageMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => getMemorialHouseLineagePostgres(repository, memorialLineageMatch[1]));
+      if (!result) return Response.json({ ok: false, error: 'House lineage not found' }, { status: 404 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'House lineage fetch failed' }, { status: 500 });
+    }
+  }
+
+  const memorialCitizenMatch = url.pathname.match(/^\/api\/memorial\/citizens\/([^/]+)$/);
+  if (memorialCitizenMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => getMemorialCitizenBiographyPostgres(repository, memorialCitizenMatch[1]));
+      if (!result) return Response.json({ ok: false, error: 'Memorial citizen not found' }, { status: 404 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Memorial biography fetch failed' }, { status: 500 });
     }
   }
 

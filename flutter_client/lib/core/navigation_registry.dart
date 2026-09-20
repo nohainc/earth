@@ -117,7 +117,7 @@ class NavigationRegistry {
     NavigationItem(
       id: 'house',
       canonicalRoute: 'house',
-      aliases: ['dynasty', 'lineage'],
+      aliases: [],
       group: NavigationGroup.house,
       defaultLabel: 'House',
       defaultPageTitle: 'HOUSE',

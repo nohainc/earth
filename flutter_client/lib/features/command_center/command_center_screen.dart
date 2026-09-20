@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
+import '../../core/models/memorial_models.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/earth_theme_context.dart';
 import '../../shared/widgets/earth_primitives.dart';
@@ -72,7 +73,7 @@ class _CommandCenterState extends State<CommandCenter>
   CommandOverview? commandOverview;
   List<dynamic> ownershipEvents = const [];
   List<dynamic> membershipEvents = const [];
-  Map<String, dynamic> pantheon = const {};
+  MemorialArchivePage? memorialArchive;
   Map<String, dynamic> personalFinanceData = const {};
   Map<String, dynamic> mutualCreditData = const {};
   int unreadNotifications = 0;
@@ -661,8 +662,8 @@ class _CommandCenterState extends State<CommandCenter>
         selectedSection == 'history' ||
         selectedSection == 'pantheon') {
       _loadPanel('pantheon', () async {
-        final data = await api.pantheon();
-        if (mounted) setState(() => pantheon = data);
+        final data = await api.memorial();
+        if (mounted) setState(() => memorialArchive = data);
       });
     }
     if (selectedSection == 'mutual-credit') {
@@ -974,6 +975,7 @@ class _CommandCenterState extends State<CommandCenter>
                                           ),
                                           child: Dashboard(
                                             state: current,
+                                            api: api,
                                             selectedSection: selectedSection,
                                             previousSection: _previousSection,
                                             onNavigate: (section) =>
@@ -998,7 +1000,7 @@ class _CommandCenterState extends State<CommandCenter>
                                             commandOverview: commandOverview,
                                             ownershipEvents: ownershipEvents,
                                             membershipEvents: membershipEvents,
-                                            pantheon: pantheon,
+                                            memorialArchive: memorialArchive,
                                             personalFinanceData:
                                                 personalFinanceData,
                                             mutualCreditData: mutualCreditData,

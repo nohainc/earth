@@ -10,6 +10,7 @@ import '../models/building_models.dart';
 import '../models/command_overview.dart';
 import '../models/initiative.dart';
 import '../models/market_models.dart';
+import '../models/memorial_models.dart';
 
 part 'earth_api_auth.dart';
 part 'earth_api_world.dart';

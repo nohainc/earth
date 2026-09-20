@@ -116,6 +116,30 @@ export function calculateAnnualMortalityHazard(age: number, health: number, esse
   return calculateMortalityHazard({ age, lifeConditionScore: health, essentialServicesIndex });
 }
 
+export type MemorialDeathCause =
+  | 'NATURAL_AGE'
+  | 'ESSENTIAL_NEEDS_DEPRIVATION'
+  | 'HEALTH_SERVICE_DEPRIVATION'
+  | 'SYSTEM_ADMINISTRATIVE';
+
+export function classifyDeathCause(input: {
+  age: number;
+  foodShortfallDays: number;
+  missedMaintenanceDays: number;
+  healthServiceCoverage: number;
+}): { code: MemorialDeathCause; details: Record<string, unknown> } {
+  const details = {
+    age: input.age,
+    foodShortfallDays: input.foodShortfallDays,
+    missedMaintenanceDays: input.missedMaintenanceDays,
+    healthServiceCoverage: input.healthServiceCoverage,
+  };
+  if (input.foodShortfallDays > 0) return { code: 'ESSENTIAL_NEEDS_DEPRIVATION', details };
+  if (input.missedMaintenanceDays > 0 || input.healthServiceCoverage < 0.5) return { code: 'HEALTH_SERVICE_DEPRIVATION', details };
+  if (input.age >= 65) return { code: 'NATURAL_AGE', details };
+  return { code: 'SYSTEM_ADMINISTRATIVE', details };
+}
+
 /** Stable, replayable uniform roll in [0, 1), independent of textual ID shape. */
 export function stableMortalityRoll(worldSeed: string, humanId: string, gameYear: number): number {
   let hash = 2166136261;
@@ -137,12 +161,17 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
   const worldSeed = world.rows[0]?.world_seed ?? 'EARTH-WORLD-V2';
   const gameYear = Math.floor((day - 1) / 365) + 1;
   const candidates = await tx.query<{
-    id: string; account_id: string; house_id: string; display_name: string; standing: number; legacy: number; age_years: number;
+    id: string; account_id: string; house_id: string; display_name: string; standing: number; legacy: number; age_years: number; generation: number;
     house_name: string; house_legacy: number; planned_successor_name: string | null; life_condition_score: number;
     recent_food_shortfall_days: number; recent_missed_maintenance_days: number;
     health_service_coverage: string; city_service_index: string;
+    epitaph: string | null; corporation_id: string | null; corporation_name: string | null;
   }>(`SELECT human.id, human.account_id, human.house_id, human.display_name, human.standing, human.final_legacy AS legacy, human.age_years,
+             COALESCE((SELECT MAX(se.generation) - 1 FROM succession_events se WHERE se.predecessor_human_id = human.id), human.generation, 1) AS generation,
              house.house_name, house.dynasty_legacy AS house_legacy, plan.successor_name AS planned_successor_name,
+             human.epitaph,
+             affiliation.corporation_id,
+             corporation.name AS corporation_name,
              100::NUMERIC AS life_condition_score,
              COALESCE(maintenance.recent_food_shortfall_days, 0) AS recent_food_shortfall_days,
              COALESCE(maintenance.recent_missed_maintenance_days, 0) AS recent_missed_maintenance_days,
@@ -160,6 +189,10 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
         ) maintenance ON maintenance.human_id = human.id
         LEFT JOIN house_succession_plans plan
           ON plan.house_id = house.id AND plan.status = 'ACTIVE'
+        LEFT JOIN house_affiliations affiliation
+          ON affiliation.house_id = house.id AND affiliation.status = 'ACTIVE'
+        LEFT JOIN institutions corporation
+          ON corporation.id = affiliation.corporation_id
        WHERE human.status = 'ACTIVE' AND human.age_years >= 65
        FOR UPDATE OF human`, [day]);
   let processed = 0;
@@ -190,9 +223,9 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     // succession representative inside the same player account while the
     // Human identity changes and the deceased predecessor remains archived.
     await tx.query(`INSERT INTO humans
-      (id, account_id, house_id, display_name, birth_game_day, age_years, standing, final_legacy, status)
-      VALUES ($1, $2, $3, $4, $5, 20, $6, 0, 'DECEASED')`,
-      [newHumanId, human.account_id, human.house_id, successorName, day - (20 * 365), emergency ? 0 : 0]);
+      (id, account_id, house_id, display_name, birth_game_day, age_years, generation, standing, final_legacy, status)
+      VALUES ($1, $2, $3, $4, $5, 20, $6, $7, 0, 'DECEASED')`,
+      [newHumanId, human.account_id, human.house_id, successorName, day - (20 * 365), nextGeneration, emergency ? 0 : 0]);
     await tx.query(
       `INSERT INTO succession_events
         (id, house_id, predecessor_human_id, successor_human_id, death_game_day, effective_game_day,
@@ -208,6 +241,65 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     // attached to the House instead of being inherited as political power.
     await tx.query("UPDATE organization_office_grants SET status = 'EXPIRED', effective_to_game_day = $2 WHERE principal_type = 'HUMAN' AND principal_id = $1 AND status = 'ACTIVE' AND effective_to_game_day IS NULL", [human.id, day]);
     await tx.query("UPDATE humans SET status = 'DECEASED', death_game_day = $1, final_legacy = $2 WHERE id = $3", [day, human.legacy, human.id]);
+    const memorialGeneration = Math.max(1, Number(human.generation));
+    const cause = classifyDeathCause({
+      age: Number(human.age_years),
+      foodShortfallDays: Number(human.recent_food_shortfall_days),
+      missedMaintenanceDays: Number(human.recent_missed_maintenance_days),
+      healthServiceCoverage: Number(human.health_service_coverage),
+    });
+    const officeSnapshot = await tx.query(`
+      SELECT r.role_code, r.institution_id, i.name AS institution_name,
+             r.status, r.effective_from_game_day
+        FROM institution_governance_roles r
+        LEFT JOIN institutions i ON i.id = r.institution_id
+       WHERE r.human_id = $1
+         AND r.role_code IN ('CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER', 'CORPORATION_OPERATOR', 'EARTH_EXECUTIVE', 'EARTH_TREASURER')
+       ORDER BY r.effective_from_game_day, r.role_code, r.id`, [human.id]);
+    const majorOfficesSnapshot = officeSnapshot.rows.map((office) => ({
+      roleCode: office.role_code,
+      roleName: String(office.role_code).replaceAll('_', ' '),
+      institutionId: office.institution_id,
+      institutionName: office.institution_name,
+      status: office.status,
+      effectiveFromGameDay: office.effective_from_game_day,
+    }));
+    const houseAccounts = await tx.query<{ account_type: string; balance_units: string }>(
+      `SELECT a.account_type, a.balance_units::TEXT
+         FROM economic_accounts a
+         JOIN owner_registry owner ON owner.economic_id = a.owner_economic_id
+        WHERE owner.id = $1 AND a.asset_id = 1 AND a.status = 'ACTIVE'
+        ORDER BY a.account_type`, [human.house_id]);
+    const finalHouseEconomicSnapshot = Object.fromEntries(
+      houseAccounts.rows.map((account) => [account.account_type, account.balance_units]),
+    );
+    await tx.query(`INSERT INTO human_memorial_records
+      (human_id, house_id, house_name_at_death, generation, generation_source, display_name, birth_game_day, death_game_day,
+       age_years, final_standing, final_legacy, cause_code, cause_details,
+       corporation_id, corporation_name, successor_human_id, successor_name,
+       final_house_economic_snapshot, major_offices_snapshot, epitaph, record_version, created_game_day)
+      VALUES ($1,$2,$3,$4,'SUCCESSION_HISTORY_V1',$5,$6,$7,$8,$9,$10,$11,$12::JSONB,$13,$14,$15,$16,$17::JSONB,$18::JSONB,$19,'human-memorial-v1',$7)
+      ON CONFLICT (human_id) DO NOTHING`, [
+      human.id,
+      human.house_id,
+      human.house_name,
+      memorialGeneration,
+      human.display_name,
+      human.birth_game_day,
+      day,
+      Number(human.age_years),
+      String(human.standing),
+      String(human.legacy),
+      cause.code,
+      JSON.stringify(cause.details),
+      human.corporation_id,
+      human.corporation_name,
+      newHumanId,
+      successorName,
+      JSON.stringify({ accountBalancesUnits: finalHouseEconomicSnapshot }),
+      JSON.stringify(majorOfficesSnapshot),
+      human.epitaph,
+    ]);
     const successionCost = await applyOptionalSuccessionCost(tx, human.house_id, day);
     await tx.query('UPDATE houses SET dynasty_legacy = dynasty_legacy + $1, generation = GREATEST(generation, $2) WHERE id = $3', [legacyContribution, nextGeneration, human.house_id]);
 
