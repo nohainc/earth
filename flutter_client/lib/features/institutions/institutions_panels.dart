@@ -5,6 +5,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/community_models.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 
@@ -4800,16 +4801,114 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String? _expandedCommunityId;
+  List<Map<String, dynamic>>? _directoryCommunities;
+  int _directoryTotalCount = 0;
+  String? _directoryNextCursor;
+  final List<String?> _directoryCursors = [null];
+  bool _directoryLoading = false;
+  Timer? _directorySearchTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDirectory();
+  }
 
   @override
   void dispose() {
+    _directorySearchTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  Map<String, dynamic> _communityMap(CommunitySummary community) {
+    final viewer = community.viewer;
+    final capabilities = viewer.capabilities;
+    return {
+      'id': community.id,
+      'name': community.name,
+      'description': community.description,
+      'visibility': community.visibility,
+      'join_policy': community.joinPolicy,
+      'status': community.status,
+      'founder_house_id': community.founderHouseId,
+      'founder_house_name': community.founderHouseName,
+      'member_count': community.memberCount,
+      'viewer': {
+        'membershipStatus': viewer.membershipStatus,
+        'role': viewer.role,
+        'requestStatus': viewer.requestStatus,
+        'requestId': viewer.requestId,
+        'canJoin': capabilities.canJoin,
+        'canLeave': capabilities.canLeave,
+        'canEdit': capabilities.canEdit,
+        'canManageMembers': capabilities.canManageMembers,
+        'canApproveRequests': capabilities.canApproveRequests,
+        'canChangeRoles': capabilities.canChangeRoles,
+        'canDisband': capabilities.canDisband,
+        'canTransferOwnership': capabilities.canTransferOwnership,
+        'canCancelRequest': capabilities.canCancelRequest,
+      },
+    };
+  }
+
+  Future<void> _loadDirectory({String? cursor, int pageIndex = 0}) async {
+    setState(() => _directoryLoading = true);
+    try {
+      final response = await widget.communityApi.listCommunityDirectory(
+        search: _searchQuery,
+        joinPolicy: _activeFilter == 'OPEN_TO_JOIN' ? 'OPEN' : null,
+        membership: _activeFilter == 'MY_COMMUNITIES' ? 'mine' : null,
+        viewerStatus: _activeFilter == 'PENDING' ? 'PENDING' : null,
+        cursor: cursor,
+        limit: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _directoryCommunities = response.communities
+            .map(_communityMap)
+            .toList(growable: false);
+        _directoryTotalCount = response.totalCount;
+        _directoryNextCursor = response.nextCursor;
+        _directoryLoading = false;
+        _page = pageIndex;
+        if (pageIndex == 0) {
+          _directoryCursors
+            ..clear()
+            ..add(null);
+        }
+        while (_directoryCursors.length <= pageIndex + 1) {
+          _directoryCursors.add(null);
+        }
+        _directoryCursors[pageIndex + 1] = response.nextCursor;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _directoryLoading = false);
+    }
+  }
+
+  void _scheduleDirectoryLoad() {
+    _directorySearchTimer?.cancel();
+    _directorySearchTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) _loadDirectory();
+    });
+  }
+
+  void _resetDirectoryFilters() {
+    setState(() {
+      _searchController.clear();
+      _searchQuery = '';
+      _activeFilter = 'ALL';
+      _page = 0;
+      _expandedCommunityId = null;
+    });
+    _loadDirectory();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rawCommunities = widget.state.communities;
+    final rawCommunities = _directoryCommunities ?? widget.state.communities;
+    final usingDirectory = _directoryCommunities != null;
 
     // Filter active communities
     final activeCommunities = rawCommunities
@@ -4830,6 +4929,9 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       final viewer = c['viewer'] is Map
           ? Map<String, dynamic>.from(c['viewer'] as Map)
           : const <String, dynamic>{};
+      final capabilities = viewer['capabilities'] is Map
+          ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
+          : viewer;
       final myRole = viewer['role']?.toString();
       final myRequestStatus = viewer['requestStatus']?.toString();
       final isOwner = myRole == 'OWNER';
@@ -4843,7 +4945,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       if (isPending) {
         pendingCount++;
       }
-      if (viewer['canJoin'] == true) {
+      if (capabilities['canJoin'] == true) {
         openCount++;
       }
     }
@@ -4852,6 +4954,9 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       final viewer = c['viewer'] is Map
           ? Map<String, dynamic>.from(c['viewer'] as Map)
           : const <String, dynamic>{};
+      final capabilities = viewer['capabilities'] is Map
+          ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
+          : viewer;
       final myRole = viewer['role']?.toString();
       final myRequestStatus = viewer['requestStatus']?.toString();
       final isOwner = myRole == 'OWNER';
@@ -4871,7 +4976,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       if (_activeFilter == 'PENDING' && !isPending) {
         return false;
       }
-      if (_activeFilter == 'OPEN_TO_JOIN' && viewer['canJoin'] != true) {
+      if (_activeFilter == 'OPEN_TO_JOIN' && capabilities['canJoin'] != true) {
         return false;
       }
       if (_searchQuery.isNotEmpty &&
@@ -4881,21 +4986,22 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       return true;
     }).toList();
 
-    final totalCount = filteredList.length;
+    final totalCount = usingDirectory ? _directoryTotalCount : filteredList.length;
     final totalPages = math.max(1, (totalCount / _pageSize).ceil());
     final safePage = _page.clamp(0, totalPages - 1);
-    final pageItems =
-        filteredList.skip(safePage * _pageSize).take(_pageSize).toList();
+    final pageItems = usingDirectory
+        ? filteredList
+        : filteredList.skip(safePage * _pageSize).take(_pageSize).toList();
 
     final cockpit = EarthPageCockpit(
-      status: 'CIVIC NETWORK',
+      status: 'HOUSE ASSOCIATIONS',
       statusColor: context.primaryColor,
       infoTitle: 'HOW COMMUNITIES WORK',
       infoDescription:
-          '• Civic Communities: Voluntary associations for social, cultural, and professional coordination.\n\n• House Membership: Your House remains affiliated across Human succession; the current Human acts and speaks for the House.\n\n• Cross-World Belonging: Communities are independent associations spanning organizations and Territories on Earth, without a treasury or economic settlement.',
-      title: 'COMMUNITIES & GUILDS',
+          '• Communities are voluntary associations of Houses for shared social, cultural, or professional interests.\n\n• House Membership: Membership belongs to your House and continues across Human succession; the current Human acts for the House.\n\n• Independent Scope: Communities are separate from Corporation membership and have no land, taxation, treasury, or economic settlement system.',
+      title: 'COMMUNITIES',
       subtitle:
-          'Grassroots civic associations, trade guilds, and mutual aid cooperatives across Earth',
+          'Voluntary House associations independent of Corporation membership',
       metrics: [
         CockpitMetric(
           label: 'Network',
@@ -4959,10 +5065,12 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                     onChanged: (value) => setState(() {
                       _searchQuery = value.trim();
                       _page = 0;
+                      _scheduleDirectoryLoad();
                     }),
                     onClear: () => setState(() {
                       _searchQuery = '';
                       _page = 0;
+                      _scheduleDirectoryLoad();
                     }),
                   );
                   final found = EarthButton(
@@ -4997,6 +5105,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                     onTap: () => setState(() {
                       _activeFilter = 'ALL';
                       _page = 0;
+                      _scheduleDirectoryLoad();
                     }),
                   ),
                   _filterChip(
@@ -5005,24 +5114,27 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                     onTap: () => setState(() {
                       _activeFilter = 'OPEN_TO_JOIN';
                       _page = 0;
+                      _scheduleDirectoryLoad();
                     }),
                   ),
-                  if (_activeFilter == 'MY_COMMUNITIES')
+                  if (myCount > 0 || _activeFilter == 'MY_COMMUNITIES')
                     _filterChip(
                       label: 'MY COMMUNITIES ($myCount)',
-                      isSelected: true,
+                      isSelected: _activeFilter == 'MY_COMMUNITIES',
                       onTap: () => setState(() {
-                        _activeFilter = 'ALL';
+                        _activeFilter = 'MY_COMMUNITIES';
                         _page = 0;
+                        _scheduleDirectoryLoad();
                       }),
                     ),
-                  if (_activeFilter == 'PENDING')
+                  if (pendingCount > 0 || _activeFilter == 'PENDING')
                     _filterChip(
                       label: 'PENDING ($pendingCount)',
-                      isSelected: true,
+                      isSelected: _activeFilter == 'PENDING',
                       onTap: () => setState(() {
-                        _activeFilter = 'ALL';
+                        _activeFilter = 'PENDING';
                         _page = 0;
+                        _scheduleDirectoryLoad();
                       }),
                     ),
                 ],
@@ -5040,6 +5152,13 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                   ? 'You have no pending community applications.'
                                   : 'No communities registered yet. You can found the first one.'))),
                   icon: Icons.groups_outlined,
+                  action: _searchQuery.isNotEmpty || _activeFilter != 'ALL'
+                      ? TextButton.icon(
+                          onPressed: _resetDirectoryFilters,
+                          icon: const Icon(Icons.clear_all_rounded),
+                          label: const Text('RESET SEARCH & FILTERS'),
+                        )
+                      : null,
                 )
               else ...[
                 Column(
@@ -5058,6 +5177,10 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                     final viewer = community['viewer'] is Map
                         ? Map<String, dynamic>.from(community['viewer'] as Map)
                         : const <String, dynamic>{};
+                    final capabilities = viewer['capabilities'] is Map
+                        ? Map<String, dynamic>.from(
+                            viewer['capabilities'] as Map)
+                        : viewer;
                     final myRole = viewer['role']?.toString();
                     final myRequestStatus = viewer['requestStatus']?.toString();
                     final isOwner = myRole == 'OWNER';
@@ -5127,8 +5250,23 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                                     fontWeight:
                                                         FontWeight.w700),
                                           ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'FOUNDED BY HOUSE: $founderName',
+                                            style: context.captionStyle.copyWith(
+                                              color: context.mutedColor,
+                                            ),
+                                          ),
                                         ],
                                       )),
+                                      EarthBadge(
+                                        label: admissionPolicy == 'OPEN'
+                                            ? 'OPEN'
+                                            : 'REQUEST',
+                                        variant: admissionPolicy == 'OPEN'
+                                            ? EarthBadgeVariant.success
+                                            : EarthBadgeVariant.warning,
+                                      ),
                                       if (isPending)
                                         const EarthBadge(
                                             label: 'PENDING REVIEW',
@@ -5155,7 +5293,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text('FOUNDED BY: $founderName',
+                                      Text('FOUNDED BY HOUSE: $founderName',
                                           style: context.widgetTitleStyle),
                                       SizedBox(height: context.spacingControl),
                                       Wrap(
@@ -5179,7 +5317,27 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                               variant:
                                                   EarthBadgeVariant.warning,
                                             ),
-                                          ] else if (viewer['canJoin'] ==
+                                            if (capabilities[
+                                                    'canCancelRequest'] ==
+                                                true)
+                                              EarthButton(
+                                                label: 'CANCEL APPLICATION',
+                                                variant:
+                                                    EarthButtonVariant.ghost,
+                                                onPressed: widget.busy
+                                                    ? null
+                                                    : () => widget.action(
+                                                          () => const EarthApi()
+                                                              .cancelCommunityApplication(
+                                                            communityId: id,
+                                                            requestId: viewer[
+                                                                    'requestId']
+                                                                ?.toString() ??
+                                                                '',
+                                                          ),
+                                                        ),
+                                              ),
+                                          ] else if (capabilities['canJoin'] ==
                                               true) ...[
                                             EarthButton(
                                               label:
@@ -5234,7 +5392,9 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                 minWidth: 28, minHeight: 32),
                             icon: const Icon(Icons.first_page, size: 20),
                             onPressed: safePage > 0
-                                ? () => setState(() => _page = 0)
+                                ? () => usingDirectory
+                                    ? _loadDirectory(pageIndex: 0)
+                                    : setState(() => _page = 0)
                                 : null,
                             tooltip: 'First Page',
                           ),
@@ -5245,7 +5405,11 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                 minWidth: 28, minHeight: 32),
                             icon: const Icon(Icons.chevron_left, size: 20),
                             onPressed: safePage > 0
-                                ? () => setState(() => _page = safePage - 1)
+                                ? () => usingDirectory
+                                    ? _loadDirectory(
+                                        cursor: _directoryCursors[safePage - 1],
+                                        pageIndex: safePage - 1)
+                                    : setState(() => _page = safePage - 1)
                                 : null,
                             tooltip: 'Previous Page',
                           ),
@@ -5261,17 +5425,26 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                 style: TextStyle(
                                     fontSize: 12, color: context.mutedColor),
                               ),
-                              _PageNumberInput(
-                                key: ValueKey(
-                                    'comm_page_${safePage + 1}_$totalPages'),
-                                currentPage: safePage + 1,
-                                totalPages: totalPages,
-                                onSubmitted: (newPage) {
-                                  setState(() {
-                                    _page = newPage - 1;
-                                  });
-                                },
-                              ),
+                              if (usingDirectory)
+                                Text(
+                                  '${safePage + 1}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.inkColor,
+                                      fontWeight: FontWeight.w700),
+                                )
+                              else
+                                _PageNumberInput(
+                                  key: ValueKey(
+                                      'comm_page_${safePage + 1}_$totalPages'),
+                                  currentPage: safePage + 1,
+                                  totalPages: totalPages,
+                                  onSubmitted: (newPage) {
+                                    setState(() {
+                                      _page = newPage - 1;
+                                    });
+                                  },
+                                ),
                               Text(
                                 ' of $totalPages ($totalCount)',
                                 style: TextStyle(
@@ -5291,7 +5464,15 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                 minWidth: 28, minHeight: 32),
                             icon: const Icon(Icons.chevron_right, size: 20),
                             onPressed: safePage < totalPages - 1
-                                ? () => setState(() => _page = safePage + 1)
+                                ? () => usingDirectory &&
+                                        _directoryNextCursor != null
+                                    ? _loadDirectory(
+                                        cursor: _directoryNextCursor,
+                                        pageIndex: safePage + 1)
+                                    : (!usingDirectory
+                                        ? setState(
+                                            () => _page = safePage + 1)
+                                        : null)
                                 : null,
                             tooltip: 'Next Page',
                           ),
@@ -5301,7 +5482,8 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                             constraints: const BoxConstraints(
                                 minWidth: 28, minHeight: 32),
                             icon: const Icon(Icons.last_page, size: 20),
-                            onPressed: safePage < totalPages - 1
+                            onPressed: !usingDirectory &&
+                                    safePage < totalPages - 1
                                 ? () => setState(() => _page = totalPages - 1)
                                 : null,
                             tooltip: 'Last Page',
@@ -5380,8 +5562,8 @@ class MyCommunityPanel extends StatefulWidget {
 }
 
 class _MyCommunityPanelState extends State<MyCommunityPanel> {
-  List<dynamic> _members = [];
-  List<dynamic> _requests = [];
+  List<CommunityMember> _members = [];
+  List<CommunityMembershipRequest> _requests = [];
   bool _loading = false;
   String? _membersError;
   String? _requestsError;
@@ -5446,7 +5628,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
 
     try {
       final memRes = await const EarthApi().listCommunityMembers(id);
-      _members = memRes['members'] as List<dynamic>? ?? [];
+      _members = memRes.members;
     } catch (_) {
       _members = [];
       _membersError = 'Could not load the member roster.';
@@ -5458,13 +5640,14 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       final viewer = myComm['viewer'] is Map
           ? Map<String, dynamic>.from(myComm['viewer'] as Map)
           : const <String, dynamic>{};
-      final myRole = viewer['role']?.toString();
-      final isElevated = myRole == 'OWNER' || myRole == 'MODERATOR';
+      final capabilities = viewer['capabilities'] is Map
+          ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
+          : viewer;
 
-      if (viewer['canApproveRequests'] == true &&
+      if (capabilities['canApproveRequests'] == true &&
           admissionPolicy == 'REQUEST') {
         final reqRes = await const EarthApi().listCommunityRequests(id);
-        _requests = reqRes['requests'] as List<dynamic>? ?? [];
+        _requests = reqRes.requests;
       } else {
         _requests = [];
       }
@@ -5535,6 +5718,64 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
     controller.dispose();
   }
 
+  Future<void> _confirmDisband(
+      BuildContext context, String communityId, String communityName) async {
+    final controller = TextEditingController();
+    var confirmed = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: context.panelColor,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(context.radiusPanel)),
+          title: Text('Disband Community?',
+              style: context.topicTitleStyle
+                  .copyWith(color: context.dangerColor)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'This permanently dissolves the community and its memberships. Type "$communityName" to confirm.',
+                style: context.widgetFooterStyle,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                onChanged: (value) => setDialogState(
+                    () => confirmed = value.trim() == communityName),
+                decoration: InputDecoration(
+                    labelText: 'Community name',
+                    labelStyle: context.widgetFooterStyle),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('CANCEL',
+                    style: context.controlStyle
+                        .copyWith(color: context.mutedColor))),
+            EarthButton(
+              label: 'DISBAND COMMUNITY',
+              variant: EarthButtonVariant.danger,
+              onPressed: !confirmed || widget.busy
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      await widget.action(
+                          () => const EarthApi().disbandCommunity(communityId));
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+  }
+
   Widget _buildAttributeRow(
     BuildContext context, {
     required IconData icon,
@@ -5594,13 +5835,16 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
     final viewer = myComm['viewer'] is Map
         ? Map<String, dynamic>.from(myComm['viewer'] as Map)
         : const <String, dynamic>{};
+    final capabilities = viewer['capabilities'] is Map
+        ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
+        : viewer;
     final myRole = viewer['role']?.toString();
     final isOwner = myRole == 'OWNER';
     final isAdmin = myRole == 'MODERATOR';
     final memberCount = asIntOr(myComm['member_count'], _members.length);
 
     final statusText = isOwner
-        ? 'FOUNDER'
+        ? 'OWNER'
         : isAdmin
             ? 'MODERATOR'
             : 'MEMBER';
@@ -5612,11 +5856,11 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       statusColor: statusColor,
       infoTitle: 'ABOUT COMMUNITIES',
       infoDescription:
-          '• Civic Guilds & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, industry cooperation, and shared services.\n\n• Admission & Membership: Open or approval-based membership with shared governance rights.',
+          '• House Association: A voluntary group of Houses organized around shared social, cultural, or professional interests.\n\n• Independent Membership: Community membership is separate from Corporation membership and does not create land, taxation, treasury, or economic settlement rights.',
       title: name.toUpperCase(),
       subtitle: description.isNotEmpty ? description : null,
       actions: [
-        if (isOwner || isAdmin)
+        if (capabilities['canEdit'] == true)
           EarthButton(
             label: 'MANAGE COMMUNITY',
             icon: Icons.settings_outlined,
@@ -5632,6 +5876,32 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                     );
                     _fetchDetails();
                   },
+          ),
+        if (capabilities['canTransferOwnership'] == true)
+          EarthButton(
+            label: 'TRANSFER OWNERSHIP',
+            icon: Icons.swap_horiz_rounded,
+            variant: EarthButtonVariant.secondary,
+            onPressed: widget.busy
+                ? null
+                : () async {
+                    await showCommunityManageDialog(
+                      context,
+                      myComm,
+                      widget.state,
+                      widget.action,
+                    );
+                    _fetchDetails();
+                  },
+          ),
+        if (capabilities['canDisband'] == true)
+          EarthButton(
+            label: 'DISBAND',
+            icon: Icons.delete_outline_rounded,
+            variant: EarthButtonVariant.danger,
+            onPressed: widget.busy
+                ? null
+                : () => _confirmDisband(context, id, name),
           ),
       ],
       metrics: [
@@ -5749,7 +6019,8 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
           ],
           cockpit,
           // 4. Pending Review Requests (if founder/admin and requests exist)
-          if ((isOwner || isAdmin) && _requestsError != null) ...[
+          if (capabilities['canApproveRequests'] == true &&
+              _requestsError != null) ...[
             const SizedBox(height: 24),
             EarthDataRow(
               title: 'Admission requests unavailable',
@@ -5761,7 +6032,8 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
               ),
             ),
           ],
-          if ((isOwner || isAdmin) && _requests.isNotEmpty) ...[
+          if (capabilities['canApproveRequests'] == true &&
+              _requests.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
               'PENDING ADMISSION REQUESTS (${_requests.length})',
@@ -5770,13 +6042,12 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
             ),
             const SizedBox(height: 8),
             EarthDataList(
-              children: _requests.map((raw) {
-                final req = raw as Map<String, dynamic>;
-                final reqId = req['id']?.toString() ?? '';
-                final applicant = req['human_name']?.toString() ??
-                    req['human_id']?.toString() ??
-                    '';
-                final reqDay = req['requested_game_day'];
+              children: _requests.map((req) {
+                final reqId = req.id;
+                final applicant = req.houseName.isEmpty
+                    ? req.houseId
+                    : req.houseName;
+                final reqDay = req.requestedGameDay;
 
                 return EarthDataRow(
                   title: applicant,
@@ -5870,15 +6141,13 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                       icon: Icons.groups_outlined,
                     )
                   : EarthDataList(
-                      children: _members.map((raw) {
-                        final m = raw as Map<String, dynamic>;
-                        final hId = m['human_id']?.toString() ?? '';
-                        final hName = m['human_name']?.toString() ?? hId;
-                        final role =
-                            (m['role']?.toString() ?? 'member').toUpperCase();
-                        final isMFounder = role == 'FOUNDER';
-                        final isMAdmin = role == 'ADMIN' || role == 'MODERATOR';
-                        final joinedGameDay = asIntOr(m['joined_game_day'], 1);
+                      children: _members.map((m) {
+                        final hId = m.houseId;
+                        final hName = m.houseName.isEmpty ? hId : m.houseName;
+                        final role = m.role.toUpperCase();
+                        final isMOwner = role == 'OWNER';
+                        final isMAdmin = role == 'MODERATOR';
+                        final joinedGameDay = m.joinedGameDay;
                         final joinedYear = ((joinedGameDay - 1) ~/ 365) + 1;
                         final joinedDay = ((joinedGameDay - 1) % 365) + 1;
 
@@ -5887,12 +6156,12 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                           subtitle:
                               'Joined on Year $joinedYear, Day $joinedDay',
                           leading: Icon(
-                            isMFounder
+                            isMOwner
                                 ? Icons.star_rounded
                                 : isMAdmin
                                     ? Icons.verified_user_outlined
                                     : Icons.person_outline_rounded,
-                            color: isMFounder
+                            color: isMOwner
                                 ? context.primaryColor
                                 : isMAdmin
                                     ? context.secondaryColor
@@ -5900,19 +6169,20 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                           ),
                           badges: [
                             EarthBadge(
-                              label: isMFounder
-                                  ? 'FOUNDER'
+                                label: isMOwner
+                                  ? 'OWNER'
                                   : isMAdmin
                                       ? 'MODERATOR'
                                       : 'MEMBER',
-                              variant: isMFounder
+                              variant: isMOwner
                                   ? EarthBadgeVariant.primary
                                   : isMAdmin
                                       ? EarthBadgeVariant.secondary
                                       : EarthBadgeVariant.neutral,
                             ),
                           ],
-                          trailing: isOwner && !isMFounder
+                          trailing: capabilities['canChangeRoles'] == true &&
+                                  !isMOwner
                               ? isMAdmin
                                   ? EarthButton(
                                       label: 'DEMOTE',
@@ -5948,7 +6218,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                         );
                       }).toList(),
                     ),
-          if (!isOwner) ...[
+          if (capabilities['canLeave'] == true) ...[
             const SizedBox(height: 28),
             Container(
               padding: EdgeInsets.all(context.cardPadding),

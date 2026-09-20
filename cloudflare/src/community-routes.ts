@@ -4,13 +4,16 @@ import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   listCommunities,
+  listCommunityDirectory,
   getCommunity,
   createCommunity,
   updateCommunity,
   disbandCommunity,
   listCommunityMembershipRequests,
   decideCommunityMembershipRequest,
+  cancelCommunityMembershipRequest,
   setCommunityMemberRole,
+  transferCommunityOwnership,
   listCommunityMembers,
   changeCommunityMembership,
 } from './communities-postgres.ts';
@@ -25,6 +28,33 @@ export async function handleCommunityRoutes(
   sensitiveActionAllowed?: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
   if (!featureEnabled(env, 'communities')) return featureDisabledResponse('communities');
+  if (url.pathname === '/api/communities/directory' && request.method === 'GET') {
+    const joinPolicy = url.searchParams.get('joinPolicy');
+    const membership = url.searchParams.get('membership');
+    const viewerStatus = url.searchParams.get('viewerStatus');
+    if (joinPolicy && joinPolicy !== 'OPEN' && joinPolicy !== 'REQUEST') {
+      return Response.json({ ok: false, error: 'Invalid joinPolicy' }, { status: 400 });
+    }
+    if (membership && membership !== 'mine') {
+      return Response.json({ ok: false, error: 'Invalid membership filter' }, { status: 400 });
+    }
+    if (viewerStatus && viewerStatus !== 'PENDING') {
+      return Response.json({ ok: false, error: 'Invalid viewerStatus filter' }, { status: 400 });
+    }
+    try {
+      const result = await withRepository(env, (repository) => listCommunityDirectory(repository, {
+        houseId: viewer.houseId,
+        limit: Number(url.searchParams.get('limit') ?? 20),
+        cursor: url.searchParams.get('cursor'),
+        search: url.searchParams.get('search'),
+        joinPolicy: joinPolicy as 'OPEN' | 'REQUEST' | null,
+        membership: membership as 'mine' | null,
+        viewerStatus: viewerStatus as 'PENDING' | null,
+      }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return errorResponse(error, undefined, 'Community directory could not be loaded.'); }
+  }
   if (url.pathname === '/api/communities' && request.method === 'GET') {
     const membership = url.searchParams.get('membership') === 'mine' ? 'mine' : undefined;
     const result = await withRepository(env, (repository) => listCommunities(repository, viewer.houseId, membership));
@@ -35,7 +65,6 @@ export async function handleCommunityRoutes(
     const parsed = await parseJsonBody<{
       name?: string;
       description?: string;
-      visibility?: 'PUBLIC' | 'PRIVATE';
       joinPolicy?: 'OPEN' | 'REQUEST';
       correlationId?: string;
     }>(request);
@@ -56,7 +85,6 @@ export async function handleCommunityRoutes(
           humanId: viewer.currentHumanId,
           name,
           description: body.description,
-          visibility: body.visibility,
           joinPolicy: body.joinPolicy,
           correlationId,
         }),
@@ -78,7 +106,7 @@ export async function handleCommunityRoutes(
   }
   if (communityMatch && request.method === 'PATCH') {
     const communityId = communityMatch[1];
-    const parsed = await parseJsonBody<{ name?: string; description?: string; visibility?: 'PUBLIC' | 'PRIVATE'; joinPolicy?: 'OPEN' | 'REQUEST' }>(request);
+    const parsed = await parseJsonBody<{ name?: string; description?: string; joinPolicy?: 'OPEN' | 'REQUEST' }>(request);
     if (!parsed.ok) return parsed.response;
     try {
       const result = await withRepository(env, (repository) =>
@@ -88,7 +116,6 @@ export async function handleCommunityRoutes(
           humanId: viewer.currentHumanId,
           name: parsed.value.name,
           description: parsed.value.description,
-          visibility: parsed.value.visibility,
           joinPolicy: parsed.value.joinPolicy,
         }),
       );
@@ -146,13 +173,27 @@ export async function handleCommunityRoutes(
     }
   }
 
+  const communityRequestCancelMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/requests\/([^/]+)\/cancel$/);
+  if (communityRequestCancelMatch && request.method === 'POST') {
+    try {
+      const result = await withRepository(env, (repository) => cancelCommunityMembershipRequest(repository, {
+        communityId: communityRequestCancelMatch[1],
+        requestId: communityRequestCancelMatch[2],
+        houseId: viewer.houseId,
+        humanId: viewer.currentHumanId,
+      }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return errorResponse(error, undefined, 'Community application cancellation failed.'); }
+  }
+
   const communityMemberRoleMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members\/([^/]+)$/);
   if (communityMemberRoleMatch && request.method === 'PATCH') {
     const communityId = communityMemberRoleMatch[1];
     const targetHouseId = communityMemberRoleMatch[2];
-    const parsed = await parseJsonBody<{ role?: 'OWNER' | 'MODERATOR' | 'MEMBER' }>(request);
+    const parsed = await parseJsonBody<{ role?: 'MODERATOR' | 'MEMBER' }>(request);
     if (!parsed.ok) return parsed.response;
-    if (!parsed.value.role || !['OWNER', 'MODERATOR', 'MEMBER'].includes(parsed.value.role)) {
+    if (!parsed.value.role || !['MODERATOR', 'MEMBER'].includes(parsed.value.role)) {
       return Response.json({ ok: false, error: 'Invalid community role' }, { status: 400 });
     }
     const role = parsed.value.role;
@@ -165,6 +206,23 @@ export async function handleCommunityRoutes(
     } catch (error) {
       return errorResponse(error, undefined, 'Role change failed.');
     }
+  }
+
+  const ownershipTransferMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/ownership\/transfer$/);
+  if (ownershipTransferMatch && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ targetHouseId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    if (!parsed.value.targetHouseId) return Response.json({ ok: false, error: 'Target House is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => transferCommunityOwnership(repository, {
+        communityId: ownershipTransferMatch[1],
+        actorHouseId: viewer.houseId,
+        actorHumanId: viewer.currentHumanId,
+        targetHouseId: parsed.value.targetHouseId!,
+      }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return errorResponse(error, undefined, 'Community ownership transfer failed.'); }
   }
 
   const communityMembersMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members$/);

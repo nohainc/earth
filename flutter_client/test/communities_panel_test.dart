@@ -58,7 +58,10 @@ void main() {
             'role': 'OWNER',
             'requestStatus': null,
             'canJoin': false,
-            'canLeave': false
+            'canLeave': false,
+            'canEdit': true,
+            'canTransferOwnership': true,
+            'canDisband': true,
           },
           'member_count': 5,
           'shared_credits': 1250.0,
@@ -88,7 +91,7 @@ void main() {
       ),
     );
 
-    expect(find.text('COMMUNITIES & GUILDS'), findsOneWidget);
+    expect(find.text('COMMUNITIES'), findsOneWidget);
     expect(find.text('ALL (2)'), findsOneWidget);
     expect(find.text('MY COMMUNITIES (1)'), findsOneWidget);
     expect(find.text('OPEN TO JOIN (1)'), findsOneWidget);
@@ -138,7 +141,7 @@ void main() {
     await tester.tap(find.text('+ FOUND COMMUNITY'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Found New Community'), findsOneWidget);
+    expect(find.text('Create Community'), findsOneWidget);
     expect(find.text('OPEN ACCESS'), findsOneWidget);
     expect(find.text('APPROVAL REQUIRED'), findsOneWidget);
 
@@ -147,7 +150,7 @@ void main() {
         find.widgetWithText(TextField, 'Community Name (Required)'),
         'Olympus Cooperative');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Manifesto & Purpose (Required)'),
+        find.widgetWithText(TextField, 'Description (Required)'),
         'Advancing lunar mining automation.');
     await tester.pumpAndSettle();
 
@@ -245,13 +248,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('APPLY'), findsOneWidget);
 
-    // Tap APPLY to open application dialog with question
+    // Tap APPLY to open the application-note dialog
     await tester.tap(find.text('APPLY'));
     await tester.pumpAndSettle();
 
     expect(find.text('Apply to Nebula Research Coop'), findsOneWidget);
-    expect(find.text('Add an optional note for the community owners.'),
-        findsOneWidget);
+    expect(find.text('APPLICATION NOTE'), findsOneWidget);
+    expect(
+      find.text(
+          'Optionally tell the community owners why you would like to join.'),
+      findsOneWidget,
+    );
     expect(find.text('SUBMIT APPLICATION'), findsOneWidget);
   });
 
@@ -366,7 +373,7 @@ void main() {
 
     expect(find.text('SOLAR ENGINEERS'), findsOneWidget);
     expect(find.text('Founded by Amara Vance'), findsNothing);
-    expect(find.text('FOUNDER'), findsOneWidget);
+    expect(find.text('OWNER'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
     expect(find.text('REQUEST'), findsOneWidget);
     expect(find.text('COMMUNITY CHAT'), findsOneWidget);

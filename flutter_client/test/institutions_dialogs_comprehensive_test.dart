@@ -39,12 +39,12 @@ void main() {
     await tester.tap(find.text('Open Community Dialog'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Found New Community'), findsOneWidget);
+    expect(find.text('Create Community'), findsOneWidget);
     await tester.enterText(
         find.widgetWithText(TextField, 'Community Name (Required)'),
         'Pacific Syndicate');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Manifesto & Purpose (Required)'),
+        find.widgetWithText(TextField, 'Description (Required)'),
         'Pacific oceanic clean energy consortium.');
     await tester.pumpAndSettle();
 

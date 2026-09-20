@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:earth_client/earth_http_client.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/community_models.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 
@@ -171,7 +172,7 @@ Future<void> showCommunityComposer(BuildContext context,
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Found New Community',
+                  'Create Community',
                   style: context.topicTitleStyle
                       .copyWith(color: context.primaryColor),
                 ),
@@ -193,7 +194,7 @@ Future<void> showCommunityComposer(BuildContext context,
                       labelText: 'Community Name (Required)',
                       errorText: nameError,
                       labelStyle: context.widgetFooterStyle,
-                      hintText: 'e.g. Carthage Makers Guild',
+                      hintText: 'e.g. Carthage Makers Association',
                       hintStyle:
                           context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(
@@ -239,11 +240,11 @@ Future<void> showCommunityComposer(BuildContext context,
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
                       alignLabelWithHint: true,
-                      labelText: 'Manifesto & Purpose (Required)',
+                      labelText: 'Description (Required)',
                       errorText: descriptionError,
                       labelStyle: context.widgetFooterStyle,
                       hintText:
-                          'What is the goal and purpose of this community?',
+                          'What should this House association be about?',
                       hintStyle:
                           context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(
@@ -496,7 +497,6 @@ Future<void> showCommunityApplicationDialog(
 ) async {
   final id = community['id']?.toString() ?? '';
   final name = community['name']?.toString() ?? '';
-  const question = 'Add an optional note for the community owners.';
 
   final messageController = TextEditingController();
 
@@ -551,7 +551,7 @@ Future<void> showCommunityApplicationDialog(
                                 size: 14, color: context.primaryColor),
                             const SizedBox(width: 4),
                             Text(
-                              'COMMUNITY QUESTION',
+                              'APPLICATION NOTE',
                               style: context.widgetTitleStyle.copyWith(
                                 color: context.primaryColor,
                               ),
@@ -560,7 +560,7 @@ Future<void> showCommunityApplicationDialog(
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          question,
+                          'Optionally tell the community owners why you would like to join.',
                           style: context.bodyStyle
                               .copyWith(color: context.inkColor),
                         ),
@@ -653,6 +653,9 @@ Future<void> showCommunityDetailsDialog(
   final viewer = community['viewer'] is Map
       ? Map<String, dynamic>.from(community['viewer'] as Map)
       : const <String, dynamic>{};
+  final capabilities = viewer['capabilities'] is Map
+      ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
+      : viewer;
   final myRole = viewer['role']?.toString();
   final isPending = viewer['requestStatus']?.toString() == 'PENDING';
   final members = asIntOr(community['member_count'], 0);
@@ -689,7 +692,7 @@ Future<void> showCommunityDetailsDialog(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'MANIFESTO & PURPOSE',
+                'ABOUT THIS COMMUNITY',
                 style: context.widgetTitleStyle
                     .copyWith(color: context.mutedColor),
               ),
@@ -704,7 +707,7 @@ Future<void> showCommunityDetailsDialog(
                 child: Text(
                   description.isNotEmpty
                       ? description
-                      : 'No specific manifesto provided for this community.',
+                      : 'No description has been published for this community.',
                   style: context.bodyStyle.copyWith(color: context.inkColor),
                 ),
               ),
@@ -712,15 +715,15 @@ Future<void> showCommunityDetailsDialog(
               EarthMetricGrid(
                 metrics: [
                   EarthMetricTile(
-                    label: 'FOUNDED BY',
+                    label: 'FOUNDED BY HOUSE',
                     value: founderName,
-                    subtitle: 'Community Creator',
+                    subtitle: 'Founding House',
                     icon: Icons.person_outline_rounded,
                   ),
                   EarthMetricTile(
                     label: 'MEMBERS',
                     value: '$members',
-                    subtitle: 'Citizens active',
+                    subtitle: 'Active Houses',
                     icon: Icons.groups_outlined,
                   ),
                   EarthMetricTile(
@@ -741,7 +744,7 @@ Future<void> showCommunityDetailsDialog(
           child: Text('CLOSE',
               style: context.controlStyle.copyWith(color: context.mutedColor)),
         ),
-        if (isOwner || isAdmin) ...[
+        if (capabilities['canEdit'] == true) ...[
           EarthButton(
             label: 'MANAGE COMMUNITY',
             icon: Icons.settings_outlined,
@@ -758,7 +761,7 @@ Future<void> showCommunityDetailsDialog(
           EarthButton(
             label: 'LEAVE',
             variant: EarthButtonVariant.danger,
-            onPressed: busy || viewer['canLeave'] != true
+            onPressed: busy || capabilities['canLeave'] != true
                 ? null
                 : () async {
                     Navigator.pop(dialogContext);
@@ -774,7 +777,7 @@ Future<void> showCommunityDetailsDialog(
                 ? 'APPLY TO JOIN'
                 : 'JOIN COMMUNITY',
             variant: EarthButtonVariant.primary,
-            onPressed: busy || viewer['canJoin'] != true
+            onPressed: busy || capabilities['canJoin'] != true
                 ? null
                 : () async {
                     Navigator.pop(dialogContext);
@@ -803,6 +806,9 @@ Future<void> showCommunityManageDialog(
   final viewer = community['viewer'] is Map
       ? Map<String, dynamic>.from(community['viewer'] as Map)
       : const <String, dynamic>{};
+  final capabilities = viewer['capabilities'] is Map
+      ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
+      : viewer;
   final myRole = viewer['role']?.toString();
   final isOwner = myRole == 'OWNER';
   final descController =
@@ -813,8 +819,8 @@ Future<void> showCommunityManageDialog(
           ? 'approval'
           : 'open';
 
-  List<dynamic> members = [];
-  List<dynamic> requests = [];
+  List<CommunityMember> members = [];
+  List<CommunityMembershipRequest> requests = [];
   bool loading = true;
 
   await showDialog<void>(
@@ -825,10 +831,10 @@ Future<void> showCommunityManageDialog(
           Future.microtask(() async {
             try {
               final memRes = await const EarthApi().listCommunityMembers(id);
-              members = memRes['members'] as List<dynamic>? ?? [];
+              members = memRes.members;
               if (admissionPolicy == 'approval') {
                 final reqRes = await const EarthApi().listCommunityRequests(id);
-                requests = reqRes['requests'] as List<dynamic>? ?? [];
+                requests = reqRes.requests;
               }
             } catch (_) {}
             setDialogState(() => loading = false);
@@ -836,7 +842,7 @@ Future<void> showCommunityManageDialog(
         }
 
         return DefaultTabController(
-          length: isOwner ? 4 : 3,
+          length: capabilities['canDisband'] == true ? 4 : 3,
           child: AlertDialog(
             backgroundColor: context.panelColor,
             shape: RoundedRectangleBorder(
@@ -874,7 +880,8 @@ Future<void> showCommunityManageDialog(
                     const Tab(text: 'SETTINGS'),
                     Tab(text: 'MEMBERS (${members.length})'),
                     Tab(text: 'REQUESTS (${requests.length})'),
-                    if (isOwner) const Tab(text: 'DANGER ZONE'),
+                    if (capabilities['canDisband'] == true)
+                      const Tab(text: 'DANGER ZONE'),
                   ],
                 ),
               ],
@@ -899,7 +906,7 @@ Future<void> showCommunityManageDialog(
                                     .copyWith(color: context.inkColor),
                                 decoration: InputDecoration(
                                   alignLabelWithHint: true,
-                                  labelText: 'Manifesto & Description',
+                                  labelText: 'Description',
                                   labelStyle: context.widgetFooterStyle,
                                   hintText:
                                       'Describe the core mission and goals of this community...',
@@ -1091,22 +1098,18 @@ Future<void> showCommunityManageDialog(
                             : ListView.builder(
                                 itemCount: members.length,
                                 itemBuilder: (context, idx) {
-                                  final m =
-                                      members[idx] as Map<String, dynamic>;
-                                  final hId = m['house_id']?.toString() ?? '';
-                                  final hName =
-                                      m['house_name']?.toString() ?? hId;
-                                  final role =
-                                      (m['role']?.toString() ?? 'member')
-                                          .toUpperCase();
-                                  final isMFounder = role == 'OWNER';
+                                  final m = members[idx];
+                                  final hId = m.houseId;
+                                  final hName = m.houseName.isEmpty ? hId : m.houseName;
+                                  final role = m.role.toUpperCase();
+                                  final isMOwner = role == 'OWNER';
 
                                   return ListTile(
                                     title: Text(hName,
                                         style: context.bodyStyle
                                             .copyWith(fontSize: 13)),
                                     subtitle: Text(
-                                        '$hId · Joined Day ${m['joined_game_day']}',
+                                        '$hId · Representative ${m.currentHumanName ?? 'Unavailable'} · Joined Day ${m.joinedGameDay}',
                                         style: context.widgetFooterStyle
                                             .copyWith(
                                                 fontSize: 11,
@@ -1118,13 +1121,29 @@ Future<void> showCommunityManageDialog(
                                       children: [
                                         EarthBadge(
                                           label: role,
-                                          variant: isMFounder
+                                          variant: isMOwner
                                               ? EarthBadgeVariant.primary
                                               : role == 'MODERATOR'
                                                   ? EarthBadgeVariant.secondary
                                                   : EarthBadgeVariant.neutral,
                                         ),
-                                        if (isOwner && !isMFounder) ...[
+                                        if (capabilities['canTransferOwnership'] ==
+                                                true &&
+                                            !isMOwner)
+                                          EarthButton(
+                                            label: 'TRANSFER OWNERSHIP',
+                                            variant: EarthButtonVariant.ghost,
+                                            onPressed: () async {
+                                              await const EarthApi()
+                                                  .transferCommunityOwnership(
+                                                communityId: id,
+                                                targetHouseId: hId,
+                                              );
+                                              setDialogState(
+                                                  () => loading = true);
+                                            },
+                                          ),
+                                        if (capabilities['canChangeRoles'] == true && !isMOwner) ...[
                                           if (role == 'MODERATOR')
                                             EarthButton(
                                               label: 'DEMOTE',
@@ -1169,16 +1188,12 @@ Future<void> showCommunityManageDialog(
                             : ListView.builder(
                                 itemCount: requests.length,
                                 itemBuilder: (context, idx) {
-                                  final req =
-                                      requests[idx] as Map<String, dynamic>;
-                                  final reqId = req['id']?.toString() ?? '';
-                                  final applicant =
-                                      req['human_name']?.toString() ??
-                                          req['human_id']?.toString() ??
-                                          '';
-                                  final appMsg =
-                                      req['application_message']?.toString() ??
-                                          '';
+                                  final req = requests[idx];
+                                  final reqId = req.id;
+                                  final applicant = req.houseName.isEmpty
+                                      ? req.houseId
+                                      : req.houseName;
+                                  final appMsg = req.applicationMessage;
 
                                   return Container(
                                     margin:
@@ -1206,7 +1221,7 @@ Future<void> showCommunityManageDialog(
                                                         fontWeight:
                                                             FontWeight.bold)),
                                             Text(
-                                                'Day ${req['requested_game_day']}',
+                                                'Day ${req.requestedGameDay}',
                                                 style: TextStyle(
                                                     fontSize: 11,
                                                     color: context.mutedColor)),
@@ -1323,7 +1338,7 @@ Future<void> showCommunityManageDialog(
                                                                       fontSize:
                                                                           12),
                                                               hintText:
-                                                                  'e.g. Guild capacity full, requirements not met...',
+                                                                  'e.g. Community capacity is full, requirements not met...',
                                                               hintStyle: context
                                                                   .bodyStyle
                                                                   .copyWith(
@@ -1407,7 +1422,7 @@ Future<void> showCommunityManageDialog(
                                 },
                               ),
                         // Tab 4: Danger Zone
-                        if (isOwner)
+                        if (capabilities['canDisband'] == true)
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Column(

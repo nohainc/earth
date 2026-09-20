@@ -38,7 +38,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     repository.query('SELECT id, kind, name, status FROM institutions ORDER BY id'),
     repository.query("SELECT id, house_id, display_name, age_years, standing, final_legacy, status FROM humans WHERE status = 'ACTIVE' ORDER BY id"),
     repository.query('SELECT code, asset_kind FROM economic_assets ORDER BY id'),
-    listCommunities(repository, viewerHouseId),
+    listCommunities(repository, viewerHouseId, 'mine'),
     viewerHouseId ? repository.query<{ need_code: string; risk_level: string; game_day: number }>(`SELECT need_code, risk_level, game_day FROM house_need_assessments WHERE house_id = $1 ORDER BY game_day DESC, need_code`, [viewerHouseId]) : Promise.resolve({ rows: [] as { need_code: string; risk_level: string; game_day: number }[] }),
     listWorldConditions(repository, clock.gameDay, viewerHouseId),
     viewerId ? repository.query(`SELECT h.id, h.house_id, h.display_name, h.epitaph, h.birth_game_day, h.age_years, h.standing, h.final_legacy, h.status,

@@ -186,18 +186,18 @@ void main() {
             tester,
             (context, _) => showCommunityComposer(context, spy.invoke,
                 api: EarthApi(transport: _SuccessfulApiTransport())));
-        expect(find.text('Found New Community'), findsOneWidget);
+        expect(find.text('Create Community'), findsOneWidget);
         if (i == 1) {
           await tester.tap(find.text('CANCEL'));
           await tester.pumpAndSettle();
-          expect(find.text('Found New Community'), findsNothing);
+          expect(find.text('Create Community'), findsNothing);
           expect(spy.calls, 0);
         } else {
           await tester.enterText(
               find.widgetWithText(TextField, 'Community Name (Required)'),
               'Community $i');
           await tester.enterText(
-              find.widgetWithText(TextField, 'Manifesto & Purpose (Required)'),
+              find.widgetWithText(TextField, 'Description (Required)'),
               'Purpose $i');
           if (i.isEven) {
             await tester.tap(find.text('APPROVAL REQUIRED'));
