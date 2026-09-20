@@ -28,7 +28,7 @@ class ConstitutionValueFormatter {
         if (value is bool) return value ? 'ON' : 'OFF';
         return value.toString().toLowerCase() == 'true' ? 'ON' : 'OFF';
       case 'PROGRESSIVE_SCHEDULE_REF':
-        return 'SCHEDULE PUBLISHED';
+        return formatProgressiveSchedule(value, fallback: fallback);
       case 'INTEGER':
       case 'RESOURCE_UNITS':
         return _integer(value) ?? fallback;
@@ -63,6 +63,28 @@ class ConstitutionValueFormatter {
       .map((word) =>
           '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
       .join(' ');
+
+  static String formatProgressiveSchedule(dynamic value,
+      {String fallback = 'UNAVAILABLE'}) {
+    if (value == null) return fallback;
+    if (value is String && value.trim().isNotEmpty) {
+      return 'Schedule ${value.trim()}';
+    }
+    if (value is! List || value.isEmpty) return fallback;
+    final brackets = value.whereType<Map>().map((row) {
+      final lower = row['lower_bound_units'] ?? row['lowerBound'] ?? '0';
+      final upper = row['upper_bound_units'] ?? row['upperBound'];
+      final numerator = row['marginal_multiplier_numerator'] ??
+          row['marginalMultiplierNumerator'];
+      final denominator = row['marginal_multiplier_denominator'] ??
+          row['marginalMultiplierDenominator'];
+      final range = '$lower–${upper ?? '∞'}';
+      return numerator == null || denominator == null
+          ? range
+          : '$range ×$numerator/$denominator';
+    }).toList();
+    return brackets.isEmpty ? fallback : brackets.join(' · ');
+  }
 }
 
 /// API payloads may represent PostgreSQL decimals as either JSON numbers or

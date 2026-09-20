@@ -40,28 +40,21 @@ extension EarthApiGovernance on EarthApi {
     required List<Map<String, dynamic>> changes,
     int? effectiveFromGameDay,
   }) async {
-    final effectiveDay =
-        effectiveFromGameDay ?? await _nextV5ConstitutionGameDay(subjectId);
     final response =
         await _request('/api/governance/v5/proposals', method: 'POST', body: {
       'subjectType': subjectType,
       'subjectId': subjectId,
       'actionType': 'CONSTITUTION_AMENDMENT',
-      'payload': {'effectiveFromGameDay': effectiveDay, 'changes': changes},
+      'payload': {
+        if (effectiveFromGameDay != null)
+          'effectiveFromGameDay': effectiveFromGameDay,
+        'changes': changes,
+      },
       'title': title,
       'body': body,
       'correlationId': newClientCorrelationId('V5-CONSTITUTION-AMENDMENT'),
     });
     return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<int> _nextV5ConstitutionGameDay(String? corporationId) async {
-    final current = await getV5Constitution(corporationId: corporationId);
-    final gameDay = int.tryParse(current['gameDay']?.toString() ?? '') ?? 0;
-    if (gameDay < 1) {
-      throw StateError('Canonical Constitution game day is unavailable');
-    }
-    return gameDay + 1;
   }
 
   Future<Map<String, dynamic>> previewV5ConstitutionAmendment({

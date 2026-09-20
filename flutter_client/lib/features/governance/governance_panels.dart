@@ -909,6 +909,12 @@ class _ProposalCard extends StatelessWidget {
     required this.scopeFor,
   });
 
+  String _formatRuleValue(Map<String, dynamic> change, dynamic value) {
+    final valueType = change['valueType'] ?? change['value_type'];
+    if (valueType == null) return value?.toString() ?? 'UNAVAILABLE';
+    return ConstitutionValueFormatter.format(value, valueType);
+  }
+
   Widget _impactDetails(BuildContext context) {
     final rawImpact = proposal['impact'];
     if (rawImpact is! Map) {
@@ -924,8 +930,8 @@ class _ProposalCard extends StatelessWidget {
         if (raw is! Map) continue;
         final change = Map<String, dynamic>.from(raw);
         rows.add('${change['ruleCode'] ?? 'RULE'}: '
-            '${change['currentValue'] ?? 'UNAVAILABLE'} → '
-            '${change['proposedValue'] ?? 'UNAVAILABLE'}');
+            '${_formatRuleValue(change, change['currentValue'])} → '
+            '${_formatRuleValue(change, change['proposedValue'])}');
       }
     } else {
       const labels = <String, String>{
@@ -937,8 +943,17 @@ class _ProposalCard extends StatelessWidget {
         'generationNumber': 'Generation',
       };
       for (final entry in labels.entries) {
-        if (impact[entry.key] != null)
-          rows.add('${entry.value}: ${impact[entry.key]}');
+        if (impact[entry.key] != null) {
+          final valueType = entry.key == 'costUnits'
+              ? 'CREDIT_UNITS'
+              : entry.key == 'generationNumber'
+                  ? 'INTEGER'
+                  : entry.key == 'effectiveFromGameDay'
+                      ? 'GAME_DAYS'
+                      : 'RESOURCE_UNITS';
+          rows.add(
+              '${entry.value}: ${ConstitutionValueFormatter.format(impact[entry.key], valueType)}');
+        }
       }
     }
     if (impact['effectiveFromGameDay'] != null) {
@@ -1935,7 +1950,8 @@ class _ProposalCard extends StatelessWidget {
         detail['cost_credits'] ??
         detail['cost'] ??
         detail['costs'];
-    final costUnits = rawCost == null ? null : BigInt.tryParse(rawCost.toString());
+    final costUnits =
+        rawCost == null ? null : BigInt.tryParse(rawCost.toString());
     final durationMinutes = asInt(detail['duration_minutes']);
     final durationHours = durationMinutes == null
         ? null
@@ -2042,7 +2058,7 @@ class _ProposalCard extends StatelessWidget {
               Text(
                   costUnits == null
                       ? 'NOT PUBLISHED'
-                      : '${formatCreditUnits(costUnits)}',
+                      : formatCreditUnits(costUnits),
                   style: context.widgetFooterStyle),
               const SizedBox(width: 6),
               const Icon(Icons.timer_outlined, size: 14, color: Colors.amber),

@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { createGameEvent } from './game-events-postgres.ts';
-import { previewConstitutionAmendment, validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
-import { assertConstitutionalAmendableRule, getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { deriveV5GovernanceTiming, previewConstitutionAmendment, validateV5GovernanceAction, type V5GovernanceAction } from './v5-governance.ts';
+import { assertConstitutionalAmendableRule, getConstitutionalRuleDefinition, parseConstitutionalInputValue } from './v5-constitution.ts';
 import { resolveEffectiveConstitution } from './constitutional-kernel-postgres.ts';
 import { evaluateOneHouseVote } from './governance-decision.ts';
 import { validateProposalActionSnapshot } from './proposal-actions.ts';
@@ -44,7 +44,8 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
     }) : undefined,
     changes: Array.isArray(payload.changes) ? payload.changes.map((item) => {
       const row = item as Record<string, unknown>;
-      return { ruleCode: String(row.ruleCode ?? ''), value: row.value, clearOverride: row.clearOverride === true, baseVersionId: row.baseVersionId == null ? undefined : String(row.baseVersionId) };
+      const ruleCode = String(row.ruleCode ?? '');
+      return { ruleCode, value: row.clearOverride === true ? undefined : parseConstitutionalInputValue(ruleCode, row.value), clearOverride: row.clearOverride === true, baseVersionId: row.baseVersionId == null ? undefined : String(row.baseVersionId) };
     }) : undefined,
     domainId: payload.domainId == null ? undefined : String(payload.domainId),
     generationNumber: payload.generationNumber == null ? undefined : Number(payload.generationNumber),
@@ -107,7 +108,7 @@ async function assertExistingProgressiveSchedule(
   }
 }
 
-async function governancePolicy(tx: PostgresRepository, subjectType: 'EARTH' | 'CORPORATION', subjectId: string | null, gameDay: number) {
+export async function getV5GovernancePolicy(tx: PostgresRepository, subjectType: 'EARTH' | 'CORPORATION', subjectId: string | null, gameDay: number) {
   const resolved = await resolveEffectiveConstitution(tx, {
     gameDay,
     corporationId: subjectType === 'CORPORATION' ? subjectId ?? undefined : undefined,
@@ -236,9 +237,18 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     }
     await canPropose(tx, input.humanId, input.subjectType, input.subjectId);
     const day = await currentDay(tx);
-    const proposalInputPayload = input.actionType === 'CONSTITUTION_AMENDMENT' && Number(input.payload.effectiveFromGameDay ?? 0) <= day
-      ? { ...input.payload, effectiveFromGameDay: day + 1 }
-      : input.payload;
+    const governanceRuleSnapshot = await getV5GovernancePolicy(tx, input.subjectType, input.subjectId, day);
+    const timing = deriveV5GovernanceTiming(day, governanceRuleSnapshot.votingPeriodDays, governanceRuleSnapshot.implementationDelayDays);
+    const requestedEffectiveDay = input.payload.effectiveFromGameDay == null
+      ? undefined
+      : Number(input.payload.effectiveFromGameDay);
+    if (requestedEffectiveDay != null && (!Number.isInteger(requestedEffectiveDay) || requestedEffectiveDay < timing.earliestValidEffectiveGameDay)) {
+      throw new Error(`Effective game day must be on or after ${timing.earliestValidEffectiveGameDay}, after voting concludes and the implementation delay`);
+    }
+    const proposalInputPayload = {
+      ...input.payload,
+      effectiveFromGameDay: requestedEffectiveDay ?? timing.earliestValidEffectiveGameDay,
+    };
     let proposalPayload = proposalInputPayload;
     let action = actionFromPayload(input.actionType, proposalPayload);
     validateV5GovernanceAction(action, day);
@@ -379,9 +389,8 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
                 : input.actionType === 'EARTH_TECHNOLOGY_FRONTIER' ? `EARTH:TECHNOLOGY_FRONTIER:${action.domainId}`
                   : `${scope}:PROGRESSIVE_SCHEDULE`;
     if ((await tx.query(`SELECT 1 FROM v5_governance_proposals WHERE subject_type = $1 AND subject_id IS NOT DISTINCT FROM $2 AND policy_group = $3 AND status IN ('VOTING','PASSED','SCHEDULED') LIMIT 1`, [input.subjectType, input.subjectId, policyGroup])).rows[0]) throw new Error('An active proposal already exists for this policy group');
-    const governanceRuleSnapshot = await governancePolicy(tx, input.subjectType, input.subjectId, day);
-    if (action.effectiveFromGameDay < day + 1 + governanceRuleSnapshot.implementationDelayDays) {
-      throw new Error('Constitution amendment does not satisfy the implementation delay');
+    if (action.effectiveFromGameDay < timing.earliestValidEffectiveGameDay) {
+      throw new Error('Proposal effective day is before voting completion plus the implementation delay');
     }
     const votingStart = day + 1;
     const electorate = input.subjectType === 'CORPORATION'
@@ -478,6 +487,15 @@ export async function resolveV5GovernanceProposal(repository: PostgresRepository
     const electorateSize = Number(proposal.electorate_size);
     const decision = evaluateOneHouseVote({ support, oppose, abstain, electorateSize, quorumBps: Number(proposal.quorum_bps), approvalBps: Number(proposal.approval_bps) });
     const { quorumMet, passed } = decision;
+    const ruleSnapshot = proposal.governance_rule_snapshot ?? {};
+    const timing = deriveV5GovernanceTiming(
+      Number(proposal.submitted_game_day),
+      Number(ruleSnapshot.votingPeriodDays ?? Number(proposal.voting_end_game_day) - Number(proposal.voting_start_game_day)),
+      Number(ruleSnapshot.implementationDelayDays ?? 0),
+    );
+    if (Number(proposal.effective_from_game_day) < timing.earliestValidEffectiveGameDay) {
+      throw new Error('Proposal effective day is before voting completion plus the implementation delay');
+    }
     const status = passed ? 'SCHEDULED' : 'REJECTED';
     await tx.query('UPDATE v5_governance_proposals SET status = $1, quorum_met = $2 WHERE id = $3', [passed ? 'PASSED' : status, quorumMet, proposalId]);
     if (passed) {

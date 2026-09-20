@@ -1535,6 +1535,10 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
                   : status == 'AVAILABLE'
                       ? Colors.green
                       : mutedColor;
+          final statusTextStyle = TextStyle(
+              color: statusColor,
+              fontSize: 8,
+              fontWeight: FontWeight.w800);
           final effectSummary = item.effects.isEmpty
               ? 'No typed effects published'
               : item.effects
@@ -1566,11 +1570,7 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
                               style: const TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w800))),
-                    Text(status,
-                          style: TextStyle(
-                              color: statusColor,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w800))
+                      Text(status, style: statusTextStyle)
                     ]),
                     const SizedBox(height: 3),
                     Text(description,

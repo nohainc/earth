@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/constitution_models.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 class ConstitutionPanel extends StatefulWidget {
   final EarthState state;
   final Future<Map<String, dynamic>> Function()? canonicalLoader;
-  final Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> changes)? onPreviewAmendment;
-  final Future<Map<String, dynamic>> Function(List<Map<String, dynamic>> changes)? onProposeAmendment;
+  final Future<Map<String, dynamic>> Function(
+      List<Map<String, dynamic>> changes)? onPreviewAmendment;
+  final Future<Map<String, dynamic>> Function(
+      List<Map<String, dynamic>> changes)? onProposeAmendment;
+  final ValueChanged<String>? onNavigate;
 
   const ConstitutionPanel(
       {super.key,
       required this.state,
       this.canonicalLoader,
       this.onPreviewAmendment,
-      this.onProposeAmendment});
+      this.onProposeAmendment,
+      this.onNavigate});
 
   @override
   State<ConstitutionPanel> createState() => _ConstitutionPanelState();
@@ -49,22 +55,46 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     );
   }
 
-  List<Map<String, dynamic>> _resolveAllRules(
-      Map<String, dynamic>? canonical) {
+  List<ConstitutionRuleView> _resolveAllRules(Map<String, dynamic>? canonical) {
+    final typedViews = canonical?['ruleViews'];
+    if (typedViews is List && typedViews.isNotEmpty) {
+      return typedViews
+          .whereType<Map>()
+          .map((row) =>
+              ConstitutionRuleView.fromJson(Map<String, dynamic>.from(row)))
+          .toList(growable: false);
+    }
     final canonicalDefinitions = canonical?['definitions'];
     if (canonicalDefinitions is List && canonicalDefinitions.isNotEmpty) {
+      final resolvedRules = canonical?['rules'] is Map
+          ? Map<String, dynamic>.from(canonical!['rules'] as Map)
+          : const <String, dynamic>{};
+      final versionIds = canonical?['versionIds'] is Map
+          ? Map<String, dynamic>.from(canonical!['versionIds'] as Map)
+          : const <String, dynamic>{};
+      final provenance = canonical?['provenance'] is Map
+          ? Map<String, dynamic>.from(canonical!['provenance'] as Map)
+          : const <String, dynamic>{};
       return canonicalDefinitions.whereType<Map>().map((definition) {
         final row = Map<String, dynamic>.from(definition);
         final article = row['article_code']?.toString().toUpperCase() ?? '';
-        return {
-          'id': row['rule_code'] ?? 'UNKNOWN_RULE',
-          'rule_number': article,
-          'title': row['rule_code'] ?? 'Constitutional rule',
-          'description':
-              'Typed ${row['value_type'] ?? 'policy'} rule under the $article article.',
-          'category': _categoryForArticle(article),
-          'authority_model': row['authority_model'],
-        };
+        final code = row['rule_code']?.toString() ?? 'UNKNOWN_RULE';
+        return ConstitutionRuleView.fromJson({
+          'code': code,
+          'articleCode': article,
+          'displayName': _displayRuleTitle(code),
+          'description': _ruleDescription(code, article, row['value_type']),
+          'valueType': row['value_type'],
+          'authorityModel': row['authority_model'],
+          'amendmentClass': row['amendment_class'],
+          'policyGroup': row['policy_group'],
+          'allowedValues': row['allowed_values'],
+          'resolved': {
+            'value': resolvedRules[code],
+            'source': provenance[code],
+            'versionId': versionIds[code],
+          },
+        });
       }).toList(growable: false);
     }
 
@@ -78,20 +108,63 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     // Constitutional text is authoritative only when it comes from the
     // server. Never merge it with client-maintained baseline articles: that
     // can produce a Constitution version that was never adopted.
-    return serverRules;
+    return serverRules.map((row) {
+      final code = row['id']?.toString() ??
+          row['rule_number']?.toString() ??
+          'UNKNOWN_RULE';
+      return ConstitutionRuleView.fromJson({
+        'code': code,
+        'articleCode': row['category']?.toString() ?? 'OTHER_POLICY',
+        'displayName': row['title']?.toString() ?? 'Constitutional rule',
+        'description': row['description']?.toString() ?? '',
+        'valueType': 'LEGACY',
+        'authorityModel': row['invariant'] == true ? 'EARTH_LOCKED' : 'UNKNOWN',
+        'resolved': {'value': row['default_value']},
+      });
+    }).toList(growable: false);
   }
 
   String _categoryForArticle(String article) {
-    switch (article) {
+    switch (article.toUpperCase()) {
       case 'TAXATION':
         return 'TAXATION & FISCAL';
+      case 'EARTH_GOVERNANCE':
+        return 'EARTH GOVERNANCE';
       case 'CORPORATION_GOVERNANCE':
-        return 'DEMOCRACY & GOVERNANCE';
+        return 'CORPORATION GOVERNANCE';
       case 'TERRITORY_CAPACITY':
-        return 'RESOURCES & PROPERTY';
+        return 'CAPACITY & SCARCITY';
+      case 'SUCCESSION':
+        return 'SUCCESSION';
       default:
-        return 'AMENDMENTS & CONSTITUTION';
+        return article.isEmpty ? 'OTHER POLICY' : article.replaceAll('_', ' ');
     }
+  }
+
+  String _categoryForRule(ConstitutionRuleView rule) {
+    if (rule.articleLabel.isNotEmpty && rule.articleLabel != rule.articleCode) {
+      return rule.articleLabel;
+    }
+    return _categoryForArticle(rule.articleCode);
+  }
+
+  String _displayRuleTitle(String code) {
+    final parts = code.split('.');
+    final name = parts.isEmpty ? code : parts.last;
+    return name
+        .replaceAll('_', ' ')
+        .toLowerCase()
+        .split(' ')
+        .map((word) => word.isEmpty
+            ? word
+            : '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+  }
+
+  String _ruleDescription(String code, String article, dynamic valueType) {
+    final type =
+        valueType?.toString().replaceAll('_', ' ').toLowerCase() ?? 'policy';
+    return 'Canonical $type rule in the ${_categoryForArticle(article)} policy article ($code).';
   }
 
   Widget _buildContent(BuildContext context, Map<String, dynamic>? canonical,
@@ -99,23 +172,25 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     final allRules = _resolveAllRules(canonical);
     final serverRules = widget.state.json['constitutionalRules'];
     final canonicalDefinitions = canonical?['definitions'];
-    final hasCanonicalRules = canonicalDefinitions is List &&
-        canonicalDefinitions.isNotEmpty;
+    final hasCanonicalRules =
+        (canonicalDefinitions is List && canonicalDefinitions.isNotEmpty) ||
+            (canonical?['ruleViews'] is List &&
+                (canonical!['ruleViews'] as List).isNotEmpty);
     final hasServerRules = !canonicalUnavailable &&
         (hasCanonicalRules || (serverRules is List && serverRules.isNotEmpty));
     final query = _searchQuery.trim().toLowerCase();
 
     final filteredRules = allRules.where((rule) {
       final matchesCat = _selectedCategory == 'ALL' ||
-          (rule['category']?.toString().toUpperCase() == _selectedCategory);
+          (_categoryForRule(rule).toUpperCase() == _selectedCategory);
       if (!matchesCat) return false;
 
       if (query.isEmpty) return true;
-      final title = rule['title']?.toString().toLowerCase() ?? '';
-      final desc = rule['description']?.toString().toLowerCase() ?? '';
-      final code = rule['rule_number']?.toString().toLowerCase() ?? '';
-      final id = rule['id']?.toString().toLowerCase() ?? '';
-      final cat = rule['category']?.toString().toLowerCase() ?? '';
+      final title = rule.displayName.toLowerCase();
+      final desc = rule.description.toLowerCase();
+      final code = rule.articleCode.toLowerCase();
+      final id = rule.code.toLowerCase();
+      final cat = _categoryForRule(rule).toLowerCase();
       return title.contains(query) ||
           desc.contains(query) ||
           code.contains(query) ||
@@ -123,34 +198,16 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           cat.contains(query);
     }).toList();
 
-    final constitutionalChanges = widget.state.history['events'] is List
-        ? (widget.state.history['events'] as List)
+    final changeSets = canonical?['changeSets'] is List
+        ? (canonical!['changeSets'] as List)
             .whereType<Map>()
-            .map(Map<String, dynamic>.from)
-            .where((event) {
-              final type = event['event_type']?.toString().toLowerCase() ?? '';
-              return type == 'constitutional_amendment_enacted' ||
-                  type == 'constitution_amended' ||
-                  type == 'organization_charter_amended' ||
-                  type == 'territory_charter_amended';
-            })
-            .take(12)
-            .toList()
-        : const <Map<String, dynamic>>[];
+            .map((row) =>
+                ConstitutionChangeSet.fromJson(Map<String, dynamic>.from(row)))
+            .toList(growable: false)
+        : const <ConstitutionChangeSet>[];
 
-    final categories = [
-      'ALL',
-      'TIME & SETTLEMENT',
-      'MONETARY & LEDGER',
-      'RESOURCES & PROPERTY',
-      'DYNASTY & SUCCESSION',
-      'MARKET & COMMERCE',
-      'TAXATION & FISCAL',
-      'SUBSIDIARITY & INSTITUTIONS',
-      'DEMOCRACY & GOVERNANCE',
-      'RESEARCH & PATENTS',
-      'AMENDMENTS & CONSTITUTION',
-    ];
+    final categories =
+        <String>{'ALL', ...allRules.map(_categoryForRule)}.toList();
 
     final cockpit = EarthPageCockpit(
       status: 'SUPREME LAW',
@@ -169,14 +226,14 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           color: context.primaryColor,
         ),
         CockpitMetric(
-          label: 'Hierarchy',
-          value: '3 Tiers',
+          label: 'Policy scopes',
+          value: '2 Scopes',
           icon: Icons.account_tree_outlined,
           color: context.secondaryColor,
         ),
         CockpitMetric(
           label: 'Amendments',
-          value: '${constitutionalChanges.length}',
+          value: '${changeSets.length}',
           icon: Icons.history_outlined,
           color: context.warningColor,
         ),
@@ -189,7 +246,7 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
         children: [
           cockpit,
           const SizedBox(height: 28),
-          _buildTierFlow(context),
+          _buildPolicyScopeFlow(context),
           const SizedBox(height: 24),
 
           if (canonical != null) ...[
@@ -249,7 +306,14 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                             'No constitutional statutes match your search query.',
                         icon: Icons.search_off_outlined,
                       )
-                    : _buildStatuteList(context, filteredRules),
+                    : _buildStatuteList(
+                        context,
+                        filteredRules,
+                        corporationScope: canonical?['corporationId']
+                                ?.toString()
+                                .isNotEmpty ==
+                            true,
+                      ),
           ),
 
           SizedBox(height: context.spacingSection),
@@ -257,26 +321,32 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           EarthSection(
             title: 'CONSTITUTIONAL HISTORY & AMENDMENTS',
             showSurface: false,
-            child: constitutionalChanges.isEmpty
+            child: changeSets.isEmpty
                 ? const EarthEmptyState(
                     message:
-                        'No constitutional or charter amendments have been recorded yet in this epoch.',
+                        'No canonical Constitution change sets have been recorded yet.',
                     icon: Icons.history_outlined,
                   )
                 : EarthDataList(
-                    children: constitutionalChanges.indexed.map((indexed) {
-                      final event = indexed.$2;
+                    children: changeSets.map((changeSet) {
                       return EarthDataRow(
-                        title: event['title']?.toString() ?? 'Rule change',
+                        title: changeSet.policyGroup,
                         subtitle:
-                            'Game day ${event['game_day'] ?? '—'} · ${event['event_type'] ?? 'governance'}',
+                            'DAY ${changeSet.effectiveFromGameDay ?? '—'} · ${changeSet.authorityType} · ${changeSet.changes.length} RULES',
                         leading: Icon(
                           Icons.history_outlined,
                           size: context.iconSize,
                           color: context.secondaryColor,
                         ),
-                        showDivider:
-                            indexed.$1 != constitutionalChanges.length - 1,
+                        trailing: changeSet.proposalId.isEmpty
+                            ? null
+                            : TextButton(
+                                onPressed: widget.onNavigate == null
+                                    ? null
+                                    : () => widget.onNavigate!('governance'),
+                                child: const Text('GOVERNANCE'),
+                              ),
+                        showDivider: changeSet != changeSets.last,
                       );
                     }).toList(),
                   ),
@@ -324,6 +394,20 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     final definitions = canonical['definitions'] is List
         ? (canonical['definitions'] as List).whereType<Map>().toList()
         : const <Map>[];
+    final scheduledViews = canonical['scheduledChangeViews'] is List
+        ? (canonical['scheduledChangeViews'] as List)
+            .whereType<Map>()
+            .map((row) => ScheduledConstitutionChange.fromJson(
+                Map<String, dynamic>.from(row)))
+            .toList(growable: false)
+        : const <ScheduledConstitutionChange>[];
+    final versionHistoryViews = canonical['versionHistory'] is List
+        ? (canonical['versionHistory'] as List)
+            .whereType<Map>()
+            .map((row) => ConstitutionVersionHistory.fromJson(
+                Map<String, dynamic>.from(row)))
+            .toList(growable: false)
+        : const <ConstitutionVersionHistory>[];
     final earthRules = canonical['earthRules'] is Map
         ? Map<String, dynamic>.from(canonical['earthRules'] as Map)
         : const <String, dynamic>{};
@@ -342,7 +426,7 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                 return EarthDataRow(
                   title: entry.key,
                   subtitle: [
-                    _formatCanonicalValue(entry.value),
+                    _formatRuleValue(canonical, entry.key, entry.value),
                     if (version != null) version,
                   ].join(' · '),
                   leading: Icon(Icons.public_outlined,
@@ -353,7 +437,8 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
             ),
           ),
         EarthSection(
-          title: 'CURRENT CONSTITUTION POLICY · DAY ${canonical['gameDay'] ?? '—'}',
+          title:
+              'CURRENT CONSTITUTION POLICY · DAY ${canonical['gameDay'] ?? '—'}',
           showSurface: false,
           child: rules.isEmpty
               ? const EarthEmptyState(
@@ -362,11 +447,13 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                 )
               : EarthDataList(
                   children: rules.map((entry) {
-                    final value = _formatCanonicalValue(entry.value);
+                    final value =
+                        _formatRuleValue(canonical, entry.key, entry.value);
                     final version = versionIds[entry.key]?.toString();
                     final source = provenance[entry.key]?.toString();
                     final scheduleRows = canonical['scheduleBrackets'] is Map
-                        ? (canonical['scheduleBrackets'] as Map)[entry.value.toString()]
+                        ? (canonical['scheduleBrackets']
+                            as Map)[entry.value.toString()]
                         : null;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -379,19 +466,26 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                             if (version != null) version,
                           ].join(' · '),
                           leading: Icon(Icons.rule_outlined,
-                              size: context.iconSize, color: context.primaryColor),
-                          showDivider: scheduleRows is! List && entry.key != rules.last.key,
+                              size: context.iconSize,
+                              color: context.primaryColor),
+                          showDivider: scheduleRows is! List &&
+                              entry.key != rules.last.key,
                         ),
                         if (scheduleRows is List && scheduleRows.isNotEmpty)
                           Padding(
-                            padding: const EdgeInsets.only(left: 44, right: 12, bottom: 12),
+                            padding: const EdgeInsets.only(
+                                left: 44, right: 12, bottom: 12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('PROGRESSIVE BRACKETS', style: context.captionStyle.copyWith(color: context.mutedColor)),
+                                Text('PROGRESSIVE BRACKETS',
+                                    style: context.captionStyle
+                                        .copyWith(color: context.mutedColor)),
                                 const SizedBox(height: 4),
-                                for (final bracket in scheduleRows.whereType<Map>())
-                                  Text(_formatBracket(bracket), style: context.captionStyle),
+                                for (final bracket
+                                    in scheduleRows.whereType<Map>())
+                                  Text(_formatBracket(bracket),
+                                      style: context.captionStyle),
                               ],
                             ),
                           ),
@@ -408,86 +502,222 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
               child: EarthButton(
                 label: 'PROPOSE AMENDMENT',
                 variant: EarthButtonVariant.primary,
-                onPressed: () => _openAmendmentComposer(context, canonical, definitions),
+                onPressed: () =>
+                    _openAmendmentComposer(context, canonical, definitions),
               ),
             ),
           ),
-        if (scheduled.isNotEmpty)
+        if (scheduledViews.isNotEmpty || scheduled.isNotEmpty)
           EarthSection(
             title: 'SCHEDULED CONSTITUTION CHANGES',
             showSurface: false,
             child: EarthDataList(
-              children: scheduled.map((change) {
-                final value = change['value_json'] is Map
-                    ? _formatCanonicalValue(change['value_json'])
-                    : '—';
-                return EarthDataRow(
-                  title: change['rule_code']?.toString() ?? 'Rule',
-                  subtitle: 'DAY ${change['effective_from_game_day'] ?? '—'} · $value',
-                  leading: Icon(Icons.schedule_outlined,
-                      size: context.iconSize, color: context.primaryColor),
-                  showDivider: change != scheduled.last,
-                );
-              }).toList(),
+              children: scheduledViews.isNotEmpty
+                  ? scheduledViews.map((change) {
+                      return EarthDataRow(
+                        title: change.ruleCode,
+                        subtitle:
+                            'DAY ${change.effectiveFromGameDay} · ${_formatRuleValue(canonical, change.ruleCode, change.value)} · ${change.authorityType}',
+                        leading: Icon(Icons.schedule_outlined,
+                            size: context.iconSize,
+                            color: context.primaryColor),
+                        showDivider: change != scheduledViews.last,
+                      );
+                    }).toList()
+                  : scheduled.map((change) {
+                      final code = change['rule_code']?.toString() ?? 'UNKNOWN';
+                      final rawValue = change['value_json'];
+                      return EarthDataRow(
+                        title: code,
+                        subtitle:
+                            'DAY ${change['effective_from_game_day'] ?? '—'} · ${_formatRuleValue(canonical, code, rawValue)}',
+                        leading: Icon(Icons.schedule_outlined,
+                            size: context.iconSize,
+                            color: context.primaryColor),
+                        showDivider: change != scheduled.last,
+                      );
+                    }).toList(),
             ),
           ),
-        if (history.isNotEmpty)
+        if (versionHistoryViews.isNotEmpty || history.isNotEmpty)
           EarthSection(
             title: 'CONSTITUTION RULE HISTORY',
             showSurface: false,
             child: EarthDataList(
-              children: history.map((version) {
-                final value = version['value_json'] is Map
-                    ? _formatCanonicalValue(version['value_json'])
-                    : '—';
-                final status = version['status']?.toString() ?? '—';
-                final proposal = version['proposal_id']?.toString();
-                return EarthDataRow(
-                  title: version['rule_code']?.toString() ?? 'Rule',
-                  subtitle: 'DAY ${version['effective_from_game_day'] ?? '—'} · $status · $value${proposal == null ? '' : ' · $proposal'}',
-                  leading: Icon(Icons.history_edu_outlined,
-                      size: context.iconSize, color: context.primaryColor),
-                  showDivider: version != history.last,
-                );
-              }).toList(),
+              children: versionHistoryViews.isNotEmpty
+                  ? versionHistoryViews.map((version) {
+                      final technical = <String>[
+                        'VERSION ${version.versionId}',
+                        'AUTHORITY ${version.authorityId}',
+                        if (version.proposalId != null)
+                          'PROPOSAL ${version.proposalId}',
+                      ].join(' · ');
+                      return ExpansionTile(
+                        title: Text(version.ruleCode),
+                        subtitle: Text(
+                            'DAY ${version.effectiveFromGameDay} · ${version.status} · ${_formatRuleValue(canonical, version.ruleCode, version.value)}'),
+                        leading: Icon(Icons.history_edu_outlined,
+                            size: context.iconSize,
+                            color: context.primaryColor),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(technical,
+                                      style: context.captionStyle),
+                                ),
+                                if (version.proposalId != null)
+                                  TextButton(
+                                    onPressed: widget.onNavigate == null
+                                        ? null
+                                        : () => widget.onNavigate!
+                                            .call('governance'),
+                                    child: const Text('GOVERNANCE'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList()
+                  : history.map((version) {
+                      final code =
+                          version['rule_code']?.toString() ?? 'UNKNOWN';
+                      return EarthDataRow(
+                        title: code,
+                        subtitle:
+                            'DAY ${version['effective_from_game_day'] ?? '—'} · ${version['status'] ?? '—'} · ${_formatRuleValue(canonical, code, version['value_json'])}',
+                        leading: Icon(Icons.history_edu_outlined,
+                            size: context.iconSize,
+                            color: context.primaryColor),
+                        showDivider: version != history.last,
+                      );
+                    }).toList(),
             ),
           ),
       ],
     );
   }
 
+  String _inputSpecHelperText(ConstitutionInputSpec spec) {
+    final parts = <String>[];
+    if (spec.min != null) parts.add('MIN ${spec.min}');
+    if (spec.max != null) parts.add('MAX ${spec.max}');
+    if (spec.step != null) parts.add('STEP ${spec.step}');
+    if (spec.allowedValues.isNotEmpty) {
+      parts.add('ALLOWED ${spec.allowedValues.join(', ')}');
+    }
+    if (spec.inputKind == 'DECIMAL_CREDIT') {
+      parts.insert(0, 'Player amount; server converts to atomic units');
+    } else if (spec.inputKind == 'PERCENTAGE') {
+      parts.insert(0, 'Player percentage; server converts to BPS');
+    } else if (spec.inputKind == 'SCHEDULE_ID') {
+      parts.insert(0, 'Select an active server schedule');
+    }
+    return parts.join(' · ');
+  }
+
+  bool _scheduleMatchesRule(
+      ConstitutionRuleView rule, ConstitutionProgressiveSchedule schedule) {
+    if (rule.valueType != 'PROGRESSIVE_SCHEDULE_REF') return false;
+    if (rule.code.contains('HOUSE_INCOME_TAX')) {
+      return schedule.basisType == 'HOUSE_INCOME_TAX';
+    }
+    if (rule.code == 'EARTH.CAPACITY.PROGRESSIVE_SCHEDULE') {
+      return schedule.basisType == 'EARTH_CORPORATION_CAPACITY';
+    }
+    if (rule.code == 'EARTH.CAPACITY.HOUSE_PROGRESSIVE_SCHEDULE') {
+      return schedule.basisType == 'CORPORATION_HOUSE_CAPACITY';
+    }
+    return true;
+  }
+
+  String _schedulePreview(ConstitutionProgressiveSchedule schedule) {
+    return schedule.brackets
+        .map((bracket) =>
+            '${bracket.lowerBoundUnits}–${bracket.upperBoundUnits ?? '∞'} · ×${bracket.marginalMultiplierNumerator}/${bracket.marginalMultiplierDenominator}')
+        .join('   ');
+  }
+
   Future<void> _openAmendmentComposer(BuildContext context,
       Map<String, dynamic> canonical, List<Map> definitions) async {
-    final corporationScope = canonical['corporationId']?.toString().isNotEmpty == true;
-    final available = definitions.where((definition) {
-      final authority = definition['authority_model']?.toString();
+    final corporationScope =
+        canonical['corporationId']?.toString().isNotEmpty == true;
+    final available = (canonical['ruleViews'] is List
+            ? (canonical['ruleViews'] as List)
+                .whereType<Map>()
+                .map((row) => ConstitutionRuleView.fromJson(
+                    Map<String, dynamic>.from(row)))
+                .toList()
+            : definitions
+                .map((row) => ConstitutionRuleView.fromJson(
+                    Map<String, dynamic>.from(row)))
+                .toList())
+        .where((definition) {
+      final authority = definition.authorityModel;
       return corporationScope
           ? authority != 'EARTH_LOCKED'
           : authority != 'CORPORATION_LOCAL';
     }).where((definition) {
-      final type = definition['value_type']?.toString();
+      final type = definition.valueType;
       // Schedule references are selectable by their canonical server-owned
       // ID. The server validates that the referenced schedule is active and
       // uses the same brackets during settlement; the client must not edit or
       // recreate the schedule definition locally.
-      return ['BOOLEAN', 'INTEGER', 'CREDIT_UNITS', 'RATE_BPS', 'ENUM', 'GAME_DAYS', 'RESOURCE_UNITS', 'PROGRESSIVE_SCHEDULE_REF'].contains(type);
+      return [
+        'BOOLEAN',
+        'INTEGER',
+        'CREDIT_UNITS',
+        'RATE_BPS',
+        'ENUM',
+        'GAME_DAYS',
+        'RESOURCE_UNITS',
+        'PROGRESSIVE_SCHEDULE_REF'
+      ].contains(type);
     }).toList();
+    final schedules = canonical['progressiveSchedules'] is List
+        ? (canonical['progressiveSchedules'] as List)
+            .whereType<Map>()
+            .map((row) => ConstitutionProgressiveSchedule.fromJson(
+                Map<String, dynamic>.from(row)))
+            .where((schedule) => schedule.brackets.isNotEmpty)
+            .toList(growable: false)
+        : const <ConstitutionProgressiveSchedule>[];
     if (available.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No scalar Constitution rules are available for amendment.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'No scalar Constitution rules are available for amendment.')));
       return;
     }
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       builder: (dialogContext) {
-        String selected = available.first['rule_code'].toString();
+        String selected = available.first.code;
         String? error;
         final valueController = TextEditingController();
+        final selectedChanges = <Map<String, dynamic>>[];
         return StatefulBuilder(builder: (context, setState) {
-          final definition = available.firstWhere((item) => item['rule_code'].toString() == selected);
-          final type = definition['value_type']?.toString() ?? 'INTEGER';
-          final allowed = definition['allowed_values'] is List
-              ? (definition['allowed_values'] as List).map((item) => item.toString()).toList()
-              : const <String>[];
+          final policyGroup = selectedChanges.isEmpty
+              ? null
+              : selectedChanges.first['policyGroup']?.toString();
+          final candidates = available
+              .where((item) =>
+                  policyGroup == null || item.policyGroup == policyGroup)
+              .toList(growable: false);
+          if (!candidates.any((item) => item.code == selected)) {
+            selected = candidates.first.code;
+            valueController.clear();
+          }
+          final definition =
+              candidates.firstWhere((item) => item.code == selected);
+          final type = definition.valueType;
+          final inputSpec = definition.inputSpec;
+          final allowed = inputSpec.allowedValues;
+          final scheduleOptions = schedules
+              .where((schedule) => _scheduleMatchesRule(definition, schedule))
+              .toList(growable: false);
           return AlertDialog(
             title: const Text('PROPOSE CONSTITUTION AMENDMENT'),
             content: SizedBox(
@@ -496,78 +726,232 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                 DropdownButtonFormField<String>(
                   value: selected,
                   decoration: const InputDecoration(labelText: 'Rule'),
-                  items: available.map((item) => DropdownMenuItem(value: item['rule_code'].toString(), child: Text(item['rule_code'].toString()))).toList(),
-                  onChanged: (value) => setState(() { selected = value ?? selected; error = null; }),
+                  items: available
+                      .where((item) =>
+                          policyGroup == null ||
+                          item.policyGroup == policyGroup)
+                      .map((item) => DropdownMenuItem(
+                          value: item.code, child: Text(item.displayName)))
+                      .toList(),
+                  onChanged: (value) => setState(() {
+                    selected = value ?? selected;
+                    valueController.clear();
+                    error = null;
+                  }),
                 ),
                 const SizedBox(height: 12),
                 if (type == 'BOOLEAN')
                   DropdownButtonFormField<String>(
-                    value: valueController.text.isEmpty ? null : valueController.text,
+                    value: valueController.text.isEmpty
+                        ? null
+                        : valueController.text,
                     decoration: const InputDecoration(labelText: 'Value'),
-                    items: const [DropdownMenuItem(value: 'true', child: Text('TRUE')), DropdownMenuItem(value: 'false', child: Text('FALSE'))],
-                    onChanged: (value) => setState(() => valueController.text = value ?? ''),
+                    items: const [
+                      DropdownMenuItem(value: 'true', child: Text('TRUE')),
+                      DropdownMenuItem(value: 'false', child: Text('FALSE'))
+                    ],
+                    onChanged: (value) =>
+                        setState(() => valueController.text = value ?? ''),
                   )
                 else if (type == 'ENUM' && allowed.isNotEmpty)
                   DropdownButtonFormField<String>(
-                    value: allowed.contains(valueController.text) ? valueController.text : null,
+                    value: allowed.contains(valueController.text)
+                        ? valueController.text
+                        : null,
                     decoration: const InputDecoration(labelText: 'Value'),
-                    items: allowed.map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
-                    onChanged: (value) => setState(() => valueController.text = value ?? ''),
+                    items: allowed
+                        .map((value) =>
+                            DropdownMenuItem(value: value, child: Text(value)))
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => valueController.text = value ?? ''),
                   )
-                else
+                else if (type == 'PROGRESSIVE_SCHEDULE_REF') ...[
+                  DropdownButtonFormField<String>(
+                    value: scheduleOptions.any(
+                            (schedule) => schedule.id == valueController.text)
+                        ? valueController.text
+                        : null,
+                    decoration: const InputDecoration(
+                        labelText: 'Progressive schedule'),
+                    items: scheduleOptions
+                        .map((schedule) => DropdownMenuItem(
+                              value: schedule.id,
+                              child: SizedBox(
+                                width: 410,
+                                child: Text(
+                                  '${schedule.code} · v${schedule.version}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => valueController.text = value ?? ''),
+                  ),
+                  if (scheduleOptions.isNotEmpty &&
+                      valueController.text.isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          _schedulePreview(scheduleOptions.firstWhere(
+                              (schedule) =>
+                                  schedule.id == valueController.text)),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ),
+                ] else
                   TextField(
                     controller: valueController,
-                    keyboardType: type == 'PROGRESSIVE_SCHEDULE_REF' ? TextInputType.text : TextInputType.number,
+                    keyboardType: TextInputType.numberWithOptions(
+                        decimal: type == 'CREDIT_UNITS' || type == 'RATE_BPS'),
                     decoration: InputDecoration(
-                      labelText: type == 'PROGRESSIVE_SCHEDULE_REF' ? 'Canonical schedule ID' : '$type value',
-                      helperText: type == 'PROGRESSIVE_SCHEDULE_REF' ? 'Use an active schedule ID from the server.' : null,
+                      labelText: inputSpec.inputKind == 'DECIMAL_CREDIT'
+                          ? 'Amount in CREDIT'
+                          : inputSpec.inputKind == 'PERCENTAGE'
+                              ? 'Rate percentage'
+                              : '$type value',
+                      helperText: _inputSpecHelperText(inputSpec),
                     ),
                   ),
-                if (error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                if (selectedChanges.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'ATOMIC CHANGE SET · ${definition.policyGroup}',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                  for (final change in selectedChanges)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(change['ruleCode'].toString()),
+                      subtitle: Text(change['value'].toString()),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.remove_circle_outline),
+                        onPressed: () => setState(() {
+                          selectedChanges.remove(change);
+                        }),
+                      ),
+                    ),
+                ],
+                if (error != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(error!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error))),
               ]),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('CANCEL')),
-              FilledButton(onPressed: () {
-                dynamic value;
-                if (type == 'BOOLEAN') {
-                  value = valueController.text == 'true' ? true : valueController.text == 'false' ? false : null;
-                } else if (type == 'ENUM') {
-                  value = valueController.text.isEmpty ? null : valueController.text;
-                } else {
-                  final parsed = BigInt.tryParse(valueController.text.trim());
-                  value = parsed == null ? null : valueController.text.trim();
-                }
-                if (value == null) { setState(() => error = 'Enter a valid $type value.'); return; }
-                Navigator.of(dialogContext).pop({'ruleCode': selected, 'value': value});
-              }, child: const Text('CONTINUE')),
+              TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('CANCEL')),
+              OutlinedButton(
+                  onPressed: () {
+                    dynamic value;
+                    if (type == 'BOOLEAN') {
+                      value = valueController.text == 'true'
+                          ? true
+                          : valueController.text == 'false'
+                              ? false
+                              : null;
+                    } else if (type == 'ENUM') {
+                      value = valueController.text.isEmpty
+                          ? null
+                          : valueController.text;
+                    } else if (type == 'CREDIT_UNITS' || type == 'RATE_BPS') {
+                      value = valueController.text.trim().isEmpty
+                          ? null
+                          : valueController.text.trim();
+                    } else {
+                      final parsed =
+                          BigInt.tryParse(valueController.text.trim());
+                      value =
+                          parsed == null ? null : valueController.text.trim();
+                    }
+                    if (value == null) {
+                      setState(() => error = 'Enter a valid $type value.');
+                      return;
+                    }
+                    if (selectedChanges
+                        .any((change) => change['ruleCode'] == selected)) {
+                      setState(() =>
+                          error = 'This rule is already in the change set.');
+                      return;
+                    }
+                    setState(() {
+                      selectedChanges.add({
+                        'ruleCode': selected,
+                        'value': value,
+                        'policyGroup': definition.policyGroup,
+                      });
+                      valueController.clear();
+                      error = null;
+                    });
+                  },
+                  child: const Text('ADD RULE')),
+              FilledButton(
+                onPressed: () {
+                  if (selectedChanges.isEmpty) {
+                    setState(() => error = 'Add at least one rule.');
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(
+                    selectedChanges
+                        .map((change) => Map<String, dynamic>.from(change)
+                          ..remove('policyGroup'))
+                        .toList(growable: false),
+                  );
+                },
+                child: const Text('CONTINUE'),
+              ),
             ],
           );
         });
       },
     );
-    if (result == null || !context.mounted || widget.onProposeAmendment == null) return;
+    if (result == null ||
+        !context.mounted ||
+        widget.onProposeAmendment == null) {
+      return;
+    }
     try {
       if (widget.onPreviewAmendment != null) {
-        final preview = await widget.onPreviewAmendment!([result]);
+        final preview = await widget.onPreviewAmendment!(result);
         if (!context.mounted) return;
         if (preview['ok'] == false) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(preview['error']?.toString() ?? 'Amendment preview failed.')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(preview['error']?.toString() ??
+                  'Amendment preview failed.')));
           return;
         }
-        final proceed = await _confirmPreview(context, preview);
+        final proceed = await _confirmPreview(context, preview, canonical);
         if (!proceed || !context.mounted) return;
       }
-      final response = await widget.onProposeAmendment!([result]);
+      final response = await widget.onProposeAmendment!(result);
       if (!context.mounted) return;
       final ok = response['ok'] != false;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Constitution amendment proposal submitted.' : response['error']?.toString() ?? 'Amendment proposal failed.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ok
+              ? 'Constitution amendment proposal submitted.'
+              : response['error']?.toString() ??
+                  'Amendment proposal failed.')));
     } catch (error) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Amendment proposal failed: $error')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Amendment proposal failed: $error')));
+      }
     }
   }
 
-  Future<bool> _confirmPreview(BuildContext context, Map<String, dynamic> preview) async {
+  Future<bool> _confirmPreview(BuildContext context,
+      Map<String, dynamic> preview, Map<String, dynamic> canonical) async {
     final changes = preview['changes'] is List
         ? (preview['changes'] as List).whereType<Map>().toList()
         : const <Map>[];
@@ -575,21 +959,32 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
         ? (preview['progressiveEffects'] as List).whereType<Map>().toList()
         : const <Map>[];
     final lines = <Widget>[
-      Text('GAME DAY ${preview['gameDay'] ?? '—'} · SERVER-CALCULATED IMPACT', style: Theme.of(context).textTheme.labelSmall),
+      Text('GAME DAY ${preview['gameDay'] ?? '—'} · SERVER-CALCULATED IMPACT',
+          style: Theme.of(context).textTheme.labelSmall),
+      const SizedBox(height: 12),
+      Text(
+        'VOTING: DAY ${preview['votingStartGameDay'] ?? '—'} → ${preview['votingEndGameDay'] ?? '—'} · IMPLEMENTATION DELAY: ${preview['implementationDelayDays'] ?? '—'} DAYS · EARLIEST EFFECTIVE: DAY ${preview['earliestValidEffectiveGameDay'] ?? '—'}',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
       const SizedBox(height: 12),
       for (final change in changes)
         ListTile(
           dense: true,
           contentPadding: EdgeInsets.zero,
           title: Text(change['ruleCode']?.toString() ?? 'Rule'),
-          subtitle: Text('${_formatCanonicalValue(change['currentValue'])}  →  ${_formatCanonicalValue(change['proposedValue'])}'),
+          subtitle: Text(
+              '${_formatRuleValue(canonical, change['ruleCode'], change['currentValue'])}  →  ${_formatRuleValue(canonical, change['ruleCode'], change['proposedValue'])}'),
         ),
       for (final effect in effects) ...[
         const Divider(),
-        Text('PROGRESSIVE EFFECT · ${effect['ruleCode'] ?? 'RULE'}', style: Theme.of(context).textTheme.labelSmall),
-        for (final row in (effect['effects'] is List ? effect['effects'] as List : const []).whereType<Map>())
+        Text('PROGRESSIVE EFFECT · ${effect['ruleCode'] ?? 'RULE'}',
+            style: Theme.of(context).textTheme.labelSmall),
+        for (final row in (effect['effects'] is List
+                ? effect['effects'] as List
+                : const [])
+            .whereType<Map>())
           Text(
-            'QTY ${row['current']?['quantity'] ?? '—'}: ${row['current']?['totalCharge'] ?? '—'} → ${row['proposed']?['totalCharge'] ?? '—'} (Δ ${row['delta'] ?? '—'})',
+            'QTY ${row['current']?['quantity'] ?? '—'}: ${formatCreditUnits(row['current']?['totalCharge'])} → ${formatCreditUnits(row['proposed']?['totalCharge'])} (Δ ${formatCreditUnits(row['delta'])})',
             style: Theme.of(context).textTheme.bodySmall,
           ),
       ],
@@ -598,17 +993,73 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('REVIEW CONSTITUTION AMENDMENT'),
-            content: SizedBox(width: 520, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: lines))),
+            content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: lines))),
             actions: [
-              TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('CANCEL')),
-              FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('SUBMIT PROPOSAL')),
+              TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('CANCEL')),
+              FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('SUBMIT PROPOSAL')),
             ],
           ),
         ) ??
         false;
   }
 
-  String _formatCanonicalValue(dynamic value) {
+  String _formatRuleValue(
+      Map<String, dynamic>? canonical, dynamic code, dynamic value) {
+    final ruleCode = code?.toString() ?? '';
+    final views = canonical?['ruleViews'];
+    if (views is List) {
+      for (final raw in views.whereType<Map>()) {
+        final view =
+            ConstitutionRuleView.fromJson(Map<String, dynamic>.from(raw));
+        if (view.code == ruleCode) {
+          if (view.valueType == 'PROGRESSIVE_SCHEDULE_REF') {
+            final schedules = canonical?['progressiveSchedules'] is List
+                ? (canonical!['progressiveSchedules'] as List)
+                    .whereType<Map>()
+                    .map((row) => ConstitutionProgressiveSchedule.fromJson(
+                        Map<String, dynamic>.from(row)))
+                    .toList(growable: false)
+                : const <ConstitutionProgressiveSchedule>[];
+            ConstitutionProgressiveSchedule? schedule;
+            for (final item in schedules) {
+              if (item.id == value?.toString() ||
+                  item.code == value?.toString()) {
+                schedule = item;
+                break;
+              }
+            }
+            if (schedule != null) {
+              return '${schedule.code} · ${_schedulePreview(schedule)}';
+            }
+          }
+          return ConstitutionValueFormatter.format(value, view.valueType);
+        }
+      }
+    }
+    final definitions = canonical?['definitions'];
+    if (definitions is List) {
+      for (final raw in definitions.whereType<Map>()) {
+        if (raw['rule_code']?.toString() == ruleCode) {
+          return ConstitutionValueFormatter.format(value, raw['value_type']);
+        }
+      }
+    }
+    return _formatCanonicalValue(value);
+  }
+
+  String _formatCanonicalValue(dynamic value, [dynamic valueType]) {
+    if (valueType != null) {
+      return ConstitutionValueFormatter.format(value, valueType);
+    }
     if (value is List) {
       return value.map((item) => _formatCanonicalValue(item)).join(' · ');
     }
@@ -623,8 +1074,10 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
   String _formatBracket(Map bracket) {
     final lower = bracket['lower_bound_units']?.toString() ?? '0';
     final upper = bracket['upper_bound_units']?.toString();
-    final numerator = bracket['marginal_multiplier_numerator']?.toString() ?? '—';
-    final denominator = bracket['marginal_multiplier_denominator']?.toString() ?? '—';
+    final numerator =
+        bracket['marginal_multiplier_numerator']?.toString() ?? '—';
+    final denominator =
+        bracket['marginal_multiplier_denominator']?.toString() ?? '—';
     return '$lower–${upper ?? '∞'} · ×$numerator/$denominator';
   }
 
@@ -718,8 +1171,8 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     );
   }
 
-  Widget _buildTierFlow(BuildContext context) {
-    Widget tier(IconData icon, String label, String detail, Color color) =>
+  Widget _buildPolicyScopeFlow(BuildContext context) {
+    Widget scope(IconData icon, String label, String detail, Color color) =>
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -746,20 +1199,17 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
       child: Column(
         children: [
           Text(
-            'Rule Precedence: Earth Baseline → Corporation Policy → Community and capacity administration',
+            'Policy authorities: Earth Constitution → Corporation policy overrides',
             style: context.widgetFooterStyle,
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              tier(Icons.public_outlined, 'EARTH', 'Constitutional baseline',
-                  context.primaryColor),
+              scope(Icons.public_outlined, 'EARTH',
+                  'Universal rules and defaults', context.primaryColor),
               Icon(Icons.arrow_forward_rounded, color: context.mutedColor),
-              tier(Icons.domain_outlined, 'ORGANIZATION', 'Corporate policy',
-                  context.secondaryColor),
-              Icon(Icons.arrow_forward_rounded, color: context.mutedColor),
-              tier(Icons.location_on_outlined, 'TERRITORY',
-                  'Local commons charter', context.warningColor),
+              scope(Icons.domain_outlined, 'CORPORATION',
+                  'Permitted local policy overrides', context.secondaryColor),
             ],
           ),
         ],
@@ -768,25 +1218,15 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
   }
 
   Widget _buildStatuteList(
-      BuildContext context, List<Map<String, dynamic>> rules) {
-    final grouped = <int, List<Map<String, dynamic>>>{};
+    BuildContext context,
+    List<ConstitutionRuleView> rules, {
+    required bool corporationScope,
+  }) {
+    final grouped = <String, List<ConstitutionRuleView>>{};
     for (final rule in rules) {
-      final part = int.tryParse(rule['part_number']?.toString() ?? '') ?? 1;
-      grouped.putIfAbsent(part, () => []).add(rule);
+      final article = rule.articleCode.toUpperCase();
+      grouped.putIfAbsent(article, () => []).add(rule);
     }
-
-    final partTitles = {
-      1: 'PART 1 · TIME & SETTLEMENT',
-      2: 'PART 2 · MONETARY SYSTEM',
-      3: 'PART 3 · RESOURCES & PROPERTY',
-      4: 'PART 4 · DYNASTY CONTINUITY',
-      5: 'PART 5 · PRODUCTION & MARKETS',
-      6: 'PART 6 · TAXATION & PUBLIC LEDGER',
-      7: 'PART 7 · SUBSIDIARITY & INSTITUTIONS',
-      8: 'PART 8 · DEMOCRATIC GOVERNANCE',
-      9: 'PART 9 · TECHNOLOGY & PATENTS',
-      10: 'PART 10 · CONSTITUTIONAL AMENDMENTS',
-    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -798,7 +1238,7 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                partTitles[entry.key] ?? 'PART ${entry.key}',
+                _categoryForRule(rows.first),
                 style: context.topicTitleStyle,
               ),
               const SizedBox(height: 8),
@@ -812,7 +1252,12 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                   children: rows.asMap().entries.map((indexed) {
                     final rule = indexed.value;
                     final isLast = indexed.key == rows.length - 1;
-                    return _buildStatuteCard(context, rule, isLast: isLast);
+                    return _buildStatuteCard(
+                      context,
+                      rule,
+                      corporationScope: corporationScope,
+                      isLast: isLast,
+                    );
                   }).toList(),
                 ),
               ),
@@ -823,23 +1268,28 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
     );
   }
 
-  Widget _buildStatuteCard(BuildContext context, Map<String, dynamic> rule,
-      {required bool isLast}) {
-    final invariant = rule['invariant'] == true ||
-        rule['immutability']?.toString().toUpperCase() == 'INVARIANT';
-    final overridePolicy = rule['override_policy']?.toString().toUpperCase();
-    final status = invariant
-        ? 'INVARIANT'
-        : overridePolicy == 'LOCAL_ALLOWED'
+  Widget _buildStatuteCard(BuildContext context, ConstitutionRuleView rule,
+      {required bool corporationScope, required bool isLast}) {
+    final id = rule.code;
+    final code = rule.articleCode;
+    final title = rule.displayName;
+    final desc = rule.description;
+    final valueType = rule.valueType;
+    final resolvedValue = rule.resolved.value;
+    final source = rule.resolved.source;
+    final authorityModel = rule.authorityModel;
+    final permitted =
+        rule.allowedValues.isNotEmpty ? rule.allowedValues.join(', ') : null;
+    final inheritanceStatus = rule.inheritanceStatus;
+    final status = inheritanceStatus == 'INHERITED'
+        ? 'INHERITED'
+        : inheritanceStatus == 'LOCAL_OVERRIDE'
             ? 'LOCAL OVERRIDE'
-            : 'AMENDABLE';
-    final id = rule['id']?.toString() ?? '';
-    final code = rule['rule_number']?.toString() ?? '';
-    final title = rule['title']?.toString() ?? 'Statute';
-    final desc = rule['description']?.toString() ?? '';
-    final defaultValue = rule['default_value']?.toString() ?? 'Baseline';
-    final permitted = rule['permitted_values']?.toString();
-    final authority = rule['authority']?.toString() ?? 'EARTH';
+            : authorityModel == 'EARTH_LOCKED'
+                ? 'EARTH LOCKED'
+                : authorityModel == 'CORPORATION_LOCAL'
+                    ? 'CORPORATION POLICY'
+                    : 'OVERRIDE-ELIGIBLE';
 
     return Container(
       padding: EdgeInsets.all(context.cardPadding),
@@ -892,13 +1342,20 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
               ),
               EarthBadge(
                 label: status,
-                customColor:
-                    invariant ? context.primaryColor : context.secondaryColor,
+                customColor: authorityModel == 'EARTH_LOCKED'
+                    ? context.primaryColor
+                    : context.secondaryColor,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(desc, style: context.bodyStyle),
+          if (rule.inputHint.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(rule.inputHint,
+                style:
+                    context.captionStyle.copyWith(color: context.mutedColor)),
+          ],
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(10),
@@ -912,11 +1369,16 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('STATUTORY DEFAULT',
+                      Text(
+                          inheritanceStatus == 'LOCAL_OVERRIDE'
+                              ? 'LOCAL VALUE'
+                              : 'CURRENT VALUE',
                           style: context.captionStyle
                               .copyWith(color: context.mutedColor)),
                       const SizedBox(height: 2),
-                      Text(defaultValue,
+                      Text(
+                          ConstitutionValueFormatter.format(
+                              resolvedValue, valueType),
                           style: context.bodyStyle
                               .copyWith(fontWeight: FontWeight.w600)),
                     ],
@@ -939,24 +1401,90 @@ class _ConstitutionPanelState extends State<ConstitutionPanel> {
                     ),
                   ),
                 ],
+                if (valueType.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('VALUE TYPE',
+                            style: context.captionStyle
+                                .copyWith(color: context.mutedColor)),
+                        const SizedBox(height: 2),
+                        Text(rule.displayHint,
+                            style: context.bodyStyle
+                                .copyWith(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ],
+                if (corporationScope && rule.earthDefault != null) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('EARTH DEFAULT',
+                            style: context.captionStyle
+                                .copyWith(color: context.mutedColor)),
+                        const SizedBox(height: 2),
+                        Text(
+                          ConstitutionValueFormatter.format(
+                              rule.earthDefault!.value, valueType),
+                          style: context.bodyStyle
+                              .copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('AUTHORITY',
+                    Text('SOURCE',
                         style: context.captionStyle
                             .copyWith(color: context.mutedColor)),
                     const SizedBox(height: 2),
-                    Text(authority,
+                    Text(source ?? authorityModel,
                         style: context.bodyStyle.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: context.primaryColor,
+                          color: source == 'CORPORATION'
+                              ? context.secondaryColor
+                              : context.primaryColor,
                         )),
                   ],
                 ),
               ],
             ),
           ),
+          if (corporationScope &&
+              inheritanceStatus == 'LOCAL_OVERRIDE' &&
+              widget.onProposeAmendment != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: EarthButton(
+                label: 'RETURN TO EARTH DEFAULT',
+                variant: EarthButtonVariant.secondary,
+                onPressed: () async {
+                  final result = await widget.onProposeAmendment!([
+                    {'ruleCode': rule.code, 'clearOverride': true},
+                  ]);
+                  if (!context.mounted) return;
+                  final ok = result['ok'] != false;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(ok
+                          ? 'Earth-default restoration proposed.'
+                          : (result['error']?.toString() ??
+                              'Unable to propose restoration.')),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );

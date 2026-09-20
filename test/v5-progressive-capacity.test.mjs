@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { calculateProgressiveCharge, validateProgressiveBrackets } from '../cloudflare/src/v5-progressive.ts';
 import { aggregateCorporationCapacity, calculateHouseCapacity, quoteCapacityChange, requiredTerritoryUnits } from '../cloudflare/src/v5-capacity.ts';
-import { previewConstitutionAmendment, previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
+import { deriveV5GovernanceTiming, previewConstitutionAmendment, previewProgressivePolicyChange, validateV5FutureEffectiveDay, validateV5GovernanceAction } from '../cloudflare/src/v5-governance.ts';
 import { runV5ShadowSimulation } from '../cloudflare/src/v5-shadow-simulation.ts';
 import { CONSTITUTIONAL_RULE_DEFINITIONS, resolveConstitutionalRuleSet, validateConstitutionalRuleValue } from '../cloudflare/src/v5-constitution.ts';
 import { evaluateOneHouseVote } from '../cloudflare/src/governance-decision.ts';
@@ -491,6 +491,106 @@ test('V5 Constitution read model exposes resolved values, provenance, and histor
   assert.match(route, /governance\/v5\/constitution/);
   assert.match(route, /constitution\/preview/);
   assert.match(client, /getV5Constitution/);
+});
+
+test('V5 Constitution registry owns rule presentation metadata and ordering', () => {
+  const seenOrders = new Set();
+  for (const definition of CONSTITUTIONAL_RULE_DEFINITIONS) {
+    assert.ok(definition.displayName);
+    assert.ok(definition.description);
+    assert.ok(definition.articleLabel);
+    assert.ok(definition.inputHint);
+    assert.ok(definition.displayHint);
+    assert.equal(Number.isInteger(definition.order), true);
+    assert.equal(seenOrders.has(definition.order), false);
+    seenOrders.add(definition.order);
+  }
+});
+
+test('V5 Constitution certification preserves canonical authority and article boundaries', () => {
+  assert.equal(CONSTITUTIONAL_RULE_DEFINITIONS.some((rule) => rule.articleCode === 'PART_1'), false);
+  assert.equal(CONSTITUTIONAL_RULE_DEFINITIONS.some((rule) => rule.articleLabel.startsWith('PART ')), false);
+  const localRule = CONSTITUTIONAL_RULE_DEFINITIONS.find((rule) => rule.code === 'CORPORATION.ADMISSION_POLICY');
+  assert.equal(localRule?.authorityModel, 'CORPORATION_LOCAL');
+  const earthRule = CONSTITUTIONAL_RULE_DEFINITIONS.find((rule) => rule.code === 'EARTH.GOVERNANCE.POLICY_QUORUM_BPS');
+  assert.equal(earthRule?.authorityModel, 'EARTH_LOCKED');
+  const resolved = resolveConstitutionalRuleSet({
+    earth: { 'CORPORATION.ADMISSION_POLICY': 'OPEN', 'EARTH.GOVERNANCE.POLICY_QUORUM_BPS': 2500n },
+    corporation: { 'CORPORATION.ADMISSION_POLICY': 'APPROVAL' },
+  });
+  assert.equal(resolved['CORPORATION.ADMISSION_POLICY'], 'APPROVAL');
+  assert.equal(resolved['EARTH.GOVERNANCE.POLICY_QUORUM_BPS'], 2500n);
+});
+
+test('Earth Constitution read model omits Corporation-local and duplicate override rows', async () => {
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  assert.match(kernel, /authorityModel === 'CORPORATION_LOCAL'/);
+  assert.match(kernel, /authorityModel === 'EARTH_DEFAULT_CORPORATION_OVERRIDE'/);
+  assert.match(kernel, /if \(!input\.corporationId/);
+  assert.match(kernel, /return \[\];/);
+});
+
+test('V5 Constitution certification covers exact values, clearing, bundling, and effective timing', () => {
+  const preview = previewConstitutionAmendment({
+    currentRules: {
+      'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 2500n,
+      'CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS': 5000n,
+    },
+    fallbackRules: {
+      'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 2000n,
+      'CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS': 5000n,
+    },
+    changes: [
+      { ruleCode: 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS', value: 3000n },
+      { ruleCode: 'CORPORATION.GOVERNANCE.POLICY_APPROVAL_BPS', value: 6000n },
+    ],
+  });
+  assert.equal(preview.changes.length, 2);
+  assert.equal(new Set(preview.changes.map((change) => change.policyGroup)).size, 1);
+  const cleared = previewConstitutionAmendment({
+    currentRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 3000n },
+    fallbackRules: { 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS': 2500n },
+    changes: [{ ruleCode: 'CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS', clearOverride: true }],
+  });
+  assert.equal(cleared.proposedRules['CORPORATION.GOVERNANCE.POLICY_QUORUM_BPS'], 2500n);
+  const timing = deriveV5GovernanceTiming(100, 3, 2);
+  assert.equal(timing.earliestValidEffectiveGameDay, 107);
+  assert.equal(106 < timing.earliestValidEffectiveGameDay, true);
+  assert.throws(() => validateV5FutureEffectiveDay(100, 100), /future game day/);
+});
+
+test('V5 Constitution historical versions remain immutable and retire only through forward state', async () => {
+  const migration = await readFile(new URL('../db/migrations/110_constitution_version_immutability_guard.sql', import.meta.url), 'utf8');
+  assert.match(migration, /Active constitutional rule versions may only be retired/);
+  assert.match(migration, /OLD\.status = 'ACTIVE'/);
+  assert.match(migration, /NEW\.status NOT IN \('ACTIVE', 'RETIRED'\)/);
+  assert.doesNotMatch(migration, /DELETE FROM constitutional_rule_versions_v5/);
+});
+
+test('V5 Constitution read model exposes inheritance and suppresses duplicate Earth defaults', async () => {
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  const models = await readFile(new URL('../cloudflare/src/constitution-read-model.ts', import.meta.url), 'utf8');
+  assert.match(kernel, /earthDefault:/);
+  assert.match(kernel, /inheritanceStatus/);
+  assert.match(kernel, /LOCAL_OVERRIDE/);
+  assert.match(kernel, /INHERITED/);
+  assert.match(kernel, /Corporation override definitions are a Corporation-scope view/);
+  assert.match(kernel, /!input\.corporationId && authorityModel === 'EARTH_DEFAULT_CORPORATION_OVERRIDE'/);
+  assert.match(models, /earthDefault: ResolvedConstitutionValue \| null/);
+  assert.match(models, /inheritanceStatus: 'EARTH' \| 'INHERITED' \| 'LOCAL_OVERRIDE' \| null/);
+});
+
+test('V5 Constitution legal history uses version and atomic change-set records', async () => {
+  const kernel = await readFile(new URL('../cloudflare/src/constitutional-kernel-postgres.ts', import.meta.url), 'utf8');
+  const panel = await readFile(new URL('../flutter_client/lib/features/governance/constitution_panel.dart', import.meta.url), 'utf8');
+  assert.match(kernel, /constitutional_change_sets_v5/);
+  assert.match(kernel, /changeSets/);
+  assert.match(kernel, /constitutional_rule_versions_v5 rv/);
+  assert.match(panel, /ConstitutionChangeSet\.fromJson/);
+  assert.match(panel, /onNavigate!\('governance'\)/);
+  assert.match(panel, /ExpansionTile/);
+  assert.doesNotMatch(panel, /organization_charter_amended/);
+  assert.doesNotMatch(panel, /territory_charter_amended/);
 });
 
 test('V5 tax statements consume assessed-day Constitution snapshots with provenance', async () => {

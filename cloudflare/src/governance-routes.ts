@@ -12,11 +12,11 @@ import {
 } from './governance-postgres.ts';
 import { createProposalV3, castVoteV3 } from './governance-v3-postgres.ts';
 import { castGovernanceVoteV4, createGovernanceProposalV4, getOrganizationVotingSettings, resolveGovernanceProposalV4, setOrganizationVotingSettings } from './governance-v4-postgres.ts';
-import { castV5GovernanceVote, createV5GovernanceProposal, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
+import { castV5GovernanceVote, createV5GovernanceProposal, getV5GovernancePolicy, listV5GovernanceProposals, resolveV5GovernanceProposal } from './v5-governance-postgres.ts';
 import { getConstitutionReadModel, getResolvedConstitutionForDay } from './constitutional-kernel-postgres.ts';
-import { getConstitutionalRuleDefinition } from './v5-constitution.ts';
+import { getConstitutionalRuleDefinition, parseConstitutionalInputValue } from './v5-constitution.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
-import { previewConstitutionAmendment, previewProgressivePolicyChange } from './v5-governance.ts';
+import { deriveV5GovernanceTiming, previewConstitutionAmendment, previewProgressivePolicyChange } from './v5-governance.ts';
 import type { ProgressiveBracket } from './v5-progressive.ts';
 
 export async function handleGovernanceRoutes(
@@ -40,6 +40,8 @@ export async function handleGovernanceRoutes(
         const gameDay = clock.gameDay;
         const current = await getResolvedConstitutionForDay(repository, { corporationId, gameDay });
         const earth = corporationId ? await getResolvedConstitutionForDay(repository, { gameDay }) : undefined;
+        const governancePolicy = await getV5GovernancePolicy(repository, corporationId ? 'CORPORATION' : 'EARTH', corporationId ?? null, gameDay);
+        const timing = deriveV5GovernanceTiming(gameDay, governancePolicy.votingPeriodDays, governancePolicy.implementationDelayDays);
         for (const change of parsed.value.changes!) {
           const definition = getConstitutionalRuleDefinition(String(change.ruleCode ?? ''));
           if (!corporationId && definition.authorityModel === 'CORPORATION_LOCAL') throw new Error('Corporation-local rule cannot be previewed at Earth scope');
@@ -62,7 +64,10 @@ export async function handleGovernanceRoutes(
           const missingSchedule = proposedScheduleIds.find((scheduleId) => !activeScheduleIds.has(scheduleId));
           if (missingSchedule) throw new Error(`Progressive schedule is not an active canonical policy: ${missingSchedule}`);
         }
-        const preview = previewConstitutionAmendment({ currentRules: current.rules, fallbackRules: earth?.rules, changes: parsed.value.changes!.map((change) => ({ ruleCode: String(change.ruleCode ?? ''), value: change.value, clearOverride: change.clearOverride })) });
+        const preview = previewConstitutionAmendment({ currentRules: current.rules, fallbackRules: earth?.rules, changes: parsed.value.changes!.map((change) => {
+          const ruleCode = String(change.ruleCode ?? '');
+          return { ruleCode, value: change.clearOverride ? undefined : parseConstitutionalInputValue(ruleCode, change.value), clearOverride: change.clearOverride };
+        }) });
         const scheduleChanges = preview.changes.filter((change) => {
           const definition = getConstitutionalRuleDefinition(change.ruleCode);
           return definition.valueType === 'PROGRESSIVE_SCHEDULE_REF' && typeof change.currentValue === 'string' && typeof change.proposedValue === 'string';
@@ -105,7 +110,19 @@ export async function handleGovernanceRoutes(
             }),
           }];
         });
-        return { ...preview, progressiveEffects, gameDay, corporationId: corporationId ?? null, versionIds: current.versionIds, generatedFrom: 'postgres-constitutional-kernel-v5-preview' };
+        return {
+          ...preview,
+          progressiveEffects,
+          gameDay,
+          corporationId: corporationId ?? null,
+          versionIds: current.versionIds,
+          votingStartGameDay: timing.votingStartGameDay,
+          votingEndGameDay: timing.votingEndGameDay,
+          implementationDelayDays: timing.implementationDelayDays,
+          earliestValidEffectiveGameDay: timing.earliestValidEffectiveGameDay,
+          effectiveFromGameDay: timing.earliestValidEffectiveGameDay,
+          generatedFrom: 'postgres-constitutional-kernel-v5-preview',
+        };
       });
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return new Response(JSON.stringify({ ok: true, ...result }, (_, value) => typeof value === 'bigint' ? value.toString() : value), { headers: { 'content-type': 'application/json; charset=utf-8' } });

@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
-import { CONSTITUTIONAL_RULE_DEFINITIONS, earthDefaultRuleCode, resolveConstitutionalRuleSet, type EffectiveRuleSet } from './v5-constitution.ts';
+import { CONSTITUTIONAL_RULE_DEFINITIONS, constitutionalInputSpec, earthDefaultRuleCode, resolveConstitutionalRuleSet, type EffectiveRuleSet } from './v5-constitution.ts';
+import { constitutionArticleLabel, constitutionRuleLabel, type ConstitutionArticle, type ConstitutionChangeSet, type ConstitutionProgressiveSchedule, type ConstitutionRuleView, type ConstitutionVersionHistory, type ScheduledConstitutionChange } from './constitution-read-model.ts';
 
 type RuleRow = {
   id: string;
@@ -166,14 +167,14 @@ export async function getConstitutionReadModel(
        WHERE active = TRUE
        ORDER BY article_code, rule_code`),
     repository.query(`
-    SELECT rule_code, authority_type, authority_id, version, value_json,
+    SELECT id, rule_code, authority_type, authority_id, version, value_json,
            effective_from_game_day, effective_to_game_day, status, proposal_id
       FROM constitutional_rule_versions_v5
      WHERE (authority_type = 'EARTH' AND authority_id = 'EARTH')
         OR (authority_type = 'CORPORATION' AND authority_id = $1)
      ORDER BY rule_code, effective_from_game_day DESC, version DESC`, [input.corporationId ?? '']),
     repository.query(`
-      SELECT rule_code, authority_type, authority_id, version, value_json,
+      SELECT id, rule_code, authority_type, authority_id, version, value_json,
              effective_from_game_day, proposal_id
         FROM constitutional_rule_versions_v5
        WHERE effective_from_game_day > $1
@@ -182,7 +183,171 @@ export async function getConstitutionReadModel(
            OR (authority_type = 'CORPORATION' AND authority_id = $2))
        ORDER BY effective_from_game_day, rule_code, version`, [input.gameDay, input.corporationId ?? '']),
   ]);
+  const scheduleAuthorityIds = input.corporationId ? ['EARTH', input.corporationId] : ['EARTH'];
+  const scheduleRows = (await repository.query(`
+    SELECT s.id, s.code, s.basis_type, s.authority_institution_id, s.version,
+           s.effective_from_game_day,
+           b.ordinal, b.lower_bound_units::TEXT AS lower_bound_units,
+           b.upper_bound_units::TEXT AS upper_bound_units,
+           b.marginal_multiplier_numerator::TEXT AS marginal_multiplier_numerator,
+           b.marginal_multiplier_denominator::TEXT AS marginal_multiplier_denominator
+      FROM progressive_policy_schedules s
+      LEFT JOIN progressive_policy_brackets b ON b.schedule_id = s.id
+     WHERE s.status = 'ACTIVE'
+       AND s.authority_institution_id = ANY($1::TEXT[])
+     ORDER BY s.code, s.version DESC, b.ordinal`, [scheduleAuthorityIds])).rows;
+  const progressiveSchedulesById = new Map<string, ConstitutionProgressiveSchedule>();
+  for (const row of scheduleRows as any[]) {
+    const id = String(row.id);
+    const schedule = progressiveSchedulesById.get(id) ?? {
+      id,
+      code: String(row.code),
+      basisType: String(row.basis_type),
+      authorityInstitutionId: String(row.authority_institution_id),
+      version: Number(row.version),
+      effectiveFromGameDay: Number(row.effective_from_game_day),
+      brackets: [],
+    };
+    if (row.ordinal != null) schedule.brackets.push({
+      ordinal: Number(row.ordinal),
+      lowerBoundUnits: String(row.lower_bound_units),
+      upperBoundUnits: row.upper_bound_units == null ? null : String(row.upper_bound_units),
+      marginalMultiplierNumerator: String(row.marginal_multiplier_numerator),
+      marginalMultiplierDenominator: String(row.marginal_multiplier_denominator),
+    });
+    progressiveSchedulesById.set(id, schedule);
+  }
   const history = historyResult.rows;
+  const versionById = new Map(history.map((row: any) => [String(row.id), row]));
+  const changeSetRows = (await repository.query(`
+    SELECT cs.proposal_id, cs.authority_type, cs.authority_id, cs.policy_group,
+           cs.changes, cs.base_version_snapshot,
+           MIN(rv.effective_from_game_day) AS effective_from_game_day
+      FROM constitutional_change_sets_v5 cs
+      LEFT JOIN constitutional_rule_versions_v5 rv
+        ON rv.proposal_id = cs.proposal_id
+     WHERE (cs.authority_type = 'EARTH' AND cs.authority_id = 'EARTH')
+        OR (cs.authority_type = 'CORPORATION' AND cs.authority_id = $1)
+     GROUP BY cs.proposal_id, cs.authority_type, cs.authority_id,
+              cs.policy_group, cs.changes, cs.base_version_snapshot
+     ORDER BY MIN(rv.effective_from_game_day) DESC NULLS LAST, cs.proposal_id`, [input.corporationId ?? ''])).rows;
+  const changeSets: ConstitutionChangeSet[] = (changeSetRows as any[]).map((row) => ({
+    proposalId: String(row.proposal_id),
+    authorityType: row.authority_type,
+    authorityId: String(row.authority_id),
+    policyGroup: String(row.policy_group),
+    changes: Array.isArray(row.changes) ? row.changes : [],
+    baseVersionSnapshot: row.base_version_snapshot && typeof row.base_version_snapshot === 'object' ? row.base_version_snapshot : {},
+    effectiveFromGameDay: row.effective_from_game_day == null ? null : Number(row.effective_from_game_day),
+  }));
+  const ruleViews: ConstitutionRuleView[] = definitionsResult.rows.flatMap((definition: any) => {
+    const code = String(definition.rule_code);
+    const registryDefinition = CONSTITUTIONAL_RULE_DEFINITIONS.find((item) => item.code === code);
+    const authorityModel = String(definition.authority_model ?? 'UNKNOWN');
+    const earthCode = earthDefaultRuleCode(code);
+    // Corporation override definitions are a Corporation-scope view. At
+    // Earth scope the mapped Earth rule is the canonical row; emitting both
+    // would display the same default twice under different codes.
+    if (!input.corporationId && authorityModel === 'CORPORATION_LOCAL') {
+      return [];
+    }
+    if (!input.corporationId && authorityModel === 'EARTH_DEFAULT_CORPORATION_OVERRIDE' && earthCode && resolved.rules[earthCode] !== undefined) {
+      return [];
+    }
+    const versionId = resolved.versionIds[code] ?? null;
+    const version = versionId == null ? undefined : versionById.get(String(versionId));
+    const articleCode = String(definition.article_code ?? 'OTHER_POLICY');
+    const earthDefaultVersionId = earthCode ? (earth?.versionIds[earthCode] ?? null) : null;
+    const earthDefaultVersion = earthDefaultVersionId == null ? undefined : versionById.get(String(earthDefaultVersionId));
+    const hasEarthDefault = Boolean(earthCode && earth?.rules[earthCode] !== undefined);
+    const isLocalOverride = input.corporationId != null && authorityModel === 'EARTH_DEFAULT_CORPORATION_OVERRIDE' && resolved.provenance[code] === 'CORPORATION';
+    const isInherited = input.corporationId != null && authorityModel === 'EARTH_DEFAULT_CORPORATION_OVERRIDE' && hasEarthDefault && !isLocalOverride;
+    return [{
+      code,
+      articleCode,
+      valueType: String(definition.value_type ?? 'POLICY'),
+      authorityModel,
+      policyGroup: String(definition.policy_group ?? 'UNKNOWN'),
+      amendmentClass: String(definition.amendment_class ?? 'UNKNOWN'),
+      calculationKey: String(definition.calculation_key ?? code),
+      allowedValues: toJsonSafe(definition.allowed_values ?? null),
+      validation: toJsonSafe(definition.validation_schema ?? null),
+      displayName: registryDefinition?.displayName ?? constitutionRuleLabel(code),
+      description: registryDefinition?.description ?? `Canonical ${String(definition.value_type ?? 'policy').replaceAll('_', ' ').toLowerCase()} rule in the ${constitutionArticleLabel(articleCode)} policy article.`,
+      articleLabel: registryDefinition?.articleLabel ?? constitutionArticleLabel(articleCode),
+      order: registryDefinition?.order ?? 9999,
+      inputHint: registryDefinition?.inputHint ?? 'Use the canonical input format.',
+      displayHint: registryDefinition?.displayHint ?? String(definition.value_type ?? 'POLICY'),
+      inputSpec: constitutionalInputSpec(CONSTITUTIONAL_RULE_DEFINITIONS.find((item) => item.code === code) ?? {
+        code,
+        articleCode,
+        valueType: String(definition.value_type ?? 'INTEGER') as any,
+        authorityModel: String(definition.authority_model ?? 'EARTH_LOCKED') as any,
+        policyGroup: String(definition.policy_group ?? 'UNKNOWN'),
+        calculationKey: String(definition.calculation_key ?? code),
+        amendmentClass: String(definition.amendment_class ?? 'POLICY') as any,
+        allowedValues: Array.isArray(definition.allowed_values) ? definition.allowed_values.map(String) : [],
+        displayName: constitutionRuleLabel(code),
+        description: 'Canonical Constitution rule.',
+        articleLabel: constitutionArticleLabel(articleCode),
+        order: 9999,
+        inputHint: 'Use the canonical input format.',
+        displayHint: String(definition.value_type ?? 'POLICY'),
+      }, definition.validation_schema),
+      resolved: {
+        value: toJsonSafe(resolved.rules[code] ?? null),
+        source: resolved.provenance[code] ?? null,
+        versionId,
+        effectiveFromGameDay: version?.effective_from_game_day == null ? null : Number(version.effective_from_game_day),
+      },
+      earthDefault: hasEarthDefault ? {
+        value: toJsonSafe(earth!.rules[earthCode!]),
+        source: 'EARTH',
+        versionId: earthDefaultVersionId,
+        effectiveFromGameDay: earthDefaultVersion?.effective_from_game_day == null ? null : Number(earthDefaultVersion.effective_from_game_day),
+      } : null,
+      inheritanceStatus: input.corporationId == null
+        ? 'EARTH'
+        : isLocalOverride
+          ? 'LOCAL_OVERRIDE'
+          : isInherited
+            ? 'INHERITED'
+            : null,
+    }];
+  });
+  ruleViews.sort((left, right) => left.order - right.order || left.code.localeCompare(right.code));
+  const articlesByCode = new Map<string, ConstitutionArticle>();
+  for (const rule of ruleViews) {
+    const article = articlesByCode.get(rule.articleCode) ?? {
+      articleCode: rule.articleCode,
+      displayName: rule.articleLabel,
+      ruleCodes: [],
+    };
+    article.ruleCodes.push(rule.code);
+    articlesByCode.set(rule.articleCode, article);
+  }
+  const scheduledChanges: ScheduledConstitutionChange[] = scheduledResult.rows.map((row: any) => ({
+    ruleCode: String(row.rule_code),
+    authorityType: row.authority_type,
+    authorityId: String(row.authority_id),
+    versionId: String(row.id),
+    version: Number(row.version),
+    effectiveFromGameDay: Number(row.effective_from_game_day),
+    proposalId: row.proposal_id == null ? null : String(row.proposal_id),
+    value: toJsonSafe(row.value_json?.value ?? row.value_json?.scheduleId ?? row.value_json),
+  }));
+  const versionHistory: ConstitutionVersionHistory[] = history.map((row: any) => ({
+    ruleCode: String(row.rule_code),
+    authorityType: row.authority_type,
+    authorityId: String(row.authority_id),
+    versionId: String(row.id),
+    version: Number(row.version),
+    effectiveFromGameDay: Number(row.effective_from_game_day),
+    effectiveToGameDay: row.effective_to_game_day == null ? null : Number(row.effective_to_game_day),
+    status: String(row.status),
+    proposalId: row.proposal_id == null ? null : String(row.proposal_id),
+    value: toJsonSafe(row.value_json?.value ?? row.value_json?.scheduleId ?? row.value_json),
+  }));
   const progressiveCodes = new Set(definitionsResult.rows
     .filter((definition) => definition.value_type === 'PROGRESSIVE_SCHEDULE_REF')
     .map((definition) => String(definition.rule_code)));
@@ -216,7 +381,13 @@ export async function getConstitutionReadModel(
     definitions: toJsonSafe(definitionsResult.rows),
     history: toJsonSafe(history),
     scheduledChanges: toJsonSafe(scheduledResult.rows),
+    ruleViews: toJsonSafe(ruleViews),
+    articles: toJsonSafe([...articlesByCode.values()]),
+    versionHistory: toJsonSafe(versionHistory),
+    changeSets: toJsonSafe(changeSets),
+    scheduledChangeViews: toJsonSafe(scheduledChanges),
     scheduleBrackets: toJsonSafe(scheduleBrackets),
+    progressiveSchedules: toJsonSafe([...progressiveSchedulesById.values()]),
     generatedFrom: 'postgres-constitutional-kernel-v5',
   };
 }

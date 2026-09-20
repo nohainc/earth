@@ -57,6 +57,7 @@ void main() {
   });
 
   test('formatCreditUnits formats atomic CREDIT with integer arithmetic', () {
+    expect(formatCreditUnits('100'), '1.00 C');
     expect(formatCreditUnits('12500'), '125.00 C');
     expect(formatCreditUnits('50000'), '500.00 C');
     expect(formatCreditUnits(1), '0.01 C');
@@ -64,5 +65,22 @@ void main() {
     expect(formatCreditUnits('9007199254740993'), '90071992547409.93 C');
     expect(formatCreditUnits('invalid'), 'UNAVAILABLE');
     expect(formatCreditUnits(null), 'UNAVAILABLE');
+  });
+
+  test('ConstitutionValueFormatter formats every canonical value type', () {
+    expect(ConstitutionValueFormatter.format('500', 'RATE_BPS'), '5.00%');
+    expect(
+        ConstitutionValueFormatter.format('12500', 'CREDIT_UNITS'), '125.00 C');
+    expect(ConstitutionValueFormatter.format('7', 'GAME_DAYS'), '7 game days');
+    expect(ConstitutionValueFormatter.format('INVITE_ONLY', 'ENUM'),
+        'Invite Only');
+    expect(ConstitutionValueFormatter.format(true, 'BOOLEAN'), 'ON');
+    expect(ConstitutionValueFormatter.format('42', 'INTEGER'), '42');
+    expect(ConstitutionValueFormatter.format('10000000', 'RESOURCE_UNITS'),
+        '10000000');
+    expect(
+        ConstitutionValueFormatter.format(
+            'SCHEDULE-V1', 'PROGRESSIVE_SCHEDULE_REF'),
+        'Schedule SCHEDULE-V1');
   });
 }

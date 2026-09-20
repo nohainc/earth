@@ -51,11 +51,34 @@ export type ConstitutionAmendmentPreview = {
     ruleCode: string;
     articleCode: string;
     policyGroup: string;
+    valueType: string;
     currentValue: unknown;
     proposedValue: unknown;
     clearedOverride: boolean;
   }>;
 };
+
+export type V5GovernanceTiming = {
+  votingStartGameDay: number;
+  votingEndGameDay: number;
+  implementationDelayDays: number;
+  earliestValidEffectiveGameDay: number;
+};
+
+export function deriveV5GovernanceTiming(
+  currentGameDay: number,
+  votingPeriodDays: number,
+  implementationDelayDays: number,
+): V5GovernanceTiming {
+  const votingStartGameDay = currentGameDay + 1;
+  const votingEndGameDay = votingStartGameDay + votingPeriodDays;
+  return {
+    votingStartGameDay,
+    votingEndGameDay,
+    implementationDelayDays,
+    earliestValidEffectiveGameDay: votingEndGameDay + implementationDelayDays + 1,
+  };
+}
 
 function positiveInteger(value: unknown, field: string): bigint {
   const parsed = typeof value === 'bigint' ? value : BigInt(String(value ?? ''));
@@ -165,6 +188,7 @@ export function previewConstitutionAmendment(input: {
     return {
       ruleCode,
       articleCode: definition.articleCode,
+      valueType: definition.valueType,
       policyGroup: definition.policyGroup,
       currentValue,
       proposedValue: proposedRules[ruleCode],
