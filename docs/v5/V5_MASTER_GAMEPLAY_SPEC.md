@@ -462,7 +462,7 @@ Buildings remain the primary private productive assets.
 A building has:
 
 - canonical ownership scope;
-- tier/blueprint/generation;
+- Building Tier/blueprint and Domain Generation;
 - footprint/capacity usage;
 - construction cost/time;
 - resource inputs;
@@ -485,10 +485,22 @@ productivity per capacity unit becomes a major long-term strategic dimension.
 V5 retains tiered/predefined building blueprints and general Corporation
 technology/R&D but requires all economic effects to be authoritative.
 
-Long-term progression should not depend on unlimited building tiers. It comes
-from a combination of:
+Long-term progression should not depend on unlimited Building Tiers. V5 uses
+three distinct progression concepts:
 
-- better technology/blueprints/generations;
+- **Building Tier** — the authored level of one building blueprint family. A
+  Tier IV building is a more advanced blueprint in that family.
+- **Domain Generation** — the Earth frontier level of a technology domain. A
+  Generation III domain is a world-level technology boundary and advances
+  through V5 Governance.
+- **Capability** — a named researched technology effect funded by a
+  Corporation. A Capability can change outcomes without changing a building's
+  Tier or the Earth's Domain Generation.
+
+These concepts must not be presented as interchangeable “technology level”
+values. Long-term progression comes from their combination with:
+
+- better Building Tiers, Domain Generations, and researched Capabilities;
 - higher productivity per scarce capacity unit;
 - market specialization;
 - Corporation technology strategy;
@@ -505,6 +517,19 @@ RESEARCH → UNLOCK/ACCESS → DEPLOY/BUILD/UPGRADE
 
 Research completion does not silently upgrade every building unless the
 canonical technology effect explicitly defines automatic adoption.
+
+V5 technology access and IP policy:
+
+- Research is funded and initiated by the Corporation research budget.
+- A completed Corporation research project grants access through the canonical
+  `corporation_technology_access` model.
+- Patentability is an explicit catalog property. Patent rights are
+  Corporation-owned, time-limited, and finalized by daily settlement.
+- Licenses are explicit Corporation-to-Corporation contracts. Licensed access
+  is resolved through the same technology-access resolver and daily license
+  fees use Economy V2 transactions.
+- Human-level technology adoption and subscription systems are retired. They
+  must not create a second access, payment, or progression economy.
 
 ---
 

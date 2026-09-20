@@ -561,7 +561,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         : const <String, dynamic>{};
     String units(String key) {
       final raw = capacity[key];
-      return raw == null ? 'UNAVAILABLE' : formatCreditsAmount(raw);
+      return raw == null ? 'UNAVAILABLE' : formatCreditUnits(raw);
     }
 
     return Column(

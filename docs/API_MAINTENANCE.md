@@ -12,4 +12,10 @@ When changing an API:
 
 The API-surface regression test is `test/api-surface.test.mjs`. It protects canonical replacements and prevents retired aliases from being reintroduced during future changes.
 
-Retired namespaces currently include public-investment share operations, patent/licensing operations, manual clock mutation, dynasty aliases, and the successor alias. Their replacements are civic building operations, corporation research/subscriptions, the trusted scheduler, `/api/house/*`, and `/api/life/successor` respectively.
+Retired namespaces currently include public-investment share operations,
+legacy Organization technology-adoption operations, human-level technology
+subscriptions, manual clock mutation, dynasty aliases, and the successor
+alias. Patent and licensing records remain settlement-owned V5 domain facts;
+they have no player mutation endpoint in the legacy Organization namespace.
+Corporation research, canonical technology access, and V5 Governance are the
+active player-facing technology surfaces.

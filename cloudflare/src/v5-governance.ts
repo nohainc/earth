@@ -4,6 +4,7 @@ import { getConstitutionalRuleDefinition, validateConstitutionalRuleValue, type 
 export type V5GovernanceActionType =
   | 'CONSTITUTION_AMENDMENT'
   | 'CORPORATION_PUBLIC_CONSTRUCTION'
+  | 'CORPORATION_BUILDING_RESEARCH'
   | 'CORPORATION_SCALE_RESEARCH'
   | 'EARTH_TECHNOLOGY_FRONTIER'
   | 'EARTH_CAPACITY_POLICY'
@@ -30,6 +31,7 @@ export type V5GovernanceAction = {
   researchCreditCostUnits?: bigint;
   researchResourceCosts?: Record<string, string>;
   buildingType?: string;
+  targetTier?: number;
   territoryId?: string;
   name?: string;
   generation?: number;
@@ -86,6 +88,13 @@ export function validateV5GovernanceAction(action: V5GovernanceAction, currentGa
     if (action.generation != null && (!Number.isInteger(action.generation) || action.generation < 1)) {
       throw new Error('Generation must be a positive integer');
     }
+    return;
+  }
+  if (action.actionType === 'CORPORATION_BUILDING_RESEARCH') {
+    if (!action.corporationId?.trim()) throw new Error('Corporation is required');
+    if (!action.buildingType?.trim()) throw new Error('Building family is required');
+    if (!Number.isInteger(action.targetTier) || Number(action.targetTier) < 2) throw new Error('Target building tier must be at least 2');
+    if (action.researchCreditCostUnits != null) positiveInteger(action.researchCreditCostUnits, 'Building research CREDIT cost');
     return;
   }
   if (action.actionType === 'CORPORATION_SCALE_RESEARCH') {

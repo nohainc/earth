@@ -74,7 +74,7 @@ Future<bool?> showBuildingUpgradeDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('Upgrade $buildingName'),
-      content: Text('Upgrade $buildingName to next tier.'),
+      content: Text('Upgrade $buildingName to the next Building Tier.'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),

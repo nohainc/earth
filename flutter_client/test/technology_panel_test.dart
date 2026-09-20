@@ -3,391 +3,143 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/operations/technology_panel.dart';
 
-void main() {
-  testWidgets(
-      'TechnologyOutcomePanel explains catalog capabilities and effects',
-      (tester) async {
-    const state = EarthState({
-      'technology': {
-        'catalog': [
+const _catalogState = EarthState({
+  'technology': {
+    'catalog': [
+      {
+        'id': 'TECH-FOOD-1',
+        'code': 'food_science',
+        'name': 'Food Science',
+        'category': 'LIFE_SUPPORT',
+        'description': 'Improves food production efficiency.',
+        'researchCostUnits': '18000',
+        'researchDurationGameDays': '12',
+        'researchPointsRequired': '900',
+        'viewerStatus': 'AVAILABLE',
+        'effects': [
           {
-            'name': 'Food Synthesis',
-            'description': 'Builds resilient local food capacity.',
-            'effect': 'Stronger food reserves',
-          },
-        ],
-      },
-    });
-
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-              child: TechnologyOutcomePanel(state: state)),
-        ),
-      ),
-    );
-
-    expect(find.text('CAPABILITY OUTCOMES'), findsOneWidget);
-    expect(find.text('Food Synthesis'), findsOneWidget);
-    expect(find.text('STRONGER FOOD RESERVES'), findsOneWidget);
-    expect(find.text('Builds resilient local food capacity.'), findsOneWidget);
-  });
-
-  testWidgets(
-      'TechnologyPanel renders research progress, budget, and triggers funding',
-      (tester) async {
-    const state = EarthState({
-      'clock': {'day': 184, 'minute': 100},
-      'human': {'id': 'H-0044', 'credits': 5000},
-      'world': {'health': 100},
-      'resources': {},
-      'business': {},
-      'technology': {
-        'research': {
-          'id': 'TECH-001',
-          'name': 'Adaptive Maintenance AI',
-          'progress': 72,
-          'budget': 1440,
-          'focus': 'efficiency',
-          'status': 'active',
-        },
-        'activePatents': 0,
-        'activeLicenses': 0,
-      },
-      'technologyRegistry': {
-        'activePatents': 0,
-        'activeLicenses': 0,
-      },
-      'membership': {'corporation_id': 'CORP-001'},
-      'institutions': {},
-      'life': {},
-      'governance': {},
-      'market': {'orders': []},
-    });
-
-    bool fundTriggered = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: TechnologyPanel(
-              state: state,
-              busy: false,
-              initialTab: 1,
-              action: (cb) async {
-                fundTriggered = true;
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('ADAPTIVE MAINTENANCE AI'), findsOneWidget);
-    expect(find.text('72%'), findsOneWidget);
-    expect(find.textContaining('PROJECT ID: TECH-001  ·  FOCUS: efficiency'),
-        findsOneWidget);
-    expect(find.text('FUND 240 C · +4% MAX'), findsNothing);
-
-    // Verify info icon is present and opens description dialog
-    expect(find.byIcon(Icons.info_outline), findsWidgets);
-    await tester.tap(find.byIcon(Icons.info_outline).first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Choose and fund a capability'), findsOneWidget);
-    await tester.tap(find.text('CLOSE'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('NEW PROJECT · CATALOG COST'), findsOneWidget);
-    expect(fundTriggered, isFalse);
-  });
-
-  testWidgets('TechnologyPanel enables patent grant when research reaches 100%',
-      (tester) async {
-    return;
-    const completedState = EarthState({
-      'clock': {'day': 184, 'minute': 100},
-      'human': {'id': 'H-0044', 'credits': 5000},
-      'world': {'health': 100},
-      'resources': {},
-      'business': {},
-      'technology': {
-        'research': {
-          'id': 'TECH-001',
-          'name': 'Adaptive Maintenance AI',
-          'progress': 100,
-          'budget': 2400,
-          'focus': 'efficiency',
-          'status': 'completed',
-        },
-        'activePatents': 1,
-        'activeLicenses': 1,
-      },
-      'technologyRegistry': {
-        'activePatents': 1,
-        'activeLicenses': 1,
-      },
-      'institutions': {},
-      'life': {},
-      'governance': {},
-      'market': {'orders': []},
-    });
-
-    bool patentTriggered = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: TechnologyPanel(
-              state: completedState,
-              busy: false,
-              action: (cb) async {
-                patentTriggered = true;
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('100%'), findsOneWidget);
-    expect(find.textContaining('Status: COMPLETED'), findsOneWidget);
-    final grantButton = find.text('GRANT PATENT');
-    expect(grantButton, findsOneWidget);
-    await tester.tap(grantButton);
-    await tester.pumpAndSettle();
-
-    expect(patentTriggered, isTrue);
-  });
-
-  testWidgets(
-      'TechnologyPanel renders 24-year statutory patent term and public domain transition',
-      (tester) async {
-    return;
-    const patentState = EarthState({
-      'clock': {'day': 40, 'minute': 100},
-      'human': {'id': 'H-0044', 'credits': 5000},
-      'world': {'health': 100},
-      'resources': {},
-      'business': {},
-      'technology': {
-        'research': {
-          'id': 'TECH-001',
-          'name': 'Adaptive Maintenance AI',
-          'progress': 100,
-          'budget': 2400,
-          'focus': 'efficiency',
-          'status': 'completed',
-          'patentGrantedDay': 10,
-        },
-        'activePatents': 1,
-        'activeLicenses': 2,
-      },
-      'technologyRegistry': {
-        'activePatents': 1,
-        'activeLicenses': 2,
-      },
-      'institutions': {},
-      'life': {},
-      'governance': {},
-      'market': {'orders': []},
-    });
-
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: TechnologyPanel(
-              state: patentState,
-              busy: false,
-              action: _dummyAction,
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(
-        find.text('COMMERCIAL OPTIONS FOR COMPLETED RESEARCH'), findsOneWidget);
-    expect(find.text('PUBLIC DOMAIN TERM'), findsOneWidget);
-    expect(find.text('258d remaining'), findsOneWidget);
-    expect(find.text('24-year statutory term'), findsOneWidget);
-  });
-
-  testWidgets(
-      'CorporateBuildingResearchPanel renders building cards, sub-tabs, tier data, and confirms research',
-      (tester) async {
-    const state = EarthState({
-      'membership': {'corporation_id': 'CORP-001'},
-      'corporationBuildingResearch': {
-        'corporationId': 'CORP-001',
-        'projects': [
-          {
-            'id': 'CBR-001',
-            'building_type': 'restaurant',
-            'catalog_name': 'Molecular Bistro',
-            'target_tier': 2,
-            'progress': 65.0,
-            'status': 'active',
+            'effectType': 'PRODUCTION_OUTPUT',
+            'modifierFamily': 'OUTPUT',
+            'targetType': 'RESOURCE',
+            'targetKey': 'FOOD',
+            'modifierBps': 1000,
           }
         ],
-        'unlocks': [],
+        'prerequisites': [],
       },
-      'buildingCatalog': [
-        {
-          'building_type': 'restaurant',
-          'name': 'Molecular Bistro',
-          'category': 'commercial',
-          'ownership_class': 'private',
-          'cost_credits': 38000,
-          'construction_days': 2,
-          'research_credit_cost_units': 1000,
-          'construction_minutes': 2880,
-          'tier': 1,
-        },
-        {
-          'building_type': 'geothermal-grid',
-          'name': 'Geothermal Core Grid',
-          'category': 'energy',
-          'ownership_class': 'civic',
-          'cost_credits': 140000,
-          'construction_days': 5,
-          'research_credit_cost_units': 1000,
-          'construction_minutes': 7200,
-          'tier': 1,
-        },
-      ],
-    });
+      {
+        'id': 'TECH-AUTO-1',
+        'code': 'automation',
+        'name': 'Industrial Automation',
+        'category': 'INDUSTRY',
+        'description': 'Improves industrial output.',
+        'researchCostUnits': '25000',
+        'researchDurationGameDays': '15',
+        'researchPointsRequired': '1000',
+        'viewerStatus': 'ACTIVE',
+        'effects': [],
+        'prerequisites': ['TECH-FOUNDATION'],
+      },
+      {
+        'id': 'TECH-LOCKED-1',
+        'code': 'locked_technology',
+        'name': 'Locked Technology',
+        'category': 'INDUSTRY',
+        'description': 'Unavailable until authority is granted.',
+        'researchCostUnits': '40000',
+        'researchDurationGameDays': '20',
+        'researchPointsRequired': '1400',
+        'viewerStatus': 'LOCKED',
+        'effects': [],
+        'prerequisites': ['TECH-PREREQUISITE'],
+      },
+    ],
+    'projects': [
+      {
+        'id': 'PROJECT-AUTO',
+        'name': 'Industrial Automation',
+        'targetType': 'TECHNOLOGY',
+        'targetId': 'TECH-AUTO-1',
+        'status': 'ACTIVE',
+        'creditCostUnits': '25000',
+        'startedGameDay': 175,
+        'progressBps': 5000,
+        'remainingGameDays': 3,
+        'completionGameDay': 190,
+      }
+    ],
+    'adoptedCodes': [],
+    'researchBudget': {
+      'authorizedUnits': '100000',
+      'committedUnits': '25000',
+      'spentUnits': '10000',
+      'availableUnits': '65000',
+      'status': 'ACTIVE',
+    },
+    'frontier': [],
+  },
+});
 
-    String? researchedType;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: CorporateBuildingResearchPanel(
-              state: state,
-              busy: false,
-              action: (cb) async {
-                researchedType = 'geothermal-grid';
-              },
-            ),
-          ),
+void main() {
+  testWidgets('catalog renders fixed cost, typed effects, status, and countdown',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: TechnologyOutcomePanel(state: _catalogState),
         ),
       ),
-    );
-    await tester.pumpAndSettle();
+    ));
 
-    // Verify sub-tabs render
-    expect(find.textContaining('ALL BLUEPRINTS'), findsOneWidget);
-    expect(find.textContaining('PRIVATE SECTOR'), findsWidgets);
-    expect(find.textContaining('CIVIC & UTILITY'), findsOneWidget);
-
-    // Active research is shown on its matching blueprint card.
-    expect(find.text('R&D IN PROGRESS'), findsOneWidget);
-    expect(find.textContaining('65%'), findsWidgets);
-
-    // Filter to CIVIC & UTILITY
-    await tester.tap(find.textContaining('CIVIC & UTILITY'));
-    await tester.pumpAndSettle();
-    expect(find.text('Geothermal Core Grid'), findsOneWidget);
-    expect(find.textContaining('CIVIC'), findsWidgets);
-
-    // Search for Geothermal
-    await tester.enterText(find.byType(TextField).first, 'Geothermal');
-    await tester.pumpAndSettle();
-    expect(find.text('Geothermal Core Grid'), findsOneWidget);
-
-    // Tap research button for Geothermal Core Grid
-    final researchBtn = find.text('PROPOSE CIVIC RESEARCH TIER 2');
-    expect(researchBtn, findsOneWidget);
-    await tester.ensureVisible(researchBtn);
-    await tester.tap(researchBtn);
-    await tester.pumpAndSettle();
-
-    // Verify confirmation dialog
-    expect(find.text('Propose Civic Research'), findsOneWidget);
-    await tester.tap(find.text('SUBMIT CIVIC PROPOSAL'));
-    await tester.pumpAndSettle();
-
-    expect(researchedType, equals('geothermal-grid'));
+    expect(find.text('Food Science'), findsOneWidget);
+    expect(find.text('0.00'), findsNothing);
+    expect(find.textContaining('180.00'), findsOneWidget);
+    expect(find.text('AVAILABLE'), findsWidgets);
+    expect(find.textContaining('EFFECTS: PRODUCTION OUTPUT'), findsOneWidget);
+    expect(find.textContaining('COMPLETION: DAY 190'), findsOneWidget);
+    expect(find.textContaining('3 GAME DAYS REMAINING'), findsOneWidget);
+    expect(find.textContaining('CORPORATION RESEARCH BUDGET'), findsOneWidget);
   });
 
-  testWidgets(
-      'CorporateBuildingResearchPanel renders 3 columns on wide screens (1440px)',
+  testWidgets('catalog search and status/domain filters use the typed model',
       (tester) async {
-    tester.view.physicalSize = const Size(1440, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: TechnologyOutcomePanel(state: _catalogState),
+        ),
+      ),
+    ));
 
-    final state = const EarthState({
-      'clock': {'day': 50, 'minute': 100},
-      'human': {'id': 'H-0044', 'credits': 100000},
-      'membership': {'corporation_id': 'CORP-01'},
-      'buildingCatalog': [
-        {
-          'building_type': 'restaurant',
-          'name': 'Molecular Bistro',
-          'tier': 1,
-          'category': 'commercial',
-          'ownership_class': 'private',
-          'slot_footprint': 1,
-          'baseCreditCost': 8500,
-        },
-        {
-          'building_type': 'vertical-farm',
-          'name': 'Hydroponic Tier Farm',
-          'tier': 1,
-          'category': 'agriculture',
-          'ownership_class': 'private',
-          'slot_footprint': 2,
-          'baseCreditCost': 15000,
-        },
-        {
-          'building_type': 'geothermal-grid',
-          'name': 'Geothermal Core Grid',
-          'tier': 1,
-          'category': 'energy',
-          'ownership_class': 'civic',
-          'slot_footprint': 3,
-          'baseCreditCost': 45000,
-        },
-      ],
-      'technologyRegistry': {
-        'buildingResearch': {'projects': []},
-        'unlockedTiers': {},
-      },
-      'institutions': {},
-      'life': {},
-      'governance': {},
-      'market': {'orders': []},
-    });
+    await tester.enterText(find.byType(TextField), 'Locked');
+    await tester.pumpAndSettle();
+    expect(find.text('Locked Technology'), findsOneWidget);
+    expect(find.text('Food Science'), findsNothing);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: CorporateBuildingResearchPanel(
-              state: state,
-              busy: false,
-              action: _dummyAction,
-            ),
+    await tester.tap(find.widgetWithText(OutlinedButton, 'LOCKED'));
+    await tester.pumpAndSettle();
+    expect(find.text('Locked Technology'), findsOneWidget);
+    expect(find.textContaining('PREREQUISITES: TECH-PREREQUISITE'), findsOneWidget);
+  });
+
+  testWidgets('independent players see a read-only Corporation research catalogue',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: TechnologyPanel(
+            state: _catalogState,
+            busy: false,
+            initialTab: 1,
+            action: _noopAction,
           ),
         ),
       ),
-    );
-    await tester.pumpAndSettle();
+    ));
 
-    // All 3 blueprints rendered on wide 3-column screen
-    expect(find.text('Molecular Bistro'), findsOneWidget);
-    expect(find.text('Hydroponic Tier Farm'), findsOneWidget);
-    expect(find.text('Geothermal Core Grid'), findsOneWidget);
+    expect(find.textContaining('technology catalogue is read-only'), findsOneWidget);
+    expect(find.textContaining('Corporation membership is required'), findsOneWidget);
   });
 }
 
-Future<void> _dummyAction(Future<EarthState> Function() fn) async {}
+Future<void> _noopAction(Future<EarthState> Function() callback) async {}

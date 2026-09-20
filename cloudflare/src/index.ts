@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { authorityMode, withRepository } from './repository';
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, registerSuccessor as registerSuccessorPostgres } from './lifecycle-postgres';
-import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, quoteResearchProject as quoteResearchProjectPostgres } from './technology-postgres';
+import { createResearchProject as createResearchProjectPostgres, quoteResearchProject as quoteResearchProjectPostgres } from './technology-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { runSchedulerHeartbeat } from './scheduler';
 import { deliverOutbox } from './outbox-postgres';
@@ -302,16 +302,14 @@ const worker = {
     if (url.pathname === '/api/technology/projects' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ name?: string; budget?: number; focus?: string; correlationId?: string }>(request);
+      const parsed = await parseJsonBody<{ name?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const name = body.name?.trim();
-      const budget = Math.round(Number(body.budget) * 100) / 100;
-      const focus = body.focus?.trim() ?? 'efficiency';
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!name || name.length < 3 || name.length > 120 || !Number.isFinite(budget) || budget < 240 || budget > 100000 || !['efficiency','durability','safety','cost'].includes(focus) || !correlationId) return Response.json({ ok: false, error: 'Research parameters or Idempotency-Key are invalid' }, { status: 400 });
+      if (!name || name.length < 3 || name.length > 120 || !correlationId) return Response.json({ ok: false, error: 'Research name or Idempotency-Key is invalid' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => createResearchProjectPostgres(repository, { ownerId: viewer.id, name, budget, focus, correlationId }));
+        const result = await withRepository(env, (repository) => createResearchProjectPostgres(repository, { ownerId: viewer.id, name, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {
@@ -334,22 +332,7 @@ const worker = {
       }
     }
     if (url.pathname === '/api/technology/me/fund' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ amount?: number; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const amount = Number(body.amount);
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!Number.isFinite(amount) || amount <= 0 || !correlationId) return Response.json({ ok: false, error: 'Funding parameters or Idempotency-Key are invalid' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => fundResearchProjectPostgres(repository, { ownerId: viewer.id, amount, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Research funding failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
+      return Response.json({ ok: false, error: 'Legacy research funding is retired; research is funded from the authoritative catalog quote.' }, { status: 410 });
     }
     if (url.pathname === '/api/economy' || url.pathname.startsWith('/api/economy/')) {
       const viewer = await currentHuman(request, env);

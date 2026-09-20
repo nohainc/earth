@@ -3,12 +3,26 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/technology_models.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/design_system/building_function.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'technology_dialogs.dart';
+
+BigInt? _parseTechnologyCreditUnits(dynamic value) =>
+    value == null ? null : BigInt.tryParse(value.toString().trim());
+
+String _formatTechnologyCreditUnits(dynamic value) => formatCreditUnits(value);
+
+String _buildingBlueprintScope(Map<String, dynamic> blueprint) {
+  final raw = (blueprint['ownership_scope'] ?? blueprint['ownership_class'] ?? '')
+      .toString()
+      .trim()
+      .toUpperCase();
+  return raw == 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+}
 
 class CorporateBuildingResearchPanel extends StatefulWidget {
   final EarthState state;
@@ -29,7 +43,7 @@ class CorporateBuildingResearchPanel extends StatefulWidget {
 
 class _CorporateBuildingResearchPanelState
     extends State<CorporateBuildingResearchPanel> {
-  int _selectedScope = 0; // 0 = ALL, 1 = PRIVATE, 2 = CIVIC & UTILITIES
+  int _selectedScope = 0; // 0 = ALL, 1 = PRIVATE, 2 = PUBLIC
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -43,10 +57,10 @@ class _CorporateBuildingResearchPanelState
   /// deliberately does not infer it from wall-clock time or a fallback
   /// duration between refreshes.
   double? _authoritativeResearchProgress(Map<String, dynamic> project) {
-    final raw = project['progress'];
+    final raw = project['progressBps'];
     if (raw == null) return null;
     final parsed = double.tryParse(raw.toString());
-    return parsed?.clamp(0.0, 100.0);
+    return parsed == null ? null : (parsed / 100).clamp(0.0, 100.0);
   }
 
   bool _hasAuthoritativeResearchBlueprint(Map<String, dynamic> blueprint) {
@@ -88,6 +102,11 @@ class _CorporateBuildingResearchPanelState
     }
     return fixed;
   }
+
+  BigInt? _creditUnits(dynamic value) =>
+      value == null ? null : BigInt.tryParse(value.toString().trim());
+
+  String _credit(dynamic value) => formatCreditUnits(value);
 
   @override
   Widget build(BuildContext context) {
@@ -140,22 +159,17 @@ class _CorporateBuildingResearchPanelState
         .where(_hasAuthoritativeResearchBlueprint)
         .toList();
 
-    final privateCount = allBlueprints.where((b) {
-      final oc = b['ownership_class']?.toString() ?? 'private';
-      return oc == 'private';
-    }).length;
-
-    final civicCount = allBlueprints.where((b) {
-      final oc = b['ownership_class']?.toString() ?? 'private';
-      return oc == 'civic' || oc == 'public_investment';
-    }).length;
+    final privateCount = allBlueprints
+        .where((b) => _buildingBlueprintScope(b) == 'PRIVATE')
+        .length;
+    final publicCount = allBlueprints
+        .where((b) => _buildingBlueprintScope(b) == 'PUBLIC')
+        .length;
 
     final filteredBlueprints = allBlueprints.where((b) {
-      final oc = b['ownership_class']?.toString() ?? 'private';
-      if (_selectedScope == 1 && oc != 'private') return false;
-      if (_selectedScope == 2 && oc != 'civic' && oc != 'public_investment') {
-        return false;
-      }
+      final scope = _buildingBlueprintScope(b);
+      if (_selectedScope == 1 && scope != 'PRIVATE') return false;
+      if (_selectedScope == 2 && scope != 'PUBLIC') return false;
       if (_searchQuery.trim().isNotEmpty) {
         final q = _searchQuery.trim().toLowerCase();
         final name = (b['name']?.toString() ?? '').toLowerCase();
@@ -173,16 +187,16 @@ class _CorporateBuildingResearchPanelState
       final bType = b['building_type']?.toString() ?? '';
       final aTier = (unlockedTiers[aType] ?? 1) + 1;
       final bTier = (unlockedTiers[bType] ?? 1) + 1;
-      final aCost = asDouble(a['research_credit_units'] ??
+      final aCost = _creditUnits(a['research_credit_units'] ??
               a['research_credit_cost_units'] ??
               a['researchCost'] ??
               a['research_cost']) ??
-          0.0;
-      final bCost = asDouble(b['research_credit_units'] ??
+          BigInt.zero;
+      final bCost = _creditUnits(b['research_credit_units'] ??
               b['research_credit_cost_units'] ??
               b['researchCost'] ??
               b['research_cost']) ??
-          0.0;
+          BigInt.zero;
       final costCmp = aCost.compareTo(bCost);
       if (costCmp != 0) return costCmp;
       return (a['name']?.toString() ?? '')
@@ -213,8 +227,8 @@ class _CorporateBuildingResearchPanelState
             _buildScopeFilterButton(
               context,
               index: 2,
-              label: 'CIVIC & UTILITY',
-              count: civicCount,
+              label: 'PUBLIC',
+              count: publicCount,
               icon: Icons.account_balance_outlined,
             ),
           ],
@@ -248,22 +262,21 @@ class _CorporateBuildingResearchPanelState
                   .map<Widget Function({bool fillHeight})>((bp) {
                 final type = bp['building_type']?.toString() ?? '';
                 final name = bp['name']?.toString() ?? type;
-                final ownership =
-                    bp['ownership_class']?.toString() ?? 'private';
+                final ownership = _buildingBlueprintScope(bp);
 
                 final currentTier = unlockedTiers[type] ?? 1;
                 final targetTier = currentTier + 1;
 
-                final baseCost = asDouble(bp['construction_credit_units'] ??
+                final baseCostUnits = _creditUnits(bp['construction_credit_units'] ??
                         bp['cost_credits']) ??
-                    0.0;
+                    BigInt.zero;
                 final slots =
                     asInt(bp['slot_footprint'] ?? bp['slotFootprint']) ?? 1;
-                final nextResearchCost = asDouble(bp['research_credit_units'] ??
+                final nextResearchCostUnits = _creditUnits(bp['research_credit_units'] ??
                         bp['research_credit_cost_units'] ??
                         bp['researchCost'] ??
                         bp['research_cost']) ??
-                    0.0;
+                    BigInt.zero;
                 final durationDays = asInt(bp['research_duration_game_days'] ??
                         bp['research_duration_days'] ??
                         bp['duration_days'] ??
@@ -281,12 +294,12 @@ class _CorporateBuildingResearchPanelState
                     (bp['description'] ?? bp['catalog_description'] ?? '')
                         .toString();
                 final purpose = buildingEconomicFunctionFromJson(bp);
-                final civicBenefit = bp['civicBenefit']?.toString();
+                final publicBenefit = bp['publicBenefit']?.toString();
 
                 // Show next-tier economics only when the catalog publishes them.
-                final costCreditsCur = baseCost;
+                final costCreditsCur = baseCostUnits;
                 final costCreditsNext =
-                    asDouble(bp['next_construction_credit_units']);
+                    _creditUnits(bp['next_construction_credit_units']);
                 final matBase = 0.0;
                 final compBase = 0.0;
                 final computeBase = 0.0;
@@ -298,9 +311,10 @@ class _CorporateBuildingResearchPanelState
                     <(IconData, Color, String, double, double)>[];
 
                 // Operating economics are read from the catalog, never scaled locally.
-                final opCreditsBase = asDoubleOr(
-                    bp['operating_credit_units'] ?? bp['operating_credits'], 0);
-                final opCreditsNext = asDouble(
+                final opCreditsBase = _creditUnits(
+                        bp['operating_credit_units'] ?? bp['operating_credits']) ??
+                    BigInt.zero;
+                final opCreditsNext = _creditUnits(
                     bp['next_operating_credit_units'] ??
                         bp['next_operating_credits']);
                 final opEnergyBase = 0.0;
@@ -309,7 +323,7 @@ class _CorporateBuildingResearchPanelState
                 final opComponentsBase = 0.0;
                 final opComputeBase = 0.0;
 
-                final hasOperating = opCreditsBase > 0 ||
+                final hasOperating = opCreditsBase > BigInt.zero ||
                     opEnergyBase > 0 ||
                     opFoodBase > 0 ||
                     opMaterialsBase > 0 ||
@@ -368,7 +382,7 @@ class _CorporateBuildingResearchPanelState
                                     children: [
                                       EarthBadge(
                                         label:
-                                            'TIER $currentTier -> $targetTier',
+                                            'BUILDING TIER $currentTier -> $targetTier',
                                         variant: EarthBadgeVariant.primary,
                                       ),
                                       EarthBadge(
@@ -397,8 +411,8 @@ class _CorporateBuildingResearchPanelState
                                     'Economic Function: $purpose',
                                     style: context.widgetFooterStyle,
                                   ),
-                                  if (civicBenefit != null &&
-                                      civicBenefit.isNotEmpty) ...[
+                                  if (publicBenefit != null &&
+                                      publicBenefit.isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     Wrap(
                                       spacing: 6,
@@ -406,13 +420,13 @@ class _CorporateBuildingResearchPanelState
                                       crossAxisAlignment:
                                           WrapCrossAlignment.center,
                                       children: [
-                                        Text('CIVIC BENEFIT',
+                                        Text('PUBLIC SERVICE',
                                             style: context.captionStyle),
                                         const SizedBox(width: 2),
                                         const Icon(Icons.star_outline_rounded,
                                             size: 14,
                                             color: Colors.purpleAccent),
-                                        Text(civicBenefit,
+                                        Text(publicBenefit,
                                             style: context.widgetFooterStyle
                                                 .copyWith(
                                               color: Colors.purpleAccent,
@@ -442,8 +456,8 @@ class _CorporateBuildingResearchPanelState
                             ),
                             Text(
                               costCreditsNext == null
-                                  ? '${formatWholeNumber(costCreditsCur)} C'
-                                  : '${formatWholeNumber(costCreditsCur)} -> ${formatWholeNumber(costCreditsNext)} C',
+                                  ? _credit(costCreditsCur)
+                                  : '${_credit(costCreditsCur)} -> ${_credit(costCreditsNext)}',
                               style: context.widgetFooterStyle,
                             ),
                             if (matBase > 0) ...[
@@ -553,7 +567,7 @@ class _CorporateBuildingResearchPanelState
                             children: [
                               Text('OPERATING', style: context.captionStyle),
                               const SizedBox(width: 2),
-                              if (opCreditsBase > 0) ...[
+                              if (opCreditsBase > BigInt.zero) ...[
                                 const Icon(
                                   Icons.account_balance_wallet_outlined,
                                   size: 14,
@@ -561,8 +575,8 @@ class _CorporateBuildingResearchPanelState
                                 ),
                                 Text(
                                   opCreditsNext == null
-                                      ? '-${formatWholeNumber(opCreditsBase)} C / DAY'
-                                      : '-${formatWholeNumber(opCreditsBase)} -> -${formatWholeNumber(opCreditsNext)} C / DAY',
+                                      ? '-${_credit(opCreditsBase)} / DAY'
+                                      : '-${_credit(opCreditsBase)} -> -${_credit(opCreditsNext)} / DAY',
                                   style: context.widgetFooterStyle,
                                 ),
                               ],
@@ -691,11 +705,11 @@ class _CorporateBuildingResearchPanelState
                         ] else ...[
                           Builder(
                             builder: (context) {
-                              final isPrivate = ownership == 'private';
-                              final canAffordResearch =
-                                  isCorporationMember && nextResearchCost > 0;
+                              final isPrivate = ownership == 'PRIVATE';
+                              final canRequestResearch =
+                                  isCorporationMember && nextResearchCostUnits > BigInt.zero;
                               final isButtonDisabled =
-                                  widget.busy || !canAffordResearch;
+                                  widget.busy || !canRequestResearch;
 
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -715,17 +729,17 @@ class _CorporateBuildingResearchPanelState
                                       Icon(
                                         Icons.account_balance_wallet_outlined,
                                         size: 14,
-                                        color: canAffordResearch
+                                        color: canRequestResearch
                                             ? EarthResourceColors.credits
                                             : context.dangerColor,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        '${formatWholeNumber(nextResearchCost)} C',
+                                        _credit(nextResearchCostUnits),
                                         style: TextStyle(
                                           fontSize: 12.5,
                                           fontWeight: FontWeight.w800,
-                                          color: canAffordResearch
+                                          color: canRequestResearch
                                               ? context.inkColor
                                               : context.dangerColor,
                                         ),
@@ -753,8 +767,8 @@ class _CorporateBuildingResearchPanelState
                                       width: double.infinity,
                                       child: EarthButton(
                                         label: isPrivate
-                                            ? 'RESEARCH TIER $targetTier'
-                                            : 'PROPOSE CIVIC RESEARCH TIER $targetTier',
+                                            ? 'START CORPORATION R&D · BUILDING TIER $targetTier'
+                                            : 'PROPOSE PUBLIC R&D · BUILDING TIER $targetTier',
                                         icon: isPrivate
                                             ? Icons.science_outlined
                                             : Icons.how_to_vote_outlined,
@@ -777,10 +791,11 @@ class _CorporateBuildingResearchPanelState
                                                   context,
                                                   type: type,
                                                   name: name,
+                                                  corporationId: corporationId,
                                                   targetTier: targetTier,
                                                   currentTier: currentTier,
                                                   costCredits:
-                                                      nextResearchCost.round(),
+                                                      nextResearchCostUnits.toString(),
                                                   durationDays: durationDays,
                                                   costCreditsCur:
                                                       costCreditsCur,
@@ -796,7 +811,6 @@ class _CorporateBuildingResearchPanelState
                                                   opComponentsBase:
                                                       opComponentsBase,
                                                   opComputeBase: opComputeBase,
-                                                  ownership: ownership,
                                                   tierDaysCurrent:
                                                       tierDaysCurrent,
                                                   tierDaysNext: tierDaysNext,
@@ -886,10 +900,12 @@ class _CorporateBuildingResearchPanelState
               leading: const Icon(Icons.lock_open_outlined,
                   size: 16, color: cyanAccentColor),
               title: name,
-              subtitle: tier == null ? 'Tier unlocked' : 'Tier $tier unlocked',
+              subtitle: tier == null
+                  ? 'Building Tier unlocked'
+                  : 'Building Tier $tier unlocked',
               badges: const [
                 Chip(
-                    label: Text('TIER UNLOCKED'),
+                    label: Text('BUILDING TIER UNLOCKED'),
                     visualDensity: VisualDensity.compact)
               ],
               padding: const EdgeInsets.symmetric(vertical: 5),
@@ -954,35 +970,40 @@ class _CorporateBuildingResearchPanelState
     required String name,
     required int targetTier,
     required int currentTier,
-    required int costCredits,
+    required String costCredits,
     required int durationDays,
-    required double costCreditsCur,
-    required double? costCreditsNext,
+    required BigInt costCreditsCur,
+    required BigInt? costCreditsNext,
     required List<(IconData, Color, String, double, double)> upkeepInputs,
     required List<(IconData, Color, String, double, double)> outputItems,
-    required double opCreditsBase,
-    required double? opCreditsNext,
+    required BigInt opCreditsBase,
+    required BigInt? opCreditsNext,
     required double opEnergyBase,
     required double opMaterialsBase,
     required double opComponentsBase,
     required double opComputeBase,
-    required String ownership,
+    required String corporationId,
     required int tierDaysCurrent,
     required int? tierDaysNext,
     required Map<String, dynamic> serverQuote,
   }) async {
     EarthAudioEngine.instance.playClick();
-    final isPrivate = ownership == 'private';
-    final fundingSource =
-        isPrivate ? 'your personal account' : 'your corporation treasury';
+    final authorization = serverQuote['authorization'] is Map
+        ? Map<String, dynamic>.from(serverQuote['authorization'] as Map)
+        : const <String, dynamic>{};
+    final blueprintScope =
+        serverQuote['blueprintScope']?.toString().toUpperCase() ?? '';
+    final isPrivate = blueprintScope == 'PRIVATE';
+    final canStart = authorization['canStart'] == true;
+    final canPropose = authorization['canPropose'] == true;
     final quote = serverQuote['quote'] is Map
         ? Map<String, dynamic>.from(serverQuote['quote'] as Map)
         : const <String, dynamic>{};
     final quotedCost =
-        int.tryParse(quote['researchCostUnits']?.toString() ?? '');
+        _creditUnits(quote['researchCostUnits']);
     final quotedDuration =
         int.tryParse(quote['durationDays']?.toString() ?? '');
-    final effectiveCost = quotedCost ?? costCredits;
+    final effectiveCost = quotedCost?.toString() ?? costCredits;
     final effectiveDuration = quotedDuration ?? durationDays;
 
     final confirmed = await showDialog<bool>(
@@ -1013,9 +1034,7 @@ class _CorporateBuildingResearchPanelState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isPrivate
-                        ? 'Initiate R&D Project'
-                        : 'Propose Civic Research',
+                    isPrivate ? 'Start Corporation R&D' : 'Propose Public R&D',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -1023,7 +1042,7 @@ class _CorporateBuildingResearchPanelState
                     ),
                   ),
                   Text(
-                    '$name · Tier $currentTier → Tier $targetTier',
+                    '$name · Building Tier $currentTier → Building Tier $targetTier',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1043,8 +1062,8 @@ class _CorporateBuildingResearchPanelState
             children: [
               Text(
                 isPrivate
-                    ? 'Starting this research project will charge ${formatCreditsAmount(effectiveCost)} from $fundingSource to develop Tier $targetTier blueprints.'
-                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(effectiveCost)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for the corporation\'s territories.',
+                    ? 'This Corporation-funded research will charge ${_credit(effectiveCost)} from the Corporation operations account to research Building Tier $targetTier.'
+                    : 'This public blueprint research requires Corporation Governance approval. If passed, ${_credit(effectiveCost)} will be funded from the Corporation operations account to research Building Tier $targetTier.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -1072,7 +1091,7 @@ class _CorporateBuildingResearchPanelState
                         const Icon(Icons.account_balance_wallet_outlined,
                             size: 14, color: EarthResourceColors.credits),
                         const SizedBox(width: 4),
-                        Text('${formatWholeNumber(effectiveCost)} C',
+                        Text(_credit(effectiveCost),
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
@@ -1136,8 +1155,8 @@ class _CorporateBuildingResearchPanelState
                         const SizedBox(width: 4),
                         Text(
                           costCreditsNext == null
-                              ? formatWholeNumber(costCreditsCur)
-                              : '${formatWholeNumber(costCreditsCur)} → ${formatWholeNumber(costCreditsNext)}',
+                              ? _credit(costCreditsCur)
+                              : '${_credit(costCreditsCur)} → ${_credit(costCreditsNext)}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -1238,7 +1257,7 @@ class _CorporateBuildingResearchPanelState
                     ],
 
                     // Operating expenses
-                    if (opCreditsBase > 0) ...[
+                    if (opCreditsBase > BigInt.zero) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -1251,8 +1270,8 @@ class _CorporateBuildingResearchPanelState
                           const SizedBox(width: 4),
                           Text(
                             opCreditsNext == null
-                                ? '-${formatWholeNumber(opCreditsBase)}'
-                                : '-${formatWholeNumber(opCreditsBase)} → -${formatWholeNumber(opCreditsNext)}',
+                                ? '-${_credit(opCreditsBase)}'
+                                : '-${_credit(opCreditsBase)} → -${_credit(opCreditsNext)}',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -1275,27 +1294,41 @@ class _CorporateBuildingResearchPanelState
             onPressed: () => Navigator.pop(dialogContext, false),
           ),
           EarthButton(
-            label: isPrivate ? 'CONFIRM R&D PROJECT' : 'SUBMIT CIVIC PROPOSAL',
+            label: isPrivate ? 'CONFIRM CORPORATION R&D' : 'SUBMIT V5 PROPOSAL',
             icon:
                 isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
-            variant: EarthButtonVariant.primary,
-            onPressed: () => Navigator.pop(dialogContext, true),
+            variant: (!canStart && !canPropose)
+                ? EarthButtonVariant.neutral
+                : EarthButtonVariant.primary,
+            onPressed: (!canStart && !canPropose)
+                ? null
+                : () => Navigator.pop(dialogContext, true),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      if (isPrivate) {
+      if (isPrivate && canStart) {
         await widget.action(
             () => const EarthApi().startCorporationBuildingResearch(type));
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Public research proposals are retired. Use V5 Corporation Governance to propose research.'),
-          ));
-        }
+      } else if (!isPrivate && canPropose) {
+        final startsGameDay = int.tryParse(
+              quote['startsGameDay']?.toString() ?? '',
+            ) ??
+            0;
+        await widget.action(() async {
+          await const EarthApi().proposeCorporationBuildingResearch(
+            corporationId: corporationId,
+            buildingType: type,
+            targetTier: targetTier,
+            effectiveFromGameDay: startsGameDay,
+            title: 'Research $name Building Tier $targetTier',
+            body:
+                'Authorize Corporation-funded research for the public $name Building Tier $targetTier blueprint.',
+          );
+          return const EarthApi().world();
+        });
       }
     }
   }
@@ -1312,113 +1345,96 @@ class TechnologyOutcomePanel extends StatefulWidget {
 
 class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
   String _selectedBranch = 'ALL';
+  String _selectedStatus = 'ALL';
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rawCatalog = widget.state.technologyRegistry['catalog'];
-    final catalog = rawCatalog is List ? rawCatalog : const <dynamic>[];
-    final items = catalog
-        .map((raw) => raw is Map
-            ? Map<String, dynamic>.from(raw)
-            : <String, dynamic>{'name': raw.toString()})
-        .toList();
+    final catalog = widget.state.technologyWorkspace.catalog;
     final branches = <String>[];
-    for (final item in items) {
-      final branch = _branchFor(item);
+    for (final item in catalog) {
+      final branch = item.category.replaceAll('_', ' ');
       if (!branches.contains(branch)) branches.add(branch);
     }
-    final visibleItems = (_selectedBranch == 'ALL'
-        ? items
-        : items.where((item) => _branchFor(item) == _selectedBranch).toList())
+    final projectByTechnology = <String, CorporationResearchProject>{
+      for (final project in widget.state.technologyWorkspace.projects)
+        if (project.targetType.toUpperCase() == 'TECHNOLOGY')
+          project.targetId: project,
+    };
+    final visibleItems = catalog
+        .where((item) {
+          final branch = item.category.replaceAll('_', ' ');
+          final status = item.viewerStatus.toUpperCase();
+          final query = _searchQuery.trim().toLowerCase();
+          if (_selectedBranch != 'ALL' && branch != _selectedBranch) {
+            return false;
+          }
+          if (_selectedStatus != 'ALL' && status != _selectedStatus) {
+            return false;
+          }
+          if (query.isNotEmpty &&
+              !item.name.toLowerCase().contains(query) &&
+              !item.code.toLowerCase().contains(query) &&
+              !item.description.toLowerCase().contains(query) &&
+              !branch.toLowerCase().contains(query)) {
+            return false;
+          }
+          return true;
+        })
+        .toList()
       ..sort((a, b) {
-        final aCost = asDoubleOr(
-            a['researchCost'] ??
-                a['research_cost'] ??
-                a['cost'] ??
-                a['cost_credits'],
-            0);
-        final bCost = asDoubleOr(
-            b['researchCost'] ??
-                b['research_cost'] ??
-                b['cost'] ??
-                b['cost_credits'],
-            0);
+        final aCost = BigInt.tryParse(a.researchCostUnits) ?? BigInt.zero;
+        final bCost = BigInt.tryParse(b.researchCostUnits) ?? BigInt.zero;
         final costCmp = aCost.compareTo(bCost);
         if (costCmp != 0) return costCmp;
-        return (a['name'] ?? a['title'] ?? '')
-            .toString()
-            .compareTo((b['name'] ?? b['title'] ?? '').toString());
+        return a.name.compareTo(b.name);
       });
-    final adoptedNames = _names(widget.state.technologyRegistry['adopted'] ??
-        widget.state.technologyRegistry['adoptedTechnologies'] ??
-        widget.state.technologyRegistry['capabilities']);
-    final resourceFlows = widget.state.json['resourceFlows'] is Map
-        ? Map<String, dynamic>.from(widget.state.json['resourceFlows'] as Map)
-        : const <String, dynamic>{};
-    final pressuredResource = [
-      'energy',
-      'food',
-      'material',
-      'components',
-      'compute'
-    ]
-        .map((key) {
-          final raw = resourceFlows[key] ??
-              (key == 'material' ? resourceFlows['materials'] : null);
-          return MapEntry(key, asDoubleOr(raw is Map ? raw['net'] : raw, 0));
-        })
-        .where((entry) => entry.value < 0)
-        .fold<MapEntry<String, double>?>(
-            null,
-            (current, entry) => current == null || entry.value < current.value
-                ? entry
-                : current);
-    final recommendation = pressuredResource == null
-        ? 'Choose the path that supports your next building milestone.'
-        : 'Consider ${_recommendationFor(pressuredResource.key)} because ${pressuredResource.key} is in net decline.';
+    final adoptedNames = widget.state.technologyWorkspace.adoptedCodes.toSet();
+    final researchBudget = widget.state.technologyWorkspace.researchBudget;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('CAPABILITY OUTCOMES', style: context.topicTitleStyle),
       const SizedBox(height: 5),
       const Text(
-          'Research paths and their practical effects on Human-owned operations and civic systems.',
+          'Browse Corporation-funded technology capabilities. Costs, access, status, and completion timing come from authoritative Corporation research data.',
           style: TextStyle(color: mutedColor, fontSize: 10.5)),
       const SizedBox(height: 12),
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: violetColor.withValues(alpha: .1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: violetColor.withValues(alpha: .28)),
+      if (researchBudget != null) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: surfaceColor.withValues(alpha: .65),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.account_balance_wallet_outlined,
+                  size: 15, color: cyanAccentColor),
+              const SizedBox(width: 7),
+              const Text('CORPORATION RESEARCH BUDGET',
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              Text(formatCreditUnits(researchBudget.availableUnits),
+                  style: const TextStyle(
+                      color: cyanAccentColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800)),
+              const SizedBox(width: 4),
+              const Text('AVAILABLE',
+                  style: TextStyle(color: mutedColor, fontSize: 8)),
+            ],
+          ),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.lightbulb_outline, size: 17, color: violetColor),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('NEXT RESEARCH DIRECTION',
-                      style: TextStyle(
-                          color: violetColor,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: .8)),
-                  const SizedBox(height: 3),
-                  Text(recommendation,
-                      style: const TextStyle(
-                          color: inkColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 14),
+        const SizedBox(height: 12),
+      ],
       const Text('RESEARCH PATHS',
           style: TextStyle(
               color: mutedColor,
@@ -1426,6 +1442,24 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
               fontWeight: FontWeight.w800,
               letterSpacing: 1.1)),
       const SizedBox(height: 8),
+      EarthSearchInput(
+        controller: _searchController,
+        hintText: 'Search technologies by name, code, domain, or effect...',
+        fontSize: 12,
+        onChanged: (value) => setState(() => _searchQuery = value),
+        onClear: () => setState(() {
+          _searchController.clear();
+          _searchQuery = '';
+        }),
+      ),
+      const SizedBox(height: 10),
+      const Text('DOMAIN FILTER',
+          style: TextStyle(
+              color: mutedColor,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0)),
+      const SizedBox(height: 6),
       Wrap(
         spacing: 7,
         runSpacing: 7,
@@ -1452,6 +1486,33 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
                 ))
             .toList(),
       ),
+      const SizedBox(height: 10),
+      const Text('STATUS FILTER',
+          style: TextStyle(
+              color: mutedColor,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0)),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 7,
+        runSpacing: 7,
+        children: const ['ALL', 'ACTIVE', 'AVAILABLE', 'ADOPTED', 'LOCKED']
+            .map((status) => status)
+            .map((status) => OutlinedButton(
+                  onPressed: () => setState(() => _selectedStatus = status),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    side: BorderSide(color: violetColor.withValues(alpha: .55)),
+                  ),
+                  child: Text(status,
+                      style: const TextStyle(
+                          fontSize: 9, fontWeight: FontWeight.w700)),
+                ))
+            .toList(),
+      ),
       const SizedBox(height: 14),
       if (visibleItems.isEmpty)
         const EarthEmptyState(
@@ -1460,37 +1521,29 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
         )
       else
         ...visibleItems.take(8).map((item) {
-          final name = (item['name'] ?? item['title'] ?? 'Approved capability')
-              .toString();
-          final description = (item['description'] ??
-                  'Approved capability with a defined gameplay effect.')
-              .toString();
-          final effect = (item['effect'] ?? 'Practical capability improvement')
-              .toString()
-              .replaceAll('_', ' ');
-          final branch = _branchFor(item);
-          final target = (item['target'] ??
-                  item['affected_buildings'] ??
-                  item['resource_effect'] ??
-                  'Buildings, businesses, or civic services')
-              .toString()
-              .replaceAll('_', ' ');
-          final requirement = item['requirements'] ?? item['requirement'];
-          final locked = item['locked'] == true;
-          final prerequisite = item['prerequisites'] ?? item['requires'];
-          final prerequisiteText = _formatPrerequisites(prerequisite);
-          final researchCost = item['researchCost'] ??
-              item['research_cost'] ??
-              item['cost'] ??
-              item['cost_credits'];
-          final before =
-              item['before'] ?? item['currentValue'] ?? item['current_value'];
-          final after = item['after'] ??
-              item['projectedValue'] ??
-              item['projected_value'];
-          final milestone =
-              item['milestone'] ?? item['tier'] ?? _milestoneFor(item);
-          final adopted = adoptedNames.contains(name);
+          final name = item.name;
+          final description = item.description;
+          final branch = item.category.replaceAll('_', ' ');
+          final status = item.viewerStatus.toUpperCase();
+          final adopted = status == 'ADOPTED' ||
+              adoptedNames.contains(item.code) ||
+              adoptedNames.contains(item.name);
+          final statusColor = status == 'ADOPTED'
+              ? cyanAccentColor
+              : status == 'ACTIVE'
+                  ? violetColor
+                  : status == 'AVAILABLE'
+                      ? Colors.green
+                      : mutedColor;
+          final effectSummary = item.effects.isEmpty
+              ? 'No typed effects published'
+              : item.effects
+                  .map((value) => value.effectType.replaceAll('_', ' '))
+                  .join(' · ');
+          final prerequisiteSummary = item.prerequisites.isEmpty
+              ? 'NONE PUBLISHED'
+              : item.prerequisites.join(' · ');
+          final project = projectByTechnology[item.id];
           return Container(
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 7),
@@ -1513,9 +1566,9 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
                               style: const TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w800))),
-                      Text(_effectLabel(effect).toUpperCase(),
-                          style: const TextStyle(
-                              color: violetColor,
+                    Text(status,
+                          style: TextStyle(
+                              color: statusColor,
                               fontSize: 8,
                               fontWeight: FontWeight.w800))
                     ]),
@@ -1524,24 +1577,44 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
                         style:
                             const TextStyle(color: mutedColor, fontSize: 9.5)),
                     const SizedBox(height: 5),
-                    Text('PATH: $branch · $milestone · APPLIES TO: $target',
+                    Text('PATH: $branch · CODE: ${item.code}',
                         style: const TextStyle(
                             color: cyanAccentColor,
                             fontSize: 8.5,
                             fontWeight: FontWeight.w700)),
                     const SizedBox(height: 3),
                     Text(
-                        'COST: ${researchCost == null ? 'Set by project' : '${researchCost.toString()} C'} · PREREQUISITE: $prerequisiteText',
+                        'COST: ${formatCreditUnits(item.researchCostUnits)} · DURATION: ${item.researchDurationGameDays} GAME DAYS',
                         style: const TextStyle(
                             color: mutedColor,
                             fontSize: 8.5,
                             fontWeight: FontWeight.w600)),
-                    if (before != null || after != null) ...[
-                      const SizedBox(height: 5),
+                    const SizedBox(height: 3),
+                    Text('PREREQUISITES: $prerequisiteSummary',
+                        style: const TextStyle(
+                            color: mutedColor,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 3),
+                    Text('EFFECTS: $effectSummary',
+                        style: const TextStyle(
+                            color: mutedColor,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w600)),
+                    if (status == 'ACTIVE' && project != null) ...[
+                      const SizedBox(height: 3),
                       Text(
-                          'BEFORE → AFTER: ${before ?? 'Current'} → ${after ?? 'Improved'}',
+                          'COMPLETION: DAY ${project.completionGameDay ?? 'UNAVAILABLE'} · ${project.remainingGameDays ?? 'UNAVAILABLE'} GAME DAYS REMAINING',
                           style: const TextStyle(
-                              color: Colors.tealAccent,
+                              color: violetColor,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    if (item.accessSource != null) ...[
+                      const SizedBox(height: 3),
+                      Text('ACCESS: ${item.accessSource}',
+                          style: const TextStyle(
+                              color: cyanAccentColor,
                               fontSize: 8.5,
                               fontWeight: FontWeight.w700)),
                     ],
@@ -1550,25 +1623,6 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
                       const Text('ADOPTED · Currently affecting outcomes',
                           style: TextStyle(
                               color: cyanAccentColor,
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700)),
-                    ],
-                    if (prerequisite != null) ...[
-                      const SizedBox(height: 3),
-                      Text('PREREQUISITE · $prerequisite',
-                          style: const TextStyle(
-                              color: Colors.orangeAccent,
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700)),
-                    ],
-                    if (locked || requirement != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                          locked
-                              ? 'LOCKED · ${requirement ?? 'Complete the prerequisite research first.'}'
-                              : 'REQUIREMENT · $requirement',
-                          style: const TextStyle(
-                              color: Colors.orangeAccent,
                               fontSize: 8.5,
                               fontWeight: FontWeight.w700)),
                     ],
@@ -1614,22 +1668,6 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
     return 'General Capability';
   }
 
-  String _recommendationFor(String resource) {
-    switch (resource) {
-      case 'energy':
-        return 'Energy & Infrastructure';
-      case 'food':
-        return 'Life Support';
-      case 'material':
-      case 'components':
-        return 'Construction & Industry';
-      case 'compute':
-        return 'Computing & Research';
-      default:
-        return 'the path matching your current bottleneck';
-    }
-  }
-
   String _formatPrerequisites(dynamic raw) {
     if (raw == null) return 'None';
     if (raw is List) {
@@ -1667,6 +1705,7 @@ class TechnologyPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
+  final ValueChanged<String>? onNavigate;
   final Key? panelKey;
   final int initialTab;
 
@@ -1676,6 +1715,7 @@ class TechnologyPanel extends StatefulWidget {
     required this.state,
     required this.busy,
     required this.action,
+    this.onNavigate,
     this.initialTab = 0,
   });
 
@@ -1684,6 +1724,11 @@ class TechnologyPanel extends StatefulWidget {
 }
 
 class _TechnologyPanelState extends State<TechnologyPanel> {
+  BigInt? _creditUnits(dynamic value) =>
+      value == null ? null : BigInt.tryParse(value.toString().trim());
+
+  String _credit(dynamic value) => formatCreditUnits(value);
+
   late int _selectedTab;
 
   @override
@@ -1694,34 +1739,23 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final registry = widget.state.technologyRegistry;
-    final techCatalog =
-        registry['catalog'] is List ? registry['catalog'] as List : const [];
-    final projectList = registry['corporationProjects'] is List
-        ? (registry['corporationProjects'] as List).whereType<Map>().toList()
-        : <Map>[];
-    final tech = widget.state.technology;
-    final research = projectList.isNotEmpty
-        ? Map<String, dynamic>.from(projectList.first)
-        : (tech['research'] is Map<String, dynamic>
-            ? (tech['research'] as Map<String, dynamic>)
-            : tech);
-    final techName = (research['name'] as String?)?.toUpperCase() ??
-        (tech['name'] as String?)?.toUpperCase() ??
-        'NO ACTIVE RESEARCH PROJECT';
-    final techId = research['id']?.toString() ?? '—';
+    final workspace = widget.state.technologyWorkspace;
+    final techCatalog = workspace.catalog;
+    final projectList = workspace.projects;
+    final research = projectList.isNotEmpty ? projectList.first : null;
+    final techName = research == null || research.name.isEmpty
+        ? 'NO ACTIVE RESEARCH PROJECT'
+        : research.name.toUpperCase();
+    final techId = research?.id.isNotEmpty == true ? research!.id : '—';
     final corporationId =
         widget.state.membership?['corporation_id']?.toString();
     final isCorporationMember =
         corporationId != null && corporationId.isNotEmpty;
-    final progress =
-        (asDouble(research['progress']) ?? asDouble(tech['progress']) ?? 0.0)
-            .clamp(0.0, 100.0);
-    final focus = (research['focus'] ?? tech['focus'] ?? 'efficiency')
-        .toString()
-        .toUpperCase();
-    final budget = asDouble(research['budget'] ?? research['budgetPerDay']);
-    final isComplete = progress >= 100;
+    final progressBps = research?.progressBps ?? 0;
+    final progress = (progressBps / 100).clamp(0.0, 100.0);
+    final remainingGameDays = research?.remainingGameDays;
+    final completionGameDay = research?.completionGameDay;
+    final isComplete = research?.status.toUpperCase() == 'COMPLETED' || progressBps >= 10000;
     final computeReserve = asDoubleOr(widget.state.resources['compute'], 0);
     final buildingCount = widget.state.buildings.length;
     final historyEvents = widget.state.history['events'] is List
@@ -1737,11 +1771,6 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
         .take(4)
         .toList();
 
-    Color focusColor = cyanAccentColor;
-    if (focus == 'DURABILITY') focusColor = Colors.tealAccent;
-    if (focus == 'SAFETY') focusColor = Colors.lightGreenAccent;
-    if (focus == 'COST') focusColor = Colors.amberAccent;
-
     final buildingResearchData = widget.state.corporationBuildingResearch;
     final buildingProjects = buildingResearchData['projects'] is List
         ? (buildingResearchData['projects'] as List)
@@ -1754,16 +1783,16 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
         : const [];
     final unlockedBuildingTiersCount = buildingUnlocks.length;
 
-    final activeCommonResearchCount = projectList.isNotEmpty
-        ? projectList
-            .where((p) =>
-                asDoubleOr(p['progress'], 0) < 100 &&
-                (p['status']?.toString().toLowerCase() != 'completed'))
-            .length
-        : 0;
+    final activeCommonResearchCount = projectList
+        .where((p) => p.targetType == 'TECHNOLOGY' &&
+            p.status.toUpperCase() != 'COMPLETED' &&
+            (p.progressBps ?? 0) < 10000)
+        .length;
 
     final corp = widget.state.institutions['corporation'];
-    final corpTreasury = corp is Map ? asDouble(corp['treasury']) : null;
+    final corpTreasury = corp is Map
+        ? _creditUnits(corp['treasury_units'] ?? corp['treasury'])
+        : null;
 
     final cockpit = EarthPageCockpit(
       status: isCorporationMember
@@ -1775,13 +1804,13 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
           isCorporationMember ? context.primaryColor : context.warningColor,
       infoTitle: 'RESEARCH & TECHNOLOGY ARCHITECTURE',
       infoDescription:
-          '• Corporate R&D Sponsorship: Industrial building tiers and general technologies are sponsored by corporations and funded from their corporate treasuries.\n\n• Capabilities & Breakthroughs: Choose and fund a capability that improves business outcomes. A completed capability can be activated with a subscription.\n\n• Building Tiers: Researches the next technological tier for shared industrial, commercial, and utility buildings in Earth\'s catalog.\n\n• Effects, cost, duration, prerequisites, and rules version are authoritative values from the active technology catalog; this page never estimates unpublished research values.',
+          '• Building Tier: The authored level of one building blueprint family (for example, Building Tier IV). Researching it unlocks that building blueprint; it does not advance Earth technology.\n\n• Domain Generation: The Earth frontier level of a technology domain (for example, Generation III ENERGY). It limits which technology generations a Corporation can access and advances through Governance.\n\n• Technology / Capability: A researched technology with a named effect. A completed Capability can improve Corporation outcomes, but it is not a Building Tier or a Domain Generation.\n\n• All R&D is Corporation-funded. Costs, duration, prerequisites, effects, and rules version come from authoritative server data.',
       title: 'RESEARCH & TECHNOLOGY',
       subtitle:
-          'Corporate capability breakthroughs and industrial technology tiers across Earth',
+          'Building Tiers, Domain Generations, and researched Capabilities across Earth',
       metrics: [
         CockpitMetric(
-          label: 'Tiers Researched',
+          label: 'Building Tiers',
           value: '$unlockedBuildingTiersCount',
           icon: Icons.military_tech_outlined,
           color: context.secondaryColor,
@@ -1794,8 +1823,8 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
         ),
         CockpitMetric(
           label: 'Corp Treasury',
-          value: corpTreasury != null
-              ? '${formatWholeNumber(corpTreasury)} C'
+                          value: corpTreasury != null
+              ? _credit(corpTreasury)
               : (isCorporationMember ? 'Corporate' : 'N/A'),
           icon: Icons.account_balance_outlined,
           color: const Color(0xFF10B981),
@@ -1812,7 +1841,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• General technology research is owned and funded by corporations. Independent characters can read the approved catalogue, but cannot start or fund a project until they join a corporation.\n\n• Choose and fund a capability that improves business outcomes. A completed capability can be activated with a subscription.\n\n• Building-tier research remains a separate corporation-owned path and uses the same corporate treasury.\n\n• Each project displays its backend-defined cost, duration, prerequisites, effects, and rules version.',
+          '• Building Tier research unlocks a specific level in a building blueprint family.\n\n• Technology / Capability research develops a named Corporation technology effect.\n\n• Domain Generation is the Earth-wide technology level available in a domain; advancing it requires a V5 Governance decision.\n\n• Independent characters can read the catalogue, but Corporation membership is required to fund research. Each project displays authoritative cost, duration, prerequisites, effects, and rules version.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1834,7 +1863,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'You are currently independent. Research is managed by corporations because it uses the corporate treasury. Join a corporation to start or fund technology research; the catalogue remains available here for reference.',
+                      'You are currently independent. The technology catalogue is read-only for independent players. Corporation membership is required to start or fund research because projects use the Corporation research budget.',
                       style: TextStyle(
                           color: mutedColor, fontSize: 11, height: 1.4),
                     ),
@@ -1856,6 +1885,8 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                 _researchTabButton(context, 0, Icons.domain, 'BUILDING TIERS'),
                 _researchTabButton(context, 1, Icons.biotech_outlined,
                     'CORPORATION TECHNOLOGIES'),
+                _researchTabButton(context, 2, Icons.public_outlined,
+                    'EARTH DOMAIN GENERATION'),
               ],
             ),
           ),
@@ -1950,7 +1981,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'PROJECT ID: $techId  ·  FOCUS: ${focus.toLowerCase()}  ·  STATUS: ${isComplete ? 'COMPLETED' : 'IN RESEARCH'}',
+                              'PROJECT ID: $techId  ·  STATUS: ${isComplete ? 'COMPLETED' : 'IN RESEARCH'}${completionGameDay == null ? '' : '  ·  COMPLETES DAY $completionGameDay'}',
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: mutedColor,
@@ -2004,38 +2035,11 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
 
                   const SizedBox(height: 14),
 
-                  // Focus & Budget Breakdown Badges (Wrap to prevent horizontal overflow)
+                  // Server-derived timing and funding facts.
                   Wrap(
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: focusColor.withValues(alpha: .12),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                              color: focusColor.withValues(alpha: .3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.tune_rounded,
-                                size: 12, color: focusColor),
-                            const SizedBox(width: 5),
-                            Text(
-                              'FOCUS: $focus',
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: focusColor,
-                                letterSpacing: .5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
@@ -2045,7 +2049,7 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
                           border: Border.all(color: Colors.white12),
                         ),
                         child: Text(
-                          'Funding: ${budget == null ? 'Not published' : '${formatWholeNumber(budget)} C'} · Compute reserve: ${formatWholeNumber(computeReserve)} · ${isComplete ? 'Ready to deploy' : (projectList.isEmpty ? 'No active project' : '${(100 - progress).toStringAsFixed(0)}% remaining')}',
+                          'Catalog cost: ${_credit(research?.creditCostUnits)} · Compute reserve: ${formatWholeNumber(computeReserve)} · ${isComplete ? 'Ready to deploy' : (remainingGameDays == null ? 'Completion day unavailable' : '$remainingGameDays game day${remainingGameDays == 1 ? '' : 's'} remaining')}',
                           style: const TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w600,
@@ -2169,6 +2173,11 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
             const SizedBox(height: 22),
             TechnologyOutcomePanel(state: widget.state),
           ],
+          if (_selectedTab == 2)
+            TechnologyFrontierPanel(
+              state: widget.state,
+              onNavigate: widget.onNavigate,
+            ),
         ],
       ),
     );
@@ -2225,4 +2234,137 @@ class _TechnologyPanelState extends State<TechnologyPanel> {
       ),
     );
   }
+}
+
+class TechnologyFrontierPanel extends StatelessWidget {
+  final EarthState state;
+  final ValueChanged<String>? onNavigate;
+
+  const TechnologyFrontierPanel({
+    super.key,
+    required this.state,
+    this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final frontier = state.technologyWorkspace.frontier;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EarthPanel(
+          title: 'EARTH DOMAIN GENERATION FRONTIER',
+          showTitle: true,
+          infoDescription:
+              'Earth Domain Generations define the maximum technology level available to Corporations. Advancing the frontier is a V5 Governance decision; Corporation access is shown separately from Earth authorization.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (frontier.isEmpty)
+                const EarthEmptyState(
+                  icon: Icons.public_off_outlined,
+                  message: 'Earth technology frontier data is unavailable.',
+                )
+              else
+                ...frontier.map((domain) => Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: context.surfaceColor,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: context.subtleBorderColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.public_outlined,
+                                  size: 17, color: context.primaryColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  domain.name.isEmpty ? domain.code : domain.name,
+                                  style: context.topicTitleStyle,
+                                ),
+                              ),
+                              Text('DOMAIN GEN ${domain.frontierGeneration}',
+                                  style: context.controlStyle.copyWith(
+                                      color: context.primaryColor,
+                                      fontWeight: FontWeight.w800)),
+                            ],
+                          ),
+                          const SizedBox(height: 9),
+                          Wrap(
+                            spacing: 18,
+                            runSpacing: 7,
+                            children: [
+                              _frontierFact(context, 'EFFECTIVE DAY',
+                                  '${domain.effectiveFromGameDay}'),
+                              _frontierFact(
+                                  context,
+                                  'NEXT DOMAIN GENERATION',
+                                  domain.nextGeneration == null
+                                      ? 'UNAVAILABLE'
+                                      : 'DOMAIN GEN ${domain.nextGeneration}'),
+                              _frontierFact(
+                                  context,
+                                  'ELIGIBILITY',
+                                  domain.nextGeneration == null
+                                      ? 'NO NEXT DOMAIN GENERATION'
+                                      : 'GOVERNANCE REQUIRED${domain.nextGenerationMinimumGameDay == null ? '' : ' · DAY ${domain.nextGenerationMinimumGameDay}'}'),
+                              _frontierFact(
+                                  context,
+                                  'CORPORATION ACCESS',
+                                  domain.corporationAccessibleGeneration == null
+                                      ? 'JOIN A CORPORATION'
+                                      : 'DOMAIN GEN ${domain.corporationAccessibleGeneration}'),
+                            ],
+                          ),
+                          const SizedBox(height: 9),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  domain.governanceStatus.replaceAll('_', ' '),
+                                  style: context.widgetFooterStyle.copyWith(
+                                      color: domain.nextGeneration == null
+                                          ? context.mutedColor
+                                          : context.warningColor,
+                                      fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                              if (domain.nextGeneration != null)
+                                TextButton.icon(
+                                  onPressed: onNavigate == null
+                                      ? null
+                                      : () => onNavigate!.call('governance'),
+                                  icon: const Icon(Icons.how_to_vote_outlined,
+                                      size: 15),
+                                  label: const Text('OPEN GOVERNANCE'),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _frontierFact(BuildContext context, String label, String value) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: context.widgetFooterStyle.copyWith(letterSpacing: .6)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: context.controlStyle.copyWith(
+                  color: context.inkColor, fontWeight: FontWeight.w700)),
+        ],
+      );
 }

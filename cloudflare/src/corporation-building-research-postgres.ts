@@ -3,7 +3,23 @@ import { formatCreditUnits } from './money.ts';
 import { readAuthoritativeGameTime, projectDeadline } from './world-clock-postgres.ts';
 import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
 
-type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
+type ResearchInput = {
+  humanId: string;
+  buildingType: string;
+  correlationId: string;
+  corporationId?: string;
+  authorizationMode?: 'DIRECT' | 'V5_GOVERNANCE';
+  targetTier?: number;
+};
+
+export type BuildingBlueprintScope = 'PRIVATE' | 'PUBLIC';
+
+function blueprintScope(row: Record<string, unknown>): BuildingBlueprintScope {
+  const value = String(row.ownership_scope ?? row.ownership_class ?? '').trim().toUpperCase();
+  if (value === 'PRIVATE') return 'PRIVATE';
+  if (value === 'PUBLIC' || value === 'CIVIC' || value === 'PUBLIC_INVESTMENT') return 'PUBLIC';
+  throw new Error(`Building blueprint has no valid PRIVATE/PUBLIC scope: ${value || 'missing'}`);
+}
 
 async function loadBlueprint(
   tx: PostgresRepository,
@@ -38,8 +54,20 @@ async function corporationForHuman(tx: PostgresRepository, humanId: string): Pro
   return corporationId;
 }
 
+async function authorizedCorporation(tx: PostgresRepository, input: ResearchInput): Promise<string> {
+  if (input.corporationId) {
+    const corporation = (await tx.query<{ id: string }>(
+      "SELECT id FROM corporations WHERE id = $1 AND status = 'ACTIVE'",
+      [input.corporationId],
+    )).rows[0];
+    if (!corporation) throw new Error('Corporation is not active');
+    return corporation.id;
+  }
+  return corporationForHuman(tx, input.humanId);
+}
+
 export async function startCorporationBuildingResearchInTransaction(tx: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
-    const corporationId = await corporationForHuman(tx, input.humanId);
+    const corporationId = await authorizedCorporation(tx, input);
     const prior = await tx.query(`SELECT p.* FROM corporation_research_projects p
       JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
       WHERE o.id = $1 AND p.correlation_id = $2`, [corporationId, input.correlationId]);
@@ -71,6 +99,9 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     if (!previous.rows[0]) throw new Error('Building blueprint not found');
     const targetTier = priorTier + 1;
     if (targetTier > 5) throw new Error(`No predefined building tier remains after Tier ${priorTier}`);
+    if (input.targetTier != null && input.targetTier !== targetTier) {
+      throw new Error(`Building research target changed; expected Tier ${input.targetTier} but the next tier is ${targetTier}`);
+    }
     const targetCatalogId = `${input.buildingType}-t${targetTier}`;
     // Tiers are authored in the catalog. Research unlocks a predefined
     // blueprint; it never generates or mutates shared catalog economics.
@@ -79,6 +110,14 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
       [targetCatalogId, input.buildingType, targetTier],
     );
     if (!targetCatalog.rows[0]) throw new Error(`Predefined Tier ${targetTier} blueprint is missing from the building catalog`);
+    const targetScope = blueprintScope(targetCatalog.rows[0] as Record<string, unknown>);
+    const governanceResearch = input.authorizationMode === 'V5_GOVERNANCE';
+    if (governanceResearch && targetScope !== 'PUBLIC') {
+      throw new Error('V5 governance building research requires a PUBLIC blueprint');
+    }
+    if (!governanceResearch && targetScope !== 'PRIVATE') {
+      throw new Error('PUBLIC building research requires a V5 Corporation Governance proposal');
+    }
     const existingProject = await tx.query(
       "SELECT p.* FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' AND p.target_id = $2 AND p.status IN ('QUEUED','ACTIVE','COMPLETED') LIMIT 1",
       [corporationId, targetCatalogId],
@@ -187,6 +226,15 @@ export async function quoteCorporationBuildingResearch(repository: PostgresRepos
       targetTier,
       currentBlueprint: previous,
       targetBlueprint: target,
+      blueprintScope: blueprintScope(target),
+      authorization: {
+        canStart: blueprintScope(target) === 'PRIVATE',
+        canPropose: blueprintScope(target) === 'PUBLIC',
+        fundingSource: 'CORPORATION_OPERATIONS',
+        reason: blueprintScope(target) === 'PRIVATE'
+          ? 'Private blueprint research is started directly by the Corporation.'
+          : 'Public blueprint research is submitted to Corporation Governance and funded by the Corporation.',
+      },
       quote: {
         researchCostUnits: costUnits.toString(),
         durationDays,

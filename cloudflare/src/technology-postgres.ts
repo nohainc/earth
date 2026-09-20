@@ -1,10 +1,10 @@
 import type { PostgresRepository } from './repository.ts';
-import { moneyToCents } from './money.ts';
 import { createNotification } from './notifications-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
-import { toNanoMarkup } from './nano-markup.ts';
+import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { runEconomicMutation, postEconomicTransaction } from './settlement-barrier-postgres.ts';
+import type { TechnologyCatalogEntry, TechnologyEffect } from './technology-read-model.ts';
 
 export type TechnologyCatalogRow = {
   id: string;
@@ -24,13 +24,60 @@ export type TechnologyCatalogRow = {
   effects: Array<Record<string, unknown>>;
 };
 
-export function mapTechnologyCatalogRow(row: TechnologyCatalogRow): Record<string, unknown> {
+export type NormalizedResearchProject = Record<string, unknown> & {
+  progressBps: number;
+  remainingGameDays: number;
+  completionGameDay: number;
+};
+
+/** Catalog duration is the only V5 completion clock. */
+export function normalizeResearchProject(
+  project: Record<string, unknown>,
+  currentGameDay: number,
+  catalogEntry?: TechnologyCatalogRow,
+): NormalizedResearchProject {
+  const snapshot = project.definition_snapshot
+    ? fromNanoMarkup<Record<string, unknown>>(project.definition_snapshot)
+    : {};
+  const duration = Math.max(1, Number(
+    snapshot.researchDurationGameDays
+      ?? project.research_duration_game_days
+      ?? catalogEntry?.research_duration_game_days
+      ?? 1,
+  ) || 1);
+  const startedGameDay = Number(project.started_game_day ?? snapshot.startedGameDay ?? currentGameDay) || currentGameDay;
+  const storedCompletion = Number(project.completed_game_day ?? 0);
+  const completionGameDay = storedCompletion > 0 ? storedCompletion : startedGameDay + duration;
+  const completed = String(project.status ?? '').toUpperCase() === 'COMPLETED' || storedCompletion > 0;
+  const elapsed = Math.max(0, currentGameDay - startedGameDay);
+  return {
+    ...project,
+    name: String(snapshot.name ?? project.name ?? catalogEntry?.name ?? ''),
+    researchDurationGameDays: String(duration),
+    startedGameDay,
+    progressBps: completed ? 10000 : Math.min(10000, Math.floor((elapsed * 10000) / duration)),
+    remainingGameDays: completed ? 0 : Math.max(0, completionGameDay - currentGameDay),
+    completionGameDay,
+  };
+}
+
+export function mapTechnologyCatalogRow(row: TechnologyCatalogRow): TechnologyCatalogEntry & Record<string, unknown> {
+  const effects: TechnologyEffect[] = (row.effects ?? []).map((effect) => ({
+    effectType: String(effect.effectType ?? ''),
+    modifierFamily: String(effect.modifierFamily ?? ''),
+    targetType: String(effect.targetType ?? ''),
+    targetKey: String(effect.targetKey ?? ''),
+    modifierBps: effect.modifierBps == null ? null : Number(effect.modifierBps),
+  }));
   return {
     ...row,
     researchCostUnits: row.research_credit_cost_units,
     researchPointsRequired: row.research_points_required,
     researchDurationGameDays: row.research_duration_game_days,
-    effects: row.effects ?? [],
+    effects,
+    prerequisites: [],
+    viewerStatus: 'LOCKED',
+    accessSource: null,
     kind: 'approved_capability',
     tradeable: false,
     playerCreated: false,
@@ -82,7 +129,7 @@ async function requireResearchJurisdiction(tx: PostgresRepository, ownerId: stri
   if (!membership.rows[0]?.corporation_id) throw new Error('Research requires active corporation membership');
 }
 
-export async function createResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string; budget: number; focus: string; correlationId: string }): Promise<Record<string, unknown>> {
+export async function createResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string; correlationId: string }): Promise<Record<string, unknown>> {
   return runEconomicMutation(repository, async (tx, clock) => {
     await requireResearchJurisdiction(tx, input.ownerId);
     const membership = await tx.query<{ corporation_id: string }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.ownerId]);
@@ -90,16 +137,18 @@ export async function createResearchProject(repository: PostgresRepository, inpu
     const day = clock.gameDay;
     const catalog = await readTechnologyCatalog(tx, day);
     const catalogEntry = catalog.find((technology) => technology.name === input.name || technology.code === input.name);
-    const minimumBudgetCents = Number(catalogEntry?.research_credit_cost_units ?? 0n) / 1;
-    if (!catalogEntry || moneyToCents(input.budget) < minimumBudgetCents) {
-      throw new Error(`Research funding for ${input.name} must meet the database catalog cost`);
-    }
+    if (!catalogEntry) throw new Error(`Technology ${input.name} is not available in the active catalog`);
     await tx.query('SELECT earth_assert_technology_research_allowed($1, $2)', [catalogEntry.id, day + 1]);
     const prior = await tx.query<{ id: string }>(`SELECT p.id FROM corporation_research_projects p
       JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
       WHERE o.id = $1 AND p.correlation_id = $2`, [corporationId, input.correlationId]);
-    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, project: (await tx.query('SELECT * FROM corporation_research_projects WHERE id = $1', [prior.rows[0].id])).rows[0], correlationId: input.correlationId };
-    const budgetCents = moneyToCents(input.budget);
+    if (prior.rows[0]) {
+      const existing = (await tx.query<Record<string, unknown>>('SELECT * FROM corporation_research_projects WHERE id = $1', [prior.rows[0].id])).rows[0];
+      return { ok: true, alreadyProcessed: true, project: existing ? normalizeResearchProject(existing, day, catalogEntry) : null, correlationId: input.correlationId };
+    }
+    // The catalog is the only source of truth for research cost. The client
+    // submits the selected technology, never a negotiable funding amount.
+    const budgetCents = BigInt(catalogEntry.research_credit_cost_units);
     const projectId = `PROJECT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const corporationOwner = await tx.query<{ economic_id: string }>('SELECT economic_id::TEXT FROM owner_registry WHERE id = $1', [corporationId]);
     if (!corporationOwner.rows[0]) throw new Error('Corporation economic owner is not provisioned');
@@ -145,11 +194,12 @@ export async function createResearchProject(repository: PostgresRepository, inpu
        required_research_points, progress_research_points, credit_cost_units,
        priority, status, started_game_day, funding_transaction_id, correlation_id, definition_snapshot)
       VALUES ($1,$2,'TECHNOLOGY',$3,$4,$5,0, $6,100,'ACTIVE',$7,$8,$9,$10::jsonb)`,
-      [projectId, corporationOwner.rows[0].economic_id, catalogEntry.id, `technology-catalog-v${catalogEntry.definition_version}`, catalogEntry.research_points_required, catalogEntry.research_credit_cost_units, day, fundingTransactionId, input.correlationId, toNanoMarkup({ technologyId: catalogEntry.id, code: catalogEntry.code, name: catalogEntry.name, definitionVersion: catalogEntry.definition_version, researchCreditCostUnits: catalogEntry.research_credit_cost_units, researchPointsRequired: catalogEntry.research_points_required, effects: catalogEntry.effects, patentable: catalogEntry.patentable, patentExclusivityDays: catalogEntry.patent_exclusivity_days })]);
+      [projectId, corporationOwner.rows[0].economic_id, catalogEntry.id, `technology-catalog-v${catalogEntry.definition_version}`, catalogEntry.research_points_required, catalogEntry.research_credit_cost_units, day + 1, fundingTransactionId, input.correlationId, toNanoMarkup({ technologyId: catalogEntry.id, code: catalogEntry.code, name: catalogEntry.name, definitionVersion: catalogEntry.definition_version, researchCreditCostUnits: catalogEntry.research_credit_cost_units, researchPointsRequired: catalogEntry.research_points_required, researchDurationGameDays: catalogEntry.research_duration_game_days, effects: catalogEntry.effects, patentable: catalogEntry.patentable, patentExclusivityDays: catalogEntry.patent_exclusivity_days })]);
     const senderHouse = await tx.query<{ house_id: string }>('SELECT house_id FROM humans WHERE id = $1', [input.ownerId]);
     await createGameEvent(tx, { id: `RESEARCH-STARTED-${input.correlationId}`, category: 'RESEARCH', eventType: 'RESEARCH_STARTED', gameDay: day, actorHouseId: senderHouse.rows[0]?.house_id ?? null, actorHumanId: input.ownerId, subjectType: 'RESEARCH_PROJECT', subjectId: projectId, title: 'Corporation research started', details: { projectId, technologyId: catalogEntry.id }, correlationId: input.correlationId });
     await createNotification(tx, { id: crypto.randomUUID(), humanId: input.ownerId, notificationType: 'technology', title: 'Corporation research started', body: `${input.name} is now being researched by your corporation.`, entityType: 'research_project', entityId: projectId, gameDay: day, correlationId: input.correlationId });
-    return { ok: true, project: (await tx.query('SELECT * FROM corporation_research_projects WHERE id = $1', [projectId])).rows[0], correlationId: input.correlationId };
+    const project = (await tx.query<Record<string, unknown>>('SELECT * FROM corporation_research_projects WHERE id = $1', [projectId])).rows[0];
+    return { ok: true, project: project ? normalizeResearchProject(project, day, catalogEntry) : null, correlationId: input.correlationId };
   });
 }
 
@@ -161,7 +211,27 @@ export async function quoteResearchProject(repository: PostgresRepository, input
   if (!entry) throw new Error('Technology is not available in the active catalog');
   await repository.query('SELECT earth_assert_technology_research_allowed($1, $2)', [entry.id, day + 1]);
   const membership = (await repository.query<{ corporation_id: string }>("SELECT ha.corporation_id FROM humans h JOIN house_affiliations ha ON ha.house_id = h.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' LIMIT 1", [input.ownerId])).rows[0];
-  const activeProject = membership ? (await repository.query<{ id: string; status: string; progress_research_points: string }>(`SELECT p.id, p.status, p.progress_research_points::TEXT FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id WHERE o.id = $1 AND p.target_id = $2 AND p.status IN ('QUEUED','ACTIVE') LIMIT 1`, [membership.corporation_id, entry.id])).rows[0] : undefined;
+  const activeProjectRow = membership ? (await repository.query<Record<string, unknown>>(`SELECT p.* FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id WHERE o.id = $1 AND p.target_id = $2 AND p.status IN ('QUEUED','ACTIVE') LIMIT 1`, [membership.corporation_id, entry.id])).rows[0] : undefined;
+  const activeProject = activeProjectRow ? normalizeResearchProject(activeProjectRow, day, entry) : null;
+  const budgetRow = membership ? (await repository.query<{ authorized_units: string; committed_units: string; spent_units: string; status: string }>(`SELECT l.authorized_units::TEXT, l.committed_units::TEXT,
+      l.spent_units::TEXT, l.status
+    FROM institution_budget_lines l
+    JOIN budget_categories c ON c.id = l.category_id
+    JOIN fiscal_periods fp ON fp.id = l.fiscal_period_id
+    WHERE l.institution_id = $1 AND c.institution_kind = 'CORPORATION'
+      AND c.category_code = 'RESEARCH'
+      AND fp.start_game_day <= $2 AND fp.end_game_day >= $2
+      AND l.status = 'ACTIVE'
+    ORDER BY fp.start_game_day DESC, l.id LIMIT 1`, [membership.corporation_id, day])).rows[0] : undefined;
+  const budgetBefore = budgetRow
+    ? BigInt(budgetRow.authorized_units) - BigInt(budgetRow.committed_units) - BigInt(budgetRow.spent_units)
+    : null;
+  const researchCostUnits = BigInt(entry.research_credit_cost_units);
+  const blockers = [
+    ...(activeProject ? ['RESEARCH_ALREADY_ACTIVE'] : []),
+    ...(budgetBefore == null ? ['RESEARCH_BUDGET_UNAVAILABLE'] : []),
+    ...(budgetBefore != null && budgetBefore < researchCostUnits ? ['INSUFFICIENT_RESEARCH_BUDGET'] : []),
+  ];
   return {
     ok: true,
     technology: mapTechnologyCatalogRow(entry),
@@ -171,16 +241,15 @@ export async function quoteResearchProject(repository: PostgresRepository, input
       researchDurationGameDays: entry.research_duration_game_days,
       startsGameDay: day + 1,
       completesGameDay: day + 1 + Number(entry.research_duration_game_days),
-      alreadyActive: activeProject ?? null,
+      alreadyActive: activeProject,
+      prerequisites: [],
+      blockers,
+      budgetBeforeUnits: budgetBefore?.toString() ?? null,
+      budgetAfterUnits: budgetBefore == null ? null : (budgetBefore - researchCostUnits).toString(),
+      budgetStatus: budgetRow?.status ?? 'UNAVAILABLE',
     },
     generatedFrom: 'postgres-canonical-facts',
   };
-}
-
-export async function fundResearchProject(repository: PostgresRepository, input: { ownerId: string; amount: number; correlationId: string }): Promise<Record<string, unknown>> {
-  void repository;
-  void input;
-  throw new Error('Research is funded at creation and completes after its scheduled whole-day duration');
 }
 
 // V5 research advances once per finalized day. Completion and access grant
@@ -202,10 +271,14 @@ export async function advanceV5ResearchProjects(
         target_id: string;
         required_research_points: string;
         progress_research_points: string;
+        started_game_day: number;
+        completed_game_day: number | null;
+        definition_snapshot: Record<string, unknown> | null;
       }>(
         `SELECT id, corporation_economic_id, target_id,
                 required_research_points::TEXT,
-                progress_research_points::TEXT
+                progress_research_points::TEXT,
+                started_game_day, completed_game_day, definition_snapshot
            FROM corporation_research_projects
           WHERE id = $1 AND target_type = 'TECHNOLOGY' AND status = 'ACTIVE'
           FOR UPDATE`,
@@ -213,19 +286,18 @@ export async function advanceV5ResearchProjects(
       )).rows[0];
       if (!project) return;
 
-      const next = BigInt(project.progress_research_points) + 1n;
-      const required = BigInt(project.required_research_points);
-      const progress = next < required ? next : required;
-      await tx.query(
-        'UPDATE corporation_research_projects SET progress_research_points = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [progress.toString(), project.id],
-      );
       advanced += 1;
-      if (progress < required) return;
+      const snapshot = project.definition_snapshot
+        ? fromNanoMarkup<Record<string, unknown>>(project.definition_snapshot)
+        : {};
+      const duration = Math.max(1, Number(snapshot.researchDurationGameDays ?? 1) || 1);
+      const completionGameDay = project.started_game_day + duration;
+      if (gameDay < completionGameDay) return;
+      const required = BigInt(project.required_research_points);
 
       await tx.query(
-        "UPDATE corporation_research_projects SET status = 'COMPLETED', completed_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND status = 'ACTIVE'",
-        [gameDay, project.id],
+        "UPDATE corporation_research_projects SET status = 'COMPLETED', progress_research_points = $1, completed_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND status = 'ACTIVE'",
+        [required.toString(), completionGameDay, project.id],
       );
       await tx.query(
         "SELECT earth_grant_corporation_technology_access($1, $2, 'RESEARCHED', $3, $4)",

@@ -648,8 +648,9 @@ test('V5 research settlement advances projects and grants access on completion',
   const service = await readFile(new URL('../cloudflare/src/technology-postgres.ts', import.meta.url), 'utf8');
   const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
   assert.match(service, /advanceV5ResearchProjects/);
+  assert.match(service, /gameDay < completionGameDay/);
   assert.match(service, /progress_research_points = \$1/);
-  assert.match(service, /completed_game_day = \$1/);
+  assert.match(service, /completed_game_day = \$2/);
   assert.match(service, /earth_grant_corporation_technology_access/);
   assert.match(scheduler, /v5: await advanceV5ResearchProjects/);
 });

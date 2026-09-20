@@ -4,6 +4,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
+import '../../shared/widgets/format_helpers.dart';
 import 'organization_people_roles_panel.dart';
 
 /// V4 organization directory. Organizations are a generic institution; a
@@ -118,7 +119,6 @@ class _OrganizationDirectoryPanelState
                     const EarthApi()
                         .getOrganizationVotingMethod(organizationId: id),
                     const EarthApi().organizationFinancialRisk(id),
-                    const EarthApi().listOrganizationTechnologyAdoptions(id),
                   ]),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
@@ -132,7 +132,6 @@ class _OrganizationDirectoryPanelState
                     final charter = snapshot.data![1];
                     final voting = snapshot.data![2];
                     final risk = snapshot.data![3];
-                    final technology = snapshot.data![4];
                     return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -141,7 +140,7 @@ class _OrganizationDirectoryPanelState
                                   .copyWith(color: context.primaryColor)),
                           const SizedBox(height: 8),
                           Text(
-                              'Treasury: ${finance['treasury_units'] ?? finance['treasury'] ?? '—'} C · Budget: ${finance['budget_authorized_units'] ?? finance['budget'] ?? '—'} C',
+                              'Treasury: ${formatCreditUnits(finance['treasury_units'] ?? finance['treasury'])} · Budget: ${formatCreditUnits(finance['budget_authorized_units'] ?? finance['budget'])}',
                               style: context.bodyStyle),
                           Text(
                               'Charter version: ${charter['version'] ?? charter['charter']?['version'] ?? '—'} · Voting: ${voting['voting_method'] ?? voting['votingMethod'] ?? '—'}',
@@ -154,23 +153,6 @@ class _OrganizationDirectoryPanelState
                             Text(
                                 'Resolution cases: ${(risk['cases'] as List).length}',
                                 style: context.bodyStyle),
-                          if ((technology['adoptions'] as List? ?? const [])
-                              .isNotEmpty)
-                            Text(
-                                'Adopted technology: ${(technology['adoptions'] as List).map((row) => '${row['generation_name'] ?? row['generation_id']} (${row['status']})').join(', ')}',
-                                style: context.bodyStyle),
-                          ...((technology['adoptionProposals'] as List? ??
-                                  const [])
-                              .whereType<Map>()
-                              .map((proposal) => ListTile(
-                                    dense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                    title: Text(
-                                        'Technology proposal: ${proposal['title'] ?? proposal['id']}'),
-                                    subtitle: Text(
-                                        '${proposal['status']} · support ${proposal['support_votes'] ?? 0} / oppose ${proposal['oppose_votes'] ?? 0}'),
-                                    trailing: const Text('V5 GOVERNANCE'),
-                                  ))),
                           const SizedBox(height: 14),
                           OrganizationPeopleRolesPanel(organizationId: id),
                         ]);
@@ -185,10 +167,6 @@ class _OrganizationDirectoryPanelState
             TextButton(
                 onPressed: () => _openResolution(id),
                 child: const Text('RESOLUTION')),
-          if (organization['is_member'] == true)
-            TextButton(
-                onPressed: () => _adoptTechnology(id),
-                child: const Text('ADOPT TECHNOLOGY')),
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('CLOSE')),
@@ -277,104 +255,6 @@ class _OrganizationDirectoryPanelState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Resolution unavailable: $error')));
-      }
-    }
-  }
-
-  Future<void> _adoptTechnology(String organizationId) async {
-    try {
-      final response = await const EarthApi().listEarthTechnologyGenerations();
-      if (!mounted) return;
-      final generations = (response['generations'] as List? ?? const [])
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .where((row) =>
-              row['discovered'] == true &&
-              row['eligibility'] is Map &&
-              (row['eligibility'] as Map)['eligible'] == true)
-          .toList();
-      final result = await showDialog<Map<String, String>>(
-          context: context,
-          builder: (dialogContext) {
-            final proposal = TextEditingController();
-            String? generation;
-            return StatefulBuilder(
-                builder: (context, setState) => AlertDialog(
-                      title: const Text('ADOPT TECHNOLOGY GENERATION'),
-                      content:
-                          Column(mainAxisSize: MainAxisSize.min, children: [
-                        DropdownButtonFormField<String>(
-                            value: generation,
-                            decoration: const InputDecoration(
-                                labelText: 'Discovered generation'),
-                            items: generations
-                                .map((row) => DropdownMenuItem(
-                                    value: row['id']?.toString(),
-                                    child: Text('${row['name'] ?? row['id']}')))
-                                .toList(),
-                            onChanged: (value) =>
-                                setState(() => generation = value),
-                            hint: Text(generations.isEmpty
-                                ? 'No effective generation available'
-                                : 'Select a generation')),
-                        TextField(
-                            controller: proposal,
-                            decoration: const InputDecoration(
-                                labelText: 'Passed Organization proposal ID')),
-                      ]),
-                      actions: [
-                        TextButton(
-                            onPressed: () => Navigator.pop(dialogContext),
-                            child: const Text('CANCEL')),
-                        TextButton(
-                            onPressed: generation == null
-                                ? null
-                                : () async {
-                                    final response = await const EarthApi()
-                                        .proposeTechnologyAdoption(
-                                            organizationId: organizationId,
-                                            generationId: generation!);
-                                    if (dialogContext.mounted) {
-                                      Navigator.pop(dialogContext, {
-                                        'proposalOnly': 'true',
-                                        'proposalId':
-                                            '${response['proposal']?['id'] ?? response['proposalId'] ?? 'created'}'
-                                      });
-                                    }
-                                  },
-                            child: const Text('PROPOSE')),
-                        FilledButton(
-                            onPressed: generation == null ||
-                                    proposal.text.trim().isEmpty
-                                ? null
-                                : () => Navigator.pop(dialogContext, {
-                                      'generation': generation!,
-                                      'proposal': proposal.text.trim()
-                                    }),
-                            child: const Text('ADOPT'))
-                      ],
-                    ));
-          });
-      if (result == null || !mounted) return;
-      if (result['proposalOnly'] == 'true') {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content:
-                Text('Technology proposal created: ${result['proposalId']}')));
-        return;
-      }
-      await const EarthApi().adoptTechnologyGeneration(
-          organizationId: organizationId,
-          generationId: result['generation']!,
-          proposalId: result['proposal']!);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Technology adoption recorded for the next effective game day.')));
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Technology adoption unavailable: $error')));
       }
     }
   }

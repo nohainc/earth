@@ -1811,7 +1811,7 @@ class _ProposalCard extends StatelessWidget {
               const SizedBox(width: 2),
               const Icon(Icons.account_balance_wallet_outlined,
                   size: 14, color: EarthResourceColors.credits),
-              Text(formatWholeNumber(creditCost),
+              Text(formatCreditUnits(creditCost),
                   style: context.widgetFooterStyle),
               if (matCost > 0) ...[
                 const SizedBox(width: 4),
@@ -1935,7 +1935,7 @@ class _ProposalCard extends StatelessWidget {
         detail['cost_credits'] ??
         detail['cost'] ??
         detail['costs'];
-    final cost = rawCost == null ? null : asDoubleOr(rawCost, 0);
+    final costUnits = rawCost == null ? null : BigInt.tryParse(rawCost.toString());
     final durationMinutes = asInt(detail['duration_minutes']);
     final durationHours = durationMinutes == null
         ? null
@@ -2040,9 +2040,9 @@ class _ProposalCard extends StatelessWidget {
               const Icon(Icons.account_balance_wallet_outlined,
                   size: 14, color: EarthResourceColors.credits),
               Text(
-                  cost == null
+                  costUnits == null
                       ? 'NOT PUBLISHED'
-                      : '${formatWholeNumber(cost)} CREDITS',
+                      : '${formatCreditUnits(costUnits)}',
                   style: context.widgetFooterStyle),
               const SizedBox(width: 6),
               const Icon(Icons.timer_outlined, size: 14, color: Colors.amber),

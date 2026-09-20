@@ -302,7 +302,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                       child: Text('Overhaul · reset major rebuild age')),
                   DropdownMenuItem(
                       value: 'GENERATION_RETROFIT',
-                      child: Text('Technology retrofit · preserve age')),
+                      child: Text('Domain-generation retrofit · preserve building age')),
                 ],
                 onChanged: (value) =>
                     setDialogState(() => kind = value ?? kind),
@@ -329,7 +329,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           ? selectedGeneration
                           : null,
                       decoration: const InputDecoration(
-                          labelText: 'Effective technology generation'),
+                          labelText: 'Target domain generation'),
                       items: eligible
                           .map((row) => DropdownMenuItem(
                               value: row['id']?.toString(),
@@ -348,7 +348,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 ),
                 const SizedBox(height: 5),
                 const Text(
-                    'Only discovered and effective generations are selectable. The server still verifies ownership, price, and settlement eligibility.',
+                    'Only discovered and effective Domain Generations are selectable. The server still verifies ownership, price, and settlement eligibility.',
                     style: TextStyle(fontSize: 10)),
               ],
             ]),
@@ -732,7 +732,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       infoBulletPoints: const [
         'Buildings are the productive assets of the economy: they use resources, provide services, and generate returns.',
         'Private buildings belong to your House. Corporation/Public buildings are owned by the Corporation. Their available actions come from Corporation governance authorization; otherwise they remain read-only.',
-        'Operating policy affects output and upkeep. Automatic upkeep keeps routine maintenance out of the main decision loop.',
+        'A Building Tier is the blueprint level; a Domain Generation is the Corporation technology level used by a building. They are separate progression systems. Operating policy affects output and upkeep. Automatic upkeep keeps routine maintenance out of the main decision loop.',
       ],
       trailing: null,
       child: LayoutBuilder(
@@ -1196,7 +1196,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             _buildingListFilterChip(context, 'UTILIZATION', 'utilized'),
             _buildingListFilterChip(context, 'RESOURCE FLOW', 'resource'),
             _buildingListFilterChip(context, 'LARGE FOOTPRINT', 'large'),
-            _buildingListFilterChip(context, 'GENERATION', 'generation'),
+            _buildingListFilterChip(context, 'DOMAIN GENERATION', 'generation'),
             _buildingListSortChip(context, 'DEFAULT', 'default'),
             _buildingListSortChip(context, 'UTILIZATION', 'capacity'),
             _buildingListSortChip(context, 'RESOURCE FLOW', 'resource'),
@@ -1967,7 +1967,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     ),
                   ),
                   Text(
-                    '$buildingName · Generation ${quotedGeneration?.toString() ?? 'UNAVAILABLE'}',
+                    '$buildingName · Domain Generation ${quotedGeneration?.toString() ?? 'UNAVAILABLE'}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -2120,7 +2120,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               Text('TECHNOLOGY & SCALE', style: context.captionStyle),
               const SizedBox(height: 6),
               Text(
-                'Scale: ${quote['minimumScaleCapability'] ?? 'UNAVAILABLE'} (${(quote['scaleAuthorization'] as Map?)?['authorized'] == true ? 'available' : 'blocked'}) · Technology: ${quote['technologyDomain'] ?? 'UNAVAILABLE'} · Generation: ${quote['installedGeneration'] ?? 'UNAVAILABLE'} (${(quote['generationAuthorization'] as Map?)?['authorized'] == true ? 'available' : 'blocked'})',
+                'Scale: ${quote['minimumScaleCapability'] ?? 'UNAVAILABLE'} (${(quote['scaleAuthorization'] as Map?)?['authorized'] == true ? 'available' : 'blocked'}) · Domain: ${quote['technologyDomain'] ?? 'UNAVAILABLE'} · Domain Generation: ${quote['installedGeneration'] ?? 'UNAVAILABLE'} (${(quote['generationAuthorization'] as Map?)?['authorized'] == true ? 'available' : 'blocked'})',
                 style: context.widgetFooterStyle,
               ),
               const SizedBox(height: 12),
@@ -2840,14 +2840,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     ],
                     if (hasActiveResearch)
                       Text(
-                        'R&D in progress: Tier $researchTargetTier (${researchProgressVal.toStringAsFixed(0)}% complete)',
+                        'R&D in progress: Building Tier $researchTargetTier (${researchProgressVal.toStringAsFixed(0)}% complete)',
                         style: context.widgetFooterStyle.copyWith(
                             color: context.primaryColor,
                             fontSize: 12,
                             fontWeight: FontWeight.w600),
                       ),
                     Text(
-                      '${itemNumber == null ? '' : '#$itemNumber  ·  '}${asIntOr(b['slot_footprint'], 1)} capacity units  ·  Tier ${asIntOr(b['tier'], 1)}${b['installed_generation'] != null ? '  ·  Technology generation ${b['installed_generation']}' : ''}${b['technology_domain'] != null ? '  ·  ${b['technology_domain']}' : ''}',
+                      '${itemNumber == null ? '' : '#$itemNumber  ·  '}${asIntOr(b['slot_footprint'], 1)} capacity units  ·  Building Tier ${asIntOr(b['tier'], 1)}${b['installed_generation'] != null ? '  ·  Domain Generation ${b['installed_generation']}' : ''}${b['technology_domain'] != null ? '  ·  ${b['technology_domain']}' : ''}',
                       style: context.widgetFooterStyle
                           .copyWith(color: context.mutedColor, fontSize: 12),
                     ),
@@ -2875,7 +2875,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 const SizedBox(width: 6),
                 Tooltip(
                   message:
-                      'Tier $researchTargetTier R&D in progress (${researchProgressVal.toStringAsFixed(0)}%)',
+                      'Building Tier $researchTargetTier R&D in progress (${researchProgressVal.toStringAsFixed(0)}%)',
                   child: EarthBadge(
                     label: 'R&D ${researchProgressVal.toStringAsFixed(0)}%',
                     variant: EarthBadgeVariant.primary,
@@ -3004,7 +3004,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         ),
                       if (tier >= 4)
                         const EarthButton(
-                          label: 'MAX TIER REACHED',
+                          label: 'MAX BUILDING TIER REACHED',
                           icon: Icons.check_circle_outline,
                           variant: EarthButtonVariant.secondary,
                           onPressed: null,
@@ -3022,7 +3022,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               ? 'UNDER CONSTRUCTION'
                               : !canUpgrade
                                   ? 'READ ONLY'
-                                  : 'UPGRADE TO TIER ${tier + 1}',
+                                  : 'UPGRADE TO BUILDING TIER ${tier + 1}',
                           icon: isUnderConstruction
                               ? Icons.hourglass_top_outlined
                               : Icons.arrow_upward_outlined,
@@ -3055,7 +3055,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                   ? 'R&D IN PROGRESS (${researchProgressVal.toStringAsFixed(0)}%)'
                                   : !canRetrofit
                                       ? 'READ ONLY'
-                                      : 'RESEARCH TIER ${tier + 1}',
+                                      : 'RESEARCH BUILDING TIER ${tier + 1}',
                           icon: isUnderConstruction
                               ? Icons.hourglass_top_outlined
                               : hasActiveResearch
@@ -3189,17 +3189,22 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       }
     }
 
-    final ownership = building['ownership_class']?.toString() ?? 'private';
-    final costCredits = asDouble(serverQuote['researchCostUnits']);
+    final blueprintScope =
+        quoteResponse['blueprintScope']?.toString().toUpperCase() ?? '';
+    final authorization = quoteResponse['authorization'] is Map
+        ? Map<String, dynamic>.from(quoteResponse['authorization'] as Map)
+        : const <String, dynamic>{};
+    final isPrivate = blueprintScope == 'PRIVATE';
+    final canStart = authorization['canStart'] == true;
+    final canPropose = authorization['canPropose'] == true;
+    final corporationId = widget.state.membership?['corporation_id']?.toString();
+    final costCredits = BigInt.tryParse(
+        serverQuote['researchCostUnits']?.toString() ?? '');
     final durationDays = asInt(serverQuote['durationDays']);
     if (costCredits == null || durationDays == null) {
       _showBuildingFeedback('Authoritative research quote is unavailable.');
       return;
     }
-
-    final isPrivate = ownership == 'private';
-    final fundingSource =
-        isPrivate ? 'your personal account' : 'your corporation treasury';
 
     List<Map<String, dynamic>> resourceFlows(Map<String, dynamic> blueprint) {
       final raw = blueprint['resourceFlows'] ?? blueprint['resource_flows'];
@@ -3273,8 +3278,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 children: [
                   Text(
                     isPrivate
-                        ? 'Initiate R&D Project'
-                        : 'Propose Civic Research',
+                        ? 'Start Corporation R&D'
+                        : 'Propose Public R&D',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -3282,7 +3287,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     ),
                   ),
                   Text(
-                    '$bName · Tier $currentTier → Tier $targetTier',
+                    '$bName · Building Tier $currentTier → Building Tier $targetTier',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -3302,8 +3307,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             children: [
               Text(
                 isPrivate
-                    ? 'Starting this research project will charge ${formatCreditUnits(serverQuote['researchCostUnits'])} from $fundingSource to develop Tier $targetTier blueprints.'
-                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditUnits(serverQuote['researchCostUnits'])} will be funded from the corporation treasury to develop Tier $targetTier blueprints.',
+                    ? 'This Corporation-funded research will charge ${formatCreditUnits(serverQuote['researchCostUnits'])} from the Corporation operations account to research Building Tier $targetTier.'
+                    : 'This public blueprint research requires Corporation Governance approval. If passed, ${formatCreditUnits(serverQuote['researchCostUnits'])} will be funded from the Corporation operations account to research Building Tier $targetTier.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -3503,26 +3508,42 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           ),
           EarthButton(
             label: isPrivate
-                ? 'CONFIRM R&D PROJECT'
-                : 'SUBMIT CORPORATION PROPOSAL',
+                ? 'CONFIRM CORPORATION R&D'
+                : 'SUBMIT V5 PROPOSAL',
             icon:
                 isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
-            variant: EarthButtonVariant.primary,
-            onPressed: () => Navigator.pop(dialogContext, true),
+            variant: (!canStart && !canPropose)
+                ? EarthButtonVariant.neutral
+                : EarthButtonVariant.primary,
+            onPressed: (!canStart && !canPropose)
+                ? null
+                : () => Navigator.pop(dialogContext, true),
           ),
         ],
       ),
     );
 
     if (confirmed == true && mounted) {
-      if (isPrivate) {
+      if (isPrivate && canStart) {
         await widget.action(
             () => const EarthApi().startCorporationBuildingResearch(bType));
         _showBuildingFeedback(
-            '$bName Tier $targetTier research project initiated.');
-      } else {
-        _showBuildingFeedback(
-            'Public research proposals are retired. Use V5 Corporation Governance to propose research.');
+            '$bName Building Tier $targetTier research project initiated.');
+      } else if (!isPrivate && canPropose && corporationId != null) {
+        final startsGameDay = asInt(serverQuote['startsGameDay']);
+        await widget.action(() async {
+          await const EarthApi().proposeCorporationBuildingResearch(
+            corporationId: corporationId,
+            buildingType: bType,
+            targetTier: targetTier,
+            effectiveFromGameDay: startsGameDay ?? 0,
+            title: 'Research $bName Building Tier $targetTier',
+            body:
+                'Authorize Corporation-funded research for the public $bName Building Tier $targetTier blueprint.',
+          );
+          return const EarthApi().world();
+        });
+        _showBuildingFeedback('V5 Governance proposal submitted.');
       }
     }
   }

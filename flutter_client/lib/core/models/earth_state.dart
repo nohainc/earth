@@ -3,6 +3,7 @@ import 'human_profile.dart';
 import 'human_daily_needs.dart';
 import 'human_authority_summary.dart';
 import 'building_models.dart';
+import 'technology_models.dart';
 
 class EarthState {
   final Map<String, dynamic> json;
@@ -25,16 +26,21 @@ class EarthState {
     final value = json['humanProfile'];
     return value is Map ? HumanProfile.fromJson(_toMap(value)) : null;
   }
+
   HumanDailyNeeds? get humanDailyNeeds {
     final value = json['humanDailyNeeds'];
     return value is Map ? HumanDailyNeeds.fromJson(_toMap(value)) : null;
   }
+
   List<dynamic> get roles => _toList(json['roles']);
   List<HumanAuthoritySummary> get humanAuthoritySummary => _toList(
         json['humanAuthoritySummary'],
-      ).whereType<Map>().map((row) => HumanAuthoritySummary.fromJson(
-            Map<String, dynamic>.from(row),
-          )).toList(growable: false);
+      )
+          .whereType<Map>()
+          .map((row) => HumanAuthoritySummary.fromJson(
+                Map<String, dynamic>.from(row),
+              ))
+          .toList(growable: false);
   List<dynamic> get recentLifeEvents => _toList(json['recentLifeEvents']);
   Map<String, dynamic> get house => _toMap(json['house']);
   Map<String, dynamic> get residency => _toMap(json['residency']);
@@ -44,6 +50,8 @@ class EarthState {
       ? (json['technology'] as Map)['research']
       : null);
   Map<String, dynamic> get technologyRegistry => _toMap(json['technology']);
+  TechnologyWorkspace get technologyWorkspace =>
+      TechnologyWorkspace.fromJson(technologyRegistry);
   Map<String, dynamic> get governance => _toMap(json['governance']);
   Map<String, dynamic> get institutions => _toMap(json['institutions']);
   Map<String, dynamic> get life => _toMap(json['life']);
@@ -83,6 +91,7 @@ class EarthState {
     final value = json['buildingPortfolio'];
     return value is Map ? BuildingPortfolio.fromJson(_toMap(value)) : null;
   }
+
   List<BuildingAsset> get houseBuildingAssets =>
       buildingPortfolio?.houseAssets ?? const [];
   List<BuildingAsset> get corporationPublicBuildingAssets =>

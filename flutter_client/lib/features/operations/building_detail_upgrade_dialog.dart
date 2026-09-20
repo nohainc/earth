@@ -75,7 +75,7 @@ Future<bool?> showBuildingDetailUpgradeDialog(
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Upgrade to Tier $targetTier',
+              'Upgrade to Building Tier $targetTier',
               style: context.topicTitleStyle,
               overflow: TextOverflow.ellipsis,
             ),
@@ -94,8 +94,8 @@ Future<bool?> showBuildingDetailUpgradeDialog(
                 style: context.bodyStyle,
               ),
               const SizedBox(height: 14),
-              _quoteRow(context, 'Current tier', currentTier),
-              _quoteRow(context, 'Target tier', targetTier),
+              _quoteRow(context, 'Current Building Tier', currentTier),
+              _quoteRow(context, 'Target Building Tier', targetTier),
               const Divider(height: 20),
               Text('UPGRADE RESOURCE COSTS', style: context.captionStyle),
               _quoteRow(context, 'CREDIT cost', creditCost),
@@ -140,7 +140,7 @@ Future<bool?> showBuildingDetailUpgradeDialog(
           onPressed: () => Navigator.of(dialogContext).pop(false),
         ),
         EarthButton(
-          label: 'COMMENCE TIER $targetTier UPGRADE',
+          label: 'COMMENCE BUILDING TIER $targetTier UPGRADE',
           icon: Icons.arrow_upward_outlined,
           variant: EarthButtonVariant.primary,
           onPressed: () async {

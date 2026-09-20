@@ -58,6 +58,7 @@ void main() {
 
   test('formatCreditUnits formats atomic CREDIT with integer arithmetic', () {
     expect(formatCreditUnits('12500'), '125.00 C');
+    expect(formatCreditUnits('50000'), '500.00 C');
     expect(formatCreditUnits(1), '0.01 C');
     expect(formatCreditUnits('-5'), '-0.05 C');
     expect(formatCreditUnits('9007199254740993'), '90071992547409.93 C');

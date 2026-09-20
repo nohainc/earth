@@ -351,6 +351,7 @@ class Dashboard extends StatelessWidget {
                 state: state,
                 busy: busy,
                 action: action,
+                onNavigate: onNavigate,
               );
               return technology;
             },

@@ -1,9 +1,12 @@
 import type { PostgresRepository } from './repository';
-import { mapTechnologyCatalogRow } from './technology-postgres.ts';
+import { mapTechnologyCatalogRow, normalizeResearchProject, type TechnologyCatalogRow } from './technology-postgres.ts';
 import { listRankings as listRankingsSnapshot } from './rankings-postgres.ts';
 import { priceUnitsToDisplayPrice } from './market-units.ts';
 import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
+import type { TechnologyWorkspace } from './technology-read-model.ts';
+import { getEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
+import { getAvailableGenerations } from './v5-generation-postgres.ts';
 
 export { listEvents } from './read-models/events-read.ts';
 export { listHistory } from './read-models/events-read.ts';
@@ -51,8 +54,8 @@ export async function listRankings(repository: PostgresRepository, options: Rank
   return listRankingsSnapshot(repository, options);
 }
 
-export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const [projects, catalog] = await Promise.all([
+export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<TechnologyWorkspace> {
+  const [projects, catalog, clock, frontier, corporation] = await Promise.all([
     repository.query(`SELECT p.* FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id JOIN house_affiliations ha ON ha.corporation_id = o.id JOIN humans h ON h.house_id = ha.house_id WHERE h.id = $1 AND ha.status = 'ACTIVE' ORDER BY p.id DESC`, [humanId]).catch(() => ({ rows: [] })),
     repository.query(`SELECT DISTINCT ON (tc.code)
       tc.id, tc.code, tc.name, tc.category, tc.description, tc.patentable,
@@ -68,8 +71,121 @@ export async function listTechnology(repository: PostgresRepository, humanId: st
       FROM technology_catalog tc
       WHERE tc.status = 'ACTIVE'
       ORDER BY tc.code, tc.definition_version DESC`).catch(() => ({ rows: [] })),
+    readAuthoritativeGameTime(repository),
+    getEarthTechnologyFrontier(repository),
+    repository.query<{ economic_id: string }>(`SELECT o.economic_id
+      FROM humans h
+      JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE'
+      JOIN owner_registry o ON o.id = ha.corporation_id AND o.owner_type = 'CORPORATION'
+     WHERE h.id = $1 LIMIT 1`, [humanId]).catch(() => ({ rows: [] })),
   ]);
-  return { catalog: catalog.rows.map(mapTechnologyCatalogRow), projects: projects.rows };
+  const catalogRows = catalog.rows as TechnologyCatalogRow[];
+  const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
+  const normalizedProjects = projects.rows.map((project) => normalizeResearchProject(
+    project as Record<string, unknown>,
+    clock.gameDay,
+    catalogById.get(String((project as Record<string, unknown>).target_id)),
+  ));
+  const corporationEconomicId = corporation.rows[0]?.economic_id ?? null;
+  const [access, budget] = corporationEconomicId
+    ? await Promise.all([
+      repository.query<{ technology_id: string; status: string }>(`SELECT technology_id, status
+        FROM corporation_technology_access
+        WHERE corporation_economic_id = $1 AND status = 'ACTIVE'
+          AND effective_from_game_day <= $2
+          AND (effective_to_game_day IS NULL OR effective_to_game_day >= $2)`, [corporationEconomicId, clock.gameDay]),
+      repository.query<{ authorized_units: string; committed_units: string; spent_units: string; status: string }>(`SELECT l.authorized_units::TEXT, l.committed_units::TEXT,
+          l.spent_units::TEXT, l.status
+        FROM institution_budget_lines l
+        JOIN budget_categories c ON c.id = l.category_id
+        JOIN fiscal_periods fp ON fp.id = l.fiscal_period_id
+        WHERE l.institution_id = $1
+          AND c.institution_kind = 'CORPORATION'
+          AND c.category_code = 'RESEARCH'
+          AND fp.start_game_day <= $2 AND fp.end_game_day >= $2
+          AND l.status = 'ACTIVE'
+        ORDER BY fp.start_game_day DESC, l.id
+        LIMIT 1`, [corporationEconomicId, clock.gameDay]),
+    ])
+    : [{ rows: [] }, { rows: [] }];
+  const accessIds = new Set(access.rows.map((row) => String(row.technology_id)));
+  const resolvedAccess = new Map<string, string>();
+  if (corporationEconomicId) {
+    const resolvedRows = await Promise.all(catalogRows.map(async (row) => {
+      const result = await repository.query<{ access_reason: string | null }>(
+        'SELECT access_reason FROM earth_resolve_corporation_technology_access($1, $2, $3)',
+        [corporationEconomicId, row.id, clock.gameDay],
+      ).catch(() => ({ rows: [] as Array<{ access_reason: string | null }> }));
+      return [row.id, result.rows[0]?.access_reason ?? null] as const;
+    }));
+    for (const [technologyId, accessReason] of resolvedRows) {
+      if (accessReason) resolvedAccess.set(technologyId, accessReason);
+    }
+  }
+  const projectByTarget = new Map(normalizedProjects.map((project) => [
+    String(project.target_id ?? project.targetId ?? ''), project,
+  ]));
+  const budgetRow = budget.rows[0];
+  const budgetAvailable = budgetRow
+    ? BigInt(budgetRow.authorized_units) - BigInt(budgetRow.committed_units) - BigInt(budgetRow.spent_units)
+    : null;
+  const researchBudget = budgetRow
+    ? {
+      authorizedUnits: String(budgetRow.authorized_units),
+      committedUnits: String(budgetRow.committed_units),
+      spentUnits: String(budgetRow.spent_units),
+      availableUnits: String(budgetAvailable),
+      status: String(budgetRow.status),
+    }
+    : null;
+  const catalogWithViewerState = catalogRows.map((row) => {
+    const project = projectByTarget.get(row.id);
+    const cost = BigInt(row.research_credit_cost_units);
+    const accessSource = resolvedAccess.get(row.id)
+      ?? (accessIds.has(row.id) ? 'RESEARCHED' : null);
+    const viewerStatus = accessSource || String(project?.status ?? '').toUpperCase() === 'COMPLETED'
+      ? 'ADOPTED'
+      : project && ['ACTIVE', 'QUEUED'].includes(String(project.status).toUpperCase())
+        ? 'ACTIVE'
+        : corporationEconomicId && budgetAvailable != null && budgetAvailable >= cost
+          ? 'AVAILABLE'
+          : 'LOCKED';
+    const mapped = mapTechnologyCatalogRow(row);
+    return { ...mapped, viewerStatus, accessSource, prerequisites: [] };
+  });
+  const frontierRows = await Promise.all((frontier.frontier as Array<Record<string, unknown>>).map(async (row) => {
+    let corporationAccessibleGeneration: number | null = null;
+    if (corporationEconomicId) {
+      const available = await getAvailableGenerations(
+        repository,
+        String(row.domain_code ?? row.domain_id),
+        corporationEconomicId,
+        'CORPORATION',
+        null,
+        clock.gameDay,
+      );
+      corporationAccessibleGeneration = available.maxAccessibleGeneration;
+    }
+    const nextGeneration = row.next_generation_number == null ? null : Number(row.next_generation_number);
+    return {
+      id: String(row.domain_id),
+      code: String(row.domain_code),
+      name: String(row.domain_name),
+      frontierGeneration: Number(row.max_generation_number ?? 1),
+      effectiveFromGameDay: Number(row.effective_from_game_day ?? 1),
+      nextGeneration,
+      nextGenerationMinimumGameDay: row.next_generation_minimum_game_day == null ? null : Number(row.next_generation_minimum_game_day),
+      corporationAccessibleGeneration,
+      governanceStatus: nextGeneration == null ? 'NO_NEXT_GENERATION' : 'READY_FOR_GOVERNANCE',
+    };
+  }));
+  return {
+    catalog: catalogWithViewerState,
+    projects: normalizedProjects as TechnologyWorkspace['projects'],
+    adoptedCodes: catalogWithViewerState.filter((entry) => entry.viewerStatus === 'ADOPTED').map((entry) => entry.code),
+    researchBudget,
+    frontier: frontierRows as TechnologyWorkspace['frontier'],
+  };
 }
 
 export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {

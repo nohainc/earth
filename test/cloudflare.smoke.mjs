@@ -181,10 +181,10 @@ assert.equal(communityCreate.response.status, 401);
 assert.equal(communityCreate.body.error, 'Authentication required');
 
 const researchFunding = await get('/api/technology/me/fund', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amount: 240, correlationId: 'smoke-research-funding' }) });
-assert.equal(researchFunding.response.status, 401);
-assert.equal(researchFunding.body.error, 'Authentication required');
+assert.equal(researchFunding.response.status, 410);
+assert.match(researchFunding.body.error, /retired/i);
 
-const researchProject = await get('/api/technology/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Smoke Research', budget: 240, focus: 'efficiency', correlationId: 'smoke-research-project' }) });
+const researchProject = await get('/api/technology/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Smoke Research', correlationId: 'smoke-research-project' }) });
 assert.equal(researchProject.response.status, 401);
 assert.equal(researchProject.body.error, 'Authentication required');
 

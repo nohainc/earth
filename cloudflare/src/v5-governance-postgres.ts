@@ -13,6 +13,7 @@ import { assertGenerationAuthorized } from './v5-generation-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { postSettlementTransaction, END_OF_GAME_DAY_MINUTE } from './economic-transaction-postgres.ts';
 import { governanceProposalFromRow } from './governance-proposal.ts';
+import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -54,6 +55,7 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
     name: payload.name == null ? undefined : String(payload.name),
     generation: payload.generation == null ? undefined : Number(payload.generation),
     scaleCapability: payload.scaleCapability as ProposalAction['scaleCapability'],
+    targetTier: payload.targetTier == null ? undefined : Number(payload.targetTier),
   };
   return action;
 }
@@ -219,13 +221,14 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     const ALLOWED_V5_ACTIONS = [
       'CONSTITUTION_AMENDMENT',
       'CORPORATION_PUBLIC_CONSTRUCTION',
+      'CORPORATION_BUILDING_RESEARCH',
       'CORPORATION_SCALE_RESEARCH',
       'EARTH_TECHNOLOGY_FRONTIER',
     ];
     if (!ALLOWED_V5_ACTIONS.includes(input.actionType)) {
       throw new Error('Legacy V5 policy actions are retired; submit a Constitution amendment proposal.');
     }
-    if (input.subjectType === 'EARTH' && ['CORPORATION_PUBLIC_CONSTRUCTION', 'CORPORATION_SCALE_RESEARCH', 'CORPORATION_HOUSE_RATE', 'CORPORATION_ADMISSION_POLICY'].includes(input.actionType)) {
+    if (input.subjectType === 'EARTH' && ['CORPORATION_PUBLIC_CONSTRUCTION', 'CORPORATION_BUILDING_RESEARCH', 'CORPORATION_SCALE_RESEARCH', 'CORPORATION_HOUSE_RATE', 'CORPORATION_ADMISSION_POLICY'].includes(input.actionType)) {
       throw new Error('Policy subject and action scope do not match');
     }
     if (input.subjectType === 'CORPORATION' && ['EARTH_TECHNOLOGY_FRONTIER', 'EARTH_CAPACITY_POLICY'].includes(input.actionType)) {
@@ -236,7 +239,8 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     const proposalInputPayload = input.actionType === 'CONSTITUTION_AMENDMENT' && Number(input.payload.effectiveFromGameDay ?? 0) <= day
       ? { ...input.payload, effectiveFromGameDay: day + 1 }
       : input.payload;
-    const action = actionFromPayload(input.actionType, proposalInputPayload);
+    let proposalPayload = proposalInputPayload;
+    let action = actionFromPayload(input.actionType, proposalPayload);
     validateV5GovernanceAction(action, day);
     let serverImpactSummary: string | null = null;
     let serverImpact: Record<string, unknown> | null = null;
@@ -267,6 +271,47 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
         costUnits: blueprint.construction_credit_units,
         footprintUnits: blueprint.slot_footprint,
         serviceCapacityUnits: blueprint.service_capacity_units,
+        effectiveFromGameDay: action.effectiveFromGameDay,
+      };
+    }
+    if (input.actionType === 'CORPORATION_BUILDING_RESEARCH') {
+      const targetTier = action.targetTier!;
+      const blueprint = (await tx.query<{ id: string; ownership_scope: string; research_credit_units: string; research_duration_game_days: number }>(
+        `SELECT id, ownership_scope, research_credit_units::TEXT, research_duration_game_days
+           FROM building_catalog
+          WHERE family_code = $1 AND tier = $2 AND active = TRUE`,
+        [action.buildingType, targetTier],
+      )).rows[0];
+      if (!blueprint) throw new Error('Target building research blueprint is unavailable');
+      if (String(blueprint.ownership_scope).toUpperCase() !== 'PUBLIC') {
+        throw new Error('Only PUBLIC blueprints can use Corporation Governance building research');
+      }
+      const corporation = (await tx.query<{ id: string }>(
+        "SELECT id FROM corporations WHERE id = $1 AND status = 'ACTIVE'",
+        [input.subjectId],
+      )).rows[0];
+      if (!corporation) throw new Error('Corporation is not active');
+      proposalPayload = {
+        ...proposalInputPayload,
+        corporationId: input.subjectId,
+        targetTier,
+        researchCreditCostUnits: blueprint.research_credit_units,
+        researchDurationGameDays: blueprint.research_duration_game_days,
+      };
+      action = actionFromPayload(input.actionType, proposalPayload);
+      validateV5GovernanceAction(action, day);
+      serverImpactSummary = [
+        `COST ${creditImpact(blueprint.research_credit_units)}`,
+        `PUBLIC BLUEPRINT TIER ${targetTier}`,
+        `DURATION ${blueprint.research_duration_game_days} GAME DAYS`,
+        `EFFECTIVE DAY ${action.effectiveFromGameDay}`,
+      ].join(' · ');
+      serverImpact = {
+        kind: 'CORPORATION_BUILDING_RESEARCH',
+        blueprintId: blueprint.id,
+        researchCostUnits: blueprint.research_credit_units,
+        durationGameDays: blueprint.research_duration_game_days,
+        targetTier,
         effectiveFromGameDay: action.effectiveFromGameDay,
       };
     }
@@ -329,6 +374,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
         : input.actionType === 'CORPORATION_ADMISSION_POLICY' ? `${scope}:ADMISSION_POLICY`
           : input.actionType === 'CONSTITUTION_AMENDMENT' ? `${scope}:${getConstitutionalRuleDefinition(String((action.changes ?? [])[0]?.ruleCode ?? 'CONSTITUTION')).policyGroup}`
             : input.actionType === 'CORPORATION_PUBLIC_CONSTRUCTION' ? `${scope}:PUBLIC_CONSTRUCTION:${action.buildingType}`
+            : input.actionType === 'CORPORATION_BUILDING_RESEARCH' ? `${scope}:BUILDING_RESEARCH:${action.buildingType}:${action.targetTier}`
               : input.actionType === 'CORPORATION_SCALE_RESEARCH' ? `${scope}:SCALE_RESEARCH:${action.scaleCapability}`
                 : input.actionType === 'EARTH_TECHNOLOGY_FRONTIER' ? `EARTH:TECHNOLOGY_FRONTIER:${action.domainId}`
                   : `${scope}:PROGRESSIVE_SCHEDULE`;
@@ -343,7 +389,6 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       : await tx.query<{ count: string }>("SELECT COUNT(*)::TEXT AS count FROM houses WHERE status = 'ACTIVE'", []);
     const electorateSize = Number(electorate.rows[0]?.count ?? 0);
     const baseVersionSnapshot: Record<string, unknown> = { capturedAtGameDay: day };
-    let proposalPayload = proposalInputPayload;
     if (input.actionType === 'CONSTITUTION_AMENDMENT') {
       const authorityType = input.subjectType;
       const authorityId = input.subjectType === 'EARTH' ? 'EARTH' : String(input.subjectId);
@@ -537,6 +582,20 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
       governanceProposalId: row.proposal_id,
       correlationId: `gov-construct:${row.proposal_id}`,
       ownerId: payload.createdByHumanId == null ? undefined : String(payload.createdByHumanId),
+    });
+  } else if (row.action_type === 'CORPORATION_BUILDING_RESEARCH') {
+    const proposal = (await tx.query<{ created_by_human_id: string; subject_id: string }>(
+      'SELECT created_by_human_id, subject_id FROM v5_governance_proposals WHERE id = $1',
+      [row.proposal_id],
+    )).rows[0];
+    if (!proposal) throw new Error('Building research proposal not found');
+    await startCorporationBuildingResearchInTransaction(tx, {
+      humanId: proposal.created_by_human_id,
+      corporationId: String(action.corporationId ?? payload.corporationId ?? proposal.subject_id),
+      buildingType: String(action.buildingType ?? payload.buildingType),
+      targetTier: action.targetTier ?? (payload.targetTier == null ? undefined : Number(payload.targetTier)),
+      correlationId: `gov-building-research:${row.proposal_id}`,
+      authorizationMode: 'V5_GOVERNANCE',
     });
   } else if (row.action_type === 'CORPORATION_SCALE_RESEARCH') {
     const corpId = String(action.corporationId ?? payload.corporationId ?? payload.subjectId);

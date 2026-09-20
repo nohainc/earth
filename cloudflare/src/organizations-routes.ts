@@ -10,50 +10,14 @@ import { validateOrganizationCharter } from './organization-charter.ts';
 import { appointOrganizationOffice, listOrganizationAuthority, resignOrganizationOffice, type OfficeCode } from './organization-authority.ts';
 import { distributeOwnership, getAssetOwnership, subscribeToAssetOwnership } from './ownership-postgres.ts';
 import { createOrganizationContract, listOrganizationContracts, signOrganizationContract } from './contracts-postgres.ts';
-import { adoptTechnologyGeneration, listOrganizationTechnologyAdoptions, proposeTechnologyAdoption, retireTechnologyAdoption } from './organization-technology-postgres.ts';
 import { acceptContractDelivery, disputeContractPerformance, listContractPerformance, rejectContractDelivery, resolveContractDispute, submitContractDelivery } from './contract-performance-postgres.ts';
 
 export async function handleOrganizationRoutes(request: Request, env: Env, url: URL, viewer: ViewerContext): Promise<Response | null> {
   const technologyMatch = url.pathname.match(/^\/api\/organizations\/([^/]+)\/technology-adoptions$/);
-  if (technologyMatch && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => listOrganizationTechnologyAdoptions(repository, technologyMatch[1], viewer.houseId));
-    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
-  }
-  if (technologyMatch && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ generationId?: string; proposalId?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.generationId || !parsed.value.proposalId) return Response.json({ ok: false, error: 'Generation, passed proposal, and idempotency key are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => adoptTechnologyGeneration(repository, { organizationId: technologyMatch[1], generationId: parsed.value.generationId!, proposalId: parsed.value.proposalId!, humanId: viewer.currentHumanId, houseId: viewer.houseId, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return errorResponse(error, correlationId, 'Technology adoption failed.'); }
-  }
   const technologyProposalMatch = url.pathname.match(/^\/api\/organizations\/([^/]+)\/technology-adoptions\/propose$/);
-  if (technologyProposalMatch && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ generationId?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.generationId) return Response.json({ ok: false, error: 'Generation and idempotency key are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => proposeTechnologyAdoption(repository, { organizationId: technologyProposalMatch[1], generationId: parsed.value.generationId!, humanId: viewer.currentHumanId, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return errorResponse(error, correlationId, 'Technology proposal failed.'); }
-  }
   const technologyRetireMatch = url.pathname.match(/^\/api\/organizations\/([^/]+)\/technology-adoptions\/([^/]+)\/retire$/);
-  if (technologyRetireMatch && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId) return Response.json({ ok: false, error: 'Idempotency key is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => retireTechnologyAdoption(repository, { organizationId: technologyRetireMatch[1], adoptionId: technologyRetireMatch[2], humanId: viewer.currentHumanId, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return errorResponse(error, correlationId, 'Technology retirement failed.'); }
+  if ((technologyMatch || technologyProposalMatch || technologyRetireMatch) && ['GET', 'POST'].includes(request.method)) {
+    return Response.json({ ok: false, error: 'Organization technology adoption is retired; use Corporation R&D and V5 Governance.' }, { status: 410 });
   }
   const performanceMatch = url.pathname.match(/^\/api\/organizations\/([^/]+)\/contracts\/performance$/);
   if (performanceMatch && request.method === 'GET') {

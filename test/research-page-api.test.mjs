@@ -29,8 +29,7 @@ async function request(path, options = {}, authenticated = true) {
 test('Tier 1 Research API protects personalized reads and mutations', async () => {
   for (const [path, method, body] of [
     ['/api/technology', 'GET'],
-    ['/api/technology/projects', 'POST', { name: 'Unauthorized Project', budget: 240 }],
-    ['/api/technology/me/fund', 'POST', { amount: 240 }],
+    ['/api/technology/projects', 'POST', { name: 'Unauthorized Project' }],
     ['/api/technology/me/patent', 'POST', {}],
     ['/api/technology/me/license', 'POST', {}],
   ]) {
@@ -48,24 +47,16 @@ test('Tier 2 Research API returns a stable safe projection', async () => {
   assert.doesNotMatch(JSON.stringify(result.body), /password|session_token|password_hash/i);
 });
 
-test('Tier 3 Research API creates and funds a project', async () => {
-  const project = await request('/api/technology/projects', { method: 'POST', body: { name: 'Resilient Systems', budget: 240, focus: 'durability' } });
+test('Tier 3 Research API creates a catalog-priced project', async () => {
+  const project = await request('/api/technology/projects', { method: 'POST', body: { name: 'Resilient Systems' } });
   assert.equal(project.response.status, 200);
   assert.equal(project.body.project.name, 'Resilient Systems');
   assert.equal(project.body.project.progress, 0);
-  const funded = await request('/api/technology/me/fund', { method: 'POST', body: { amount: 240 } });
-  assert.equal(funded.response.status, 200);
-  assert.equal(funded.body.research.progress, 4);
-  assert.equal(funded.body.research.name, 'Resilient Systems');
 });
 
-test('Tier 4 Research API rejects invalid numeric and license inputs', async () => {
-  for (const body of [{ name: 'Bad Budget', budget: 'NaN' }, { name: 'Bad Budget', budget: -1 }, { name: 'x', budget: 240 }]) {
+test('Tier 4 Research API rejects invalid project names and license inputs', async () => {
+  for (const body of [{ name: '' }, { name: 'x' }]) {
     const result = await request('/api/technology/projects', { method: 'POST', body });
-    assert.equal(result.response.status, 400);
-  }
-  for (const body of [{ amount: 'Infinity' }, { amount: -10 }, { amount: 'not-a-number' }]) {
-    const result = await request('/api/technology/me/fund', { method: 'POST', body });
     assert.equal(result.response.status, 400);
   }
   for (const body of [{ royaltyRate: 1.1 }, { royaltyRate: -0.1 }, { licenseFee: -1 }, { licenseFee: 'Infinity' }]) {
@@ -77,7 +68,6 @@ test('Tier 4 Research API rejects invalid numeric and license inputs', async () 
 test('Tier 5 Research API completes patent and idempotent licensing journey', async () => {
   const first = await request('/api/technology/me/patent', { method: 'POST', body: {} });
   assert.equal(first.response.status, 409);
-  for (let i = 0; i < 24; i += 1) await request('/api/technology/me/fund', { method: 'POST', body: { amount: 1 } });
   const patent = await request('/api/technology/me/patent', { method: 'POST', body: {} });
   assert.equal(patent.response.status, 200);
   assert.equal(patent.body.patent.status, 'active');

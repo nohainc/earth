@@ -28,7 +28,9 @@ export async function getEarthTechnologyFrontier(repository: PostgresRepository,
     SELECT d.id AS domain_id, d.code AS domain_code, d.name AS domain_name,
            COALESCE(v.generation_number, 1) AS max_generation_number,
            COALESCE(v.effective_from_game_day, 1) AS effective_from_game_day,
-           v.authorization_proposal_id, v.rules_version
+           v.authorization_proposal_id, v.rules_version,
+           next_generation.generation_number AS next_generation_number,
+           next_generation.minimum_game_day AS next_generation_minimum_game_day
       FROM technology_domains d
       LEFT JOIN LATERAL (
         SELECT generation_number, effective_from_game_day,
@@ -38,7 +40,15 @@ export async function getEarthTechnologyFrontier(repository: PostgresRepository,
            AND effective_from_game_day <= $1
          ORDER BY effective_from_game_day DESC
          LIMIT 1
-      ) v ON TRUE
+     ) v ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT g.generation_number, g.minimum_game_day
+         FROM technology_generations g
+        WHERE g.domain_id = d.id
+          AND g.generation_number > COALESCE(v.generation_number, 1)
+        ORDER BY g.generation_number
+        LIMIT 1
+     ) next_generation ON TRUE
      WHERE d.status = 'ACTIVE' AND d.code <> 'FOUNDATIONAL'
      ORDER BY d.code`, [day]);
   return { gameDay: day, frontier: result.rows, generatedFrom: 'postgres-canonical-facts' };

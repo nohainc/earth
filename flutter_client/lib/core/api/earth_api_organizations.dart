@@ -392,51 +392,6 @@ extension EarthApiOrganizations on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> listOrganizationTechnologyAdoptions(
-      String organizationId) async {
-    final response = await _request(
-        '/api/organizations/$organizationId/technology-adoptions');
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> adoptTechnologyGeneration(
-      {required String organizationId,
-      required String generationId,
-      required String proposalId}) async {
-    final response = await _request(
-        '/api/organizations/$organizationId/technology-adoptions',
-        method: 'POST',
-        body: {
-          'generationId': generationId,
-          'proposalId': proposalId,
-          'correlationId': newClientCorrelationId('ORG-TECH-ADOPTION'),
-        });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> proposeTechnologyAdoption(
-      {required String organizationId, required String generationId}) async {
-    final response = await _request(
-        '/api/organizations/$organizationId/technology-adoptions/propose',
-        method: 'POST',
-        body: {
-          'generationId': generationId,
-          'correlationId': newClientCorrelationId('PROPOSE-ORG-TECH'),
-        });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> retireTechnologyAdoption(
-      {required String organizationId, required String adoptionId}) async {
-    final response = await _request(
-        '/api/organizations/$organizationId/technology-adoptions/$adoptionId/retire',
-        method: 'POST',
-        body: {
-          'correlationId': newClientCorrelationId('RETIRE-ORG-TECH'),
-        });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
   Future<Map<String, dynamic>> listGlobalProgramContributions(
       String programId) async {
     final response =

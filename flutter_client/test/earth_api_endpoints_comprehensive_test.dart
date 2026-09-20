@@ -134,8 +134,7 @@ void main() {
 
     await api.personalFinance();
 
-    await api.startResearch('Hyperdrive', 1000);
-    await api.fundResearch();
+    await api.startResearch('Hyperdrive');
 
     expect(recordedCalls.contains('POST /api/house/succession'), true);
     expect(recordedCalls.contains('POST /api/market/orders'), true);
