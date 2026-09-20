@@ -40,7 +40,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     repository.query('SELECT code, asset_kind FROM economic_assets ORDER BY id'),
     listCommunities(repository, viewerHouseId),
     viewerHouseId ? repository.query<{ need_code: string; risk_level: string; game_day: number }>(`SELECT need_code, risk_level, game_day FROM house_need_assessments WHERE house_id = $1 ORDER BY game_day DESC, need_code`, [viewerHouseId]) : Promise.resolve({ rows: [] as { need_code: string; risk_level: string; game_day: number }[] }),
-    listWorldConditions(repository, clock.gameDay),
+    listWorldConditions(repository, clock.gameDay, viewerHouseId),
     viewerId ? repository.query(`SELECT h.id, h.house_id, h.display_name, h.epitaph, h.birth_game_day, h.age_years, h.standing, h.final_legacy, h.status,
                                         hs.house_name, hs.motto, hs.generation, hs.dynasty_legacy
                                    FROM humans h JOIN houses hs ON hs.id = h.house_id
@@ -358,18 +358,6 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   if (resources.material != null && resources.materials == null) resources.materials = resources.material;
   const wallet = accounts.rows.find((row: any) => row.code === 'CREDIT' && row.account_type === 'WALLET');
   const territory = residency.rows.find((row: any) => row.residency_class === 'PRIMARY') ?? residency.rows[0];
-  const exposedConditions = conditions.conditions.map((condition: any) => {
-    const scopeType = condition.scope?.type;
-    const scopeId = condition.scope?.id;
-    const exposure = scopeType === 'WORLD'
-      ? 'WORLDWIDE'
-      : scopeType === 'TERRITORY' && scopeId === territory?.territory_id
-        ? 'YOUR_TERRITORY'
-        : scopeType === 'ORGANIZATION'
-          ? 'ORGANIZATION_SCOPED'
-          : 'OTHER_TERRITORY';
-    return { ...condition, exposure };
-  });
   const capacity = territory?.territory_id ? (await repository.query(`SELECT territory_id, active_house_count, house_capacity, population_capacity, private_slot_capacity, public_slot_capacity, private_slots_used, public_slots_used, housing_capacity, health_capacity, energy_capacity, connectivity_capacity, service_capacity FROM territory_capacity_state WHERE territory_id = $1`, [territory.territory_id])).rows[0] : null;
   const corpId = corporation.rows[0]?.id;
   const [
@@ -583,16 +571,14 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
     rankings,
     worldConditions: {
       status: 'AVAILABLE',
-      snapshotGameDay: conditions.gameDay,
+      authoritativeGameDay: conditions.authoritativeGameDay,
+      snapshotVersion: conditions.snapshotVersion,
       rulesVersion: conditions.rulesVersion,
-      worldState: exposedConditions.length > 0 ? 'ACTIVE_CONDITIONS' : 'STABLE',
-      activeConditions: exposedConditions,
-      playerExposure: {
-        territoryId: territory?.territory_id ?? null,
-        territoryName: territory?.territory_name ?? null,
-        activeConditionCount: exposedConditions.filter((condition: any) =>
-          condition.exposure === 'YOUR_TERRITORY' || condition.exposure === 'WORLDWIDE').length,
-      },
+      globalConditionCount: conditions.globalConditionCount,
+      viewerApplicableConditionCount: conditions.viewerApplicableConditionCount,
+      worldState: conditions.viewerApplicableConditionCount > 0 ? 'ACTIVE_CONDITIONS' : 'STABLE',
+      activeConditions: conditions.conditions.filter((condition: any) => condition.appliesToViewer),
+      conditions: conditions.conditions,
     },
   });
 }

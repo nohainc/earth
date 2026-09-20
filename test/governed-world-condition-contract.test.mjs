@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-test('world conditions are created only by validated, executed governance actions', () => {
-  const migration = fs.readFileSync('db/migrations/056_governed_world_conditions.sql', 'utf8');
+test('world conditions are not created by the retired V4 governance authority', () => {
+  const migration = fs.readFileSync('db/migrations/173_retire_v4_world_condition_authority.sql', 'utf8');
   const governance = fs.readFileSync('cloudflare/src/governance-v4-postgres.ts', 'utf8');
-  assert.match(migration, /WORLD_CONDITION/);
-  assert.match(governance, /WORLD_CONDITION/);
-  assert.match(governance, /executeWorldCondition/);
-  assert.match(governance, /governance_executions_v4/);
-  assert.match(governance, /effectiveFrom < day \+ 1/);
-  assert.match(governance, /modifierBps/);
+  const outcomes = fs.readFileSync('cloudflare/src/initiative-outcomes.ts', 'utf8');
+  assert.doesNotMatch(migration, /'WORLD_CONDITION'/);
+  assert.doesNotMatch(governance, /WORLD_CONDITION/);
+  assert.doesNotMatch(governance, /world_conditions/);
+  assert.match(outcomes, /world_conditions/);
+  assert.match(outcomes, /'EARTH'/);
 });

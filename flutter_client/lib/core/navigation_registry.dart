@@ -203,19 +203,6 @@ class NavigationRegistry {
       isPrimary: true,
     ),
     NavigationItem(
-      id: 'territories',
-      canonicalRoute: 'territories',
-      // `city` is a deprecated transition alias only; V5 has no City entity.
-      aliases: ['city', 'territory', 'territory-commons'],
-      group: NavigationGroup.society,
-      defaultLabel: 'Territories',
-      defaultPageTitle: 'TERRITORIES',
-      icon: Icons.map_outlined,
-      // Keep the route and legacy aliases available for deep links, but do
-      // not present Territory as a primary Society gameplay destination.
-      isPrimary: false,
-    ),
-    NavigationItem(
       id: 'communities',
       canonicalRoute: 'communities',
       aliases: ['my-community'],
@@ -239,7 +226,7 @@ class NavigationRegistry {
     // --- WORLD ---
     NavigationItem(
       id: 'world',
-      canonicalRoute: 'world',
+      canonicalRoute: 'world/conditions',
       aliases: ['conditions', 'biosphere'],
       group: NavigationGroup.world,
       defaultLabel: 'Conditions',

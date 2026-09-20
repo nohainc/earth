@@ -46,11 +46,6 @@ class HeroCard extends StatelessWidget {
     final citizenAge = state.human['age_years'] ?? state.human['age'];
     final citizenGen = state.human['generation'];
 
-    final territoryRaw = state.residency['territory'] ?? state.institutions['territory'];
-    final territoryName =
-        (territoryRaw is Map ? territoryRaw['name'] : null)?.toString().toUpperCase() ??
-            'TERRITORY UNAVAILABLE';
-
     final corpRaw = state.institutions['corporation'];
     final corpName =
         (corpRaw is Map ? corpRaw['name'] : null)?.toString().toUpperCase();
@@ -58,7 +53,6 @@ class HeroCard extends StatelessWidget {
     final identity = <String>[
       if (citizenAge != null) 'AGE $citizenAge',
       if (citizenGen != null) 'GEN $citizenGen',
-      territoryName,
     ].join('  ·  ');
     final subtitleBuffer = StringBuffer(identity);
     if (corpName != null && corpName.isNotEmpty) {
@@ -94,7 +88,7 @@ class HeroCard extends StatelessWidget {
       statusColor: statusColor,
       infoTitle: 'CITIZEN STATUS & VITALS',
       infoDescription:
-          '• Citizen Status & Residency: Real-time vitality status, generational lineage, age in game cycles, and legal residential territory.\n\n• Biometric Health: Physical vitality score (0–100%). Low health increases mortality risk and triggers emergency healthcare protocols.\n\n• Civic Standing: Reputation and trust rating earned through lawful contracts, proposal votes, and public treasury contributions.\n\n• Legacy Score: Cumulative generational prestige inherited by designated successors upon succession.\n\n• Planetary World Health: Global ecological equilibrium index. Environmental degradation increases territorial costs and market volatility.',
+        '• Citizen Status & Lifecycle: Real-time lifecycle status, generational lineage, and age in game cycles.\n\n• Biometric Health: Physical vitality score (0–100%). Low health increases mortality risk and triggers emergency healthcare protocols.\n\n• Civic Standing: Reputation and trust rating earned through lawful contracts, proposal votes, and public treasury contributions.\n\n• Legacy Score: Cumulative generational prestige inherited by designated successors upon succession.\n\n• World Conditions: Authoritative global conditions that may affect construction, labor, services, or resource flows.',
       title: citizenName,
       subtitle: subtitleBuffer.toString(),
       metrics: metrics,

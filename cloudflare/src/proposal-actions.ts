@@ -1,7 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { validateInitiativeOutcome } from './initiative-outcomes.ts';
 import { assertConstitutionalAmendableRule, validateConstitutionalRuleValue } from './v5-constitution.ts';
-import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
 import type { EconomicMutationContext } from './settlement-barrier-postgres.ts';
 
@@ -187,39 +186,6 @@ const legacyOperationalHandlers: ProposalActionHandler[] = [
     version: 1,
     validateCreation: (action) => requiredFields(action, ['generationId', 'adoptionCostUnits'], 'Technology adoption action'),
     validateExecution: async () => undefined,
-  },
-  {
-    actionType: 'WORLD_CONDITION',
-    version: 1,
-    validateCreation: (action) => {
-      requiredFields(action, ['conditionCode', 'title', 'description', 'effectType', 'targetKey', 'effectiveFromGameDay'], 'World condition action');
-      const effectType = String(action.effectType);
-      const scopeType = String(action.scopeType ?? '');
-      const modifierBps = Number(action.modifierBps);
-      const effectiveFrom = Number(action.effectiveFromGameDay);
-      if (!WORLD_CONDITION_EFFECTS.includes(effectType as typeof WORLD_CONDITION_EFFECTS[number])) throw new Error('World condition effect is invalid');
-      if (!['WORLD', 'TERRITORY', 'ORGANIZATION'].includes(scopeType) || (scopeType === 'WORLD' ? action.scopeId != null : !action.scopeId)) throw new Error('World condition scope is invalid');
-      if (!Number.isInteger(modifierBps) || modifierBps < -5000 || modifierBps > 5000 || !Number.isInteger(effectiveFrom) || effectiveFrom < 1) throw new Error('World condition modifier or effective day is invalid');
-      if (action.effectiveToGameDay != null && (!Number.isInteger(Number(action.effectiveToGameDay)) || Number(action.effectiveToGameDay) < effectiveFrom)) throw new Error('World condition end day is invalid');
-    },
-    validateExecution: async ({ gameDay, action }) => {
-      if (Number(action.effectiveFromGameDay) < gameDay + 1) throw new Error('World condition must begin after governance execution');
-    },
-    execute: async ({ repository, proposal, action, gameDay }) => {
-      const conditionId = `WORLD-COND-${String(proposal.id)}`;
-      const effectiveToGameDay = action.effectiveToGameDay == null ? null : Number(action.effectiveToGameDay);
-      const result = { conditionId, proposalId: String(proposal.id), effectiveFromGameDay: Number(action.effectiveFromGameDay), effectiveToGameDay };
-      await repository.query(`INSERT INTO world_conditions
-        (id, condition_code, title, description, source_type, source_id, scope_type, scope_id,
-         effect_type, target_key, modifier_bps, effective_from_game_day, effective_to_game_day, rules_version)
-        VALUES ($1,$2,$3,$4,'GOVERNANCE',$5,$6,$7,$8,$9,$10,$11,$12,'world-conditions-v1')
-        ON CONFLICT (id) DO NOTHING`, [conditionId, String(action.conditionCode), String(action.title), String(action.description), String(proposal.id), String(action.scopeType), action.scopeId == null ? null : String(action.scopeId), String(action.effectType), String(action.targetKey).toUpperCase(), Number(action.modifierBps), result.effectiveFromGameDay, effectiveToGameDay]);
-      await repository.query(`INSERT INTO governance_executions_v4
-        (id, proposal_id, action_type, handler_version, status, result, correlation_id, executed_game_day)
-        VALUES ($1,$2,'WORLD_CONDITION','world-condition-v1','EXECUTED',$3::JSONB,$4,$5)
-        ON CONFLICT (proposal_id) DO UPDATE SET status = 'EXECUTED', result = EXCLUDED.result, executed_game_day = EXCLUDED.executed_game_day`, [`EXEC-${String(proposal.id)}`, String(proposal.id), JSON.stringify(result), `governance-execution:${String(proposal.id)}`, gameDay]);
-      return result;
-    },
   },
 ];
 

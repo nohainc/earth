@@ -51,13 +51,15 @@ export async function getTerritoryCapacity(repository: PostgresRepository, terri
 type ConstructionRequirement = { code: string; asset_id: number; required_units: string; available_units: string; missing_units: string };
 
 export async function effectiveConstructionMinutes(tx: PostgresRepository, day: number, territoryId: string | null, buildingCode: string, baseMinutes: number): Promise<{ minutes: number; modifiersBps: number[]; modifierDetails: Record<string, unknown>[] }> {
-  const conditions = await tx.query<{ scope_type: string; scope_id: string | null; effect_type: string; target_key: string; modifier_bps: number }>(`SELECT scope_type, scope_id, effect_type, target_key, modifier_bps
-    FROM world_conditions
-   WHERE effect_type IN ('CONSTRUCTION_INDEX', 'LABOR_INDEX') AND effective_from_game_day <= $1
-     AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
-     AND (scope_type = 'WORLD' OR (scope_type = 'TERRITORY' AND scope_id = $2))
-     AND (target_key = '*' OR upper(target_key) = upper($3))
-   ORDER BY scope_type, scope_id NULLS FIRST, target_key, id`, [day, territoryId, buildingCode]);
+  const corporationId = (await tx.query<{ corporation_id: string | null }>('SELECT corporation_id FROM territories WHERE id = $1', [territoryId])).rows[0]?.corporation_id ?? null;
+  const conditions = await tx.query<{ scope_type: string; scope_id: string | null; effect_type: string; target_key: string; modifier_bps: number }>(`SELECT condition.scope_type, condition.scope_id, effect.effect_type, effect.target_key, effect.modifier_bps
+    FROM world_conditions condition
+    JOIN world_condition_effects effect ON effect.condition_id = condition.id
+   WHERE effect.effect_type IN ('CONSTRUCTION_INDEX', 'LABOR_INDEX') AND condition.effective_from_game_day <= $1
+     AND (condition.effective_to_game_day IS NULL OR condition.effective_to_game_day >= $1)
+     AND (condition.scope_type = 'EARTH' OR (condition.scope_type = 'CORPORATION' AND condition.scope_id = $2))
+     AND (effect.target_key = '*' OR upper(effect.target_key) = upper($3))
+   ORDER BY condition.scope_type, condition.scope_id NULLS FIRST, effect.target_key, effect.id`, [day, corporationId, buildingCode]);
   const modifiersBps = conditions.rows.map((condition) => Number(condition.modifier_bps));
   const modifierDetails = conditions.rows.map((condition) => ({ effectType: condition.effect_type, scopeType: condition.scope_type, scopeId: condition.scope_id, targetKey: condition.target_key, modifierBps: Number(condition.modifier_bps) }));
   const minutes = Number(applyConditionStack(BigInt(baseMinutes), modifiersBps));
@@ -107,7 +109,7 @@ export async function getConstructionQuote(
     const isPublic = catalog.ownership_scope === 'PUBLIC';
     if (isPublic) {
       const membership = (await tx.query("SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id])).rows[0];
-      if (!membership) throw new Error('House must belong to the governing Organization for public construction');
+      if (!membership) throw new Error('House must belong to the governing Corporation for public construction');
     }
     const economicOwner = isPublic ? (await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = $1 AND owner_type = 'CORPORATION'", [territory.corporation_id])).rows[0]?.economic_id : owner.economic_id;
     if (!economicOwner) throw new Error(`${isPublic ? 'Corporation' : 'House'} economic owner not found`);
@@ -155,7 +157,7 @@ export async function purchaseBuildingInTerritory(
       const membership = (await tx.query(
         "SELECT 1 FROM house_affiliations WHERE house_id = $1 AND corporation_id = $2 AND status = 'ACTIVE'", [owner.house_id, territory.corporation_id],
       )).rows[0];
-      if (!membership) throw new Error('House must belong to the governing Organization for public construction');
+      if (!membership) throw new Error('House must belong to the governing Corporation for public construction');
       const delinquency = (await tx.query<{ status: string }>(`SELECT status FROM v5_capacity_delinquency_state WHERE subject_type = 'CORPORATION' AND subject_id = $1`, [territory.corporation_id])).rows[0];
       if (['EXPANSION_SPENDING_RESTRICTED', 'EARTH_RECEIVERSHIP'].includes(delinquency?.status ?? '')) throw new Error('Corporation capacity delinquency blocks public expansion');
     }

@@ -83,18 +83,25 @@ async function post(tx: PostgresRepository, day: number, correlationId: string, 
 }
 
 async function loadModifierResolver(tx: PostgresRepository, day: number): Promise<ModifierResolver> {
-  const conditions = (await tx.query<ConditionRow>(`SELECT scope_type, scope_id, effect_type, target_key, modifier_bps
-    FROM world_conditions
-   WHERE effective_from_game_day <= $1 AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
-     AND effect_type IN ('SUPPLY_MULTIPLIER', 'DEMAND_MULTIPLIER')
-   ORDER BY scope_type, scope_id NULLS FIRST, target_key, id`, [day])).rows;
-  const organizations = (await tx.query<{ economic_id: string; organization_id: string }>('SELECT economic_id, organization_id FROM organization_economies')).rows;
-  const organizationByEconomic = new Map(organizations.map((row) => [row.economic_id, row.organization_id]));
+  const conditions = (await tx.query<ConditionRow>(`SELECT condition.scope_type, condition.scope_id, effect.effect_type, effect.target_key, effect.modifier_bps
+    FROM world_conditions condition
+    JOIN world_condition_effects effect ON effect.condition_id = condition.id
+   WHERE condition.effective_from_game_day <= $1 AND (condition.effective_to_game_day IS NULL OR condition.effective_to_game_day >= $1)
+     AND effect.effect_type IN ('SUPPLY_MULTIPLIER', 'DEMAND_MULTIPLIER')
+   ORDER BY condition.scope_type, condition.scope_id NULLS FIRST, effect.target_key, effect.id`, [day])).rows;
+  const affiliations = (await tx.query<{ economic_id: string; corporation_id: string }>(`SELECT owner.economic_id, ha.corporation_id
+      FROM owner_registry owner
+      JOIN house_affiliations ha ON ha.house_id = owner.id AND ha.status = 'ACTIVE'
+     WHERE owner.owner_type = 'HOUSE'
+     UNION ALL
+     SELECT economic_id, id AS corporation_id
+       FROM owner_registry
+      WHERE owner_type = 'CORPORATION'`)).rows;
+  const corporationByEconomic = new Map(affiliations.map((row) => [row.economic_id, row.corporation_id]));
   return (effectType, targetKey, territoryId, ownerEconomicId) => conditions
     .filter((condition) => condition.effect_type === effectType && (condition.target_key === targetKey || condition.target_key === '*'))
-    .filter((condition) => condition.scope_type === 'WORLD'
-      || (condition.scope_type === 'TERRITORY' && condition.scope_id === territoryId)
-      || (condition.scope_type === 'ORGANIZATION' && condition.scope_id === organizationByEconomic.get(ownerEconomicId)))
+    .filter((condition) => condition.scope_type === 'EARTH'
+      || (condition.scope_type === 'CORPORATION' && condition.scope_id === corporationByEconomic.get(ownerEconomicId)))
     .map((condition) => Number(condition.modifier_bps));
 }
 

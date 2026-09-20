@@ -1,7 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
+import { WORLD_CONDITION_EFFECT_REGISTRY, type WorldConditionEffect } from './world-conditions.ts';
 
 export type InitiativeOutcome =
-  | { type: 'ECONOMIC_MODIFIER'; effectType: 'SUPPLY_MULTIPLIER' | 'DEMAND_MULTIPLIER' | 'CAPACITY_MULTIPLIER' | 'LABOR_INDEX' | 'CONSTRUCTION_INDEX'; targetKey: string; modifierBps: number; description?: string }
+  | { type: 'ECONOMIC_MODIFIER'; effectType: WorldConditionEffect; targetKey: string; modifierBps: number; description?: string }
   | { type: 'SERVICE_CAPACITY'; serviceType: string; capacityUnits: string; targetScope: 'EARTH' | 'CORPORATION'; targetId?: string }
   | { type: 'TECHNOLOGY_EFFECT'; technologyId: string; effectCode: string; targetScope: 'EARTH' | 'CORPORATION'; targetId?: string }
   | { type: 'CAPACITY_EFFECT'; capacityCode: string; capacityUnits: string; targetScope: 'EARTH' | 'CORPORATION'; targetId?: string }
@@ -9,7 +10,7 @@ export type InitiativeOutcome =
   | { type: 'PRESTIGE'; label: string; description: string };
 
 const TYPES = new Set(['ECONOMIC_MODIFIER', 'SERVICE_CAPACITY', 'TECHNOLOGY_EFFECT', 'CAPACITY_EFFECT', 'PUBLIC_ASSET', 'PRESTIGE']);
-const EFFECT_TYPES = new Set(['SUPPLY_MULTIPLIER', 'DEMAND_MULTIPLIER', 'CAPACITY_MULTIPLIER', 'LABOR_INDEX', 'CONSTRUCTION_INDEX']);
+const EFFECT_TYPES = new Set(Object.keys(WORLD_CONDITION_EFFECT_REGISTRY));
 
 function positiveUnits(value: unknown, field: string): string {
   if (!/^\d+$/.test(String(value ?? '')) || BigInt(String(value)) <= 0n) throw new Error(`${field} must be a positive integer`);
@@ -25,7 +26,7 @@ export function validateInitiativeOutcome(value: unknown): InitiativeOutcome {
     if (!EFFECT_TYPES.has(String(outcome.effectType)) || !String(outcome.targetKey ?? '').trim()) throw new Error('Economic modifier requires effectType and targetKey');
     const modifierBps = Number(outcome.modifierBps);
     if (!Number.isInteger(modifierBps) || modifierBps < -5000 || modifierBps > 5000) throw new Error('Economic modifier must be an integer between -5000 and 5000 BPS');
-    return { type, effectType: outcome.effectType as InitiativeOutcome & { type: 'ECONOMIC_MODIFIER' }['effectType'], targetKey: String(outcome.targetKey), modifierBps, description: outcome.description == null ? undefined : String(outcome.description) };
+    return { type, effectType: outcome.effectType as WorldConditionEffect, targetKey: String(outcome.targetKey), modifierBps, description: outcome.description == null ? undefined : String(outcome.description) };
   }
   if (type === 'SERVICE_CAPACITY' || type === 'CAPACITY_EFFECT') {
     const targetScope = String(outcome.targetScope) as 'EARTH' | 'CORPORATION';
@@ -51,10 +52,17 @@ export function validateInitiativeOutcome(value: unknown): InitiativeOutcome {
 export async function applyInitiativeOutcome(tx: PostgresRepository, input: { initiativeId: string; outcomeId: string; outcome: InitiativeOutcome; gameDay: number }): Promise<void> {
   const { initiativeId, outcomeId, outcome, gameDay } = input;
   if (outcome.type === 'ECONOMIC_MODIFIER') {
+    const conditionId = `INIT-EFFECT-${outcomeId}`;
     await tx.query(`INSERT INTO world_conditions
-      (id, condition_code, title, description, source_type, source_id, scope_type, target_key, effect_type, modifier_bps, effective_from_game_day, rules_version)
-      VALUES ($1,$2,$3,$4,'GOVERNANCE',$5,'WORLD',$6,$7,$8,$9,'initiative-outcome-v1')
-      ON CONFLICT (id) DO NOTHING`, [`INIT-EFFECT-${outcomeId}`, `INITIATIVE:${initiativeId}:${outcome.effectType}`, outcome.effectType, outcome.description ?? `Initiative ${outcome.effectType.toLowerCase()}`, initiativeId, outcome.targetKey, outcome.effectType, outcome.modifierBps, gameDay]);
+      (id, condition_code, title, description, source_type, source_id, scope_type,
+       effective_from_game_day, rules_version, definition_version, severity)
+      VALUES ($1,$2,$3,$4,'GOVERNANCE',$5,'EARTH',$6,'initiative-outcome-v1','initiative-outcome-v1','INFO')
+      ON CONFLICT (id) DO NOTHING`, [conditionId, `INITIATIVE:${initiativeId}:${outcome.effectType}`, outcome.effectType, outcome.description ?? `Initiative ${outcome.effectType.toLowerCase()}`, initiativeId, gameDay]);
+    await tx.query(`INSERT INTO world_condition_effects
+      (id, condition_id, effect_type, target_key, modifier_bps, effect_order)
+      VALUES ($1,$2,$3,$4,$5,0)
+      ON CONFLICT (condition_id, effect_type, target_key) DO UPDATE SET modifier_bps = EXCLUDED.modifier_bps`,
+    [`${conditionId}-MODIFIER`, conditionId, outcome.effectType, outcome.targetKey, outcome.modifierBps]);
     return;
   }
   await tx.query(`INSERT INTO initiative_effect_applications

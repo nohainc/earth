@@ -26,13 +26,14 @@ void main() {
       expect(NavigationRegistry.normalizeRoute('programs'), 'initiatives');
       expect(NavigationRegistry.normalizeRoute('public-projects'), 'initiatives');
       expect(NavigationRegistry.normalizeRoute('initiatives'), 'initiatives');
-      expect(NavigationRegistry.normalizeRoute('conditions'), 'world');
-      expect(NavigationRegistry.normalizeRoute('world'), 'world');
+      expect(NavigationRegistry.normalizeRoute('conditions'), 'world/conditions');
+      expect(NavigationRegistry.normalizeRoute('world'), 'world/conditions');
+      expect(NavigationRegistry.normalizeRoute('world/conditions'), 'world/conditions');
       expect(NavigationRegistry.normalizeRoute('pantheon'), 'history');
       expect(NavigationRegistry.normalizeRoute('memorial'), 'history');
       expect(NavigationRegistry.normalizeRoute('history'), 'history');
-      expect(NavigationRegistry.normalizeRoute('territory'), 'territories');
-      expect(NavigationRegistry.normalizeRoute('territory-commons'), 'territories');
+      expect(NavigationRegistry.findItem('territory'), isNull);
+      expect(NavigationRegistry.findItem('territory-commons'), isNull);
     });
 
     test('resolves correct group index for section', () {
@@ -52,11 +53,10 @@ void main() {
       expect(NavigationRegistry.groupIndexForSection('corporation'), 3); // SOCIETY
       expect(NavigationRegistry.groupIndexForSection('corporations'), 3);
       // Hidden routes remain deep-linkable but do not open a primary group.
-      expect(NavigationRegistry.groupIndexForSection('territories'), -1);
       expect(NavigationRegistry.groupIndexForSection('communities'), 3);
       expect(NavigationRegistry.groupIndexForSection('civic'), 3);
 
-      expect(NavigationRegistry.groupIndexForSection('world'), 4); // WORLD
+      expect(NavigationRegistry.groupIndexForSection('world/conditions'), 4); // WORLD
       expect(NavigationRegistry.groupIndexForSection('civic-rankings'), 4);
       expect(NavigationRegistry.groupIndexForSection('initiatives'), 4);
       expect(NavigationRegistry.groupIndexForSection('constitution'), 4);
@@ -116,9 +116,7 @@ void main() {
         ['corporations', 'communities', 'civic'],
       );
 
-      final territoryItem = NavigationRegistry.findItem('territories');
-      expect(territoryItem, isNotNull);
-      expect(territoryItem!.isPrimary, isFalse);
+      expect(NavigationRegistry.findItem('territories'), isNull);
     });
 
     test('resolves page titles uniformly', () {
@@ -130,7 +128,7 @@ void main() {
       expect(NavigationRegistry.pageTitle('market'), 'MARKET');
       expect(NavigationRegistry.pageTitle('policies'), 'AUTOMATION');
       expect(NavigationRegistry.pageTitle('initiatives'), 'INITIATIVES');
-      expect(NavigationRegistry.pageTitle('world'), 'CONDITIONS');
+      expect(NavigationRegistry.pageTitle('world/conditions'), 'CONDITIONS');
       expect(NavigationRegistry.pageTitle('civic-rankings'), 'RANKINGS');
       expect(NavigationRegistry.pageTitle('constitution'), 'CONSTITUTION');
       expect(NavigationRegistry.pageTitle('history'), 'MEMORIAL');

@@ -54,12 +54,11 @@ class _CommandCenterState extends State<CommandCenter>
     'civic': const ValueKey('section-civic'),
     'corporation': const ValueKey('section-corporation'),
     'corporations': const ValueKey('section-corporations'),
-    'city': const ValueKey('section-city'),
     'technology': const ValueKey('section-technology'),
     'life': const ValueKey('section-life'),
     'finance': const ValueKey('section-finance'),
     'activity': const ValueKey('section-activity'),
-    'world': const ValueKey('section-world'),
+    'world/conditions': const ValueKey('section-world-conditions'),
   };
   EarthState? state;
   String? error;
@@ -109,7 +108,7 @@ class _CommandCenterState extends State<CommandCenter>
     WidgetsBinding.instance.addObserver(this);
     final initialSec = NavigationDeepLink.getInitialSection();
     if (initialSec != null && initialSec.isNotEmpty) {
-      selectedSection = initialSec;
+      selectedSection = NavigationRegistry.normalizeRoute(initialSec);
     }
     NavigationDeepLink.listen((sec) {
       if (mounted && sec.isNotEmpty && sec != selectedSection) {
@@ -709,6 +708,7 @@ class _CommandCenterState extends State<CommandCenter>
 
   void _navigateToSection(BuildContext context, String section,
       {required bool closeDrawer, bool updateUrl = true}) {
+    section = NavigationRegistry.normalizeRoute(section);
     if (closeDrawer && Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
@@ -717,8 +717,7 @@ class _CommandCenterState extends State<CommandCenter>
       OnboardingController.instance.completeStep('world_status');
     } else if (section == 'net_worth' || section == 'finance') {
       OnboardingController.instance.completeStep('personal_resources');
-    } else if (section == 'city' ||
-        section == 'civic' ||
+    } else if (section == 'civic' ||
         section == 'corporation' ||
         section == 'corporations') {
       OnboardingController.instance.completeStep('join_community');

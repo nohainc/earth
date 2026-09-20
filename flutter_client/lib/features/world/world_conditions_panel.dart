@@ -14,50 +14,39 @@ class WorldConditionsPanel extends StatelessWidget {
         raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
     final status = snapshot['status']?.toString().toUpperCase();
     final available = status == 'AVAILABLE';
-    final stale = status == 'STALE';
-    final activeRaw = snapshot['activeConditions'];
-    final conditions = activeRaw is List
-        ? activeRaw
+    final allRaw = snapshot['conditions'];
+    final allConditions = allRaw is List
+        ? allRaw
             .whereType<Map>()
             .map((row) => Map<String, dynamic>.from(row))
             .toList()
         : const <Map<String, dynamic>>[];
-    final gameDay = snapshot['snapshotGameDay'];
-    final rulesVersion = snapshot['rulesVersion']?.toString();
+    final legacyActiveRaw = snapshot['activeConditions'];
+    final affectingConditions = allConditions.isNotEmpty
+        ? allConditions
+            .where((condition) => condition['appliesToViewer'] == true)
+            .toList()
+        : legacyActiveRaw is List
+            ? legacyActiveRaw
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList()
+            : const <Map<String, dynamic>>[];
+    final otherConditions = allConditions
+        .where((condition) => condition['appliesToViewer'] != true)
+        .toList();
+    final gameDay = snapshot['authoritativeGameDay'];
     final worldState = snapshot['worldState']?.toString() ?? 'UNKNOWN';
-    final exposure = snapshot['playerExposure'] is Map
-        ? Map<String, dynamic>.from(snapshot['playerExposure'] as Map)
-        : const <String, dynamic>{};
-    final territoryName = exposure['territoryName']?.toString() ??
-        state.membership?['territory_name']?.toString() ??
-        state.residency['territory_name']?.toString();
-    final affectedCount = exposure['activeConditionCount'];
-    final territoryRows = state.territories.whereType<Map>();
-    final population = territoryRows.fold<int>(
-      0,
-      (sum, row) => sum + _number(row['population'] ?? row['resident_count']),
-    );
-    final capacityUsed = territoryRows.fold<int>(
-      0,
-      (sum, row) => sum +
-          _number(row['active_house_count'] ?? row['private_slots_used']),
-    );
-    final capacityTotal = territoryRows.fold<int>(
-      0,
-      (sum, row) => sum +
-          _number(row['house_capacity'] ?? row['private_slot_capacity']),
-    );
+    final globalCount = snapshot['globalConditionCount'];
+    final affectedCount = snapshot['viewerApplicableConditionCount'];
 
     final cockpit = EarthPageCockpit(
       status: !available
           ? 'CONDITIONS UNAVAILABLE'
-          : stale
-              ? 'STALE SNAPSHOT'
-              : worldState == 'STABLE'
-                  ? 'STABLE'
-                  : 'ACTIVE CONDITIONS',
-      statusColor:
-          !available || stale ? context.warningColor : context.primaryColor,
+          : worldState == 'STABLE'
+              ? 'STABLE'
+              : 'ACTIVE CONDITIONS',
+      statusColor: !available ? context.warningColor : context.primaryColor,
       infoTitle: 'WORLD CONDITIONS',
       infoDescription:
           'World Conditions are authoritative temporary or persistent modifiers that affect gameplay across Earth. This page shows active conditions, affected systems, duration, and your local exposure. Missing data is never interpreted as normal.',
@@ -71,9 +60,9 @@ class WorldConditionsPanel extends StatelessWidget {
             color: context.primaryColor),
         CockpitMetric(
             label: 'Active Conditions',
-            value: available ? '${conditions.length}' : '—',
+            value: available ? '${affectingConditions.length}' : '—',
             icon: Icons.tune_outlined,
-            color: conditions.isEmpty
+            color: affectingConditions.isEmpty
                 ? context.secondaryColor
                 : context.warningColor),
       ],
@@ -86,39 +75,44 @@ class WorldConditionsPanel extends StatelessWidget {
           cockpit,
           const SizedBox(height: 28),
           if (!available)
-            _buildUnavailable(context, stale: stale)
+            _buildUnavailable(context)
           else ...[
             EarthSection(
-              title: 'ACTIVE CONDITIONS (${conditions.length})',
+              title: _conditionSectionTitle('AFFECTING YOU', affectingConditions.length),
               showHeader: true,
               showSurface: false,
-              child: conditions.isEmpty
+              child: affectingConditions.isEmpty
                   ? _buildStableState(context, gameDay)
                   : Column(
-                      children: conditions
+                      children: affectingConditions
                           .map((condition) =>
-                              _buildConditionCard(context, condition))
+                              _buildConditionCard(context, condition, gameDay))
                           .toList()),
             ),
+            if (otherConditions.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              EarthSection(
+                title: _conditionSectionTitle(
+                    'OTHER ACTIVE CONDITIONS', otherConditions.length),
+                showHeader: true,
+                showSurface: false,
+                child: Column(
+                  children: otherConditions
+                      .map((condition) =>
+                          _buildConditionCard(context, condition, gameDay))
+                      .toList(),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
-            _buildExposure(context, territoryName, affectedCount),
-            const SizedBox(height: 24),
-            _buildWorldGeography(
-              context,
-              available: available,
-              population: population,
-              capacityUsed: capacityUsed,
-              capacityTotal: capacityTotal,
-            ),
-            const SizedBox(height: 24),
-            _buildTelemetryPlaceholder(context),
+            _buildExposure(context, affectedCount, globalCount),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildUnavailable(BuildContext context, {required bool stale}) =>
+  Widget _buildUnavailable(BuildContext context) =>
       Container(
         padding: EdgeInsets.all(context.cardPadding),
         decoration: BoxDecoration(
@@ -134,9 +128,7 @@ class WorldConditionsPanel extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                stale
-                    ? 'Showing the last verified world-condition snapshot. A newer snapshot could not be confirmed.'
-                    : 'The current world-condition snapshot could not be verified. No baseline or normal-state claims are shown.',
+                'The current world-condition snapshot could not be verified. No baseline or normal-state claims are shown.',
                 style: context.bodyStyle,
               ),
             ),
@@ -167,8 +159,11 @@ class WorldConditionsPanel extends StatelessWidget {
         ),
       );
 
-  Widget _buildConditionCard(
-      BuildContext context, Map<String, dynamic> condition) {
+  String _conditionSectionTitle(String label, int count) =>
+      '$label ($count ${count == 1 ? 'CONDITION' : 'CONDITIONS'})';
+
+  Widget _buildConditionCard(BuildContext context,
+      Map<String, dynamic> condition, dynamic authoritativeGameDay) {
     final source = condition['source'] is Map
         ? Map<String, dynamic>.from(condition['source'] as Map)
         : const <String, dynamic>{};
@@ -180,25 +175,26 @@ class WorldConditionsPanel extends StatelessWidget {
             .whereType<Map>()
             .map((row) => Map<String, dynamic>.from(row))
             .toList()
-        : <Map<String, dynamic>>[
-            if (condition['effect'] is Map)
-              Map<String, dynamic>.from(condition['effect'] as Map),
-          ];
+        : const <Map<String, dynamic>>[];
     final severity = condition['severity']?.toString().toUpperCase() ?? 'INFO';
-    final impact = condition['impact']?.toString().toUpperCase() ?? 'NEUTRAL';
-    final color = impact == 'BENEFICIAL'
-        ? context.successColor
-        : severity == 'CRITICAL' || impact == 'ADVERSE'
-            ? context.warningColor
+    final color = severity == 'CRITICAL'
+        ? context.warningColor
+        : severity == 'WATCH'
+            ? context.secondaryColor
             : context.primaryColor;
     final title = (condition['title'] ?? condition['code'] ?? 'World Condition')
         .toString();
     final description = condition['description']?.toString() ?? '';
     final from = condition['effectiveFromGameDay'];
     final to = condition['effectiveToGameDay'];
+    final currentDay = _number(authoritativeGameDay);
+    final endDay = _number(to);
+    final remainingDays = to == null || currentDay == null || endDay == null
+        ? null
+        : (endDay - currentDay + 1).clamp(0, 999999);
     final period = to == null
-        ? 'Active from day ${from ?? '—'}'
-        : 'Day ${from ?? '—'} → Day $to';
+        ? 'Effective from Day ${from ?? '—'} · No scheduled end'
+        : 'Effective Day ${from ?? '—'} → Day $to';
     final scopeLabel =
         scope['type']?.toString().replaceAll('_', ' ').toUpperCase() ??
             'GLOBAL';
@@ -223,7 +219,6 @@ class WorldConditionsPanel extends StatelessWidget {
               Text(title.toUpperCase(),
                   style: context.topicTitleStyle.copyWith(color: color)),
               EarthBadge(label: severity, customColor: color),
-              EarthBadge(label: impact, customColor: color),
               EarthBadge(
                   label: scopeLabel, customColor: context.secondaryColor),
             ],
@@ -234,6 +229,13 @@ class WorldConditionsPanel extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           Text(period, style: context.captionStyle),
+          if (remainingDays != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$remainingDays ${remainingDays == 1 ? 'day' : 'days'} remaining',
+              style: context.captionStyle.copyWith(color: context.mutedColor),
+            ),
+          ],
           if (effects.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
@@ -245,6 +247,11 @@ class WorldConditionsPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
+          Text(
+            'Subsystem: ${_subsystemFor(effects)}',
+            style: context.captionStyle.copyWith(color: context.mutedColor),
+          ),
+          const SizedBox(height: 4),
           Text('Source: ${source['type'] ?? 'SYSTEM'}',
               style: context.captionStyle.copyWith(color: context.mutedColor)),
         ],
@@ -261,17 +268,37 @@ class WorldConditionsPanel extends StatelessWidget {
     final value = percent == percent.roundToDouble()
         ? percent.toStringAsFixed(0)
         : percent.toStringAsFixed(2);
+    final type = (effect['type'] ?? 'EFFECT').toString();
     final target =
         (effect['target'] ?? effect['targetKey'] ?? effect['type'] ?? 'Effect')
             .toString()
             .replaceAll('_', ' ')
             .toUpperCase();
-    return Text('$target $sign$value%',
+    final effectName = type.replaceAll('_', ' ');
+    return Text('$effectName · $target $sign$value%',
         style: context.bodyStyle.copyWith(fontWeight: FontWeight.w700));
   }
 
+  String _subsystemFor(List<Map<String, dynamic>> effects) {
+    final types = effects.map((effect) => effect['type']?.toString()).toSet();
+    if (types.contains('LABOR_INDEX') || types.contains('CONSTRUCTION_INDEX')) {
+      return 'CONSTRUCTION TIMING';
+    }
+    if (types.contains('CAPACITY_MULTIPLIER')) return 'SERVICE CAPACITY';
+    if (types.contains('SUPPLY_MULTIPLIER')) return 'BUILDING OUTPUT';
+    if (types.contains('DEMAND_MULTIPLIER')) {
+      return 'BUILDING INPUTS / SERVICE DEMAND';
+    }
+    return 'UNSPECIFIED';
+  }
+
+  int? _number(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
   Widget _buildExposure(
-          BuildContext context, String? territoryName, dynamic affectedCount) =>
+          BuildContext context, dynamic affectedCount, dynamic globalCount) =>
       EarthSection(
         title: 'YOUR EXPOSURE',
         showSurface: false,
@@ -285,13 +312,10 @@ class WorldConditionsPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(territoryName ?? 'Territory unavailable',
-                  style: context.widgetValueStyle),
+              Text('SERVER-RESOLVED EXPOSURE', style: context.widgetValueStyle),
               const SizedBox(height: 6),
               Text(
-                territoryName == null
-                    ? 'Your primary Territory could not be resolved from the canonical snapshot.'
-                    : '${affectedCount ?? '—'} active world conditions affect your Territory.',
+                '${affectedCount ?? '—'} of ${globalCount ?? '—'} active conditions apply to your current player scope.',
                 style: context.bodyStyle,
               ),
             ],
@@ -299,63 +323,4 @@ class WorldConditionsPanel extends StatelessWidget {
         ),
       );
 
-  Widget _buildTelemetryPlaceholder(BuildContext context) => const EarthSection(
-        title: 'WORLD TELEMETRY',
-        showSurface: false,
-        child: EarthEmptyState(
-          message: 'No canonical planetary telemetry is currently published.',
-          icon: Icons.insights_outlined,
-        ),
-      );
-
-  Widget _buildWorldGeography(
-    BuildContext context, {
-    required bool available,
-    required int population,
-    required int capacityUsed,
-    required int capacityTotal,
-  }) {
-    final hasCapacity = capacityTotal > 0;
-    return EarthSection(
-      title: 'WORLD CONDITIONS',
-      showSurface: false,
-      child: _buildMetricGrid(context, [
-        ('POPULATION', population > 0 ? '$population' : '—'),
-        (
-          'CAPACITY PRESSURE',
-          hasCapacity ? '$capacityUsed / $capacityTotal' : '—',
-        ),
-        (
-          'RESOURCE AVAILABILITY',
-          'NOT PUBLISHED',
-        ),
-      ]),
-    );
-  }
-
-  Widget _buildMetricGrid(
-      BuildContext context, List<(String, String)> metrics) {
-    return Wrap(
-      spacing: 24,
-      runSpacing: 12,
-      children: metrics
-          .map((metric) => SizedBox(
-                width: 190,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(metric.$1, style: context.captionStyle),
-                    const SizedBox(height: 4),
-                    Text(metric.$2, style: context.widgetValueStyle),
-                  ],
-                ),
-              ))
-          .toList(),
-    );
-  }
-
-  static int _number(dynamic value) {
-    if (value is num) return value.round();
-    return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
 }

@@ -199,7 +199,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput, rules
     metricLabel: `${publicServiceScore}% / ${targetServiceScore}% Service Rating`,
     status: serviceProgress >= 100 ? 'completed' : 'in_progress',
     rewardDescription: 'Title: "Planetary Benefactor" · Memorial Monument in Pantheon of Living Legends · +1000 Civic Trust',
-    targetSection: 'city',
+    targetSection: 'world/conditions',
     iconName: 'volunteer_activism',
   });
 

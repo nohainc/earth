@@ -165,14 +165,6 @@ export async function resolveGovernanceProposalV4(repository: PostgresRepository
     const { quorumMet, passed } = decision;
     const status = passed ? 'PASSED' : 'REJECTED';
     await tx.query('UPDATE governance_proposals_v4 SET status = $1 WHERE id = $2', [status, proposalId]);
-    if (passed && proposal.action_type === 'WORLD_CONDITION') {
-      const handler = proposalActionHandler(proposal.action_type);
-      const execution = handler.execute
-        ? await handler.execute({ repository: tx, proposal: proposal as Record<string, unknown>, action: object(proposal.action_snapshot), gameDay: day })
-        : (() => { throw new Error('Governance action handler has no executor'); })();
-      await tx.query('UPDATE governance_proposals_v4 SET status = \'EXECUTED\' WHERE id = $1', [proposalId]);
-      return { ok: true, proposalId, status: 'EXECUTED', quorumMet, executionGameDay: proposal.execution_game_day, execution };
-    }
     return { ok: true, proposalId, status, quorumMet, executionGameDay: passed ? proposal.execution_game_day : null };
   });
 }

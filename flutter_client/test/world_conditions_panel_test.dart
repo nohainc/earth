@@ -25,25 +25,31 @@ void main() {
     const state = EarthState({
       'worldConditions': {
         'status': 'AVAILABLE',
-        'snapshotGameDay': 1842,
+        'authoritativeGameDay': 1842,
+        'snapshotVersion': 'world-conditions-v1:1842',
         'rulesVersion': 'world-conditions-v1',
+        'globalConditionCount': 1,
+        'viewerApplicableConditionCount': 1,
         'worldState': 'ACTIVE_CONDITIONS',
         'activeConditions': [
           {
             'title': 'Grid stress',
             'severity': 'HIGH',
-            'impact': 'ADVERSE',
-            'scope': {'type': 'WORLD'},
-            'effect': {'target': 'ENERGY', 'modifierBps': 500},
+            'scope': {'type': 'EARTH'},
+            'appliesToViewer': true,
+            'exposureReason': 'EARTHWIDE',
+            'effects': [
+              {
+                'type': 'DEMAND_MULTIPLIER',
+                'target': 'ENERGY',
+                'modifierBps': 500,
+              },
+            ],
             'source': {'type': 'SYSTEM'},
             'effectiveFromGameDay': 1840,
             'effectiveToGameDay': 1845,
           },
         ],
-        'playerExposure': {
-          'territoryName': 'Bratislava',
-          'activeConditionCount': 1
-        },
       },
     });
     await tester.pumpWidget(const MaterialApp(
@@ -51,8 +57,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('GRID STRESS'), findsOneWidget);
-    expect(find.text('ENERGY +5%'), findsOneWidget);
-    expect(find.text('Bratislava'), findsOneWidget);
-    expect(find.text('ACTIVE CONDITIONS'), findsWidgets);
+    expect(find.text('DEMAND MULTIPLIER · ENERGY +5%'), findsOneWidget);
+    expect(find.text('EARTH'), findsWidgets);
+    expect(find.text('AFFECTING YOU (1 CONDITION)'), findsOneWidget);
   });
 }

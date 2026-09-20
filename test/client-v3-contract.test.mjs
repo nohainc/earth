@@ -14,9 +14,9 @@ test('client canonical building and Territory surfaces use V3 vocabulary', () =>
   assert.match(models, /resourceFlows/);
   assert.doesNotMatch(models, /cityId|city_id|resourceOutputAmount/);
   assert.doesNotMatch(realEstate, /cityId|city_id/);
-  assert.match(navigation, /canonicalRoute: 'territories'/);
-  assert.match(navigation, /deprecated transition alias/);
-  assert.match(dashboard, /case 'territories'/);
-  assert.match(dashboard, /case 'city'/);
+  assert.match(navigation, /canonicalRoute: 'world\/conditions'/);
+  assert.doesNotMatch(navigation, /territory-commons|aliases: \['city', 'territory'/);
+  assert.match(dashboard, /case 'world\/conditions'/);
+  assert.doesNotMatch(dashboard, /case '(territories|territory|city|territory-commons)'/);
   assert.match(institutions, /listCorporationTerritories|getCorporationFiscalState/);
 });

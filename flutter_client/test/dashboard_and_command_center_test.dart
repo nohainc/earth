@@ -10,7 +10,7 @@ void main() {
     expect(dashboardSectionTitle('civic'), 'GOVERNANCE');
     expect(dashboardSectionTitle('corporations'), 'CORPORATIONS');
     expect(dashboardSectionTitle('corporation'), 'MY CORPORATION');
-    expect(dashboardSectionTitle('city'), 'TERRITORIES');
+    expect(dashboardSectionTitle('world/conditions'), 'CONDITIONS');
     expect(dashboardSectionTitle('my-community'), 'COMMUNITIES');
     expect(dashboardSectionTitle('communities'), 'COMMUNITIES');
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');

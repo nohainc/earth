@@ -302,13 +302,6 @@ class Dashboard extends StatelessWidget {
             action: action,
           ),
         ];
-      case 'territories':
-      case 'territory':
-      case 'city':
-      case 'territory-commons':
-        // Territory remains a contextual attribute, not a standalone player
-        // system. Legacy routes land on the canonical world context screen.
-        return [WorldConditionsPanel(state: state)];
       case 'contracts':
         return [
           OrganizationContractsPanel(
@@ -374,8 +367,7 @@ class Dashboard extends StatelessWidget {
       case 'pantheon':
       case 'memorial':
         return [HistoricalArchivePanel(archive: memorialArchive, events: events, api: api)];
-      case 'world':
-      case 'conditions':
+      case 'world/conditions':
         return [WorldConditionsPanel(state: state)];
       case 'initiatives':
         return [

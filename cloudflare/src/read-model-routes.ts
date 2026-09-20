@@ -258,7 +258,8 @@ export async function handleReadModelRoutes(
     const rawDay = url.searchParams.get('day');
     const day = rawDay == null ? undefined : Number(rawDay);
     if (day != null && (!Number.isInteger(day) || day < 1)) return Response.json({ ok: false, error: 'day must be a positive integer' }, { status: 400 });
-    const result = await withRepository(env, (repository) => listWorldConditions(repository, day));
+    const viewer = await currentViewer(request, env);
+    const result = await withRepository(env, (repository) => listWorldConditions(repository, day, viewer?.houseId));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }

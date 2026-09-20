@@ -23,6 +23,7 @@
     "v5:simulate": "node scripts/simulate-v5-scenarios.mjs",
     "test:v5:simulate": "node --test test/v5-simulation-harness.test.mjs",
     "test:authoritative-time": "node --experimental-strip-types --test test/authoritative-time.test.mjs test/authoritative-time-postgres-certification.test.mjs test/settlement-failure-recovery.test.mjs",
+    "test:world-conditions": "node --test test/world-conditions-e2e.test.mjs test/world-conditions.test.mjs test/world-condition-exposure-contract.test.mjs",
     "test:v5:initiative-governance": "node --test test/v5-initiative-governance.test.mjs test/v5-initiative-certification.test.mjs test/global-program-funding.test.mjs",
     "build:deliver": "./scripts/build-and-deliver.sh",
     "check": "node --check server.js",
