@@ -1,5 +1,25 @@
 part of 'earth_api.dart';
 
+extension EarthApiInitiatives on EarthApi {
+  Future<InitiativesReadModel> listInitiatives({String? status, String? scope, bool mySupport = false}) async {
+    final query = <String, String>{if (status != null) 'status': status, if (scope != null) 'scope': scope, if (mySupport) 'mySupport': 'true'};
+    final suffix = query.isEmpty ? '' : '?${query.entries.map((entry) => '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
+    final response = await _request('/api/initiatives$suffix');
+    return InitiativesReadModel.fromJson(Map<String, dynamic>.from(response as Map));
+  }
+
+  Future<Map<String, dynamic>> contributeToInitiative({required String initiativeId, required String amountCredit}) async {
+    final response = await _request('/api/initiatives/$initiativeId/contributions', method: 'POST', body: {'amountCredit': amountCredit, 'correlationId': newClientCorrelationId('CONTRIBUTE-INITIATIVE')});
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<InitiativeContributionQuote> quoteInitiativeContribution({required String initiativeId, required String amountCredit}) async {
+    final response = await _request('/api/initiatives/$initiativeId/contribution-quote', method: 'POST', body: {'amountCredit': amountCredit});
+    final map = Map<String, dynamic>.from(response as Map);
+    return InitiativeContributionQuote.fromJson(Map<String, dynamic>.from(map['quote'] as Map));
+  }
+}
+
 extension EarthApiOrganizations on EarthApi {
   Future<Map<String, dynamic>> listCharterTemplates() async {
     final response = await _request('/api/organizations/charters/templates');
@@ -71,7 +91,8 @@ extension EarthApiOrganizations on EarthApi {
   Future<Map<String, dynamic>> amendOrganizationCharter(
       {required String organizationId,
       required Map<String, dynamic> charter}) async {
-    throw StateError('Direct Charter amendment is retired; use a V5 Constitution amendment proposal.');
+    throw StateError(
+        'Direct Charter amendment is retired; use a V5 Constitution amendment proposal.');
   }
 
   Future<Map<String, dynamic>> getOrganizationVotingMethod(
@@ -86,38 +107,12 @@ extension EarthApiOrganizations on EarthApi {
       required String votingMethod,
       int voiceCycleDays = 7,
       int voicePerCycle = 100}) async {
-    throw StateError('Direct voting-setting amendment is retired; use a V5 Constitution amendment proposal.');
+    throw StateError(
+        'Direct voting-setting amendment is retired; use a V5 Constitution amendment proposal.');
   }
 
   Future<Map<String, dynamic>> listEarthPrograms() async {
     final response = await _request('/api/earth/programs');
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> createGlobalProgram({
-    required String programType,
-    required String name,
-    required String description,
-    required String targetUnits,
-    required String authorizedUnits,
-    String? matchingAuthorizedUnits,
-    int? fundingDeadlineGameDay,
-    required String proposalId,
-  }) async {
-    final response =
-        await _request('/api/earth/programs', method: 'POST', body: {
-      'programType': programType,
-      'name': name,
-      'description': description,
-      'targetUnits': targetUnits,
-      'authorizedUnits': authorizedUnits,
-      if (matchingAuthorizedUnits != null)
-        'matchingAuthorizedUnits': matchingAuthorizedUnits,
-      if (fundingDeadlineGameDay != null)
-        'fundingDeadlineGameDay': fundingDeadlineGameDay,
-      'proposalId': proposalId,
-      'correlationId': newClientCorrelationId('CREATE-EARTH-PROGRAM'),
-    });
     return Map<String, dynamic>.from(response as Map);
   }
 
@@ -239,19 +234,31 @@ extension EarthApiOrganizations on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> listContractPerformance(String organizationId) async {
-    final response = await _request('/api/organizations/$organizationId/contracts/performance');
+  Future<Map<String, dynamic>> listContractPerformance(
+      String organizationId) async {
+    final response = await _request(
+        '/api/organizations/$organizationId/contracts/performance');
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> contractPerformanceAction({required String organizationId, required String performanceId, required String action, String? note, String? units, int? qualityBps, String? resolution}) async {
-    final response = await _request('/api/organizations/$organizationId/contracts/performance/$performanceId/$action', method: 'POST', body: {
-      if (note != null) 'note': note,
-      if (units != null) 'units': units,
-      if (qualityBps != null) 'qualityBps': qualityBps,
-      if (resolution != null) 'resolution': resolution,
-      'correlationId': newClientCorrelationId('CONTRACT-PERFORMANCE'),
-    });
+  Future<Map<String, dynamic>> contractPerformanceAction(
+      {required String organizationId,
+      required String performanceId,
+      required String action,
+      String? note,
+      String? units,
+      int? qualityBps,
+      String? resolution}) async {
+    final response = await _request(
+        '/api/organizations/$organizationId/contracts/performance/$performanceId/$action',
+        method: 'POST',
+        body: {
+          if (note != null) 'note': note,
+          if (units != null) 'units': units,
+          if (qualityBps != null) 'qualityBps': qualityBps,
+          if (resolution != null) 'resolution': resolution,
+          'correlationId': newClientCorrelationId('CONTRACT-PERFORMANCE'),
+        });
     return Map<String, dynamic>.from(response as Map);
   }
 
@@ -260,59 +267,13 @@ extension EarthApiOrganizations on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> createPublicProject({
-    required String name,
-    required String description,
-    required String beneficiaryType,
-    required String beneficiaryId,
-    required String recipientAccountId,
-    required String targetUnits,
-    required int deadlineGameDay,
-    required String matchingPoolAuthorizedUnits,
-    required String proposalId,
-  }) async {
-    final response =
-        await _request('/api/public-projects', method: 'POST', body: {
-      'name': name,
-      'description': description,
-      'beneficiaryType': beneficiaryType,
-      'beneficiaryId': beneficiaryId,
-      'recipientAccountId': recipientAccountId,
-      'targetUnits': targetUnits,
-      'deadlineGameDay': deadlineGameDay,
-      'matchingPoolAuthorizedUnits': matchingPoolAuthorizedUnits,
-      'proposalId': proposalId,
-      'correlationId': newClientCorrelationId('CREATE-PUBLIC-PROJECT'),
-    });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> fundPublicProjectMatchingPool({
-    required String projectId,
-    required String proposalId,
-    required String amountUnits,
-  }) async {
-    final response = await _request(
-        '/api/public-projects/$projectId/matching-fund',
-        method: 'POST',
-        body: {
-          'proposalId': proposalId,
-          'amountUnits': amountUnits,
-          'correlationId': newClientCorrelationId('FUND-MATCHING-POOL'),
-        });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
   Future<Map<String, dynamic>> contributeToPublicProject(
-      {required String projectId,
-      required String sourceAccountId,
-      required String amountUnits}) async {
+      {required String projectId, required String amountCredit}) async {
     final response = await _request(
         '/api/public-projects/$projectId/contributions',
         method: 'POST',
         body: {
-          'sourceAccountId': sourceAccountId,
-          'amountUnits': amountUnits,
+          'amountCredit': amountCredit,
           'correlationId': newClientCorrelationId('CONTRIBUTE-PUBLIC-PROJECT'),
         });
     return Map<String, dynamic>.from(response as Map);
@@ -323,43 +284,13 @@ extension EarthApiOrganizations on EarthApi {
     return Map<String, dynamic>.from(response as Map);
   }
 
-  Future<Map<String, dynamic>> settlePublicProject(String projectId) async {
-    final response = await _request('/api/public-projects/$projectId/settle',
-        method: 'POST',
-        body: {
-          'correlationId': newClientCorrelationId('SETTLE-PUBLIC-PROJECT'),
-        });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> fundGlobalProgram(
-      {required String programId,
-      required String proposalId,
-      required String sourceAccountId,
-      required String destinationAccountId,
-      required String amountUnits}) async {
-    final response = await _request('/api/earth/programs/$programId/fund',
-        method: 'POST',
-        body: {
-          'proposalId': proposalId,
-          'sourceAccountId': sourceAccountId,
-          'destinationAccountId': destinationAccountId,
-          'amountUnits': amountUnits,
-          'correlationId': newClientCorrelationId('FUND-EARTH-PROGRAM'),
-        });
-    return Map<String, dynamic>.from(response as Map);
-  }
-
   Future<Map<String, dynamic>> contributeToGlobalProgram(
-      {required String programId,
-      required String sourceAccountId,
-      required String amountUnits}) async {
+      {required String programId, required String amountCredit}) async {
     final response = await _request(
         '/api/earth/programs/$programId/contributions',
         method: 'POST',
         body: {
-          'sourceAccountId': sourceAccountId,
-          'amountUnits': amountUnits,
+          'amountCredit': amountCredit,
           'correlationId': newClientCorrelationId('CONTRIBUTE-EARTH-PROGRAM'),
         });
     return Map<String, dynamic>.from(response as Map);
@@ -396,12 +327,6 @@ extension EarthApiOrganizations on EarthApi {
       String programId) async {
     final response =
         await _request('/api/earth/programs/$programId/contributions');
-    return Map<String, dynamic>.from(response as Map);
-  }
-
-  Future<Map<String, dynamic>> settleGlobalProgram(String programId) async {
-    final response =
-        await _request('/api/earth/programs/$programId/settle', method: 'POST');
     return Map<String, dynamic>.from(response as Map);
   }
 }

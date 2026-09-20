@@ -14,6 +14,8 @@ import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { postSettlementTransaction, END_OF_GAME_DAY_MINUTE } from './economic-transaction-postgres.ts';
 import { governanceProposalFromRow } from './governance-proposal.ts';
 import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
+import { materializeV5Initiative } from './v5-initiatives-postgres.ts';
+import { parseCreditAmount } from './money.ts';
 
 type ProposalAction = V5GovernanceAction & { corporationId?: string };
 
@@ -57,6 +59,21 @@ function actionFromPayload(actionType: ProposalAction['actionType'], payload: Re
     generation: payload.generation == null ? undefined : Number(payload.generation),
     scaleCapability: payload.scaleCapability as ProposalAction['scaleCapability'],
     targetTier: payload.targetTier == null ? undefined : Number(payload.targetTier),
+    initiativeType: payload.initiativeType as ProposalAction['initiativeType'],
+    programType: payload.programType as ProposalAction['programType'],
+    initiativeDescription: payload.initiativeDescription == null ? (payload.description == null ? undefined : String(payload.description)) : String(payload.initiativeDescription),
+    fundingTargetUnits: payload.fundingTargetUnits == null ? undefined : bigintPayload(payload.fundingTargetUnits, 'Initiative funding target'),
+    treasuryAuthorizedUnits: payload.treasuryAuthorizedUnits == null ? undefined : bigintPayload(payload.treasuryAuthorizedUnits, 'Initiative treasury authorization'),
+    matchingPolicy: payload.matchingPolicy as ProposalAction['matchingPolicy'],
+    matchingCapUnits: payload.matchingCapUnits == null ? undefined : bigintPayload(payload.matchingCapUnits, 'Initiative matching cap'),
+    fundingDeadlineGameDay: payload.fundingDeadlineGameDay == null ? undefined : Number(payload.fundingDeadlineGameDay),
+    fundingModel: payload.fundingModel as ProposalAction['fundingModel'],
+    executionModel: payload.executionModel as ProposalAction['executionModel'],
+    executionDurationGameDays: payload.executionDurationGameDays == null ? undefined : Number(payload.executionDurationGameDays),
+    executionResourceRequirements: payload.executionResourceRequirements && typeof payload.executionResourceRequirements === 'object' ? Object.fromEntries(Object.entries(payload.executionResourceRequirements as Record<string, unknown>).map(([key, value]) => [key, String(value)])) : undefined,
+    progressModel: payload.progressModel as ProposalAction['progressModel'],
+    outcome: payload.outcome && typeof payload.outcome === 'object' ? payload.outcome as Record<string, unknown> : undefined,
+    physicalTarget: payload.physicalTarget && typeof payload.physicalTarget === 'object' ? payload.physicalTarget as Record<string, unknown> : undefined,
   };
   return action;
 }
@@ -225,6 +242,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
       'CORPORATION_BUILDING_RESEARCH',
       'CORPORATION_SCALE_RESEARCH',
       'EARTH_TECHNOLOGY_FRONTIER',
+      'INITIATIVE_CREATE',
     ];
     if (!ALLOWED_V5_ACTIONS.includes(input.actionType)) {
       throw new Error('Legacy V5 policy actions are retired; submit a Constitution amendment proposal.');
@@ -245,10 +263,27 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     if (requestedEffectiveDay != null && (!Number.isInteger(requestedEffectiveDay) || requestedEffectiveDay < timing.earliestValidEffectiveGameDay)) {
       throw new Error(`Effective game day must be on or after ${timing.earliestValidEffectiveGameDay}, after voting concludes and the implementation delay`);
     }
-    const proposalInputPayload = {
+    let proposalInputPayload = {
       ...input.payload,
       effectiveFromGameDay: requestedEffectiveDay ?? timing.earliestValidEffectiveGameDay,
     };
+    if (input.actionType === 'INITIATIVE_CREATE') {
+      const initiativePayload = { ...proposalInputPayload };
+      const decimalFields: Array<[string, string]> = [
+        ['fundingTargetCredit', 'fundingTargetUnits'],
+        ['treasuryAuthorizedCredit', 'treasuryAuthorizedUnits'],
+        ['matchingCapCredit', 'matchingCapUnits'],
+      ];
+      for (const [displayField, unitsField] of decimalFields) {
+        if (initiativePayload[unitsField] == null && initiativePayload[displayField] != null) initiativePayload[unitsField] = parseCreditAmount(initiativePayload[displayField]).toString();
+        delete initiativePayload[displayField];
+      }
+      initiativePayload.initiativeDescription = initiativePayload.initiativeDescription ?? initiativePayload.description;
+      delete initiativePayload.description;
+      if (input.subjectType === 'CORPORATION') initiativePayload.corporationId = input.subjectId;
+      if (initiativePayload.physicalTarget !== undefined && (typeof initiativePayload.physicalTarget !== 'object' || initiativePayload.physicalTarget === null || Array.isArray(initiativePayload.physicalTarget))) throw new Error('Initiative physical target must be an object');
+      proposalInputPayload = initiativePayload;
+    }
     let proposalPayload = proposalInputPayload;
     let action = actionFromPayload(input.actionType, proposalPayload);
     validateV5GovernanceAction(action, day);
@@ -256,6 +291,11 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
     let serverImpact: Record<string, unknown> | null = null;
     if (input.actionType === 'CONSTITUTION_AMENDMENT') {
       validateProposalActionSnapshot(action as unknown as Record<string, unknown>);
+    }
+    if (input.actionType === 'INITIATIVE_CREATE') {
+      validateProposalActionSnapshot(action as unknown as Record<string, unknown>);
+      if (input.subjectType === 'CORPORATION' && action.corporationId !== input.subjectId) throw new Error('Corporation initiative must target the proposal Corporation');
+      if (input.subjectType === 'EARTH' && action.corporationId) throw new Error('Earth initiative cannot target a Corporation');
     }
     if (input.actionType === 'CORPORATION_PUBLIC_CONSTRUCTION') {
       const blueprint = (await tx.query<{ id: string; code: string; ownership_scope: string; minimum_scale_capability: string; technology_domain: string; construction_credit_units: string; slot_footprint: number; service_capacity_units: string }>(
@@ -387,6 +427,7 @@ export async function createV5GovernanceProposal(repository: PostgresRepository,
             : input.actionType === 'CORPORATION_BUILDING_RESEARCH' ? `${scope}:BUILDING_RESEARCH:${action.buildingType}:${action.targetTier}`
               : input.actionType === 'CORPORATION_SCALE_RESEARCH' ? `${scope}:SCALE_RESEARCH:${action.scaleCapability}`
                 : input.actionType === 'EARTH_TECHNOLOGY_FRONTIER' ? `EARTH:TECHNOLOGY_FRONTIER:${action.domainId}`
+                  : input.actionType === 'INITIATIVE_CREATE' ? `${scope}:INITIATIVE:${action.initiativeType}:${action.name}`
                   : `${scope}:PROGRESSIVE_SCHEDULE`;
     if ((await tx.query(`SELECT 1 FROM v5_governance_proposals WHERE subject_type = $1 AND subject_id IS NOT DISTINCT FROM $2 AND policy_group = $3 AND status IN ('VOTING','PASSED','SCHEDULED') LIMIT 1`, [input.subjectType, input.subjectId, policyGroup])).rows[0]) throw new Error('An active proposal already exists for this policy group');
     if (action.effectiveFromGameDay < timing.earliestValidEffectiveGameDay) {
@@ -712,6 +753,17 @@ async function applyActivation(tx: PostgresRepository, row: { proposal_id: strin
     await tx.query(`INSERT INTO v5_capacity_policy_versions (id, version, standard_territory_capacity_units, earth_base_capacity_rate_units, earth_corporation_schedule_id, earth_house_schedule_id, effective_from_game_day, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'ACTIVE')`, [`V5-EARTH-POLICY-${row.proposal_id}`, version, action.standardTerritoryCapacityUnits!.toString(), action.earthBaseRateUnits!.toString(), prior.earth_corporation_schedule_id, prior.earth_house_schedule_id, effective]);
   } else if (row.action_type === 'EARTH_TECHNOLOGY_FRONTIER') {
     await advanceEarthTechnologyFrontier(tx, { domainId: action.domainId!, generationNumber: action.generationNumber!, effectiveFromGameDay: effective, researchCreditCostUnits: action.researchCreditCostUnits, researchResourceCosts: action.researchResourceCosts, proposalId: row.proposal_id, humanId: payload.createdByHumanId == null ? undefined : String(payload.createdByHumanId), correlationId: `frontier:${row.proposal_id}` }, day);
+  } else if (row.action_type === 'INITIATIVE_CREATE') {
+    const proposalScope = (await tx.query<{ subject_type: string; subject_id: string | null }>('SELECT subject_type, subject_id FROM v5_governance_proposals WHERE id = $1', [row.proposal_id])).rows[0];
+    if (!proposalScope || !['EARTH', 'CORPORATION'].includes(proposalScope.subject_type)) throw new Error('Initiative activation has an invalid governance scope');
+    await materializeV5Initiative(tx, {
+      proposalId: row.proposal_id,
+      subjectType: proposalScope.subject_type as 'EARTH' | 'CORPORATION',
+      subjectId: proposalScope.subject_id,
+      action,
+      effectiveGameDay: effective,
+      createdGameDay: day,
+    });
   } else {
     const scheduleId = `V5-GOV-SCHEDULE-${row.proposal_id}`;
     await retireActive(tx, 'progressive_policy_schedules', 'code', String(action.scheduleCode), effective);

@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
+import { validateInitiativeOutcome } from './initiative-outcomes.ts';
 import { assertConstitutionalAmendableRule, validateConstitutionalRuleValue } from './v5-constitution.ts';
 import { WORLD_CONDITION_EFFECTS } from './world-conditions.ts';
 import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
@@ -132,6 +133,30 @@ const earthTechnologyFrontierHandler: ProposalActionHandler = {
   },
 };
 
+const initiativeCreateHandler: ProposalActionHandler = {
+  actionType: 'INITIATIVE_CREATE',
+  version: 1,
+  validateCreation: (action) => {
+    requiredFields(action, ['initiativeType', 'name', 'initiativeDescription', 'fundingTargetUnits', 'fundingDeadlineGameDay', 'fundingModel', 'executionModel', 'matchingPolicy', 'outcome'], 'Initiative creation action');
+    if (!['PROGRAM', 'PUBLIC_PROJECT', 'EMERGENCY', 'COMMONS'].includes(String(action.initiativeType))) throw new Error('Initiative type is invalid');
+    validateInitiativeOutcome(action.outcome);
+    if (action.physicalTarget !== undefined && (typeof action.physicalTarget !== 'object' || action.physicalTarget === null || Array.isArray(action.physicalTarget))) throw new Error('Initiative physical target must be an object');
+    if ('beneficiaryType' in action || 'beneficiaryId' in action || 'recipientAccountId' in action) throw new Error('Initiative authority must be Earth or Corporation scope');
+    for (const field of ['fundingTargetUnits', 'treasuryAuthorizedUnits', 'matchingCapUnits']) {
+      if (action[field] !== undefined && !/^\d+$/.test(String(action[field]))) throw new Error(`${field} must be a non-negative integer snapshot`);
+    }
+    if (String(action.initiativeType) === 'PROGRAM') {
+      if (action.executionModel !== 'TIMED_PROGRAM') throw new Error('Program initiatives require timed execution');
+      if (!Number.isInteger(Number(action.executionDurationGameDays)) || Number(action.executionDurationGameDays) <= 0) throw new Error('Program initiatives require a positive execution duration');
+      if (!['TIME', 'TIME_AND_RESOURCES'].includes(String(action.progressModel ?? 'TIME'))) throw new Error('Program initiatives require time-based progress');
+    }
+  },
+  validateExecution: async ({ proposal, action }) => {
+    if (!['EARTH', 'CORPORATION'].includes(String(proposal.subject_type))) throw new Error('Initiative proposal has an invalid governance scope');
+    if (proposal.subject_type === 'CORPORATION' && !String(action.corporationId ?? proposal.subject_id ?? '').trim()) throw new Error('Corporation initiative requires a Corporation scope');
+  },
+};
+
 function requiredFields(action: Record<string, unknown>, fields: string[], label: string): void {
   if (fields.some((field) => action[field] === undefined || action[field] === null || action[field] === '')) {
     throw new Error(`${label} requires ${fields.join(', ')}`);
@@ -215,6 +240,7 @@ const handlers = new Map<string, ProposalActionHandler>([
   [constructCivicBuildingHandler.actionType, constructCivicBuildingHandler],
   [startResearchHandler.actionType, startResearchHandler],
   [earthTechnologyFrontierHandler.actionType, earthTechnologyFrontierHandler],
+  [initiativeCreateHandler.actionType, initiativeCreateHandler],
   [amendRuleHandler.actionType, amendRuleHandler],
   ...legacyOperationalHandlers.map((handler) => [handler.actionType, handler] as const),
   ...Array.from(FINANCIAL_ACTIONS, (actionType) => [actionType, financialHandler] as const),

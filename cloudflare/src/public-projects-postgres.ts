@@ -1,47 +1,11 @@
 import type { PostgresRepository } from './repository.ts';
-import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { createGameEvent } from './game-events-postgres.ts';
 import { calculateMatching } from './public-projects.ts';
 import { runEconomicMutation } from './settlement-barrier-postgres.ts';
 import { postEconomicTransaction, postSettlementTransaction } from './economic-transaction-postgres.ts';
 
-async function day(tx: PostgresRepository): Promise<number> { return (await readAuthoritativeGameTime(tx)).gameDay; }
-
-export async function createPublicProject(repository: PostgresRepository, input: { name: string; description: string; beneficiaryType: 'ORGANIZATION' | 'EARTH' | 'TERRITORY'; beneficiaryId: string; recipientAccountId: string; targetUnits: string; deadlineGameDay: number; matchingPoolAuthorizedUnits: string; proposalId: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const prior = await tx.query<{ id: string }>('SELECT id FROM public_projects WHERE correlation_id = $1', [input.correlationId]);
-    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, projectId: prior.rows[0].id, correlationId: input.correlationId };
-    const proposal = (await tx.query<{ status: string; subject_type: string; subject_id: string | null; action_type: string }>('SELECT status, subject_type, subject_id, action_type FROM governance_proposals_v4 WHERE id = $1', [input.proposalId])).rows[0];
-    if (!proposal || proposal.action_type !== 'PUBLIC_PROJECT' || proposal.subject_type !== 'EARTH' || proposal.subject_id !== null || !['VOTING', 'PASSED'].includes(proposal.status)) throw new Error('Public projects require an EARTH public-project proposal');
-    const target = BigInt(input.targetUnits); const pool = BigInt(input.matchingPoolAuthorizedUnits);
-    if (!input.name.trim() || input.name.trim().length > 120 || target <= 0n || pool < 0n || input.deadlineGameDay < 1) throw new Error('Invalid public project definition');
-    const recipient = (await tx.query<{ id: string }>('SELECT id::TEXT FROM economic_accounts WHERE id = $1 AND asset_id = 1 AND status = \'ACTIVE\'', [input.recipientAccountId])).rows[0];
-    if (!recipient) throw new Error('Public project recipient account is unavailable');
-    const current = await day(tx); const id = `PUBLIC-PROJECT-${crypto.randomUUID().slice(0, 12).toUpperCase()}`;
-    await tx.query(`INSERT INTO public_projects (id, name, description, beneficiary_type, beneficiary_id, recipient_account_id, target_units, deadline_game_day, matching_pool_authorized_units, proposal_id, created_by_human_id, created_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [id, input.name.trim(), input.description.trim(), input.beneficiaryType, input.beneficiaryId, recipient.id, target.toString(), input.deadlineGameDay, pool.toString(), input.proposalId, input.humanId, current, input.correlationId]);
-    return { ok: true, projectId: id, status: 'OPEN', correlationId: input.correlationId };
-  });
-}
-
-export async function fundMatchingPool(repository: PostgresRepository, input: { projectId: string; proposalId: string; amountUnits: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const prior = await tx.query<{ id: string }>('SELECT id FROM public_project_matching_funds WHERE correlation_id = $1', [input.correlationId]);
-    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, projectId: input.projectId, correlationId: input.correlationId };
-    const proposal = (await tx.query<{ status: string; subject_type: string; subject_id: string | null }>('SELECT status, subject_type, subject_id FROM governance_proposals_v4 WHERE id = $1', [input.proposalId])).rows[0];
-    if (!proposal || proposal.status !== 'PASSED' || proposal.subject_type !== 'EARTH' || proposal.subject_id !== null) throw new Error('Matching pools require a passed EARTH proposal');
-    const project = (await tx.query<{ matching_pool_authorized_units: string; matching_pool_funded_units: string; deadline_game_day: number }>('SELECT matching_pool_authorized_units::TEXT, matching_pool_funded_units::TEXT, deadline_game_day FROM public_projects WHERE id = $1 AND status IN (\'OPEN\',\'FUNDED\') FOR UPDATE', [input.projectId])).rows[0];
-    const amount = BigInt(input.amountUnits);
-    if (!project || amount <= 0n || BigInt(project.matching_pool_funded_units) + amount > BigInt(project.matching_pool_authorized_units)) throw new Error('Matching pool authority exceeded');
-    const treasury = (await tx.query<{ balance_units: string }>('SELECT balance_units::TEXT FROM economic_accounts WHERE owner_economic_id = \'ECON-EARTH-001\' AND account_type = \'TREASURY\' AND asset_id = 1 AND status = \'ACTIVE\' FOR UPDATE')).rows[0];
-    if (!treasury || BigInt(treasury.balance_units) < amount) throw new Error('EARTH matching pool cash is insufficient');
-    await tx.query("UPDATE public_projects SET matching_pool_funded_units = matching_pool_funded_units + $1 WHERE id = $2", [amount.toString(), input.projectId]);
-    await tx.query(`INSERT INTO public_project_matching_funds (id, project_id, amount_units, authorized_game_day, proposal_id, correlation_id) VALUES ($1,$2,$3,(SELECT game_day FROM earth_get_current_game_time()),$4,$5)`, [`MATCH-FUND-${input.correlationId}`, input.projectId, amount.toString(), input.proposalId, input.correlationId]);
-    return { ok: true, projectId: input.projectId, fundedUnits: (BigInt(project.matching_pool_funded_units) + amount).toString(), correlationId: input.correlationId };
-  });
-}
-
 export async function listPublicProjects(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const projects = await repository.query(`SELECT p.id, p.name, p.description, p.beneficiary_type, p.beneficiary_id, p.target_units::TEXT, p.deadline_game_day, p.matching_pool_authorized_units::TEXT, p.matching_pool_funded_units::TEXT, p.contribution_units::TEXT, p.matched_units::TEXT, p.status, p.proposal_id, p.created_game_day, COUNT(c.id)::INTEGER AS supporter_count FROM public_projects p LEFT JOIN public_project_contributions c ON c.project_id = p.id AND c.status = 'ESCROWED' GROUP BY p.id ORDER BY p.status, p.deadline_game_day, p.id`);
+  const projects = await repository.query(`SELECT p.id, p.name, p.description, p.beneficiary_type, p.beneficiary_id, p.target_units::TEXT, p.deadline_game_day, p.matching_pool_authorized_units::TEXT, p.matching_pool_funded_units::TEXT, p.contribution_units::TEXT, p.matched_units::TEXT, p.status, p.created_game_day, COUNT(c.id)::INTEGER AS supporter_count FROM public_projects p LEFT JOIN public_project_contributions c ON c.project_id = p.id AND c.status = 'ESCROWED' GROUP BY p.id ORDER BY p.status, p.deadline_game_day, p.id`);
   return {
     projects: projects.rows.map((project) => ({
       ...project,
@@ -62,9 +26,10 @@ export async function getPublicProject(repository: PostgresRepository, projectId
   const project = result.rows[0];
   if (!project) throw new Error('Public project not found');
   const match = calculateMatching({ contributionUnits: BigInt(project.contribution_units), supporterCount: BigInt(project.supporter_count), poolRemaining: BigInt(project.matching_pool_funded_units) - BigInt(project.matching_pool_spent_units), targetRemaining: BigInt(project.target_units) > BigInt(project.contribution_units) ? BigInt(project.target_units) - BigInt(project.contribution_units) : 0n, matchBps: 10000n });
+  const { recipient_account_id: _recipientAccountId, proposal_id: _proposalId, created_by_human_id: _createdByHumanId, ...playerProject } = project;
   return {
     project: {
-      ...project,
+      ...playerProject,
       projected_match_units: match.toString(),
       capabilities: {
         canContribute: ['OPEN', 'FUNDED'].includes(String(project.status).toUpperCase()),
@@ -76,7 +41,7 @@ export async function getPublicProject(repository: PostgresRepository, projectId
   };
 }
 
-export async function contributeToPublicProject(repository: PostgresRepository, input: { projectId: string; houseId: string; sourceAccountId: string; amountUnits: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
+export async function contributeToPublicProject(repository: PostgresRepository, input: { projectId: string; houseId: string; amountUnits: string; humanId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return runEconomicMutation(repository, async (tx, clock) => {
     const prior = await tx.query<{ id: string }>('SELECT id FROM public_project_contributions WHERE correlation_id = $1', [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, contributionId: prior.rows[0].id, correlationId: input.correlationId };
@@ -86,7 +51,7 @@ export async function contributeToPublicProject(repository: PostgresRepository, 
     const current = clock.gameDay;
     if (current > Number(project.deadline_game_day)) throw new Error('Public project deadline has passed');
     if (BigInt(project.contribution_units) + amount > BigInt(project.target_units)) throw new Error('Contribution exceeds project target');
-    const source = (await tx.query<{ id: string; balance_units: string }>('SELECT id::TEXT, balance_units::TEXT FROM economic_accounts WHERE id = $1 AND owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $2 AND owner_type = \'HOUSE\') AND asset_id = 1 AND account_type = \'WALLET\' AND status = \'ACTIVE\' FOR UPDATE', [input.sourceAccountId, input.houseId])).rows[0];
+    const source = (await tx.query<{ id: string; balance_units: string }>('SELECT a.id::TEXT, a.balance_units::TEXT FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1 AND o.owner_type = \'HOUSE\' AND a.asset_id = 1 AND a.account_type = \'WALLET\' AND a.status = \'ACTIVE\' FOR UPDATE', [input.houseId])).rows[0];
     const escrow = (await tx.query<{ id: string }>('SELECT id::TEXT FROM economic_accounts WHERE owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = \'ECON-CONSTRUCTION-SETTLEMENT\') AND asset_id = 1 AND account_type = \'SYSTEM_ACCOUNT\' AND status = \'ACTIVE\' LIMIT 1')).rows[0];
     if (!source || !escrow || BigInt(source.balance_units) < amount) throw new Error('Contribution wallet balance or project escrow is unavailable');
     const posted = await postEconomicTransaction(tx, {

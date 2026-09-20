@@ -12,13 +12,11 @@ import { claimSettlementWork, completeSettlementWork, ensureSettlementWork, fail
 import { executeHousePoliciesForDay } from './house-policy-execution.ts';
 import { settlePerishableResourceDecay } from './resource-settlement-postgres.ts';
 import { completeDueConstructionProjects } from './construction-settlement-postgres.ts';
-import { advanceGlobalPrograms } from './global-programs-postgres.ts';
 import { advanceTechnologyGenerationPrograms } from './technology-generations-postgres.ts';
 import { advanceV5ResearchProjects } from './technology-postgres.ts';
 import { settleBankLoanRisk } from './banking-postgres.ts';
 import { refreshOrganizationFinancialStates } from './organization-stress-postgres.ts';
 import { executeDueOrganizationResolutions } from './organization-stress-postgres.ts';
-import { settleDuePublicProjectsInTransaction } from './public-projects-postgres.ts';
 import { refreshRankingSnapshots } from './rankings-postgres.ts';
 import { settlePublicTaxesInTransaction } from './tax-settlement-postgres.ts';
 import { refreshInstitutionFinancialSnapshots } from './institution-financial-settlement-postgres.ts';
@@ -32,6 +30,7 @@ import { reconcileV5TerritoryContainersInTransaction } from './v5-territory-cont
 import { activateDueV5GovernancePoliciesInTransaction } from './v5-governance-postgres.ts';
 import { rebuildV5SettlementProfilesInShard, settleV5CorporationSettlementProfiles } from './v5-settlement-profiles-postgres.ts';
 import { materializeResolvedConstitutionSnapshot } from './constitutional-kernel-postgres.ts';
+import { advanceInitiativeExecutionsInTransaction, settleDueInitiativesInTransaction } from './initiatives-postgres.ts';
 import { reconcileV5TaxRulesInTransaction } from './v5-tax-reconciliation-postgres.ts';
 import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './economy-shadow.ts';
 import { marketBatchThroughClosedDay, processDueMarketBatches } from './market-scheduler.ts';
@@ -107,8 +106,11 @@ const settlementPhases = createDailySettlementPhaseRegistry({
     legacy: await advanceTechnologyGenerationPrograms(tx, day),
     v5: await advanceV5ResearchProjects(tx, day),
   }),
-  globalPrograms: async ({ tx, day }) => advanceGlobalPrograms(tx, day),
-  publicProjects: async ({ tx, day }) => settleDuePublicProjectsInTransaction(tx, day),
+  globalPrograms: async ({ tx, day }) => ({
+    funding: await settleDueInitiativesInTransaction(tx, day),
+    execution: await advanceInitiativeExecutionsInTransaction(tx, day),
+  }),
+  publicProjects: noOpPhase,
   housePolicyExecution: async ({ tx, day, shard, shardCount }) => executeHousePoliciesForDay(tx, day, { shard, shardCount }),
   lifecycle: async ({ tx, day }) => processHouseMortality(tx, day),
   postSuccessionAccessRefresh: async ({ tx, day }) => refreshPostSuccessionAccess(tx, day),

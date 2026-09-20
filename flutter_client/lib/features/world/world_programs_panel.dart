@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 class WorldProgramsPanel extends StatefulWidget {
   final Map<String, dynamic> personalFinanceData;
@@ -52,40 +53,10 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
     }
   }
 
-  Future<void> _createProgram() async {
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (_) => const _CreateWorldProgramDialog(),
-    );
-    if (result == null || !mounted) return;
-    try {
-      await const EarthApi().createGlobalProgram(
-        programType: result['programType']!,
-        name: result['name']!,
-        description: result['description']!,
-        targetUnits: result['targetUnits']!,
-        authorizedUnits: result['authorizedUnits']!,
-        matchingAuthorizedUnits: result['matchingAuthorizedUnits'],
-        fundingDeadlineGameDay:
-            int.tryParse(result['fundingDeadlineGameDay'] ?? ''),
-        proposalId: result['proposalId']!,
-      );
-      await _load();
-    } catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = error.toString();
-        });
-      }
-    }
-  }
-
   Future<void> _contribute(String programId) async {
-    final wallet = _walletAccountId ?? '';
     final result = await showDialog<Map<String, String>>(
         context: context,
         builder: (_) => _ProgramContributionDialog(
-              walletAccountId: wallet,
               walletBalance: _walletBalance,
             ));
     if (result == null || !mounted) return;
@@ -93,8 +64,7 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
       Future<EarthState> submit() => const EarthApi()
           .contributeToGlobalProgram(
             programId: programId,
-            sourceAccountId: result['accountId']!,
-            amountUnits: result['amount']!,
+            amountCredit: result['amount']!,
           )
           .then((_) => const EarthApi().world());
       if (widget.action != null) {
@@ -118,19 +88,12 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
       : [];
 
   String _progress(Map<String, dynamic> row) {
-    final progress = num.tryParse(
-        '${row['progress_units'] ?? row['progress_points'] ?? ''}');
-    final target =
-        num.tryParse('${row['target_units'] ?? row['required_points'] ?? ''}');
-    if (progress == null || target == null || target <= 0) {
+    final progress = row['progress_units'];
+    final target = row['target_units'];
+    if (progress == null || target == null) {
       return 'Progress unavailable';
     }
-    return '${progress.toStringAsFixed(0)} / ${target.toStringAsFixed(0)}';
-  }
-
-  String? get _walletAccountId {
-    final wallet = widget.personalFinanceData['wallet'];
-    return wallet is Map ? wallet['accountId']?.toString() : null;
+    return '${formatCreditUnits(progress)} / ${formatCreditUnits(target)}';
   }
 
   String? get _walletBalance {
@@ -181,7 +144,7 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
                           color: context.primaryColor),
                       trailing: capabilities['canContribute'] == true
                           ? TextButton(
-                              onPressed: widget.busy || _walletAccountId == null
+                              onPressed: widget.busy
                                   ? null
                                   : () => _contribute('${row['id']}'),
                               child: const Text('FUND'))
@@ -202,19 +165,9 @@ class _WorldProgramsPanelState extends State<WorldProgramsPanel> {
   }
 }
 
-class _CreateWorldProgramDialog extends StatefulWidget {
-  const _CreateWorldProgramDialog();
-
-  @override
-  State<_CreateWorldProgramDialog> createState() =>
-      _CreateWorldProgramDialogState();
-}
-
 class _ProgramContributionDialog extends StatefulWidget {
-  final String walletAccountId;
   final String? walletBalance;
   const _ProgramContributionDialog({
-    required this.walletAccountId,
     this.walletBalance,
   });
   @override
@@ -235,7 +188,7 @@ class _ProgramContributionDialogState
   Widget build(BuildContext context) => AlertDialog(
         title: const Text('FUND EARTH PROGRAM'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Wallet balance: ${widget.walletBalance ?? 'unavailable'} C'),
+          Text('Wallet balance: ${formatCreditUnits(widget.walletBalance)}'),
           TextField(
               controller: amount,
               onChanged: (_) => setState(() {}),
@@ -252,97 +205,11 @@ class _ProgramContributionDialogState
               onPressed: () => Navigator.pop(context),
               child: const Text('CANCEL')),
           FilledButton(
-              onPressed: widget.walletAccountId.isNotEmpty &&
-                      RegExp(r'^\d+$').hasMatch(amount.text.trim())
-                  ? () => Navigator.pop(context, {
-                        'accountId': widget.walletAccountId,
-                        'amount': amount.text.trim()
-                      })
+              onPressed: RegExp(r'^\d+(?:\.\d{1,2})?$')
+                      .hasMatch(amount.text.trim())
+                  ? () => Navigator.pop(context, {'amount': amount.text.trim()})
                   : null,
               child: const Text('CONTRIBUTE'))
         ],
       );
-}
-
-class _CreateWorldProgramDialogState extends State<_CreateWorldProgramDialog> {
-  final _name = TextEditingController();
-  final _description = TextEditingController();
-  final _target = TextEditingController();
-  final _authorized = TextEditingController();
-  final _matching = TextEditingController();
-  final _deadline = TextEditingController();
-  final _proposal = TextEditingController();
-  String _type = 'TECHNOLOGY';
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _description.dispose();
-    _target.dispose();
-    _authorized.dispose();
-    _matching.dispose();
-    _deadline.dispose();
-    _proposal.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final valid = _name.text.trim().isNotEmpty &&
-        _description.text.trim().isNotEmpty &&
-        RegExp(r'^\d+$').hasMatch(_target.text.trim()) &&
-        RegExp(r'^\d+$').hasMatch(_authorized.text.trim()) &&
-        _proposal.text.trim().isNotEmpty;
-    Widget field(TextEditingController controller, String label) => TextField(
-        controller: controller,
-        onChanged: (_) => setState(() {}),
-        decoration: InputDecoration(labelText: label));
-    return AlertDialog(
-      title: const Text('PROPOSE EARTH PROGRAM'),
-      content: SizedBox(
-          width: 440,
-          child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-            field(_name, 'Program name'),
-            field(_description, 'Description'),
-            DropdownButtonFormField<String>(
-                value: _type,
-                decoration: const InputDecoration(labelText: 'Program type'),
-                items: const [
-                  DropdownMenuItem(
-                      value: 'TECHNOLOGY', child: Text('Technology')),
-                  DropdownMenuItem(value: 'COMMONS', child: Text('Commons')),
-                  DropdownMenuItem(
-                      value: 'EMERGENCY', child: Text('Emergency')),
-                ],
-                onChanged: (value) => setState(() => _type = value ?? _type)),
-            field(_target, 'Target CREDIT units'),
-            field(_authorized, 'Authorized CREDIT units'),
-            field(_matching, 'Earth matching cap (CREDIT units)'),
-            field(_deadline, 'Funding deadline game day (optional)'),
-            field(_proposal, 'Passed or active EARTH proposal ID'),
-          ]))),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL')),
-        FilledButton(
-            onPressed: valid
-                ? () => Navigator.pop(context, {
-                      'programType': _type,
-                      'name': _name.text.trim(),
-                      'description': _description.text.trim(),
-                      'targetUnits': _target.text.trim(),
-                      'authorizedUnits': _authorized.text.trim(),
-                      'matchingAuthorizedUnits': _matching.text.trim().isEmpty
-                          ? '0'
-                          : _matching.text.trim(),
-                      'fundingDeadlineGameDay': _deadline.text.trim(),
-                      'proposalId': _proposal.text.trim(),
-                    })
-                : null,
-            child: const Text('SUBMIT'))
-      ],
-    );
-  }
 }

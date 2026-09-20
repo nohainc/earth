@@ -18,6 +18,7 @@ function integer(value: unknown, fallback = 0): number {
 
 function category(actionType: string): string {
   if (actionType === 'CONSTITUTION_AMENDMENT') return 'CONSTITUTION';
+  if (actionType === 'INITIATIVE_CREATE') return 'INITIATIVE';
   if (actionType.includes('CONSTRUCTION')) return 'CONSTRUCTION';
   if (actionType.includes('RESEARCH') || actionType.includes('TECHNOLOGY')) return 'RESEARCH';
   return 'POLICY';

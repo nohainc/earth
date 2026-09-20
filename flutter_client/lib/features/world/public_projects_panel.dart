@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 /// Player-facing workflow for collaborative public goods. The server remains
 /// authoritative for proposal approval, matching limits, escrow, and settlement.
@@ -67,25 +68,13 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
     }
   }
 
-  String? get _walletAccountId {
-    final wallet = widget.personalFinanceData['wallet'];
-    return wallet is Map ? wallet['accountId']?.toString() : null;
-  }
-
   Future<void> _contribute(Map<String, dynamic> project) async {
-    final accountId = _walletAccountId;
-    if (accountId == null) {
-      _showMessage(
-          'Your CREDIT wallet is not available in the current financial snapshot.');
-      return;
-    }
     final amount = await _amountDialog('CONTRIBUTE TO PROJECT');
     if (amount == null || !mounted) return;
     await widget.action(() async {
       await const EarthApi().contributeToPublicProject(
         projectId: project['id'].toString(),
-        sourceAccountId: accountId,
-        amountUnits: amount,
+        amountCredit: amount,
       );
       return const EarthApi().world();
     });
@@ -102,8 +91,7 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.number,
-          decoration:
-              const InputDecoration(labelText: 'Amount in CREDIT units'),
+          decoration: const InputDecoration(labelText: 'Amount (CREDIT)'),
         ),
         actions: [
           TextButton(
@@ -112,7 +100,10 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
           FilledButton(
             onPressed: () {
               final value = controller.text.trim();
-              if (RegExp(r'^\d+$').hasMatch(value) && value != '0') {
+              if (RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(value) &&
+                  value != '0' &&
+                  value != '0.0' &&
+                  value != '0.00') {
                 Navigator.pop(dialogContext, value);
               }
             },
@@ -123,29 +114,6 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
     );
     controller.dispose();
     return result;
-  }
-
-  Future<void> _create() async {
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (dialogContext) => const _CreatePublicProjectDialog(),
-    );
-    if (result == null || !mounted) return;
-    await widget.action(() async {
-      await const EarthApi().createPublicProject(
-        name: result['name']!,
-        description: result['description']!,
-        beneficiaryType: result['beneficiaryType']!,
-        beneficiaryId: result['beneficiaryId']!,
-        recipientAccountId: result['recipientAccountId']!,
-        targetUnits: result['targetUnits']!,
-        deadlineGameDay: int.parse(result['deadlineGameDay']!),
-        matchingPoolAuthorizedUnits: result['matchingPoolAuthorizedUnits']!,
-        proposalId: result['proposalId']!,
-      );
-      return const EarthApi().world();
-    });
-    if (mounted) await _load();
   }
 
   Future<void> _openProject(Map<String, dynamic> project) async {
@@ -176,11 +144,11 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
                           'No description published.'),
                       const SizedBox(height: 16),
                       Text(
-                          'COMMUNITY FUNDING\n${detail['contribution_units'] ?? '0'} / ${detail['target_units'] ?? '—'} C'),
+                          'COMMUNITY FUNDING\n${formatCreditUnits(detail['contribution_units'])} / ${formatCreditUnits(detail['target_units'])}'),
                       Text(
-                          'EARTH MATCHING\n${detail['matched_units'] ?? detail['matching_pool_funded_units'] ?? '0'} C'),
+                          'EARTH MATCHING\n${formatCreditUnits(detail['matched_units'] ?? detail['matching_pool_funded_units'])}'),
                       Text(
-                          'PROJECTED MATCH\n${detail['projected_match_units'] ?? '0'} C'),
+                          'PROJECTED MATCH\n${formatCreditUnits(detail['projected_match_units'])}'),
                       Text('SUPPORTERS\n${detail['supporter_count'] ?? '0'}'),
                       Text(
                           'DEADLINE\nDay ${detail['deadline_game_day'] ?? '—'}'),
@@ -188,20 +156,6 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
                   ),
                 ),
                 actions: [
-                  if (capabilities['canFundMatching'] == true)
-                    TextButton(
-                        onPressed: () async {
-                          Navigator.pop(dialogContext);
-                          await _fundMatching(detail);
-                        },
-                        child: const Text('FUND MATCHING')),
-                  if (capabilities['canSettle'] == true)
-                    TextButton(
-                        onPressed: () async {
-                          Navigator.pop(dialogContext);
-                          await _settle(detail);
-                        },
-                        child: const Text('SETTLE WHEN DUE')),
                   TextButton(
                       onPressed: () => Navigator.pop(dialogContext),
                       child: const Text('CLOSE')),
@@ -210,37 +164,6 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
     } catch (error) {
       _showMessage(
           'Project details are temporarily unavailable. Please retry.');
-    }
-  }
-
-  Future<void> _fundMatching(Map<String, dynamic> project) async {
-    final amount = await _amountDialog('FUND MATCHING POOL');
-    final proposal =
-        project['proposal_id']?.toString() ?? project['proposalId']?.toString();
-    if (amount == null || proposal == null || proposal.isEmpty || !mounted) {
-      return;
-    }
-    try {
-      await widget.action(() => const EarthApi()
-          .fundPublicProjectMatchingPool(
-              projectId: project['id'].toString(),
-              proposalId: proposal,
-              amountUnits: amount)
-          .then((_) => const EarthApi().world()));
-      await _load();
-    } catch (error) {
-      _showMessage('Matching fund failed: $error');
-    }
-  }
-
-  Future<void> _settle(Map<String, dynamic> project) async {
-    try {
-      await widget.action(() => const EarthApi()
-          .settlePublicProject(project['id'].toString())
-          .then((_) => const EarthApi().world()));
-      await _load();
-    } catch (error) {
-      _showMessage('Settlement is not available yet: $error');
     }
   }
 
@@ -286,11 +209,8 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
             ),
             child: EarthDataList(
                 children: _projects.map((project) {
-              final target =
-                  project['target_units'] ?? project['targetUnits'] ?? '—';
-              final funded = project['funded_units'] ??
-                  project['contributed_units'] ??
-                  '0';
+              final target = project['target_units'];
+              final funded = project['contribution_units'];
               final status =
                   (project['status'] ?? 'UNKNOWN').toString().toUpperCase();
               final capabilities = project['capabilities'] is Map
@@ -303,7 +223,7 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
                 subtitle:
                     '${project['beneficiary_type'] ?? 'PUBLIC'} · $status · deadline day ${project['deadline_game_day'] ?? '—'}',
                 secondarySubtitle:
-                    '${project['description'] ?? 'No description published'} · funded $funded / $target C',
+                    '${project['description'] ?? 'No description published'} · funded ${formatCreditUnits(funded)} / ${formatCreditUnits(target)}',
                 leading: Icon(Icons.construction_outlined,
                     color: context.primaryColor),
                 badges: [
@@ -321,112 +241,6 @@ class _PublicProjectsPanelState extends State<PublicProjectsPanel> {
               );
             }).toList()),
           ),
-      ],
-    );
-  }
-}
-
-class _CreatePublicProjectDialog extends StatefulWidget {
-  const _CreatePublicProjectDialog();
-
-  @override
-  State<_CreatePublicProjectDialog> createState() =>
-      _CreatePublicProjectDialogState();
-}
-
-class _CreatePublicProjectDialogState
-    extends State<_CreatePublicProjectDialog> {
-  final _name = TextEditingController();
-  final _description = TextEditingController();
-  final _beneficiaryId = TextEditingController();
-  final _recipientAccountId = TextEditingController();
-  final _target = TextEditingController();
-  final _deadline = TextEditingController();
-  final _matching = TextEditingController(text: '0');
-  final _proposal = TextEditingController();
-  String _beneficiaryType = 'TERRITORY';
-
-  @override
-  void dispose() {
-    for (final c in [
-      _name,
-      _description,
-      _beneficiaryId,
-      _recipientAccountId,
-      _target,
-      _deadline,
-      _matching,
-      _proposal,
-    ]) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final valid = _name.text.trim().isNotEmpty &&
-        _description.text.trim().isNotEmpty &&
-        _beneficiaryId.text.trim().isNotEmpty &&
-        _recipientAccountId.text.trim().isNotEmpty &&
-        RegExp(r'^\d+$').hasMatch(_target.text.trim()) &&
-        RegExp(r'^\d+$').hasMatch(_deadline.text.trim()) &&
-        RegExp(r'^\d+$').hasMatch(_matching.text.trim()) &&
-        _proposal.text.trim().isNotEmpty;
-    Widget field(TextEditingController controller, String label,
-            {TextInputType? type}) =>
-        TextField(
-            controller: controller,
-            onChanged: (_) => setState(() {}),
-            keyboardType: type,
-            decoration: InputDecoration(labelText: label));
-    return AlertDialog(
-      title: const Text('CREATE PUBLIC PROJECT'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-          field(_name, 'Project name'),
-          field(_description, 'Description'),
-          DropdownButtonFormField<String>(
-              value: _beneficiaryType,
-              decoration: const InputDecoration(labelText: 'Beneficiary type'),
-              items: const [
-                DropdownMenuItem(value: 'TERRITORY', child: Text('Territory')),
-                DropdownMenuItem(
-                    value: 'ORGANIZATION', child: Text('Organization')),
-                DropdownMenuItem(value: 'EARTH', child: Text('Earth')),
-              ],
-              onChanged: (value) =>
-                  setState(() => _beneficiaryType = value ?? _beneficiaryType)),
-          field(_beneficiaryId, 'Beneficiary ID'),
-          field(_recipientAccountId, 'Recipient account ID'),
-          field(_target, 'Target CREDIT units', type: TextInputType.number),
-          field(_deadline, 'Deadline game day', type: TextInputType.number),
-          field(_matching, 'Authorized matching CREDIT units',
-              type: TextInputType.number),
-          field(_proposal, 'Approved proposal ID'),
-        ])),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL')),
-        FilledButton(
-            onPressed: valid
-                ? () => Navigator.pop(context, {
-                      'name': _name.text.trim(),
-                      'description': _description.text.trim(),
-                      'beneficiaryType': _beneficiaryType,
-                      'beneficiaryId': _beneficiaryId.text.trim(),
-                      'recipientAccountId': _recipientAccountId.text.trim(),
-                      'targetUnits': _target.text.trim(),
-                      'deadlineGameDay': _deadline.text.trim(),
-                      'matchingPoolAuthorizedUnits': _matching.text.trim(),
-                      'proposalId': _proposal.text.trim(),
-                    })
-                : null,
-            child: const Text('CREATE'))
       ],
     );
   }

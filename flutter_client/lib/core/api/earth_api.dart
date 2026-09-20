@@ -8,6 +8,7 @@ import '../models/governance_proposal.dart';
 import '../models/house_profile.dart';
 import '../models/building_models.dart';
 import '../models/command_overview.dart';
+import '../models/initiative.dart';
 import '../models/market_models.dart';
 
 part 'earth_api_auth.dart';

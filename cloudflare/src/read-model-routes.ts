@@ -17,17 +17,18 @@ import { getV5CutoverReadiness } from './v5-cutover-readiness-postgres.ts';
 import { getV5TaxReconciliation } from './v5-tax-reconciliation-postgres.ts';
 import { listNotifications as listNotificationsPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-models/notifications-read.ts';
 import { getDecisionQueue } from './decision-queue-postgres.ts';
-import { contributeToGlobalProgram, createGlobalProgram, fundGlobalProgram, listGlobalProgramContributions, listGlobalPrograms, settleGlobalProgramFunding } from './global-programs-postgres.ts';
+import { contributeToGlobalProgram, listGlobalProgramContributions, listGlobalPrograms } from './global-programs-postgres.ts';
 import { getTechnologyGenerations } from './technology-generations-postgres.ts';
 import { getEarthTechnologyFrontier } from './earth-technology-frontier-postgres.ts';
-import { contributeToPublicProject, createPublicProject, fundMatchingPool, getPublicProject, listPublicProjects } from './public-projects-postgres.ts';
-import { settlePublicProject } from './public-projects-postgres.ts';
+import { contributeToPublicProject, getPublicProject, listPublicProjects } from './public-projects-postgres.ts';
 import { listWorldConditions } from './world-conditions-postgres.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { addMutualCreditGuarantee, createMutualCreditNetwork, getMutualCreditNetwork, joinMutualCreditNetwork, listMutualCreditNetworks, transferMutualCredit } from './mutual-credit-postgres.ts';
 import { getActiveV5StandardCapacity, getV5CorporationCapacity, getV5EarthCapacity, getV5HouseCapacity } from './v5-capacity-postgres.ts';
 import { getV5Overview } from './v5-overview-postgres.ts';
+import { parseCreditAmount } from './money.ts';
+import { contributeToInitiative, listInitiatives, quoteInitiativeContribution } from './initiatives-postgres.ts';
 
 function toJsonSafe<T>(value: T): T {
   if (typeof value === 'bigint') return value.toString() as T;
@@ -200,6 +201,43 @@ export async function handleReadModelRoutes(
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
   }
+  if (url.pathname === '/api/initiatives' && request.method === 'GET') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const status = url.searchParams.get('status')?.toUpperCase();
+    const scope = url.searchParams.get('scope')?.toUpperCase() as 'EARTH' | 'CORPORATION' | undefined;
+    const mySupport = url.searchParams.get('mySupport') === 'true';
+    const result = await withRepository(env, (repository) => listInitiatives(repository, viewer.house_id, { status, scope, mySupport }));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+  }
+  const initiativeContributionMatch = url.pathname.match(/^\/api\/initiatives\/([^/]+)\/contributions$/);
+  const initiativeContributionQuoteMatch = url.pathname.match(/^\/api\/initiatives\/([^/]+)\/contribution-quote$/);
+  if (initiativeContributionQuoteMatch && request.method === 'POST') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ amountCredit?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    if (!parsed.value.amountCredit) return Response.json({ ok: false, error: 'Decimal CREDIT amount is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => quoteInitiativeContribution(repository, { initiativeId: initiativeContributionQuoteMatch[1], houseId: viewer.houseId, amountUnits: parseCreditAmount(parsed.value.amountCredit!).toString() }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ok: true, quote: result, persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Initiative contribution quote failed' }, { status: 409 }); }
+  }
+  if (initiativeContributionMatch && request.method === 'POST') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ amountCredit?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId || !parsed.value.amountCredit) return Response.json({ ok: false, error: 'Decimal CREDIT amount and idempotency key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => contributeToInitiative(repository, { initiativeId: initiativeContributionMatch[1], houseId: viewer.houseId, amountUnits: parseCreditAmount(parsed.value.amountCredit).toString(), correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Initiative contribution failed' }, { status: 409 }); }
+  }
   if (url.pathname === '/api/earth/technology/generations' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => getTechnologyGenerations(repository));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -227,17 +265,7 @@ export async function handleReadModelRoutes(
     return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/public-projects' && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ name?: string; description?: string; beneficiaryType?: 'ORGANIZATION' | 'EARTH' | 'TERRITORY'; beneficiaryId?: string; recipientAccountId?: string; targetUnits?: string; deadlineGameDay?: number; matchingPoolAuthorizedUnits?: string; proposalId?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.name || !parsed.value.description || !parsed.value.beneficiaryType || !parsed.value.beneficiaryId || !parsed.value.recipientAccountId || !parsed.value.targetUnits || parsed.value.deadlineGameDay === undefined || !parsed.value.matchingPoolAuthorizedUnits || !parsed.value.proposalId) return Response.json({ ok: false, error: 'Project definition, proposal, and idempotency key are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => createPublicProject(repository, { name: parsed.value.name!, description: parsed.value.description!, beneficiaryType: parsed.value.beneficiaryType!, beneficiaryId: parsed.value.beneficiaryId!, recipientAccountId: parsed.value.recipientAccountId!, targetUnits: parsed.value.targetUnits!, deadlineGameDay: parsed.value.deadlineGameDay!, matchingPoolAuthorizedUnits: parsed.value.matchingPoolAuthorizedUnits!, proposalId: parsed.value.proposalId!, humanId: viewer.id, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Public project creation failed' }, { status: 409 }); }
+    return Response.json({ ok: false, error: 'Direct public-project creation is retired; propose an Initiative through V5 Governance.' }, { status: 410 });
   }
   const publicProjectDetailMatch = url.pathname.match(/^\/api\/public-projects\/([^/]+)$/);
   if (publicProjectDetailMatch && request.method === 'GET') {
@@ -249,78 +277,41 @@ export async function handleReadModelRoutes(
   if (publicProjectContributionMatch && request.method === 'POST') {
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ sourceAccountId?: string; amountUnits?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ amountCredit?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.sourceAccountId || !parsed.value.amountUnits) return Response.json({ ok: false, error: 'Source account, amount, and idempotency key are required' }, { status: 400 });
+    if (!correlationId || !parsed.value.amountCredit) return Response.json({ ok: false, error: 'Decimal CREDIT amount and idempotency key are required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => contributeToPublicProject(repository, { projectId: publicProjectContributionMatch[1], houseId: viewer.houseId, sourceAccountId: parsed.value.sourceAccountId!, amountUnits: parsed.value.amountUnits!, humanId: viewer.id, correlationId }));
+      const result = await withRepository(env, (repository) => contributeToPublicProject(repository, { projectId: publicProjectContributionMatch[1], houseId: viewer.houseId, amountUnits: parseCreditAmount(parsed.value.amountCredit).toString(), humanId: viewer.id, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Public contribution failed' }, { status: 409 }); }
   }
   const publicProjectFundMatch = url.pathname.match(/^\/api\/public-projects\/([^/]+)\/matching-fund$/);
   if (publicProjectFundMatch && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ proposalId?: string; amountUnits?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.proposalId || !parsed.value.amountUnits) return Response.json({ ok: false, error: 'Proposal, amount, and idempotency key are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => fundMatchingPool(repository, { projectId: publicProjectFundMatch[1], proposalId: parsed.value.proposalId!, amountUnits: parsed.value.amountUnits!, humanId: viewer.id, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Matching pool funding failed' }, { status: 409 }); }
+    return Response.json({ ok: false, error: 'Manual matching-pool funding is retired; matching is authorized and settled by the Initiative lifecycle.' }, { status: 410 });
   }
   const publicProjectSettleMatch = url.pathname.match(/^\/api\/public-projects\/([^/]+)\/settle$/);
   if (publicProjectSettleMatch && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const result = await withRepository(env, async (repository) => {
-      const current = (await readAuthoritativeGameTime(repository)).gameDay;
-      return settlePublicProject(repository, publicProjectSettleMatch[1], current);
-    });
-    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    return Response.json({ ok: false, error: 'Manual public-project settlement is retired; the scheduler settles due Initiatives.' }, { status: 410 });
   }
   if (url.pathname === '/api/earth/programs' && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ programType?: 'TECHNOLOGY' | 'COMMONS' | 'EMERGENCY'; name?: string; description?: string; targetUnits?: string; authorizedUnits?: string; matchingAuthorizedUnits?: string; fundingDeadlineGameDay?: number; proposalId?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.programType || !parsed.value.name || !parsed.value.description || !parsed.value.targetUnits || !parsed.value.authorizedUnits || !parsed.value.proposalId) return Response.json({ ok: false, error: 'Program definition, proposal, and idempotency key are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => createGlobalProgram(repository, { programType: parsed.value.programType!, name: parsed.value.name!, description: parsed.value.description!, targetUnits: parsed.value.targetUnits!, authorizedUnits: parsed.value.authorizedUnits!, matchingAuthorizedUnits: parsed.value.matchingAuthorizedUnits, fundingDeadlineGameDay: parsed.value.fundingDeadlineGameDay, proposalId: parsed.value.proposalId!, humanId: viewer.id, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program creation failed' }, { status: 409 }); }
+    return Response.json({ ok: false, error: 'Direct Earth-program creation is retired; propose an Initiative through V5 Governance.' }, { status: 410 });
   }
   const programFundingMatch = url.pathname.match(/^\/api\/earth\/programs\/([^/]+)\/fund$/);
   if (programFundingMatch && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ proposalId?: string; sourceAccountId?: string; destinationAccountId?: string; amountUnits?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.proposalId || !parsed.value.sourceAccountId || !parsed.value.destinationAccountId || !parsed.value.amountUnits) return Response.json({ ok: false, error: 'Proposal, accounts, amount, and idempotency key are required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) => fundGlobalProgram(repository, { programId: programFundingMatch[1], proposalId: parsed.value.proposalId!, sourceAccountId: parsed.value.sourceAccountId!, destinationAccountId: parsed.value.destinationAccountId!, amountUnits: parsed.value.amountUnits!, humanId: viewer.id, correlationId }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program funding failed' }, { status: 409 }); }
+    return Response.json({ ok: false, error: 'Manual Earth treasury funding is retired; Initiative treasury authorization is applied by Governance and settlement.' }, { status: 410 });
   }
   const programContributionMatch = url.pathname.match(/^\/api\/earth\/programs\/([^/]+)\/contributions$/);
   if (programContributionMatch && request.method === 'POST') {
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ sourceAccountId?: string; amountUnits?: string; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ amountCredit?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-    if (!correlationId || !parsed.value.sourceAccountId || !parsed.value.amountUnits) return Response.json({ ok: false, error: 'Source account, amount, and idempotency key are required' }, { status: 400 });
+    if (!correlationId || !parsed.value.amountCredit) return Response.json({ ok: false, error: 'Decimal CREDIT amount and idempotency key are required' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => contributeToGlobalProgram(repository, { programId: programContributionMatch[1], houseId: viewer.houseId, sourceAccountId: parsed.value.sourceAccountId!, amountUnits: parsed.value.amountUnits!, humanId: viewer.id, correlationId }));
+      const result = await withRepository(env, (repository) => contributeToGlobalProgram(repository, { programId: programContributionMatch[1], houseId: viewer.houseId, amountUnits: parseCreditAmount(parsed.value.amountCredit).toString(), humanId: viewer.id, correlationId }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program contribution failed' }, { status: 409 }); }
@@ -335,13 +326,7 @@ export async function handleReadModelRoutes(
   }
   const programSettleMatch = url.pathname.match(/^\/api\/earth\/programs\/([^/]+)\/settle$/);
   if (programSettleMatch && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    try {
-      const result = await withRepository(env, async (repository) => settleGlobalProgramFunding(repository, programSettleMatch[1], (await readAuthoritativeGameTime(repository)).gameDay));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json(result);
-    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Global program settlement failed' }, { status: 409 }); }
+    return Response.json({ ok: false, error: 'Manual Earth-program settlement is retired; the scheduler settles due Initiatives.' }, { status: 410 });
   }
 
   // ── World activity ───────────────────────────────────────────────────────────

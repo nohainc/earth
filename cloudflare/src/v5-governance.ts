@@ -1,5 +1,6 @@
 import { calculateProgressiveCharge, validateProgressiveBrackets, type ProgressiveBracket } from './v5-progressive.ts';
 import { getConstitutionalRuleDefinition, validateConstitutionalRuleValue, type EffectiveRuleSet } from './v5-constitution.ts';
+import { validateInitiativeOutcome } from './initiative-outcomes.ts';
 
 export type V5GovernanceActionType =
   | 'CONSTITUTION_AMENDMENT'
@@ -7,6 +8,7 @@ export type V5GovernanceActionType =
   | 'CORPORATION_BUILDING_RESEARCH'
   | 'CORPORATION_SCALE_RESEARCH'
   | 'EARTH_TECHNOLOGY_FRONTIER'
+  | 'INITIATIVE_CREATE'
   | 'EARTH_CAPACITY_POLICY'
   | 'CORPORATION_HOUSE_RATE'
   | 'PROGRESSIVE_SCHEDULE'
@@ -36,6 +38,22 @@ export type V5GovernanceAction = {
   name?: string;
   generation?: number;
   scaleCapability?: 'SCALE_COMMERCIAL' | 'SCALE_INDUSTRIAL' | 'SCALE_STRATEGIC';
+  initiativeType?: 'PROGRAM' | 'PUBLIC_PROJECT' | 'EMERGENCY' | 'COMMONS';
+  programType?: 'TECHNOLOGY' | 'COMMONS' | 'EMERGENCY';
+  initiativeDescription?: string;
+  fundingTargetUnits?: bigint;
+  treasuryAuthorizedUnits?: bigint;
+  matchingPolicy?: 'NONE' | 'LINEAR_MATCH' | 'BREADTH_MATCH';
+  matchingCapUnits?: bigint;
+  fundingDeadlineGameDay?: number;
+  fundingModel?: 'TREASURY' | 'CROWDFUND' | 'MATCHED' | 'MIXED';
+  executionModel?: 'FUNDING_ONLY' | 'TIMED_PROGRAM' | 'PUBLIC_WORK';
+  executionDurationGameDays?: number;
+  executionResourceRequirements?: Record<string, string>;
+  progressModel?: 'FUNDING_ONLY' | 'TIME' | 'TIME_AND_RESOURCES';
+  outcome?: Record<string, unknown>;
+  /** Physical placement/capacity metadata; never an authority or beneficiary scope. */
+  physicalTarget?: Record<string, unknown>;
 };
 
 export type ProgressivePolicyPreview = {
@@ -103,6 +121,41 @@ export function validateV5GovernanceAction(action: V5GovernanceAction, currentGa
       if (change.clearOverride) continue;
       validateConstitutionalRuleValue(change.ruleCode, change.value);
     }
+    return;
+  }
+  if (action.actionType === 'INITIATIVE_CREATE') {
+    if (!action.initiativeType || !['PROGRAM', 'PUBLIC_PROJECT', 'EMERGENCY', 'COMMONS'].includes(action.initiativeType)) throw new Error('Initiative type is invalid');
+    if (!action.name?.trim() || action.name.trim().length > 120) throw new Error('Initiative name is required and must be at most 120 characters');
+    if (!action.initiativeDescription?.trim()) throw new Error('Initiative description is required');
+    validateInitiativeOutcome(action.outcome);
+    if (action.physicalTarget !== undefined && (typeof action.physicalTarget !== 'object' || action.physicalTarget === null || Array.isArray(action.physicalTarget))) throw new Error('Initiative physical target must be an object');
+    if ('beneficiaryType' in action || 'beneficiaryId' in action || 'recipientAccountId' in action) throw new Error('Initiatives use Earth or Corporation governance scope; beneficiary and recipient authority fields are not allowed');
+    if (action.initiativeType === 'PROGRAM' && (!action.programType || !['TECHNOLOGY', 'COMMONS', 'EMERGENCY'].includes(action.programType))) throw new Error('Program initiatives require a valid program type');
+    if (action.initiativeType !== 'PROGRAM' && action.programType != null) throw new Error('Only PROGRAM initiatives may specify a program type');
+    if (positiveInteger(action.fundingTargetUnits, 'Initiative funding target') <= 0n) throw new Error('Initiative funding target must be positive');
+    positiveInteger(action.treasuryAuthorizedUnits ?? 0n, 'Initiative treasury authorization');
+    positiveInteger(action.matchingCapUnits ?? 0n, 'Initiative matching cap');
+    if (!action.fundingModel || !['TREASURY', 'CROWDFUND', 'MATCHED', 'MIXED'].includes(action.fundingModel)) throw new Error('Initiative funding model is invalid');
+    if (!action.executionModel || !['FUNDING_ONLY', 'TIMED_PROGRAM', 'PUBLIC_WORK'].includes(action.executionModel)) throw new Error('Initiative execution model is invalid');
+    const defaultProgressModel = action.initiativeType === 'PROGRAM' ? 'TIME' : 'FUNDING_ONLY';
+    const progressModel = action.progressModel ?? defaultProgressModel;
+    if (!['FUNDING_ONLY', 'TIME', 'TIME_AND_RESOURCES'].includes(progressModel)) throw new Error('Initiative progress model is invalid');
+    if (action.initiativeType === 'PROGRAM') {
+      if (action.executionModel !== 'TIMED_PROGRAM') throw new Error('Programs require timed execution');
+      if (!Number.isInteger(action.executionDurationGameDays) || Number(action.executionDurationGameDays) <= 0) throw new Error('Programs require a positive execution duration');
+      if (!['TIME', 'TIME_AND_RESOURCES'].includes(progressModel)) throw new Error('Programs require time-based progress');
+    } else if (progressModel === 'FUNDING_ONLY' && action.executionDurationGameDays != null) {
+      throw new Error('Funding-only initiatives cannot declare an execution duration');
+    }
+    if (action.executionResourceRequirements != null) {
+      if (typeof action.executionResourceRequirements !== 'object' || Array.isArray(action.executionResourceRequirements)) throw new Error('Execution resource requirements must be an object');
+      for (const [resource, quantity] of Object.entries(action.executionResourceRequirements)) {
+        if (!resource.trim() || !/^\d+$/.test(String(quantity)) || BigInt(String(quantity)) <= 0n) throw new Error('Execution resource requirements must contain positive integer quantities');
+      }
+    }
+    if (!action.matchingPolicy || !['NONE', 'LINEAR_MATCH', 'BREADTH_MATCH'].includes(action.matchingPolicy)) throw new Error('Initiative matching policy is invalid');
+    if (action.matchingPolicy === 'NONE' && (action.matchingCapUnits ?? 0n) !== 0n) throw new Error('Matching cap must be zero when matching is disabled');
+    if (!Number.isInteger(action.fundingDeadlineGameDay) || Number(action.fundingDeadlineGameDay) < currentGameDay + 1) throw new Error('Initiative funding deadline must be a future game day');
     return;
   }
   if (action.actionType === 'CORPORATION_PUBLIC_CONSTRUCTION') {
