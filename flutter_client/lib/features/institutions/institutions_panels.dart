@@ -1465,13 +1465,19 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
     final metrics = _canonicalMetrics(widget.state.rankings['metrics']);
     final definitions = widget.state.rankings['metricDefinitions'];
     final definedCodes = definitions is List
-        ? definitions.whereType<Map>().where((definition) {
-            final type = definition['subjectType']?.toString() ??
-                definition['subject_type']?.toString();
-            return type == _subjectType;
-          }).map((definition) => definition['code']?.toString()).whereType<String>().toList()
+        ? definitions
+            .whereType<Map>()
+            .where((definition) {
+              final type = definition['subjectType']?.toString() ??
+                  definition['subject_type']?.toString();
+              return type == _subjectType;
+            })
+            .map((definition) => definition['code']?.toString())
+            .whereType<String>()
+            .toList()
         : const <String>[];
-    final available = definedCodes.isNotEmpty ? definedCodes : metrics.keys.toList();
+    final available =
+        definedCodes.isNotEmpty ? definedCodes : metrics.keys.toList();
     final metric = available.isEmpty
         ? null
         : available[_metricTab.clamp(0, available.length - 1)];
@@ -1494,7 +1500,10 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
       if (!mounted) return;
       final rawItems = response['items'];
       final fetchedRows = rawItems is List
-          ? rawItems.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
+          ? rawItems
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList()
           : <Map<String, dynamic>>[];
       setState(() {
         _serverMetric = metric;
@@ -1935,17 +1944,38 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
     ];
 
     final corporationMetricDefinitions = [
-      (code: 'CORPORATION_MEMBER_HOUSES', label: 'MEMBER HOUSES', icon: Icons.groups_outlined),
-      (code: 'CORPORATION_LIQUID_CREDIT', label: 'LIQUID CREDIT', icon: Icons.account_balance_wallet_outlined),
-      (code: 'CORPORATION_OCCUPIED_CAPACITY', label: 'OCCUPIED CAPACITY', icon: Icons.domain_outlined),
-      (code: 'CORPORATION_TECHNOLOGY', label: 'TECHNOLOGY', icon: Icons.biotech_outlined),
-      (code: 'CORPORATION_MARKET_VOLUME_30D', label: 'MARKET VOLUME · 30D', icon: Icons.storefront_outlined),
+      (
+        code: 'CORPORATION_MEMBER_HOUSES',
+        label: 'MEMBER HOUSES',
+        icon: Icons.groups_outlined
+      ),
+      (
+        code: 'CORPORATION_LIQUID_CREDIT',
+        label: 'LIQUID CREDIT',
+        icon: Icons.account_balance_wallet_outlined
+      ),
+      (
+        code: 'CORPORATION_OCCUPIED_CAPACITY',
+        label: 'OCCUPIED CAPACITY',
+        icon: Icons.domain_outlined
+      ),
+      (
+        code: 'CORPORATION_TECHNOLOGY',
+        label: 'TECHNOLOGY',
+        icon: Icons.biotech_outlined
+      ),
+      (
+        code: 'CORPORATION_MARKET_VOLUME_30D',
+        label: 'MARKET VOLUME · 30D',
+        icon: Icons.storefront_outlined
+      ),
     ];
     final definedCodes = widget.state.rankings['metricDefinitions'] is List
         ? (widget.state.rankings['metricDefinitions'] as List)
             .whereType<Map>()
             .where((definition) =>
-                (definition['subjectType'] ?? definition['subject_type']) == _subjectType)
+                (definition['subjectType'] ?? definition['subject_type']) ==
+                _subjectType)
             .map((definition) => definition['code']?.toString())
             .whereType<String>()
             .toSet()
@@ -2063,11 +2093,13 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
     String viewerTopPercent() {
       final rank = asInt(viewer['rank']);
       final population = asInt(viewer['populationSize'] ??
-          viewer['population_size'] ?? widget.state.rankings['populationSize']);
+          viewer['population_size'] ??
+          widget.state.rankings['populationSize']);
       if (rank == null || population == null || population == 0) return '—';
       final top = (rank / population * 100).clamp(0.01, 100.0);
       return 'Top ${top.toStringAsFixed(top >= 10 ? 1 : 2)}%';
     }
+
     String rankDeltaLabel(Map<String, dynamic> row) {
       final delta = asInt(row['rankDelta'] ?? row['rank_delta']);
       if (delta == null) return '';
@@ -2078,327 +2110,335 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-        EarthPageCockpit(
-          status: activeList.isEmpty ? 'NOT SETTLED' : 'WORLD · RANKINGS',
-          statusColor: context.goldColor,
-          infoTitle: 'HOW RANKINGS WORK',
-          infoDescription:
-              'Each leaderboard is an independent, server-settled metric snapshot. Values are not combined into a hidden composite score. Rankings are ordered by the finalized game day. Rules version: $version.',
-          title: title,
-          subtitle:
-              'Published ${_subjectType == 'HOUSE' ? 'House' : 'Corporation'} rankings · Day $gameDay',
-          metrics: [
-            CockpitMetric(
-                label: 'Categories',
-                value: '${activeList.length}',
-                icon: Icons.stacked_bar_chart_outlined,
-                color: context.primaryColor),
-            CockpitMetric(
-                label: _subjectType == 'HOUSE' ? 'Total Houses' : 'Total Corporations',
-                value:
-                    '${widget.state.rankings['populationSize'] ?? (rows.isEmpty ? '—' : rows.first['population_size'] ?? '—')}',
-                icon: Icons.shield_outlined,
-                color: context.goldColor),
-          ],
-        ),
-        const SizedBox(height: 28),
-        Container(
-          padding: EdgeInsets.all(context.cardPadding),
-          decoration: BoxDecoration(
-            color: context.surfaceColor.withValues(alpha: .7),
-            borderRadius: BorderRadius.circular(context.radiusCard),
-            border: Border.all(color: context.subtleBorderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'HOUSES',
-                      icon: Icons.shield_outlined,
-                      isSelected: _subjectType == 'HOUSE',
-                      onTap: () {
-                        setState(() {
-                          _subjectType = 'HOUSE';
-                          _metricTab = 0;
-                          _serverRows = null;
-                          _serverMetric = null;
-                        });
-                        _loadServerPage(reset: true);
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'CORPORATIONS',
-                      icon: Icons.account_balance_outlined,
-                      isSelected: _subjectType == 'CORPORATION',
-                      onTap: () {
-                        setState(() {
-                          _subjectType = 'CORPORATION';
-                          _metricTab = 0;
-                          _serverRows = null;
-                          _serverMetric = null;
-                        });
-                        _loadServerPage(reset: true);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  labelText: 'SEARCH ${_subjectType == 'HOUSE' ? 'HOUSES' : 'CORPORATIONS'}',
-                  hintText: 'Search the full leaderboard',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: IconButton(
-                    tooltip: 'Search',
-                    icon: const Icon(Icons.arrow_forward),
-                    onPressed: () {
-                      _search = _searchController.text.trim();
-                      _loadServerPage(reset: true);
-                    },
-                  ),
-                ),
-                onSubmitted: (value) {
-                  _search = value.trim();
-                  _loadServerPage(reset: true);
-                },
-              ),
-              if (_serverError != null) ...[
-                const SizedBox(height: 6),
-                Text(_serverError!, style: context.widgetFooterStyle),
-              ],
+          EarthPageCockpit(
+            status: activeList.isEmpty ? 'NOT SETTLED' : 'WORLD · RANKINGS',
+            statusColor: context.goldColor,
+            infoTitle: 'HOW RANKINGS WORK',
+            infoDescription:
+                'Each leaderboard is an independent, server-settled metric snapshot. Values are not combined into a hidden composite score. Rankings are ordered by the finalized game day. Rules version: $version.',
+            title: title,
+            subtitle:
+                'Published ${_subjectType == 'HOUSE' ? 'House' : 'Corporation'} rankings · Day $gameDay',
+            metrics: [
+              CockpitMetric(
+                  label: 'Categories',
+                  value: '${activeList.length}',
+                  icon: Icons.stacked_bar_chart_outlined,
+                  color: context.primaryColor),
+              CockpitMetric(
+                  label: _subjectType == 'HOUSE'
+                      ? 'Total Houses'
+                      : 'Total Corporations',
+                  value:
+                      '${widget.state.rankings['populationSize'] ?? (rows.isEmpty ? '—' : rows.first['population_size'] ?? '—')}',
+                  icon: Icons.shield_outlined,
+                  color: context.goldColor),
             ],
           ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          margin: EdgeInsets.only(bottom: context.spacingControl),
-          decoration: BoxDecoration(
-            color: context.surfaceColor.withValues(alpha: .6),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: context.subtleBorderColor),
-          ),
-          child: Row(
-            children: [
-              for (var index = 0; index < activeList.length; index++)
-                Expanded(
-                  child: _buildNarrowTabButton(
-                    context,
-                    title: activeList[index].label,
-                    icon: activeList[index].icon,
-                    isSelected: index == metricIndex,
-                    onTap: () {
-                      EarthAudioEngine.instance.playClick();
-                      _selectMetric(index);
-                      _loadServerPage(reset: true);
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (viewer['rank'] != null || myHouse != null || viewerName != null) ...[
+          const SizedBox(height: 28),
           Container(
             padding: EdgeInsets.all(context.cardPadding),
             decoration: BoxDecoration(
-              color: context.surfaceColor,
+              color: context.surfaceColor.withValues(alpha: .7),
               borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(
-                  color: context.primaryColor.withValues(alpha: .35)),
+              border: Border.all(color: context.subtleBorderColor),
             ),
-            child: Row(children: [
-              Icon(
-                _subjectType == 'HOUSE'
-                    ? Icons.shield_outlined
-                    : Icons.account_balance_outlined,
-                color: context.primaryColor,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(
-                        _subjectType == 'HOUSE'
-                            ? 'YOUR HOUSE'
-                            : 'YOUR CORPORATION',
-                        style: context.captionStyle
-                            .copyWith(color: context.primaryColor)),
-                    Text(
-                        viewerName ??
-                            myHouse?['subject_name']?.toString() ??
-                            (_subjectType == 'HOUSE'
-                                ? 'House'
-                                : 'Corporation'),
-                        style: context.widgetValueStyle),
-                  ])),
-              if (viewer['rank'] != null || myHouse != null)
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('#${viewer['rank'] ?? myHouse?['rank'] ?? '—'}',
-                      style: context.widgetValueStyle
-                          .copyWith(color: context.goldColor)),
-                  Text(viewerTopPercent(), style: context.captionStyle),
-                  if (viewer['rankDelta'] != null)
-                    Text(rankDeltaLabel(viewer), style: context.captionStyle),
-                  if (viewer['metricValue'] != null ||
-                      viewer['metric_value'] != null)
-                    Text(
-                      metricValue({
-                        'metric_value':
-                            viewer['metricValue'] ?? viewer['metric_value'],
-                      }),
-                      style: context.captionStyle,
-                    ),
-                  if (viewer['valueDelta'] != null ||
-                      viewer['value_delta'] != null)
-                    Text(
-                      'Δ ${metricValue({
-                        'metric_value':
-                            viewer['valueDelta'] ?? viewer['value_delta'],
-                      })}',
-                      style: context.captionStyle,
-                    ),
-                  if (_subjectType == 'CORPORATION' &&
-                      widget.onNavigate != null)
-                    TextButton(
-                      onPressed: () => widget.onNavigate?.call('my-corporation'),
-                      child: const Text('VIEW CORPORATION'),
-                    ),
-                  if (_subjectType == 'HOUSE' &&
-                      (viewer['subjectId'] ??
-                              viewer['subject_id'] ??
-                              myHouseId) !=
-                          null)
-                    TextButton(
-                      onPressed: () => showHouseLineageDialog(
-                        context,
-                        houseId: (viewer['subjectId'] ??
-                                viewer['subject_id'] ??
-                                myHouseId)
-                            .toString(),
-                        api: widget.api,
-                      ),
-                      child: const Text('VIEW LINEAGE'),
-                    ),
-                ]),
-            ]),
-          ),
-          const SizedBox(height: 16),
-        ],
-        EarthSection(
-          title: '',
-          showHeader: false,
-          showSurface: false,
-          child: rows.isEmpty
-              ? EarthEmptyState(
-                  message: activeList.isEmpty
-                      ? 'Rankings are not settled yet. The first snapshot will be published after the next completed daily settlement.'
-                      : 'No finalized entries exist for this ranking dimension yet.',
-                  icon: Icons.hourglass_empty_outlined)
-              : Column(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
                   children: [
-                    for (final row in rows)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: EdgeInsets.all(context.cardPadding),
-                        decoration: BoxDecoration(
-                          color: context.surfaceColor,
-                          borderRadius:
-                              BorderRadius.circular(context.radiusCard),
-                          border: Border.all(color: context.subtleBorderColor),
-                        ),
-                        child: Row(
-                          children: [
-                            SizedBox(
-                                width: 42,
-                                child: Text('#${row['rank'] ?? '—'}',
-                                    style: context.widgetValueStyle
-                                        .copyWith(color: context.goldColor))),
-                            Expanded(
-                                child: Text(
-                                    row['subject_name']?.toString() ??
-                                        row['subject_id']?.toString() ??
-                                        'Unknown subject',
-                                    style: context.bodyStyle.copyWith(
-                                        fontWeight: FontWeight.w700))),
-                            Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(metricValue(row),
-                                      style: context.widgetValueStyle),
-                                  Text(topPercent(row),
-                                      style: context.captionStyle),
-                                  if (row['rankDelta'] != null ||
-                                      row['rank_delta'] != null)
-                                    Text(rankDeltaLabel(row),
-                                        style: context.captionStyle),
-                                  if (row['valueDelta'] != null ||
-                                      row['value_delta'] != null)
-                                    Text(
-                                      'Δ ${metricValue({
-                                        ...row,
-                                        'metric_value': row['valueDelta'] ??
-                                            row['value_delta'],
-                                      })}',
-                                      style: context.captionStyle,
-                                    ),
-                                  if (widget.onNavigate != null &&
-                                      _subjectType == 'CORPORATION')
-                                    TextButton(
-                                      onPressed: () => widget.onNavigate?.call(
-                                          'my-corporation'),
-                                      child: Text(
-                                          'VIEW CORPORATION'),
-                                    ),
-                                  if (_subjectType == 'HOUSE')
-                                    TextButton(
-                                      onPressed: () {
-                                        final id = row['subjectId'] ??
-                                            row['subject_id'];
-                                        if (id != null) {
-                                          showHouseLineageDialog(
-                                            context,
-                                            houseId: id.toString(),
-                                            api: widget.api,
-                                          );
-                                        }
-                                      },
-                                      child: const Text('VIEW LINEAGE'),
-                                    ),
-                                ]),
-                          ],
-                        ),
+                    Expanded(
+                      child: _buildNarrowTabButton(
+                        context,
+                        title: 'HOUSES',
+                        icon: Icons.shield_outlined,
+                        isSelected: _subjectType == 'HOUSE',
+                        onTap: () {
+                          setState(() {
+                            _subjectType = 'HOUSE';
+                            _metricTab = 0;
+                            _serverRows = null;
+                            _serverMetric = null;
+                          });
+                          _loadServerPage(reset: true);
+                        },
                       ),
+                    ),
+                    Expanded(
+                      child: _buildNarrowTabButton(
+                        context,
+                        title: 'CORPORATIONS',
+                        icon: Icons.account_balance_outlined,
+                        isSelected: _subjectType == 'CORPORATION',
+                        onTap: () {
+                          setState(() {
+                            _subjectType = 'CORPORATION';
+                            _metricTab = 0;
+                            _serverRows = null;
+                            _serverMetric = null;
+                          });
+                          _loadServerPage(reset: true);
+                        },
+                      ),
+                    ),
                   ],
                 ),
-        ),
-        const SizedBox(height: 8),
-        if (_serverLoading)
-          const Center(child: Padding(
-            padding: EdgeInsets.all(12),
-            child: CircularProgressIndicator(),
-          )),
-        if (!_serverLoading && _nextCursor != null)
-          Align(
-            alignment: Alignment.center,
-            child: OutlinedButton.icon(
-              onPressed: () => _loadServerPage(cursor: _nextCursor),
-              icon: const Icon(Icons.expand_more),
-              label: const Text('LOAD MORE'),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    labelText:
+                        'SEARCH ${_subjectType == 'HOUSE' ? 'HOUSES' : 'CORPORATIONS'}',
+                    hintText: 'Search the full leaderboard',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: IconButton(
+                      tooltip: 'Search',
+                      icon: const Icon(Icons.arrow_forward),
+                      onPressed: () {
+                        _search = _searchController.text.trim();
+                        _loadServerPage(reset: true);
+                      },
+                    ),
+                  ),
+                  onSubmitted: (value) {
+                    _search = value.trim();
+                    _loadServerPage(reset: true);
+                  },
+                ),
+                if (_serverError != null) ...[
+                  const SizedBox(height: 6),
+                  Text(_serverError!, style: context.widgetFooterStyle),
+                ],
+              ],
             ),
           ),
-        const SizedBox(height: 8),
-        if (selectedCode.isNotEmpty)
-          Text(description(selectedCode), style: context.widgetFooterStyle),
+          const SizedBox(height: 16),
+          Container(
+            margin: EdgeInsets.only(bottom: context.spacingControl),
+            decoration: BoxDecoration(
+              color: context.surfaceColor.withValues(alpha: .6),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: context.subtleBorderColor),
+            ),
+            child: Row(
+              children: [
+                for (var index = 0; index < activeList.length; index++)
+                  Expanded(
+                    child: _buildNarrowTabButton(
+                      context,
+                      title: activeList[index].label,
+                      icon: activeList[index].icon,
+                      isSelected: index == metricIndex,
+                      onTap: () {
+                        EarthAudioEngine.instance.playClick();
+                        _selectMetric(index);
+                        _loadServerPage(reset: true);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (viewer['rank'] != null ||
+              myHouse != null ||
+              viewerName != null) ...[
+            Container(
+              padding: EdgeInsets.all(context.cardPadding),
+              decoration: BoxDecoration(
+                color: context.surfaceColor,
+                borderRadius: BorderRadius.circular(context.radiusCard),
+                border: Border.all(
+                    color: context.primaryColor.withValues(alpha: .35)),
+              ),
+              child: Row(children: [
+                Icon(
+                  _subjectType == 'HOUSE'
+                      ? Icons.shield_outlined
+                      : Icons.account_balance_outlined,
+                  color: context.primaryColor,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(
+                          _subjectType == 'HOUSE'
+                              ? 'YOUR HOUSE'
+                              : 'YOUR CORPORATION',
+                          style: context.captionStyle
+                              .copyWith(color: context.primaryColor)),
+                      Text(
+                          viewerName ??
+                              myHouse?['subject_name']?.toString() ??
+                              (_subjectType == 'HOUSE'
+                                  ? 'House'
+                                  : 'Corporation'),
+                          style: context.widgetValueStyle),
+                    ])),
+                if (viewer['rank'] != null || myHouse != null)
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('#${viewer['rank'] ?? myHouse?['rank'] ?? '—'}',
+                        style: context.widgetValueStyle
+                            .copyWith(color: context.goldColor)),
+                    Text(viewerTopPercent(), style: context.captionStyle),
+                    if (viewer['rankDelta'] != null)
+                      Text(rankDeltaLabel(viewer), style: context.captionStyle),
+                    if (viewer['metricValue'] != null ||
+                        viewer['metric_value'] != null)
+                      Text(
+                        metricValue({
+                          'metric_value':
+                              viewer['metricValue'] ?? viewer['metric_value'],
+                        }),
+                        style: context.captionStyle,
+                      ),
+                    if (viewer['valueDelta'] != null ||
+                        viewer['value_delta'] != null)
+                      Text(
+                        'Δ ${metricValue({
+                              'metric_value':
+                                  viewer['valueDelta'] ?? viewer['value_delta'],
+                            })}',
+                        style: context.captionStyle,
+                      ),
+                    if (_subjectType == 'CORPORATION' &&
+                        widget.onNavigate != null)
+                      TextButton(
+                        onPressed: () =>
+                            widget.onNavigate?.call('my-corporation'),
+                        child: const Text('VIEW CORPORATION'),
+                      ),
+                    if (_subjectType == 'HOUSE' &&
+                        (viewer['subjectId'] ??
+                                viewer['subject_id'] ??
+                                myHouseId) !=
+                            null)
+                      TextButton(
+                        onPressed: () => showHouseLineageDialog(
+                          context,
+                          houseId: (viewer['subjectId'] ??
+                                  viewer['subject_id'] ??
+                                  myHouseId)
+                              .toString(),
+                          api: widget.api,
+                        ),
+                        child: const Text('VIEW LINEAGE'),
+                      ),
+                  ]),
+              ]),
+            ),
+            const SizedBox(height: 16),
+          ],
+          EarthSection(
+            title: '',
+            showHeader: false,
+            showSurface: false,
+            child: rows.isEmpty
+                ? EarthEmptyState(
+                    message: activeList.isEmpty
+                        ? 'Rankings are not settled yet. The first snapshot will be published after the next completed daily settlement.'
+                        : 'No finalized entries exist for this ranking dimension yet.',
+                    icon: Icons.hourglass_empty_outlined)
+                : Column(
+                    children: [
+                      for (final row in rows)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: EdgeInsets.all(context.cardPadding),
+                          decoration: BoxDecoration(
+                            color: context.surfaceColor,
+                            borderRadius:
+                                BorderRadius.circular(context.radiusCard),
+                            border:
+                                Border.all(color: context.subtleBorderColor),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                  width: 42,
+                                  child: Text('#${row['rank'] ?? '—'}',
+                                      style: context.widgetValueStyle
+                                          .copyWith(color: context.goldColor))),
+                              Expanded(
+                                  child: Text(
+                                      row['subject_name']?.toString() ??
+                                          row['subject_id']?.toString() ??
+                                          'Unknown subject',
+                                      style: context.bodyStyle.copyWith(
+                                          fontWeight: FontWeight.w700))),
+                              Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(metricValue(row),
+                                        style: context.widgetValueStyle),
+                                    Text(topPercent(row),
+                                        style: context.captionStyle),
+                                    if (row['rankDelta'] != null ||
+                                        row['rank_delta'] != null)
+                                      Text(rankDeltaLabel(row),
+                                          style: context.captionStyle),
+                                    if (row['valueDelta'] != null ||
+                                        row['value_delta'] != null)
+                                      Text(
+                                        'Δ ${metricValue({
+                                              ...row,
+                                              'metric_value':
+                                                  row['valueDelta'] ??
+                                                      row['value_delta'],
+                                            })}',
+                                        style: context.captionStyle,
+                                      ),
+                                    if (widget.onNavigate != null &&
+                                        _subjectType == 'CORPORATION')
+                                      TextButton(
+                                        onPressed: () => widget.onNavigate
+                                            ?.call('my-corporation'),
+                                        child: Text('VIEW CORPORATION'),
+                                      ),
+                                    if (_subjectType == 'HOUSE')
+                                      TextButton(
+                                        onPressed: () {
+                                          final id = row['subjectId'] ??
+                                              row['subject_id'];
+                                          if (id != null) {
+                                            showHouseLineageDialog(
+                                              context,
+                                              houseId: id.toString(),
+                                              api: widget.api,
+                                            );
+                                          }
+                                        },
+                                        child: const Text('VIEW LINEAGE'),
+                                      ),
+                                  ]),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 8),
+          if (_serverLoading)
+            const Center(
+                child: Padding(
+              padding: EdgeInsets.all(12),
+              child: CircularProgressIndicator(),
+            )),
+          if (!_serverLoading && _nextCursor != null)
+            Align(
+              alignment: Alignment.center,
+              child: OutlinedButton.icon(
+                onPressed: () => _loadServerPage(cursor: _nextCursor),
+                icon: const Icon(Icons.expand_more),
+                label: const Text('LOAD MORE'),
+              ),
+            ),
+          const SizedBox(height: 8),
+          if (selectedCode.isNotEmpty)
+            Text(description(selectedCode), style: context.widgetFooterStyle),
         ],
       ),
     );
@@ -3166,8 +3206,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
               subtitle: subtitle,
               secondarySubtitle: secondarySubtitle,
               isHighlight: isMyAffiliation,
-              onTap: isHouse
-                  && entityId != null
+              onTap: isHouse && entityId != null
                   ? () => showHouseLineageDialog(
                         context,
                         houseId: entityId!,
@@ -4865,9 +4904,8 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       );
       if (!mounted) return;
       setState(() {
-        _directoryCommunities = response.communities
-            .map(_communityMap)
-            .toList(growable: false);
+        _directoryCommunities =
+            response.communities.map(_communityMap).toList(growable: false);
         _directoryTotalCount = response.totalCount;
         _directoryNextCursor = response.nextCursor;
         _directoryLoading = false;
@@ -4932,11 +4970,12 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       final capabilities = viewer['capabilities'] is Map
           ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
           : viewer;
-      final myRole = viewer['role']?.toString();
+      final normalizedRole = normalizeCommunityRole(viewer['role']);
+      final myRole = normalizedRole.isEmpty ? null : normalizedRole;
       final myRequestStatus = viewer['requestStatus']?.toString();
       final isOwner = myRole == 'OWNER';
-      final isAdmin = myRole == 'MODERATOR';
-      final isMember = isOwner || isAdmin || myRole == 'MEMBER';
+      final isModerator = myRole == 'MODERATOR';
+      final isMember = isOwner || isModerator || myRole == 'MEMBER';
       final isPending = myRequestStatus == 'PENDING';
 
       if (isMember) {
@@ -4957,11 +4996,12 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       final capabilities = viewer['capabilities'] is Map
           ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
           : viewer;
-      final myRole = viewer['role']?.toString();
+      final normalizedRole = normalizeCommunityRole(viewer['role']);
+      final myRole = normalizedRole.isEmpty ? null : normalizedRole;
       final myRequestStatus = viewer['requestStatus']?.toString();
       final isOwner = myRole == 'OWNER';
-      final isAdmin = myRole == 'MODERATOR';
-      final isMember = isOwner || isAdmin || myRole == 'MEMBER';
+      final isModerator = myRole == 'MODERATOR';
+      final isMember = isOwner || isModerator || myRole == 'MEMBER';
       final isPending = myRequestStatus == 'PENDING';
       final name = c['name']?.toString() ?? '';
       final searchText = [
@@ -4986,7 +5026,8 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       return true;
     }).toList();
 
-    final totalCount = usingDirectory ? _directoryTotalCount : filteredList.length;
+    final totalCount =
+        usingDirectory ? _directoryTotalCount : filteredList.length;
     final totalPages = math.max(1, (totalCount / _pageSize).ceil());
     final safePage = _page.clamp(0, totalPages - 1);
     final pageItems = usingDirectory
@@ -5181,11 +5222,15 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                         ? Map<String, dynamic>.from(
                             viewer['capabilities'] as Map)
                         : viewer;
-                    final myRole = viewer['role']?.toString();
+                    final normalizedRole =
+                        normalizeCommunityRole(viewer['role']);
+                    final myRole =
+                        normalizedRole.isEmpty ? null : normalizedRole;
                     final myRequestStatus = viewer['requestStatus']?.toString();
                     final isOwner = myRole == 'OWNER';
-                    final isAdmin = myRole == 'MODERATOR';
-                    final isMember = isOwner || isAdmin || myRole == 'MEMBER';
+                    final isModerator = myRole == 'MODERATOR';
+                    final isMember =
+                        isOwner || isModerator || myRole == 'MEMBER';
                     final isPending = myRequestStatus == 'PENDING';
                     final members = asIntOr(community['member_count'], 0);
 
@@ -5253,7 +5298,8 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                           const SizedBox(height: 4),
                                           Text(
                                             'FOUNDED BY HOUSE: $founderName',
-                                            style: context.captionStyle.copyWith(
+                                            style:
+                                                context.captionStyle.copyWith(
                                               color: context.mutedColor,
                                             ),
                                           ),
@@ -5309,7 +5355,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                                       null
                                                   ? null
                                                   : () => widget.onNavigate!(
-                                                      'my-community:$id'),
+                                                      'community:$id'),
                                             ),
                                           if (isPending) ...[
                                             const EarthBadge(
@@ -5331,8 +5377,8 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                                               .cancelCommunityApplication(
                                                             communityId: id,
                                                             requestId: viewer[
-                                                                    'requestId']
-                                                                ?.toString() ??
+                                                                        'requestId']
+                                                                    ?.toString() ??
                                                                 '',
                                                           ),
                                                         ),
@@ -5470,8 +5516,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                         cursor: _directoryNextCursor,
                                         pageIndex: safePage + 1)
                                     : (!usingDirectory
-                                        ? setState(
-                                            () => _page = safePage + 1)
+                                        ? setState(() => _page = safePage + 1)
                                         : null)
                                 : null,
                             tooltip: 'Next Page',
@@ -5569,41 +5614,56 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
   String? _requestsError;
   String? _loadedCommunityId;
   String? _selectedCommunityId;
+  CommunitySummary? _communityOverride;
+  CommunityWorkspace? _workspace;
+  String? _membersNextCursor;
+  String? _requestsNextCursor;
+  String? _memberSearch;
+  String? _requestSearch;
+  late final TextEditingController _descriptionController;
+  String? _settingsCommunityId;
+  String _admissionDraft = 'OPEN';
 
-  Map<String, dynamic>? get _community {
+  CommunitySummary? get _community {
+    if (_communityOverride != null) return _communityOverride;
+    final communities = widget.state.myCommunitySummaries;
     if (widget.communityId != null) {
-      for (final c in widget.state.communities) {
-        if (c is Map && c['id']?.toString() == widget.communityId) {
-          return Map<String, dynamic>.from(c);
-        }
+      for (final community in communities) {
+        if (community.id == widget.communityId) return community;
       }
+      return null;
     }
     final selectedId = _selectedCommunityId;
     if (selectedId != null) {
-      for (final c in widget.state.myCommunities) {
-        if (c['id']?.toString() == selectedId) return c;
+      for (final community in communities) {
+        if (community.id == selectedId) return community;
       }
     }
-    return widget.state.myCommunities.isNotEmpty
-        ? widget.state.myCommunities.first
-        : null;
+    return communities.isNotEmpty ? communities.first : null;
   }
 
   @override
   void initState() {
     super.initState();
+    _descriptionController = TextEditingController();
     _selectedCommunityId = widget.communityId ??
-        (widget.state.myCommunities.isNotEmpty
-            ? widget.state.myCommunities.first['id']?.toString()
+        (widget.state.myCommunitySummaries.isNotEmpty
+            ? widget.state.myCommunitySummaries.first.id
             : null);
     _fetchDetails();
+  }
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(covariant MyCommunityPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     final comm = _community;
-    final currentId = comm?['id']?.toString();
+    final currentId = comm?.id;
     if (currentId != _loadedCommunityId ||
         oldWidget.communityId != widget.communityId) {
       if (widget.communityId != null) {
@@ -5614,40 +5674,66 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
   }
 
   Future<void> _fetchDetails() async {
-    final myComm = _community;
+    var myComm = _community;
+    if (widget.communityId != null) {
+      try {
+        _workspace =
+            await const EarthApi().getCommunityWorkspace(widget.communityId!);
+        myComm = _workspace;
+        if (!mounted) return;
+        setState(() {
+          _communityOverride = myComm;
+          _syncSettings(myComm!);
+        });
+      } catch (_) {
+        if (mounted && _communityOverride == null) {
+          setState(() => _communityOverride = null);
+        }
+      }
+    }
     if (myComm == null) return;
-    final id = myComm['id']?.toString();
-    if (id == null) return;
+    final id = myComm.id;
+    _syncSettings(myComm);
 
     setState(() {
       _loading = true;
       _loadedCommunityId = id;
       _membersError = null;
       _requestsError = null;
+      _membersNextCursor = null;
+      _requestsNextCursor = null;
     });
 
     try {
-      final memRes = await const EarthApi().listCommunityMembers(id);
-      _members = memRes.members;
+      final workspace = _workspace;
+      if (workspace != null && workspace.id == id) {
+        _members = workspace.memberPreview;
+        _membersNextCursor = workspace.memberNextCursor;
+        _requestsNextCursor = workspace.requestNextCursor;
+      } else {
+        final memRes = await const EarthApi().listCommunityMembers(
+          id,
+          search: _memberSearch,
+        );
+        _members = memRes.members;
+        _membersNextCursor = memRes.nextCursor;
+      }
     } catch (_) {
       _members = [];
       _membersError = 'Could not load the member roster.';
     }
 
     try {
-      final admissionPolicy =
-          (myComm['join_policy']?.toString() ?? 'OPEN').toUpperCase();
-      final viewer = myComm['viewer'] is Map
-          ? Map<String, dynamic>.from(myComm['viewer'] as Map)
-          : const <String, dynamic>{};
-      final capabilities = viewer['capabilities'] is Map
-          ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
-          : viewer;
+      final admissionPolicy = myComm.joinPolicy;
+      final capabilities = myComm.viewer.capabilities;
 
-      if (capabilities['canApproveRequests'] == true &&
-          admissionPolicy == 'REQUEST') {
-        final reqRes = await const EarthApi().listCommunityRequests(id);
+      if (capabilities.canApproveRequests && admissionPolicy == 'REQUEST') {
+        final reqRes = await const EarthApi().listCommunityRequests(
+          id,
+          search: _requestSearch,
+        );
         _requests = reqRes.requests;
+        _requestsNextCursor = reqRes.nextCursor;
       } else {
         _requests = [];
       }
@@ -5659,6 +5745,64 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _loadMoreMembers() async {
+    final community = _community;
+    final cursor = _membersNextCursor;
+    if (community == null || cursor == null || _loading) return;
+    setState(() => _loading = true);
+    try {
+      final response = await const EarthApi().listCommunityMembers(
+        community.id,
+        cursor: cursor,
+        search: _memberSearch,
+      );
+      if (!mounted) return;
+      setState(() {
+        _members = [..._members, ...response.members];
+        _membersNextCursor = response.nextCursor;
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMoreRequests() async {
+    final community = _community;
+    final cursor = _requestsNextCursor;
+    if (community == null || cursor == null || _loading) return;
+    setState(() => _loading = true);
+    try {
+      final response = await const EarthApi().listCommunityRequests(
+        community.id,
+        cursor: cursor,
+        search: _requestSearch,
+      );
+      if (!mounted) return;
+      setState(() {
+        _requests = [..._requests, ...response.requests];
+        _requestsNextCursor = response.nextCursor;
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _syncSettings(CommunitySummary community) {
+    if (_settingsCommunityId == community.id) return;
+    _settingsCommunityId = community.id;
+    _descriptionController.text = community.description;
+    _admissionDraft = community.joinPolicy;
+  }
+
+  Future<void> _saveSettings(CommunitySummary community) async {
+    await widget.action(() => const EarthApi().updateCommunity(
+          communityId: community.id,
+          description: _descriptionController.text.trim(),
+          joinPolicy: _admissionDraft,
+        ));
+    await _fetchDetails();
   }
 
   Future<void> _confirmLeave(
@@ -5730,8 +5874,8 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(context.radiusPanel)),
           title: Text('Disband Community?',
-              style: context.topicTitleStyle
-                  .copyWith(color: context.dangerColor)),
+              style:
+                  context.topicTitleStyle.copyWith(color: context.dangerColor)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -5818,38 +5962,34 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
         title: 'COMMUNITY',
         showSurface: false,
         icon: Icons.groups_outlined,
-        child: const EarthEmptyState(
-          message: 'You are not currently an owner or member of any community.',
+        child: EarthEmptyState(
+          message: widget.communityId != null
+              ? 'You do not have access to this community.'
+              : 'You are not currently an owner or member of any community.',
           icon: Icons.groups_outlined,
         ),
       );
     }
 
-    final id = myComm['id']?.toString() ?? '';
-    final name = myComm['name']?.toString() ?? '';
-    final founderName =
-        myComm['founder_house_name']?.toString() ?? 'Unknown House';
-    final description = myComm['description']?.toString() ?? '';
-    final admissionPolicy =
-        (myComm['join_policy']?.toString() ?? 'OPEN').toUpperCase();
-    final viewer = myComm['viewer'] is Map
-        ? Map<String, dynamic>.from(myComm['viewer'] as Map)
-        : const <String, dynamic>{};
-    final capabilities = viewer['capabilities'] is Map
-        ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
-        : viewer;
-    final myRole = viewer['role']?.toString();
+    final id = myComm.id;
+    final name = myComm.name;
+    final founderName = myComm.founderHouseName ?? myComm.founderHouseId;
+    final description = myComm.description;
+    final admissionPolicy = myComm.joinPolicy;
+    final capabilities = myComm.viewer.capabilities;
+    final myRole = myComm.viewer.role;
     final isOwner = myRole == 'OWNER';
-    final isAdmin = myRole == 'MODERATOR';
-    final memberCount = asIntOr(myComm['member_count'], _members.length);
+    final isModerator = myRole == 'MODERATOR';
+    final memberCount = myComm.memberCount;
 
-    final statusText = isOwner
-        ? 'OWNER'
-        : isAdmin
-            ? 'MODERATOR'
-            : 'MEMBER';
+    final statusText = switch (myRole) {
+      'OWNER' => 'OWNER',
+      'MODERATOR' => 'MODERATOR',
+      'MEMBER' => 'MEMBER',
+      _ => 'ROLE UNAVAILABLE',
+    };
     final statusColor =
-        isOwner || isAdmin ? context.primaryColor : context.successColor;
+        isOwner || isModerator ? context.primaryColor : context.successColor;
 
     final cockpit = EarthPageCockpit(
       status: statusText,
@@ -5860,49 +6000,21 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       title: name.toUpperCase(),
       subtitle: description.isNotEmpty ? description : null,
       actions: [
-        if (capabilities['canEdit'] == true)
-          EarthButton(
-            label: 'MANAGE COMMUNITY',
-            icon: Icons.settings_outlined,
-            variant: EarthButtonVariant.primary,
-            onPressed: widget.busy
-                ? null
-                : () async {
-                    await showCommunityManageDialog(
-                      context,
-                      myComm,
-                      widget.state,
-                      widget.action,
-                    );
-                    _fetchDetails();
-                  },
-          ),
-        if (capabilities['canTransferOwnership'] == true)
-          EarthButton(
-            label: 'TRANSFER OWNERSHIP',
-            icon: Icons.swap_horiz_rounded,
-            variant: EarthButtonVariant.secondary,
-            onPressed: widget.busy
-                ? null
-                : () async {
-                    await showCommunityManageDialog(
-                      context,
-                      myComm,
-                      widget.state,
-                      widget.action,
-                    );
-                    _fetchDetails();
-                  },
-          ),
-        if (capabilities['canDisband'] == true)
-          EarthButton(
-            label: 'DISBAND',
-            icon: Icons.delete_outline_rounded,
-            variant: EarthButtonVariant.danger,
-            onPressed: widget.busy
-                ? null
-                : () => _confirmDisband(context, id, name),
-          ),
+        EarthButton(
+          label: 'OPEN CHAT',
+          variant: EarthButtonVariant.secondary,
+          onPressed: () {
+            if (widget.onNavigate != null) {
+              widget.onNavigate!('messages:channel-community-$id');
+            } else {
+              showCommLinkDialog(
+                context,
+                state: widget.state,
+                initialChannelId: 'channel-community-$id',
+              );
+            }
+          },
+        ),
       ],
       metrics: [
         CockpitMetric(
@@ -5918,70 +6030,6 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
           color: context.secondaryColor,
         ),
       ],
-      metricWidgets: [
-        InkWell(
-          onTap: () {
-            if (widget.onNavigate != null) {
-              widget.onNavigate!('messages:channel-community-$id');
-            } else {
-              showCommLinkDialog(
-                context,
-                state: widget.state,
-                initialChannelId: 'channel-community-$id',
-              );
-            }
-          },
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: context.surfaceColor.withValues(alpha: 0.65),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: context.primaryColor.withValues(alpha: 0.35),
-                width: 0.8,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(Icons.chat_outlined,
-                        size: 10, color: context.primaryColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      'COMMUNICATION',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 8,
-                        letterSpacing: 0.8,
-                        fontWeight: FontWeight.w700,
-                        color: context.mutedColor,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'COMMUNITY CHAT',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: context.primaryColor,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
 
     return EarthSection(
@@ -5992,35 +6040,10 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.communityId == null &&
-              widget.state.myCommunities.length > 1) ...[
-            Text('YOUR COMMUNITIES', style: context.topicTitleStyle),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: id,
-              decoration: const InputDecoration(
-                labelText: 'Select a community',
-                border: OutlineInputBorder(),
-              ),
-              items: widget.state.myCommunities.map((community) {
-                final communityId = community['id']?.toString() ?? '';
-                return DropdownMenuItem<String>(
-                  value: communityId,
-                  child: Text(community['name']?.toString() ?? communityId),
-                );
-              }).toList(),
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _selectedCommunityId = value);
-                _fetchDetails();
-              },
-            ),
-            const SizedBox(height: 18),
-          ],
           cockpit,
-          // 4. Pending Review Requests (if founder/admin and requests exist)
-          if (capabilities['canApproveRequests'] == true &&
-              _requestsError != null) ...[
+          _buildSettingsSection(context, myComm, capabilities),
+          // 4. Pending Review Requests (if the viewer can approve requests)
+          if (capabilities.canApproveRequests && _requestsError != null) ...[
             const SizedBox(height: 24),
             EarthDataRow(
               title: 'Admission requests unavailable',
@@ -6032,8 +6055,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
               ),
             ),
           ],
-          if (capabilities['canApproveRequests'] == true &&
-              _requests.isNotEmpty) ...[
+          if (capabilities.canApproveRequests && _requests.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
               'PENDING ADMISSION REQUESTS (${_requests.length})',
@@ -6044,14 +6066,14 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
             EarthDataList(
               children: _requests.map((req) {
                 final reqId = req.id;
-                final applicant = req.houseName.isEmpty
-                    ? req.houseId
-                    : req.houseName;
+                final applicant =
+                    req.houseName.isEmpty ? req.houseId : req.houseName;
                 final reqDay = req.requestedGameDay;
 
                 return EarthDataRow(
                   title: applicant,
-                  subtitle: 'Requested admission on Game Day $reqDay',
+                  subtitle:
+                      'Representative: ${req.currentHumanName ?? 'Unavailable'} · Requested admission on Game Day $reqDay',
                   leading: Icon(Icons.person_add_outlined,
                       color: context.warningColor),
                   badges: const [
@@ -6069,12 +6091,24 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                         onPressed: widget.busy
                             ? null
                             : () async {
-                                await const EarthApi().decideCommunityRequest(
+                                final result = await const EarthApi()
+                                    .decideCommunityRequestResult(
                                   communityId: id,
                                   requestId: reqId,
                                   action: 'approve',
                                 );
-                                _fetchDetails();
+                                if (!mounted) return;
+                                setState(() {
+                                  _requests = _requests
+                                      .where((item) => item.id != reqId)
+                                      .toList(growable: false);
+                                  if (result.member != null &&
+                                      !_members.any((item) =>
+                                          item.houseId ==
+                                          result.member!.houseId)) {
+                                    _members = [..._members, result.member!];
+                                  }
+                                });
                               },
                       ),
                       EarthButton(
@@ -6083,12 +6117,24 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                         onPressed: widget.busy
                             ? null
                             : () async {
-                                await const EarthApi().decideCommunityRequest(
+                                final result = await const EarthApi()
+                                    .decideCommunityRequestResult(
                                   communityId: id,
                                   requestId: reqId,
                                   action: 'reject',
                                 );
-                                _fetchDetails();
+                                if (!mounted) return;
+                                setState(() {
+                                  _requests = _requests
+                                      .where((item) => item.id != reqId)
+                                      .toList(growable: false);
+                                  if (result.request != null) {
+                                    _requests = _requests
+                                        .where((item) =>
+                                            item.id != result.request!.id)
+                                        .toList(growable: false);
+                                  }
+                                });
                               },
                       ),
                     ],
@@ -6096,6 +6142,17 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                 );
               }).toList(),
             ),
+            if (_requestsNextCursor != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: EarthButton(
+                  label: 'LOAD MORE REQUESTS',
+                  variant: EarthButtonVariant.ghost,
+                  onPressed: _loading ? null : _loadMoreRequests,
+                ),
+              ),
+            ],
           ],
 
           const SizedBox(height: 24),
@@ -6144,9 +6201,11 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                       children: _members.map((m) {
                         final hId = m.houseId;
                         final hName = m.houseName.isEmpty ? hId : m.houseName;
-                        final role = m.role.toUpperCase();
+                        final role = m.role.isEmpty
+                            ? 'UNAVAILABLE'
+                            : m.role.toUpperCase();
                         final isMOwner = role == 'OWNER';
-                        final isMAdmin = role == 'MODERATOR';
+                        final isMModerator = role == 'MODERATOR';
                         final joinedGameDay = m.joinedGameDay;
                         final joinedYear = ((joinedGameDay - 1) ~/ 365) + 1;
                         final joinedDay = ((joinedGameDay - 1) % 365) + 1;
@@ -6154,71 +6213,101 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                         return EarthDataRow(
                           title: hName,
                           subtitle:
-                              'Joined on Year $joinedYear, Day $joinedDay',
+                              'Representative: ${m.currentHumanName ?? 'Unavailable'} · Joined on Year $joinedYear, Day $joinedDay',
                           leading: Icon(
                             isMOwner
                                 ? Icons.star_rounded
-                                : isMAdmin
+                                : isMModerator
                                     ? Icons.verified_user_outlined
                                     : Icons.person_outline_rounded,
                             color: isMOwner
                                 ? context.primaryColor
-                                : isMAdmin
+                                : isMModerator
                                     ? context.secondaryColor
                                     : context.mutedColor,
                           ),
                           badges: [
                             EarthBadge(
-                                label: isMOwner
+                              label: isMOwner
                                   ? 'OWNER'
-                                  : isMAdmin
+                                  : isMModerator
                                       ? 'MODERATOR'
-                                      : 'MEMBER',
+                                      : 'UNAVAILABLE',
                               variant: isMOwner
                                   ? EarthBadgeVariant.primary
-                                  : isMAdmin
+                                  : isMModerator
                                       ? EarthBadgeVariant.secondary
                                       : EarthBadgeVariant.neutral,
                             ),
                           ],
-                          trailing: capabilities['canChangeRoles'] == true &&
-                                  !isMOwner
-                              ? isMAdmin
+                          trailing: capabilities.canChangeRoles && !isMOwner
+                              ? isMModerator
                                   ? EarthButton(
                                       label: 'DEMOTE',
                                       variant: EarthButtonVariant.ghost,
                                       onPressed: widget.busy
                                           ? null
                                           : () async {
-                                              await const EarthApi()
-                                                  .setCommunityMemberRole(
+                                              final result = await const EarthApi()
+                                                  .setCommunityMemberRoleResult(
                                                 communityId: id,
                                                 targetHouseId: hId,
                                                 role: 'MEMBER',
                                               );
-                                              _fetchDetails();
+                                              if (!mounted) return;
+                                              if (result.member != null) {
+                                                setState(() {
+                                                  _members = _members
+                                                      .map((item) =>
+                                                          item.houseId == hId
+                                                              ? result.member!
+                                                              : item)
+                                                      .toList(growable: false);
+                                                });
+                                              }
                                             },
                                     )
                                   : EarthButton(
-                                      label: 'MAKE ADMIN',
+                                      label: 'MAKE MODERATOR',
                                       variant: EarthButtonVariant.secondary,
                                       onPressed: widget.busy
                                           ? null
                                           : () async {
-                                              await const EarthApi()
-                                                  .setCommunityMemberRole(
+                                              final result = await const EarthApi()
+                                                  .setCommunityMemberRoleResult(
                                                 communityId: id,
                                                 targetHouseId: hId,
                                                 role: 'MODERATOR',
                                               );
-                                              _fetchDetails();
+                                              if (!mounted) return;
+                                              if (result.member != null) {
+                                                setState(() {
+                                                  _members = _members
+                                                      .map((item) =>
+                                                          item.houseId == hId
+                                                              ? result.member!
+                                                              : item)
+                                                      .toList(growable: false);
+                                                });
+                                              }
                                             },
                                     )
                               : null,
                         );
                       }).toList(),
                     ),
-          if (capabilities['canLeave'] == true) ...[
+          if (_membersNextCursor != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: EarthButton(
+                label: 'LOAD MORE MEMBERS',
+                variant: EarthButtonVariant.ghost,
+                onPressed: _loading ? null : _loadMoreMembers,
+              ),
+            ),
+          ],
+          if (capabilities.canLeave) ...[
             const SizedBox(height: 28),
             Container(
               padding: EdgeInsets.all(context.cardPadding),
@@ -6264,6 +6353,150 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsSection(
+    BuildContext context,
+    CommunitySummary community,
+    CommunityViewerCapabilities capabilities,
+  ) {
+    if (!capabilities.canEdit &&
+        !capabilities.canTransferOwnership &&
+        !capabilities.canDisband) {
+      return const SizedBox.shrink();
+    }
+    return EarthSection(
+      title: 'SETTINGS',
+      icon: Icons.settings_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (capabilities.canEdit) ...[
+            TextField(
+              controller: _descriptionController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('ADMISSION POLICY', style: context.widgetTitleStyle),
+            const SizedBox(height: 6),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'OPEN', label: Text('OPEN')),
+                ButtonSegment(value: 'REQUEST', label: Text('REQUEST')),
+              ],
+              selected: {_admissionDraft},
+              onSelectionChanged: (selection) => setState(
+                () => _admissionDraft = selection.first,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: EarthButton(
+                label: 'SAVE SETTINGS',
+                variant: EarthButtonVariant.primary,
+                onPressed: widget.busy ? null : () => _saveSettings(community),
+              ),
+            ),
+          ],
+          if (capabilities.canTransferOwnership || capabilities.canDisband) ...[
+            if (capabilities.canEdit) const SizedBox(height: 24),
+            Text('IRREVERSIBLE ACTIONS',
+                style: context.topicTitleStyle.copyWith(
+                  color: context.dangerColor,
+                )),
+            const SizedBox(height: 6),
+            Text(
+              'These actions change ownership or permanently dissolve the Community.',
+              style: context.widgetFooterStyle,
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (capabilities.canTransferOwnership)
+                  EarthButton(
+                    label: 'TRANSFER OWNERSHIP',
+                    icon: Icons.swap_horiz_rounded,
+                    variant: EarthButtonVariant.secondary,
+                    onPressed: widget.busy
+                        ? null
+                        : () => _showOwnershipTransfer(community),
+                  ),
+                if (capabilities.canDisband)
+                  EarthButton(
+                    label: 'DISBAND COMMUNITY',
+                    icon: Icons.delete_outline_rounded,
+                    variant: EarthButtonVariant.danger,
+                    onPressed: widget.busy
+                        ? null
+                        : () => _confirmDisband(
+                              context,
+                              community.id,
+                              community.name,
+                            ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showOwnershipTransfer(CommunitySummary community) async {
+    String? targetHouseId;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('TRANSFER OWNERSHIP'),
+          content: DropdownButtonFormField<String>(
+            value: targetHouseId,
+            decoration: const InputDecoration(
+              labelText: 'New owner House',
+              border: OutlineInputBorder(),
+            ),
+            items: _members
+                .where((member) => member.status == 'ACTIVE')
+                .map((member) => DropdownMenuItem(
+                      value: member.houseId,
+                      child: Text(member.houseName.isEmpty
+                          ? member.houseId
+                          : member.houseName),
+                    ))
+                .toList(),
+            onChanged: (value) => setDialogState(() => targetHouseId = value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCEL'),
+            ),
+            EarthButton(
+              label: 'TRANSFER',
+              variant: EarthButtonVariant.secondary,
+              onPressed: targetHouseId == null
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      await const EarthApi().transferCommunityOwnershipResult(
+                        communityId: community.id,
+                        targetHouseId: targetHouseId!,
+                      );
+                      await _fetchDetails();
+                    },
+            ),
+          ],
+        ),
       ),
     );
   }

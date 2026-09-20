@@ -1,5 +1,9 @@
 part of 'earth_api.dart';
 
+CommunityMutationResult _communityMutationResult(Object response) =>
+    CommunityMutationResult.fromJson(
+        Map<String, dynamic>.from(response as Map));
+
 extension EarthApiInstitutions on EarthApi {
   Future<CorporationProfile> getCorporationProfile(String corporationId) async {
     final response =
@@ -271,10 +275,8 @@ extension EarthApiInstitutions on EarthApi {
     final query = <String, String>{
       'limit': limit.clamp(1, 50).toString(),
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
-      if (joinPolicy != null && joinPolicy.isNotEmpty)
-        'joinPolicy': joinPolicy,
-      if (membership != null && membership.isNotEmpty)
-        'membership': membership,
+      if (joinPolicy != null && joinPolicy.isNotEmpty) 'joinPolicy': joinPolicy,
+      if (membership != null && membership.isNotEmpty) 'membership': membership,
       if (viewerStatus != null && viewerStatus.isNotEmpty)
         'viewerStatus': viewerStatus,
       if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
@@ -291,6 +293,101 @@ extension EarthApiInstitutions on EarthApi {
       throw const FormatException('Community directory response is incomplete');
     }
     return CommunityDirectoryResponse.fromJson(payload);
+  }
+
+  Future<CommunityDetail> getCommunity(String communityId) async {
+    final res = await _request('/api/communities/$communityId', method: 'GET');
+    final payload = Map<String, dynamic>.from(res as Map);
+    final community = payload['community'] is Map
+        ? Map<String, dynamic>.from(payload['community'] as Map)
+        : payload;
+    return CommunityDetail.fromJson(community);
+  }
+
+  Future<CommunityWorkspace> getCommunityWorkspace(String communityId) async {
+    final res = await _request('/api/communities/$communityId/workspace',
+        method: 'GET');
+    final payload = Map<String, dynamic>.from(res as Map);
+    final workspace = payload['workspace'] is Map
+        ? Map<String, dynamic>.from(payload['workspace'] as Map)
+        : payload;
+    return CommunityWorkspace.fromJson(workspace);
+  }
+
+  Future<CommunityMutationResult> updateCommunityResult({
+    required String communityId,
+    String? description,
+    String? joinPolicy,
+  }) async {
+    final response =
+        await _request('/api/communities/$communityId', method: 'PATCH', body: {
+      if (description != null) 'description': description,
+      if (joinPolicy != null) 'joinPolicy': joinPolicy,
+    });
+    return _communityMutationResult(response);
+  }
+
+  Future<CommunityMutationResult> joinCommunityResult(String communityId,
+      {String? applicationMessage}) async {
+    final response = await _request('/api/communities/$communityId/join',
+        method: 'POST',
+        body: {
+          if (applicationMessage != null && applicationMessage.isNotEmpty)
+            'applicationMessage': applicationMessage,
+        });
+    return _communityMutationResult(response);
+  }
+
+  Future<CommunityMutationResult> leaveCommunityResult(
+      String communityId) async {
+    final response = await _request('/api/communities/$communityId/leave',
+        method: 'POST', body: {});
+    return _communityMutationResult(response);
+  }
+
+  Future<CommunityMutationResult> decideCommunityRequestResult({
+    required String communityId,
+    required String requestId,
+    required String action,
+    String? rejectionReason,
+  }) async {
+    if (action != 'approve' && action != 'reject') {
+      throw ArgumentError.value(action, 'action', 'must be approve or reject');
+    }
+    final response = await _request(
+      '/api/communities/$communityId/requests/$requestId/$action',
+      method: 'POST',
+      body: {
+        if (rejectionReason != null && rejectionReason.isNotEmpty)
+          'rejectionReason': rejectionReason,
+      },
+    );
+    return _communityMutationResult(response);
+  }
+
+  Future<CommunityMutationResult> setCommunityMemberRoleResult({
+    required String communityId,
+    required String targetHouseId,
+    required String role,
+  }) async {
+    final response = await _request(
+      '/api/communities/$communityId/members/$targetHouseId',
+      method: 'PATCH',
+      body: {'role': role},
+    );
+    return _communityMutationResult(response);
+  }
+
+  Future<CommunityMutationResult> transferCommunityOwnershipResult({
+    required String communityId,
+    required String targetHouseId,
+  }) async {
+    final response = await _request(
+      '/api/communities/$communityId/ownership/transfer',
+      method: 'POST',
+      body: {'targetHouseId': targetHouseId},
+    );
+    return _communityMutationResult(response);
   }
 
   Future<EarthState> updateCommunity({
@@ -310,16 +407,40 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
-  Future<CommunityMembersResponse> listCommunityMembers(String communityId) async {
-    final res =
-        await _request('/api/communities/$communityId/members', method: 'GET');
-    return CommunityMembersResponse.fromJson(Map<String, dynamic>.from(res as Map));
+  Future<CommunityMembersResponse> listCommunityMembers(String communityId,
+      {String? cursor, String? search, int limit = 25}) async {
+    final query = <String, String>{
+      'limit': limit.clamp(1, 50).toString(),
+      if (cursor != null) 'cursor': cursor,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    };
+    final encoded = query.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final res = await _request('/api/communities/$communityId/members?$encoded',
+        method: 'GET');
+    return CommunityMembersResponse.fromJson(
+        Map<String, dynamic>.from(res as Map));
   }
 
-  Future<CommunityMembershipRequestsResponse> listCommunityRequests(String communityId) async {
-    final res =
-        await _request('/api/communities/$communityId/requests', method: 'GET');
-    return CommunityMembershipRequestsResponse.fromJson(Map<String, dynamic>.from(res as Map));
+  Future<CommunityMembershipRequestsResponse> listCommunityRequests(
+      String communityId,
+      {String? cursor,
+      String? search,
+      int limit = 25}) async {
+    final query = <String, String>{
+      'limit': limit.clamp(1, 50).toString(),
+      if (cursor != null) 'cursor': cursor,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    };
+    final encoded = query.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final res = await _request(
+        '/api/communities/$communityId/requests?$encoded',
+        method: 'GET');
+    return CommunityMembershipRequestsResponse.fromJson(
+        Map<String, dynamic>.from(res as Map));
   }
 
   Future<EarthState> decideCommunityRequest({

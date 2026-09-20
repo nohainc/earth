@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/core/api/earth_api.dart';
 import 'package:earth_client/core/api/earth_api_transport.dart';
+import 'package:earth_client/core/models/community_models.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
 
 class _SuccessfulApiTransport extends EarthApiTransport {
@@ -14,6 +15,102 @@ class _SuccessfulApiTransport extends EarthApiTransport {
 }
 
 void main() {
+  test('Community roles accept only OWNER, MODERATOR, and MEMBER', () {
+    expect(normalizeCommunityRole('OWNER'), 'OWNER');
+    expect(normalizeCommunityRole('MODERATOR'), 'MODERATOR');
+    expect(normalizeCommunityRole('MEMBER'), 'MEMBER');
+    expect(normalizeCommunityRole('FOUNDER'), isEmpty);
+    expect(normalizeCommunityRole('ADMIN'), isEmpty);
+
+    final founder = CommunityMember.fromJson({
+      'house_id': 'HOUSE-1',
+      'house_name': 'House One',
+      'role': 'FOUNDER',
+    });
+    expect(founder.role, isEmpty);
+  });
+
+  test(
+      'House community membership keeps its role when its representative succeeds',
+      () {
+    final before = CommunityMember.fromJson({
+      'house_id': 'HOUSE-1',
+      'house_name': 'House One',
+      'current_human_id': 'HUMAN-1',
+      'current_human_name': 'First Representative',
+      'role': 'MODERATOR',
+    });
+    final after = CommunityMember.fromJson({
+      'house_id': 'HOUSE-1',
+      'house_name': 'House One',
+      'current_human_id': 'HUMAN-2',
+      'current_human_name': 'Successor Representative',
+      'role': 'MODERATOR',
+    });
+
+    expect(after.houseId, before.houseId);
+    expect(after.role, before.role);
+    expect(after.currentHumanId, isNot(before.currentHumanId));
+    expect(after.currentHumanName, 'Successor Representative');
+  });
+
+  test('Community access and roles never infer membership or founder status', () {
+    final visitor = CommunitySummary.fromJson({
+      'id': 'COM-PUBLIC',
+      'name': 'Public Community',
+      'founder_house_id': 'HOUSE-FOUNDER',
+      'founder_house_name': 'House Founder',
+      'member_count': 2,
+      'viewer': {'membershipStatus': null, 'role': null},
+    });
+    final owner = CommunityMember.fromJson({
+      'house_id': 'HOUSE-OWNER',
+      'house_name': 'House Owner',
+      'role': 'OWNER',
+    });
+
+    expect(visitor.viewer.membershipStatus, isNull);
+    expect(visitor.viewer.role, isNull);
+    expect(owner.role, 'OWNER');
+    expect(owner.role, isNot('FOUNDER'));
+    expect(visitor.founderHouseName, 'House Founder');
+  });
+
+  test('Community membership pagination preserves large rosters and cursors', () {
+    final response = CommunityMembersResponse.fromJson({
+      'members': List.generate(
+        125,
+        (index) => {
+          'house_id': 'HOUSE-$index',
+          'house_name': 'House $index',
+          'role': index == 0 ? 'OWNER' : 'MEMBER',
+        },
+      ),
+      'totalCount': 125,
+      'hasMore': true,
+      'nextCursor': 'cursor-100',
+    });
+
+    expect(response.members, hasLength(125));
+    expect(response.totalCount, 125);
+    expect(response.hasMore, isTrue);
+    expect(response.nextCursor, 'cursor-100');
+  });
+
+  test('Owner leave capabilities distinguish sole-owner and transferable ownership', () {
+    CommunityViewerPermissions permissions(Map<String, dynamic> json) =>
+        CommunityViewerPermissions.fromJson({
+          'membershipStatus': 'ACTIVE',
+          'role': 'OWNER',
+          ...json,
+        });
+
+    expect(permissions({'canLeave': false, 'capabilities': {}}).canLeave,
+        isFalse);
+    expect(permissions({'canLeave': true, 'capabilities': {}}).canLeave,
+        isTrue);
+  });
+
   testWidgets(
       'CommunitiesPanel renders non-member and owner communities with correct badges and actions',
       (tester) async {
@@ -376,13 +473,13 @@ void main() {
     expect(find.text('OWNER'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
     expect(find.text('REQUEST'), findsOneWidget);
-    expect(find.text('COMMUNITY CHAT'), findsOneWidget);
+    expect(find.text('OPEN CHAT'), findsOneWidget);
     expect(find.text('GUILD MANIFESTO & PURPOSE'), findsNothing);
     expect(find.text('Pioneering clean renewable energy across the quadrant.'),
         findsOneWidget);
     expect(find.text('CONTRIBUTE TO GUILD TREASURY'), findsNothing);
 
-    await tester.tap(find.text('COMMUNITY CHAT'));
+    await tester.tap(find.text('OPEN CHAT'));
     await tester.pumpAndSettle();
     expect(navigatedSection, 'messages:channel-community-COM-002');
   });

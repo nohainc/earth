@@ -1,3 +1,10 @@
+const _communityRoles = {'OWNER', 'MODERATOR', 'MEMBER'};
+
+String normalizeCommunityRole(Object? raw) {
+  final role = raw?.toString().toUpperCase();
+  return _communityRoles.contains(role) ? role! : '';
+}
+
 class CommunityViewerPermissions {
   final String? membershipStatus;
   final String? role;
@@ -12,7 +19,7 @@ class CommunityViewerPermissions {
   final bool canDisband;
   final bool canTransferOwnership;
   final bool canCancelRequest;
-  final CommunityCapabilityMatrix capabilities;
+  final CommunityViewerCapabilities capabilities;
 
   const CommunityViewerPermissions({
     required this.membershipStatus,
@@ -35,27 +42,30 @@ class CommunityViewerPermissions {
     final rawCapabilities = json['capabilities'] is Map
         ? Map<String, dynamic>.from(json['capabilities'] as Map)
         : json;
-    final capabilities = CommunityCapabilityMatrix.fromJson(rawCapabilities);
+    final capabilities = CommunityViewerCapabilities.fromJson(rawCapabilities);
     return CommunityViewerPermissions(
-        membershipStatus: json['membershipStatus']?.toString(),
-        role: json['role']?.toString(),
-        requestStatus: json['requestStatus']?.toString(),
-        requestId: json['requestId']?.toString(),
-        canJoin: json['canJoin'] == true,
-        canLeave: json['canLeave'] == true,
-        canEdit: json['canEdit'] == true,
-        canManageMembers: json['canManageMembers'] == true,
-        canApproveRequests: json['canApproveRequests'] == true,
-        canChangeRoles: json['canChangeRoles'] == true,
-        canDisband: json['canDisband'] == true,
-        canTransferOwnership: capabilities.canTransferOwnership,
-        canCancelRequest: capabilities.canCancelRequest,
-        capabilities: capabilities,
-      );
+      membershipStatus: json['membershipStatus']?.toString(),
+      role: (() {
+        final role = normalizeCommunityRole(json['role']);
+        return role.isEmpty ? null : role;
+      })(),
+      requestStatus: json['requestStatus']?.toString(),
+      requestId: json['requestId']?.toString(),
+      canJoin: json['canJoin'] == true,
+      canLeave: json['canLeave'] == true,
+      canEdit: json['canEdit'] == true,
+      canManageMembers: json['canManageMembers'] == true,
+      canApproveRequests: json['canApproveRequests'] == true,
+      canChangeRoles: json['canChangeRoles'] == true,
+      canDisband: json['canDisband'] == true,
+      canTransferOwnership: capabilities.canTransferOwnership,
+      canCancelRequest: capabilities.canCancelRequest,
+      capabilities: capabilities,
+    );
   }
 }
 
-class CommunityCapabilityMatrix {
+class CommunityViewerCapabilities {
   final bool canJoin;
   final bool canLeave;
   final bool canEdit;
@@ -66,7 +76,7 @@ class CommunityCapabilityMatrix {
   final bool canTransferOwnership;
   final bool canCancelRequest;
 
-  const CommunityCapabilityMatrix({
+  const CommunityViewerCapabilities({
     required this.canJoin,
     required this.canLeave,
     required this.canEdit,
@@ -78,8 +88,8 @@ class CommunityCapabilityMatrix {
     required this.canCancelRequest,
   });
 
-  factory CommunityCapabilityMatrix.fromJson(Map<String, dynamic> json) =>
-      CommunityCapabilityMatrix(
+  factory CommunityViewerCapabilities.fromJson(Map<String, dynamic> json) =>
+      CommunityViewerCapabilities(
         canJoin: json['canJoin'] == true,
         canLeave: json['canLeave'] == true,
         canEdit: json['canEdit'] == true,
@@ -91,6 +101,8 @@ class CommunityCapabilityMatrix {
         canCancelRequest: json['canCancelRequest'] == true,
       );
 }
+
+typedef CommunityCapabilityMatrix = CommunityViewerCapabilities;
 
 class CommunitySummary {
   final String id;
@@ -154,6 +166,86 @@ class CommunityDetail extends CommunitySummary {
     this.members = const [],
     this.requests = const [],
   });
+
+  factory CommunityDetail.fromJson(Map<String, dynamic> json) {
+    final summary = CommunitySummary.fromJson(json);
+    final members = (json['members'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((row) => CommunityMember.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+    final requests = (json['requests'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((row) => CommunityMembershipRequest.fromJson(
+              Map<String, dynamic>.from(row),
+            ))
+        .toList(growable: false);
+    return CommunityDetail(
+      id: summary.id,
+      name: summary.name,
+      description: summary.description,
+      visibility: summary.visibility,
+      joinPolicy: summary.joinPolicy,
+      status: summary.status,
+      founderHouseId: summary.founderHouseId,
+      founderHouseName: summary.founderHouseName,
+      memberCount: summary.memberCount,
+      viewer: summary.viewer,
+      members: members,
+      requests: requests,
+    );
+  }
+}
+
+class CommunityWorkspace extends CommunityDetail {
+  final int pendingRequestCount;
+  final List<CommunityMember> memberPreview;
+  final String? memberNextCursor;
+  final String? requestNextCursor;
+
+  const CommunityWorkspace({
+    required super.id,
+    required super.name,
+    required super.description,
+    required super.visibility,
+    required super.joinPolicy,
+    required super.status,
+    required super.founderHouseId,
+    required super.founderHouseName,
+    required super.memberCount,
+    required super.viewer,
+    super.members,
+    super.requests,
+    required this.pendingRequestCount,
+    required this.memberPreview,
+    required this.memberNextCursor,
+    required this.requestNextCursor,
+  });
+
+  factory CommunityWorkspace.fromJson(Map<String, dynamic> json) {
+    final detail = CommunityDetail.fromJson(json);
+    final preview = (json['member_preview'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((row) => CommunityMember.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+    return CommunityWorkspace(
+      id: detail.id,
+      name: detail.name,
+      description: detail.description,
+      visibility: detail.visibility,
+      joinPolicy: detail.joinPolicy,
+      status: detail.status,
+      founderHouseId: detail.founderHouseId,
+      founderHouseName: detail.founderHouseName,
+      memberCount: detail.memberCount,
+      viewer: detail.viewer,
+      members: detail.members,
+      requests: detail.requests,
+      pendingRequestCount: _int(json['pending_request_count']),
+      memberPreview: preview,
+      memberNextCursor: json['member_next_cursor']?.toString(),
+      requestNextCursor: json['request_next_cursor']?.toString(),
+    );
+  }
 }
 
 class CommunityMember {
@@ -187,7 +279,7 @@ class CommunityMember {
         houseName: json['house_name']?.toString() ?? '',
         currentHumanId: json['current_human_id']?.toString(),
         currentHumanName: json['current_human_name']?.toString(),
-        role: json['role']?.toString() ?? 'MEMBER',
+        role: normalizeCommunityRole(json['role']),
         status: json['status']?.toString() ?? 'ACTIVE',
         joinedGameDay: _int(json['joined_game_day']),
         joinedGameMinute: _int(json['joined_game_minute']),
@@ -249,21 +341,32 @@ class CommunityMembershipRequest {
 
 class CommunityMembersResponse {
   final List<CommunityMember> members;
-  const CommunityMembersResponse(this.members);
+  final int totalCount;
+  final bool hasMore;
+  final String? nextCursor;
+  const CommunityMembersResponse(this.members,
+      {this.totalCount = 0, this.hasMore = false, this.nextCursor});
 
   factory CommunityMembersResponse.fromJson(Map<String, dynamic> json) =>
       CommunityMembersResponse(
         (json['members'] as List<dynamic>? ?? const [])
             .whereType<Map>()
-            .map((row) => CommunityMember.fromJson(
-                Map<String, dynamic>.from(row)))
+            .map((row) =>
+                CommunityMember.fromJson(Map<String, dynamic>.from(row)))
             .toList(growable: false),
+        totalCount: _int(json['totalCount']),
+        hasMore: json['hasMore'] == true,
+        nextCursor: json['nextCursor']?.toString(),
       );
 }
 
 class CommunityMembershipRequestsResponse {
   final List<CommunityMembershipRequest> requests;
-  const CommunityMembershipRequestsResponse(this.requests);
+  final int totalCount;
+  final bool hasMore;
+  final String? nextCursor;
+  const CommunityMembershipRequestsResponse(this.requests,
+      {this.totalCount = 0, this.hasMore = false, this.nextCursor});
 
   factory CommunityMembershipRequestsResponse.fromJson(
           Map<String, dynamic> json) =>
@@ -273,7 +376,52 @@ class CommunityMembershipRequestsResponse {
             .map((row) => CommunityMembershipRequest.fromJson(
                 Map<String, dynamic>.from(row)))
             .toList(growable: false),
+        totalCount: _int(json['totalCount']),
+        hasMore: json['hasMore'] == true,
+        nextCursor: json['nextCursor']?.toString(),
       );
+}
+
+class CommunityMutationResult {
+  final String? status;
+  final CommunitySummary? community;
+  final CommunityMember? member;
+  final List<CommunityMember> members;
+  final CommunityMembershipRequest? request;
+
+  const CommunityMutationResult({
+    this.status,
+    this.community,
+    this.member,
+    this.members = const [],
+    this.request,
+  });
+
+  factory CommunityMutationResult.fromJson(Map<String, dynamic> json) {
+    final community = json['community'] is Map
+        ? CommunitySummary.fromJson(
+            Map<String, dynamic>.from(json['community'] as Map))
+        : null;
+    final member = json['member'] is Map
+        ? CommunityMember.fromJson(
+            Map<String, dynamic>.from(json['member'] as Map))
+        : null;
+    final request = json['request'] is Map
+        ? CommunityMembershipRequest.fromJson(
+            Map<String, dynamic>.from(json['request'] as Map))
+        : null;
+    final members = (json['members'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((row) => CommunityMember.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+    return CommunityMutationResult(
+      status: json['status']?.toString(),
+      community: community,
+      member: member,
+      members: members,
+      request: request,
+    );
+  }
 }
 
 class CommunityDirectoryResponse {
@@ -293,8 +441,8 @@ class CommunityDirectoryResponse {
       CommunityDirectoryResponse(
         communities: (json['communities'] as List<dynamic>? ?? const [])
             .whereType<Map>()
-            .map((row) => CommunitySummary.fromJson(
-                Map<String, dynamic>.from(row)))
+            .map((row) =>
+                CommunitySummary.fromJson(Map<String, dynamic>.from(row)))
             .toList(growable: false),
         totalCount: _int(json['totalCount']),
         hasMore: json['hasMore'] == true,

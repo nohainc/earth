@@ -338,8 +338,15 @@ class NavigationRegistry {
   }
 
   static String normalizeRoute(String rawSection) {
-    final section = rawSection.trim().toLowerCase();
-    if (section.startsWith('my-community')) return 'communities';
+    final trimmed = rawSection.trim();
+    final section = trimmed.toLowerCase();
+    if (section.startsWith('community:')) {
+      return 'community:${trimmed.substring('community:'.length)}';
+    }
+    if (section.startsWith('my-community:')) {
+      return 'community:${trimmed.substring('my-community:'.length)}';
+    }
+    if (section == 'my-community') return 'communities';
     if (section.startsWith('messages')) return 'messages';
 
     for (final item in items) {
@@ -358,7 +365,7 @@ class NavigationRegistry {
     if (clean == 'account' || clean == 'messages' || clean == 'notifications') {
       return -1;
     }
-    if (clean.startsWith('my-community')) {
+    if (clean.startsWith('community:')) {
       return NavigationGroup.society.index;
     }
     final item = findItem(clean);
@@ -369,12 +376,13 @@ class NavigationRegistry {
   }
 
   static String pageTitle(String section, [EarthState? state]) {
-    if (section.startsWith('my-community:')) {
-      final communityId = section.substring('my-community:'.length);
+    final clean = normalizeRoute(section);
+    if (clean.startsWith('community:')) {
+      final communityId = clean.substring('community:'.length);
       Map<String, dynamic>? community;
       for (final item
           in state?.myCommunities ?? const <Map<String, dynamic>>[]) {
-        if (item['id']?.toString() == communityId) {
+        if (item['id']?.toString().toLowerCase() == communityId.toLowerCase()) {
           community = item;
           break;
         }
@@ -382,13 +390,12 @@ class NavigationRegistry {
       final name = community?['name']?.toString().trim();
       return name == null || name.isEmpty ? 'COMMUNITY' : name.toUpperCase();
     }
-    final clean = normalizeRoute(section);
     final item = findItem(clean);
     if (item != null) {
       return item.getPageTitle(state);
     }
     if (section.startsWith('messages')) return 'MESSAGES';
-    if (section.startsWith('my-community')) return 'COMMUNITY';
+    if (clean.startsWith('community:')) return 'COMMUNITY';
     return section.toUpperCase().replaceAll('-', ' ');
   }
 
@@ -404,29 +411,9 @@ class NavigationRegistry {
 
     if (group != NavigationGroup.society) return registered;
 
-    // Each active community the House belongs to gets a contextual Society
-    // destination. The registry entry remains stable while the community
-    // profile itself is loaded by the existing MyCommunityPanel route.
-    final communityItems = <NavigationItem>[];
-    final seen = <String>{};
-    for (final community in state.myCommunities) {
-      final id = community['id']?.toString().trim() ?? '';
-      if (id.isEmpty || !seen.add(id)) continue;
-      final name = community['name']?.toString().trim();
-      communityItems.add(
-        NavigationItem(
-          id: 'my-community:$id',
-          canonicalRoute: 'my-community:$id',
-          group: NavigationGroup.society,
-          defaultLabel: name == null || name.isEmpty ? 'Community' : name,
-          defaultPageTitle:
-              name == null || name.isEmpty ? 'COMMUNITY' : name.toUpperCase(),
-          icon: Icons.groups_outlined,
-          isPrimary: true,
-        ),
-      );
-    }
-    return [...registered, ...communityItems];
+    // Keep one stable Society destination. Membership-specific Communities
+    // are selected inside CommunitiesPanel; deep links remain supported.
+    return registered;
   }
 
   static String _resolveHumanLabel(EarthState state) {

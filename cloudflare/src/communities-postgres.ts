@@ -85,6 +85,13 @@ export type CommunityDetail = CommunitySummary & {
   requests?: CommunityMembershipRequest[];
 };
 
+export type CommunityWorkspace = CommunitySummary & {
+  pending_request_count: number;
+  member_preview: CommunityMember[];
+  member_next_cursor: string | null;
+  request_next_cursor: string | null;
+};
+
 export type CommunityMemberRosterEntry = CommunityMember;
 export type CommunityMembershipRequestDto = CommunityMembershipRequest;
 type CommunityMembershipRequestRecord = CommunityMembershipRequest & {
@@ -184,6 +191,17 @@ async function loadMembershipRequest(repo: PostgresRepository, where: string, va
     LEFT JOIN humans hu ON hu.id=h.current_human_id
     WHERE ${where} ${lock ? 'FOR UPDATE' : ''}`, values);
   return result.rows[0];
+}
+
+async function loadCommunityMember(repo: PostgresRepository, communityId: string, houseId: string): Promise<CommunityMember | null> {
+  const result = await repo.query<CommunityMember>(`SELECT cm.house_id,h.house_name,h.current_human_id,
+      hu.display_name AS current_human_name,cm.role,cm.status,cm.joined_game_day,
+      cm.joined_game_minute,cm.joined_at,cm.left_at
+    FROM community_memberships cm
+    JOIN houses h ON h.id=cm.house_id
+    LEFT JOIN humans hu ON hu.id=h.current_human_id
+    WHERE cm.community_id=$1 AND cm.house_id=$2`, [communityId, houseId]);
+  return result.rows[0] ?? null;
 }
 
 export async function listCommunities(repo: PostgresRepository, houseId?: string, membership: 'mine' | undefined = undefined) {
@@ -384,7 +402,7 @@ export async function changeCommunityMembership(repo: PostgresRepository, input:
       await createGameEvent(tx, { id: newId('EVENT'), category: 'INSTITUTION', eventType: 'COMMUNITY_MEMBER_REMOVED', gameDay: time.gameDay, gameMinute: time.gameMinute, actorHouseId: input.houseId, actorHumanId: input.humanId, subjectType: 'COMMUNITY', subjectId: input.communityId, title: 'House removed from community', details: { targetHouseId: input.targetHouseId }, correlationId: `community-remove:${input.communityId}:${input.targetHouseId}:${time.gameDay}` });
       const targetHuman = (await tx.query<{ human_id: string }>(`SELECT current_human_id AS human_id FROM houses WHERE id=$1`, [input.targetHouseId])).rows[0]?.human_id;
       if (targetHuman) await addNotification(tx, input.targetHouseId, targetHuman, input.communityId, 'COMMUNITY_MEMBER_REMOVED', 'Removed from community', 'Your House was removed from the community.', time.gameDay, time.gameMinute, `community-remove-notification:${input.communityId}:${input.targetHouseId}:${time.gameDay}`);
-      return { ok: true, status: 'REMOVED' };
+      return { ok: true, status: 'REMOVED', member: await loadCommunityMember(tx, input.communityId, input.targetHouseId) };
     }
     if (input.correlationId) {
       const prior = await tx.query<{ event_type: string }>(
@@ -409,13 +427,13 @@ export async function changeCommunityMembership(repo: PostgresRepository, input:
       if (existing.rows[0].role === 'OWNER') throw earthError('COMMUNITY_LAST_OWNER', 'The owner must transfer ownership or disband the Community before leaving.');
       await tx.query(`UPDATE community_memberships SET status='LEFT',left_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE community_id=$1 AND house_id=$2`, [input.communityId, input.houseId]);
       await createGameEvent(tx, { id: newId('EVENT'), category: 'AFFILIATION', eventType: 'COMMUNITY_LEFT', gameDay: time.gameDay, gameMinute: time.gameMinute, actorHouseId: input.houseId, actorHumanId: input.humanId, subjectType: 'COMMUNITY', subjectId: input.communityId, title: 'House left community', correlationId: input.correlationId ?? `community-leave:${input.communityId}:${input.houseId}:${time.gameDay}` });
-      return { ok: true, status: 'LEFT' };
+      return { ok: true, status: 'LEFT', member: await loadCommunityMember(tx, input.communityId, input.houseId) };
     }
     if (existing.rows[0]?.status === 'ACTIVE') throw earthError('COMMUNITY_ALREADY_MEMBER', 'House is already an active member.');
     if (c.join_policy === 'OPEN') {
       await tx.query(`INSERT INTO community_memberships (community_id,house_id,role,status,joined_by_human_id,joined_game_day,joined_game_minute,left_at) VALUES ($1,$2,'MEMBER','ACTIVE',$3,$4,$5,NULL) ON CONFLICT (community_id,house_id) DO UPDATE SET role='MEMBER',status='ACTIVE',joined_by_human_id=EXCLUDED.joined_by_human_id,joined_game_day=EXCLUDED.joined_game_day,joined_game_minute=EXCLUDED.joined_game_minute,left_at=NULL,updated_at=CURRENT_TIMESTAMP`, [input.communityId, input.houseId, input.humanId, time.gameDay, time.gameMinute]);
       await createGameEvent(tx, { id: newId('EVENT'), category: 'AFFILIATION', eventType: 'COMMUNITY_JOINED', gameDay: time.gameDay, gameMinute: time.gameMinute, actorHouseId: input.houseId, actorHumanId: input.humanId, subjectType: 'COMMUNITY', subjectId: input.communityId, title: 'House joined community', correlationId: input.correlationId ?? `community-join:${input.communityId}:${input.houseId}:${time.gameDay}` });
-      return { ok: true, status: 'ACTIVE' };
+      return { ok: true, status: 'ACTIVE', member: await loadCommunityMember(tx, input.communityId, input.houseId) };
     }
     const correlationId = input.correlationId ?? `community-request:${input.communityId}:${input.houseId}:${time.gameDay}`;
     const pending = await tx.query<{ id: string }>(`SELECT id FROM community_membership_requests WHERE community_id=$1 AND house_id=$2 AND status='PENDING' FOR UPDATE`, [input.communityId, input.houseId]);
@@ -452,6 +470,78 @@ export async function listCommunityMembershipRequests(repo: PostgresRepository, 
   return { ok: true, requests: result.rows };
 }
 
+export async function getCommunityWorkspace(repo: PostgresRepository, communityId: string, houseId: string) {
+  const communityResult = await getCommunity(repo, communityId, houseId);
+  const community = communityResult.community;
+  const [members, requests] = await Promise.all([
+    listCommunityMembersPage(repo, { communityId, limit: 10 }),
+    community.viewer.capabilities.canApproveRequests
+      ? listCommunityMembershipRequestsPage(repo, { communityId, houseId, limit: 1 })
+      : Promise.resolve({ requests: [], totalCount: 0, hasMore: false, nextCursor: null }),
+  ]);
+  return {
+    ok: true,
+    workspace: {
+      ...community,
+      pending_request_count: requests.totalCount,
+      member_preview: members.members,
+      member_next_cursor: members.nextCursor,
+      request_next_cursor: requests.nextCursor,
+    } satisfies CommunityWorkspace,
+  };
+}
+
+function decodePageCursor(value: string | null): Record<string, string> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(atob(value));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : null;
+  } catch { return null; }
+}
+
+function encodePageCursor(value: Record<string, string>): string {
+  return btoa(JSON.stringify(value));
+}
+
+export async function listCommunityMembersPage(repo: PostgresRepository, input: { communityId: string; limit?: number; cursor?: string | null; search?: string | null }) {
+  const limit = Math.min(50, Math.max(1, Math.trunc(Number(input.limit ?? 25))));
+  const cursor = decodePageCursor(input.cursor ?? null);
+  const params: unknown[] = [input.communityId];
+  const conditions = ["cm.community_id=$1", "cm.status='ACTIVE'"];
+  const bind = (value: unknown) => { params.push(value); return `$${params.length}`; };
+  if (input.search?.trim()) conditions.push(`(h.house_name ILIKE ${bind(`%${input.search.trim()}%`)} OR hu.display_name ILIKE ${bind(`%${input.search.trim()}%`)})`);
+  if (cursor?.joinedAt && cursor.houseId) conditions.push(`(cm.joined_at,cm.house_id) > (${bind(cursor.joinedAt)},${bind(cursor.houseId)})`);
+  const from = `FROM community_memberships cm JOIN houses h ON h.id=cm.house_id LEFT JOIN humans hu ON hu.id=h.current_human_id WHERE ${conditions.join(' AND ')}`;
+  const [rows, count] = await Promise.all([
+    repo.query<CommunityMember>(`SELECT cm.house_id,h.house_name,h.current_human_id,hu.display_name AS current_human_name,cm.role,cm.status,cm.joined_game_day,cm.joined_game_minute,cm.joined_at,cm.left_at ${from} ORDER BY cm.joined_at,cm.house_id LIMIT ${limit + 1}`, params),
+    repo.query<{ count: string }>(`SELECT COUNT(*)::text AS count ${from}`, params.slice(0, input.search?.trim() ? 3 : 1)),
+  ]);
+  const hasMore = rows.rows.length > limit;
+  const members = hasMore ? rows.rows.slice(0, limit) : rows.rows;
+  const last = members[members.length - 1];
+  return { members, totalCount: Number(count.rows[0]?.count ?? 0), hasMore, nextCursor: hasMore && last ? encodePageCursor({ joinedAt: String(last.joined_at), houseId: String(last.house_id) }) : null };
+}
+
+export async function listCommunityMembershipRequestsPage(repo: PostgresRepository, input: { communityId: string; houseId: string; limit?: number; cursor?: string | null; search?: string | null }) {
+  requireManager(await getRole(repo, input.communityId, input.houseId));
+  const limit = Math.min(50, Math.max(1, Math.trunc(Number(input.limit ?? 25))));
+  const cursor = decodePageCursor(input.cursor ?? null);
+  const params: unknown[] = [input.communityId];
+  const conditions = ['r.community_id=$1'];
+  const bind = (value: unknown) => { params.push(value); return `$${params.length}`; };
+  if (input.search?.trim()) conditions.push(`(h.house_name ILIKE ${bind(`%${input.search.trim()}%`)} OR hu.display_name ILIKE ${bind(`%${input.search.trim()}%`)})`);
+  if (cursor?.createdAt && cursor.id) conditions.push(`(r.created_at,r.id) < (${bind(cursor.createdAt)},${bind(cursor.id)})`);
+  const from = `FROM community_membership_requests r JOIN houses h ON h.id=r.house_id LEFT JOIN humans hu ON hu.id=h.current_human_id WHERE ${conditions.join(' AND ')}`;
+  const [rows, count] = await Promise.all([
+    repo.query<CommunityMembershipRequest>(`SELECT r.id,r.community_id,r.house_id,h.house_name,h.current_human_id,hu.display_name AS current_human_name,r.message AS application_message,r.decision_note,r.status,r.requested_game_day,r.requested_game_minute,r.created_at,r.decided_at ${from} ORDER BY r.created_at DESC,r.id DESC LIMIT ${limit + 1}`, params),
+    repo.query<{ count: string }>(`SELECT COUNT(*)::text AS count ${from}`, params.slice(0, input.search?.trim() ? 3 : 1)),
+  ]);
+  const hasMore = rows.rows.length > limit;
+  const requests = hasMore ? rows.rows.slice(0, limit) : rows.rows;
+  const last = requests[requests.length - 1];
+  return { requests, totalCount: Number(count.rows[0]?.count ?? 0), hasMore, nextCursor: hasMore && last ? encodePageCursor({ createdAt: String(last.created_at), id: String(last.id) }) : null };
+}
+
 export async function decideCommunityMembershipRequest(repo: PostgresRepository, input: { communityId: string; requestId: string; actorHouseId: string; actorHumanId: string; action: 'approve' | 'reject'; rejectionReason?: string }) {
   return repo.transaction(async (tx) => {
     await assertActor(tx, input.actorHouseId, input.actorHumanId); const community = await loadCommunity(tx, input.communityId, true); if (community.visibility !== 'PUBLIC') throw earthError('NOT_FOUND', 'Community not found.'); requireManager(await getRole(tx, input.communityId, input.actorHouseId, true));
@@ -462,7 +552,14 @@ export async function decideCommunityMembershipRequest(repo: PostgresRepository,
     await createGameEvent(tx, { id: newId('EVENT'), category: 'AFFILIATION', eventType: input.action === 'approve' ? 'COMMUNITY_JOIN_APPROVED' : 'COMMUNITY_JOIN_REJECTED', gameDay: time.gameDay, gameMinute: time.gameMinute, actorHouseId: input.actorHouseId, actorHumanId: input.actorHumanId, subjectType: 'COMMUNITY', subjectId: input.communityId, title: input.action === 'approve' ? 'House joined community' : 'Community request rejected', details: { affectedHouseId: request.house_id }, correlationId: `community-request-decision:${input.requestId}:${input.action}` });
     const applicant = (await tx.query<{ human_id: string | null }>(`SELECT current_human_id AS human_id FROM houses WHERE id=$1`, [request.house_id])).rows[0]?.human_id;
     if (applicant) await addNotification(tx, request.house_id, applicant, input.communityId, 'COMMUNITY_REQUEST_DECIDED', input.action === 'approve' ? 'Community request approved' : 'Community request rejected', input.action === 'approve' ? 'Your House joined the community.' : 'Your community request was rejected.', time.gameDay, time.gameMinute, `community-request-notification:${input.requestId}:${input.action}`);
-    return { ok: true, status: input.action === 'approve' ? 'APPROVED' : 'REJECTED' };
+    return {
+      ok: true,
+      status: input.action === 'approve' ? 'APPROVED' : 'REJECTED',
+      request: await loadMembershipRequest(tx, 'r.id=$1', [input.requestId]),
+      member: input.action === 'approve'
+        ? await loadCommunityMember(tx, input.communityId, request.house_id)
+        : null,
+    };
   });
 }
 
@@ -491,7 +588,7 @@ export async function setCommunityMemberRole(repo: PostgresRepository, input: { 
     await createGameEvent(tx, { id: newId('EVENT'), category: 'INSTITUTION', eventType: 'COMMUNITY_ROLE_CHANGED', gameDay: time.gameDay, gameMinute: time.gameMinute, actorHouseId: input.actorHouseId, actorHumanId: input.actorHumanId, subjectType: 'COMMUNITY', subjectId: input.communityId, title: 'Community role changed', details: { targetHouseId: input.targetHouseId, role: input.role }, correlationId: `community-role:${input.communityId}:${input.targetHouseId}:${time.gameDay}:${input.role}` });
     const targetHuman = (await tx.query<{ human_id: string }>(`SELECT current_human_id AS human_id FROM houses WHERE id=$1`, [input.targetHouseId])).rows[0]?.human_id;
     if (targetHuman) await addNotification(tx, input.targetHouseId, targetHuman, input.communityId, 'COMMUNITY_ROLE_CHANGED', 'Community role changed', `Your role is now ${input.role}.`, time.gameDay, time.gameMinute, `community-role-notification:${input.communityId}:${input.targetHouseId}:${time.gameDay}:${input.role}`);
-    return { ok: true, role: input.role };
+    return { ok: true, role: input.role, member: await loadCommunityMember(tx, input.communityId, input.targetHouseId) };
   });
 }
 
@@ -511,7 +608,15 @@ export async function transferCommunityOwnership(repo: PostgresRepository, input
     await createGameEvent(tx, { id: newId('EVENT'), category: 'INSTITUTION', eventType: 'COMMUNITY_OWNERSHIP_TRANSFERRED', gameDay: time.gameDay, gameMinute: time.gameMinute, actorHouseId: input.actorHouseId, actorHumanId: input.actorHumanId, subjectType: 'COMMUNITY', subjectId: input.communityId, title: 'Community ownership transferred', details: { previousOwnerHouseId: input.actorHouseId, newOwnerHouseId: input.targetHouseId }, correlationId: `community-ownership-transfer:${input.communityId}:${input.targetHouseId}:${time.gameDay}` });
     const targetHuman = (await tx.query<{ human_id: string }>(`SELECT current_human_id AS human_id FROM houses WHERE id=$1`, [input.targetHouseId])).rows[0]?.human_id;
     if (targetHuman) await addNotification(tx, input.targetHouseId, targetHuman, input.communityId, 'COMMUNITY_OWNERSHIP_TRANSFERRED', 'Community ownership transferred', 'Your House is now the owner of this community.', time.gameDay, time.gameMinute, `community-ownership-notification:${input.communityId}:${input.targetHouseId}:${time.gameDay}`);
-    return { ok: true, status: 'TRANSFERRED', ownerHouseId: input.targetHouseId };
+    return {
+      ok: true,
+      status: 'TRANSFERRED',
+      ownerHouseId: input.targetHouseId,
+      members: [
+        await loadCommunityMember(tx, input.communityId, input.actorHouseId),
+        await loadCommunityMember(tx, input.communityId, input.targetHouseId),
+      ].filter((member): member is CommunityMember => member !== null),
+    };
   });
 }
 

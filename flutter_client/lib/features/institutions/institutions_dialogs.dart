@@ -243,8 +243,7 @@ Future<void> showCommunityComposer(BuildContext context,
                       labelText: 'Description (Required)',
                       errorText: descriptionError,
                       labelStyle: context.widgetFooterStyle,
-                      hintText:
-                          'What should this House association be about?',
+                      hintText: 'What should this House association be about?',
                       hintStyle:
                           context.bodyStyle.copyWith(color: context.mutedColor),
                       border: OutlineInputBorder(
@@ -643,25 +642,20 @@ Future<void> showCommunityDetailsDialog(
   bool busy,
   Future<void> Function(Future<EarthState> Function()) action,
 ) async {
-  final id = community['id']?.toString() ?? '';
-  final name = community['name']?.toString() ?? '';
-  final founderName =
-      community['founder_house_name']?.toString() ?? 'Unknown House';
-  final description = community['description']?.toString() ?? '';
-  final admissionPolicy =
-      (community['join_policy']?.toString() ?? 'OPEN').toUpperCase();
-  final viewer = community['viewer'] is Map
-      ? Map<String, dynamic>.from(community['viewer'] as Map)
-      : const <String, dynamic>{};
-  final capabilities = viewer['capabilities'] is Map
-      ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
-      : viewer;
-  final myRole = viewer['role']?.toString();
-  final isPending = viewer['requestStatus']?.toString() == 'PENDING';
-  final members = asIntOr(community['member_count'], 0);
+  final summary = CommunitySummary.fromJson(community);
+  final id = summary.id;
+  final name = summary.name;
+  final founderName = summary.founderHouseName ?? summary.founderHouseId;
+  final description = summary.description;
+  final admissionPolicy = summary.joinPolicy;
+  final viewer = summary.viewer;
+  final capabilities = viewer.capabilities;
+  final myRole = viewer.role;
+  final isPending = viewer.requestStatus == 'PENDING';
+  final members = summary.memberCount;
   final isOwner = myRole == 'OWNER';
-  final isAdmin = myRole == 'MODERATOR';
-  final isMember = isOwner || isAdmin || myRole == 'MEMBER';
+  final isModerator = myRole == 'MODERATOR';
+  final isMember = isOwner || isModerator || myRole == 'MEMBER';
 
   await showDialog<void>(
     context: context,
@@ -734,6 +728,22 @@ Future<void> showCommunityDetailsDialog(
                   ),
                 ],
               ),
+              if (isOwner && !capabilities.canLeave) ...[
+                const SizedBox(height: 12),
+                EarthDataRow(
+                  title: 'OWNER LEAVE PROTECTION',
+                  subtitle:
+                      'Transfer ownership or disband the Community before leaving.',
+                  leading:
+                      Icon(Icons.lock_outline, color: context.warningColor),
+                  badges: const [
+                    EarthBadge(
+                      label: 'ACTION REQUIRED',
+                      variant: EarthBadgeVariant.warning,
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -744,7 +754,7 @@ Future<void> showCommunityDetailsDialog(
           child: Text('CLOSE',
               style: context.controlStyle.copyWith(color: context.mutedColor)),
         ),
-        if (capabilities['canEdit'] == true) ...[
+        if (capabilities.canEdit) ...[
           EarthButton(
             label: 'MANAGE COMMUNITY',
             icon: Icons.settings_outlined,
@@ -753,35 +763,35 @@ Future<void> showCommunityDetailsDialog(
                 ? null
                 : () {
                     Navigator.pop(dialogContext);
-                    showCommunityManageDialog(
-                        context, community, state, action);
+                    showCommunityManageDialog(context,
+                        CommunitySummary.fromJson(community), state, action);
                   },
           ),
-        ] else if (isMember) ...[
+        ] else if (isMember && capabilities.canLeave) ...[
           EarthButton(
             label: 'LEAVE',
             variant: EarthButtonVariant.danger,
-            onPressed: busy || capabilities['canLeave'] != true
+            onPressed: busy
                 ? null
                 : () async {
                     Navigator.pop(dialogContext);
                     await action(() => const EarthApi().leaveCommunity(id));
                   },
           ),
-        ] else if (isPending) ...[
+        ] else if (!isMember && isPending) ...[
           const EarthBadge(
               label: 'REQUEST PENDING', variant: EarthBadgeVariant.warning),
-        ] else ...[
+        ] else if (!isMember) ...[
           EarthButton(
-            label: admissionPolicy == 'APPROVAL'
+            label: admissionPolicy == 'REQUEST'
                 ? 'APPLY TO JOIN'
                 : 'JOIN COMMUNITY',
             variant: EarthButtonVariant.primary,
-            onPressed: busy || capabilities['canJoin'] != true
+            onPressed: busy || !capabilities.canJoin
                 ? null
                 : () async {
                     Navigator.pop(dialogContext);
-                    if (admissionPolicy == 'APPROVAL') {
+                    if (admissionPolicy == 'REQUEST') {
                       showCommunityApplicationDialog(
                           context, community, action);
                     } else {
@@ -790,6 +800,42 @@ Future<void> showCommunityDetailsDialog(
                   },
           ),
         ],
+        if (isOwner &&
+            !capabilities.canLeave &&
+            capabilities.canTransferOwnership)
+          EarthButton(
+            label: 'TRANSFER OWNERSHIP',
+            icon: Icons.swap_horiz_rounded,
+            variant: EarthButtonVariant.secondary,
+            onPressed: busy
+                ? null
+                : () {
+                    Navigator.pop(dialogContext);
+                    showCommunityManageDialog(
+                      context,
+                      summary,
+                      state,
+                      action,
+                    );
+                  },
+          ),
+        if (isOwner && !capabilities.canLeave && capabilities.canDisband)
+          EarthButton(
+            label: 'DISBAND COMMUNITY',
+            icon: Icons.delete_outline_rounded,
+            variant: EarthButtonVariant.danger,
+            onPressed: busy
+                ? null
+                : () {
+                    Navigator.pop(dialogContext);
+                    showCommunityManageDialog(
+                      context,
+                      summary,
+                      state,
+                      action,
+                    );
+                  },
+          ),
       ],
     ),
   );
@@ -797,27 +843,18 @@ Future<void> showCommunityDetailsDialog(
 
 Future<void> showCommunityManageDialog(
   BuildContext context,
-  Map<String, dynamic> community,
+  CommunitySummary community,
   EarthState state,
   Future<void> Function(Future<EarthState> Function()) action,
 ) async {
-  final id = community['id']?.toString() ?? '';
-  final name = community['name']?.toString() ?? '';
-  final viewer = community['viewer'] is Map
-      ? Map<String, dynamic>.from(community['viewer'] as Map)
-      : const <String, dynamic>{};
-  final capabilities = viewer['capabilities'] is Map
-      ? Map<String, dynamic>.from(viewer['capabilities'] as Map)
-      : viewer;
-  final myRole = viewer['role']?.toString();
+  final id = community.id;
+  final name = community.name;
+  final capabilities = community.viewer.capabilities;
+  final myRole = community.viewer.role;
   final isOwner = myRole == 'OWNER';
-  final descController =
-      TextEditingController(text: community['description']?.toString() ?? '');
+  final descController = TextEditingController(text: community.description);
   String admissionPolicy =
-      (community['join_policy']?.toString() ?? 'OPEN').toLowerCase() ==
-              'request'
-          ? 'approval'
-          : 'open';
+      community.joinPolicy == 'REQUEST' ? 'approval' : 'open';
 
   List<CommunityMember> members = [];
   List<CommunityMembershipRequest> requests = [];
@@ -842,7 +879,7 @@ Future<void> showCommunityManageDialog(
         }
 
         return DefaultTabController(
-          length: capabilities['canDisband'] == true ? 4 : 3,
+          length: capabilities.canDisband ? 4 : 3,
           child: AlertDialog(
             backgroundColor: context.panelColor,
             shape: RoundedRectangleBorder(
@@ -880,8 +917,7 @@ Future<void> showCommunityManageDialog(
                     const Tab(text: 'SETTINGS'),
                     Tab(text: 'MEMBERS (${members.length})'),
                     Tab(text: 'REQUESTS (${requests.length})'),
-                    if (capabilities['canDisband'] == true)
-                      const Tab(text: 'DANGER ZONE'),
+                    if (capabilities.canDisband) const Tab(text: 'DANGER ZONE'),
                   ],
                 ),
               ],
@@ -1100,7 +1136,8 @@ Future<void> showCommunityManageDialog(
                                 itemBuilder: (context, idx) {
                                   final m = members[idx];
                                   final hId = m.houseId;
-                                  final hName = m.houseName.isEmpty ? hId : m.houseName;
+                                  final hName =
+                                      m.houseName.isEmpty ? hId : m.houseName;
                                   final role = m.role.toUpperCase();
                                   final isMOwner = role == 'OWNER';
 
@@ -1127,8 +1164,7 @@ Future<void> showCommunityManageDialog(
                                                   ? EarthBadgeVariant.secondary
                                                   : EarthBadgeVariant.neutral,
                                         ),
-                                        if (capabilities['canTransferOwnership'] ==
-                                                true &&
+                                        if (capabilities.canTransferOwnership &&
                                             !isMOwner)
                                           EarthButton(
                                             label: 'TRANSFER OWNERSHIP',
@@ -1143,7 +1179,8 @@ Future<void> showCommunityManageDialog(
                                                   () => loading = true);
                                             },
                                           ),
-                                        if (capabilities['canChangeRoles'] == true && !isMOwner) ...[
+                                        if (capabilities.canChangeRoles &&
+                                            !isMOwner) ...[
                                           if (role == 'MODERATOR')
                                             EarthButton(
                                               label: 'DEMOTE',
@@ -1161,7 +1198,7 @@ Future<void> showCommunityManageDialog(
                                             )
                                           else
                                             EarthButton(
-                                              label: 'MAKE ADMIN',
+                                              label: 'MAKE MODERATOR',
                                               variant:
                                                   EarthButtonVariant.secondary,
                                               onPressed: () async {
@@ -1214,14 +1251,31 @@ Future<void> showCommunityManageDialog(
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(applicant,
-                                                style: context.bodyStyle
-                                                    .copyWith(
-                                                        fontSize: 13,
-                                                        fontWeight:
-                                                            FontWeight.bold)),
-                                            Text(
-                                                'Day ${req.requestedGameDay}',
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(applicant,
+                                                      style: context.bodyStyle
+                                                          .copyWith(
+                                                              fontSize: 13,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold)),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    'House representative: ${req.currentHumanName ?? 'Unavailable'}',
+                                                    style: context
+                                                        .widgetFooterStyle
+                                                        .copyWith(
+                                                            color: context
+                                                                .mutedColor),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Text('Day ${req.requestedGameDay}',
                                                 style: TextStyle(
                                                     fontSize: 11,
                                                     color: context.mutedColor)),
@@ -1422,7 +1476,7 @@ Future<void> showCommunityManageDialog(
                                 },
                               ),
                         // Tab 4: Danger Zone
-                        if (capabilities['canDisband'] == true)
+                        if (capabilities.canDisband)
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Column(
@@ -1649,8 +1703,9 @@ Future<void> showAdmissionPolicyDialog(
               groupValue: policy,
               activeColor: context.primaryColor,
               onChanged: (value) => setState(() => policy = value!),
-              title: Text('Admin approval', style: context.widgetValueStyle),
-              subtitle: Text('Administrators review membership requests.',
+              title:
+                  Text('Moderator approval', style: context.widgetValueStyle),
+              subtitle: Text('Moderators review membership requests.',
                   style: context.widgetFooterStyle),
             ),
           ],

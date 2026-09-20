@@ -9,12 +9,13 @@ import {
   createCommunity,
   updateCommunity,
   disbandCommunity,
-  listCommunityMembershipRequests,
   decideCommunityMembershipRequest,
   cancelCommunityMembershipRequest,
   setCommunityMemberRole,
   transferCommunityOwnership,
-  listCommunityMembers,
+  getCommunityWorkspace,
+  listCommunityMembersPage,
+  listCommunityMembershipRequestsPage,
   changeCommunityMembership,
 } from './communities-postgres.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
@@ -104,6 +105,15 @@ export async function handleCommunityRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) { return errorResponse(error, undefined, 'Community could not be loaded.'); }
   }
+
+  const workspaceMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/workspace$/);
+  if (workspaceMatch && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) => getCommunityWorkspace(repository, workspaceMatch[1], viewer.houseId));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) { return errorResponse(error, undefined, 'Community workspace could not be loaded.'); }
+  }
   if (communityMatch && request.method === 'PATCH') {
     const communityId = communityMatch[1];
     const parsed = await parseJsonBody<{ name?: string; description?: string; joinPolicy?: 'OPEN' | 'REQUEST' }>(request);
@@ -144,9 +154,13 @@ export async function handleCommunityRoutes(
   if (communityRequestsMatch && request.method === 'GET') {
     const communityId = communityRequestsMatch[1];
     try {
-      const result = await withRepository(env, (repository) =>
-        listCommunityMembershipRequests(repository, communityId, viewer.houseId),
-      );
+      const result = await withRepository(env, (repository) => listCommunityMembershipRequestsPage(repository, {
+        communityId,
+        houseId: viewer.houseId,
+        limit: Number(url.searchParams.get('limit') ?? 25),
+        cursor: url.searchParams.get('cursor'),
+        search: url.searchParams.get('search'),
+      }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -229,7 +243,12 @@ export async function handleCommunityRoutes(
   if (communityMembersMatch && request.method === 'GET') {
     const communityId = communityMembersMatch[1];
     try {
-      const result = await withRepository(env, (repository) => listCommunityMembers(repository, communityId, viewer.houseId));
+      const result = await withRepository(env, (repository) => listCommunityMembersPage(repository, {
+        communityId,
+        limit: Number(url.searchParams.get('limit') ?? 25),
+        cursor: url.searchParams.get('cursor'),
+        search: url.searchParams.get('search'),
+      }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {

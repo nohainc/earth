@@ -2,6 +2,7 @@ import '../../shared/widgets/format_helpers.dart';
 import 'human_profile.dart';
 import 'human_daily_needs.dart';
 import 'human_authority_summary.dart';
+import 'community_models.dart';
 import 'building_models.dart';
 import 'technology_models.dart';
 
@@ -115,11 +116,18 @@ class EarthState {
         final viewer = row['viewer'] is Map
             ? Map<String, dynamic>.from(row['viewer'] as Map)
             : const <String, dynamic>{};
-        if (viewer['membershipStatus'] == 'ACTIVE') list.add(row);
+        final role = viewer['role']?.toString();
+        if (viewer['membershipStatus'] == 'ACTIVE' &&
+            {'OWNER', 'MODERATOR', 'MEMBER'}.contains(role)) {
+          list.add(row);
+        }
       }
     }
     return list;
   }
+
+  List<CommunitySummary> get myCommunitySummaries =>
+      myCommunities.map(CommunitySummary.fromJson).toList(growable: false);
 
   Map<String, dynamic> get corporation => _toMap(json['corporation']);
   Map<String, dynamic> get corporationProfile =>

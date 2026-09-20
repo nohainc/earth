@@ -137,6 +137,46 @@ test('Community roster and admission requests use canonical House DTOs', () => {
   assert.doesNotMatch(panel, /'FOUNDER'/);
 });
 
+test('Community workspace and paginated mutations expose authoritative affected records', () => {
+  const api = fs.readFileSync('flutter_client/lib/core/api/earth_api_institutions.dart', 'utf8');
+  const models = fs.readFileSync('flutter_client/lib/core/models/community_models.dart', 'utf8');
+  assert.match(service, /getCommunityWorkspace/);
+  assert.match(service, /listCommunityMembersPage/);
+  assert.match(service, /listCommunityMembershipRequestsPage/);
+  assert.match(service, /member_next_cursor/);
+  assert.match(service, /request_next_cursor/);
+  assert.match(service, /loadCommunityMember/);
+  assert.match(service, /request: await loadMembershipRequest/);
+  assert.match(service, /members: \[/);
+  assert.match(routes, /\/workspace/);
+  assert.match(routes, /search: url\.searchParams\.get\('search'\)/);
+  assert.match(routes, /cursor: url\.searchParams\.get\('cursor'\)/);
+  assert.match(api, /Future<CommunityWorkspace> getCommunityWorkspace/);
+  assert.match(api, /Future<CommunityMutationResult> joinCommunityResult/);
+  assert.match(api, /Future<CommunityMutationResult> decideCommunityRequestResult/);
+  assert.match(api, /Future<CommunityMutationResult> transferCommunityOwnershipResult/);
+  assert.match(models, /class CommunityWorkspace extends CommunityDetail/);
+  assert.match(models, /class CommunityMutationResult/);
+  assert.match(models, /memberNextCursor/);
+  assert.match(models, /totalCount/);
+});
+
+test('Community routing and ownership regressions remain explicit', () => {
+  const models = fs.readFileSync('flutter_client/lib/core/models/community_models.dart', 'utf8');
+  const navigation = fs.readFileSync('flutter_client/lib/core/navigation_registry.dart', 'utf8');
+  const panel = fs.readFileSync('flutter_client/lib/features/institutions/institutions_panels.dart', 'utf8');
+  assert.match(navigation, /my-community/);
+  assert.match(navigation, /return 'community:\$\{trimmed\.substring\(/);
+  assert.match(models, /role: \(\(\)\s*\{[\s\S]*normalizeCommunityRole/);
+  assert.doesNotMatch(models, /role: json\['role'\]\?\.toString\(\) \?\? 'MEMBER'/);
+  assert.match(panel, /You do not have access to this community/);
+  assert.match(service, /The owner must transfer ownership or disband/);
+  assert.match(service, /canLeave: Boolean\(membershipStatus\)/);
+  assert.match(service, /member_next_cursor/);
+  assert.match(service, /LIMIT \$\{limit \+ 1\}/);
+  assert.match(routes, /\/workspace\$\//);
+});
+
 test('Community membership is House-owned across Human succession', () => {
   const migration = fs.readFileSync('db/migrations/002_communities_v2.sql', 'utf8');
   const lifecycle = fs.readFileSync('cloudflare/src/lifecycle-postgres.ts', 'utf8');
@@ -154,7 +194,10 @@ test('Community membership is House-owned across Human succession', () => {
   assert.match(models, /class CommunityDetail extends CommunitySummary/);
   assert.match(models, /class CommunityMember/);
   assert.match(models, /class CommunityViewerPermissions/);
-  assert.match(models, /class CommunityCapabilityMatrix/);
+  assert.match(models, /class CommunityViewerCapabilities/);
+  assert.match(service, /SELECT cm\.house_id,h\.house_name,h\.current_human_id,hu\.display_name AS current_human_name/);
+  assert.match(service, /SELECT r\.id,r\.community_id,r\.house_id,h\.house_name,h\.current_human_id,[\s\S]*hu\.display_name AS current_human_name/);
+  assert.doesNotMatch(mortality, /UPDATE community_memberships/);
 });
 
 test('V5 Communities are public and admission-only gated', () => {

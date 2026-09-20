@@ -317,7 +317,7 @@ class Dashboard extends StatelessWidget {
         return [
           BuildingsHubScreen(state: state, busy: busy, action: action),
         ];
-      case String s when s.startsWith('my-community'):
+      case String s when s.startsWith('community:'):
         final targetId = s.contains(':') ? s.split(':').last : null;
         return [
           MyCommunityPanel(
