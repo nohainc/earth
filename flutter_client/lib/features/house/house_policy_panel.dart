@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
-import '../../shared/widgets/format_helpers.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 
 class HousePolicyPanel extends StatefulWidget {
@@ -28,6 +27,11 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
   final _materialReserve = TextEditingController();
   final _componentsReserve = TextEditingController();
   final _computeReserve = TextEditingController();
+  final _foodSellAbove = TextEditingController();
+  final _energySellAbove = TextEditingController();
+  final _materialSellAbove = TextEditingController();
+  final _componentsSellAbove = TextEditingController();
+  final _computeSellAbove = TextEditingController();
   final _foodPrice = TextEditingController();
   final _energyPrice = TextEditingController();
   final _materialPrice = TextEditingController();
@@ -43,11 +47,20 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
   final _materialQuantity = TextEditingController();
   final _componentsQuantity = TextEditingController();
   final _computeQuantity = TextEditingController();
-  String _operatingMode = 'BALANCED';
+  final _foodMaxSell = TextEditingController();
+  final _energyMaxSell = TextEditingController();
+  final _materialMaxSell = TextEditingController();
+  final _componentsMaxSell = TextEditingController();
+  final _computeMaxSell = TextEditingController();
   bool _loading = true;
   bool _saving = false;
+  bool _automationEnabled = true;
   String? _error;
   List<Map<String, dynamic>> _policies = [];
+  List<Map<String, dynamic>> _scheduledPolicies = [];
+  List<Map<String, dynamic>> _executionSummaries = [];
+  Map<String, String> _currentInventory = {};
+  Map<String, String> _referencePrices = {};
 
   final _resources = const [
     ('FOOD', 'Food'),
@@ -72,6 +85,7 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
       _materialReserve,
       _componentsReserve,
       _computeReserve,
+      _foodSellAbove, _energySellAbove, _materialSellAbove, _componentsSellAbove, _computeSellAbove,
       _foodPrice,
       _energyPrice,
       _materialPrice,
@@ -87,6 +101,7 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
       _materialQuantity,
       _componentsQuantity,
       _computeQuantity,
+      _foodMaxSell, _energyMaxSell, _materialMaxSell, _componentsMaxSell, _computeMaxSell,
     ]) {
       c.dispose();
     }
@@ -95,16 +110,31 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
 
   Future<void> _load() async {
     try {
-      final response = await const EarthApi().listHousePolicies();
-      final raw = response['policies'];
+      final response = await const EarthApi().getHouseAutomation();
+      final raw = response['current'];
+      final scheduledRaw = response['scheduled'];
       if (!mounted) return;
       setState(() {
-        _policies = raw is List
-            ? raw
-                .whereType<Map>()
-                .map((v) => Map<String, dynamic>.from(v))
-                .toList()
+        _policies = raw is Map
+            ? [Map<String, dynamic>.from(raw)]
             : [];
+        _scheduledPolicies = scheduledRaw is Map
+            ? [Map<String, dynamic>.from(scheduledRaw)]
+            : [];
+        final summaries = response['recentExecutionSummaries'];
+        _executionSummaries = summaries is List
+            ? summaries.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+            : [];
+        final inventory = response['currentInventory'];
+        _currentInventory = _map(inventory);
+        final prices = response['referenceMarketPrices'];
+        _referencePrices = prices is List
+            ? {
+                for (final item in prices.whereType<Map>())
+                  item['product']?.toString().toUpperCase() ?? '':
+                      item['referencePrice']?.toString() ?? 'UNAVAILABLE',
+              }
+            : {};
         _loading = false;
         _error = response['ok'] == false ? response['error']?.toString() : null;
       });
@@ -120,34 +150,26 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
   }
 
   void _applyActivePolicies() {
-    final currentDay = asInt(widget.state.clock['day']) ?? 0;
-    Map<String, dynamic>? active(String type) {
-      for (final policy in _policies) {
-        final effectiveDay = asInt(policy['effective_from_game_day']) ?? 0;
-        if (policy['policy_type'] == type &&
-            policy['status'] == 'ACTIVE' &&
-            effectiveDay <= currentDay) {
-          return policy;
-        }
-      }
-      return null;
+    final config = _policies.isEmpty ? null : _policies.first;
+    if (config != null) {
+      _automationEnabled = config['enabled'] == true;
     }
-
-    final operating = active('OPERATING');
-    final reserve = active('INVENTORY_RESERVE');
-    final standing = active('MARKET_STANDING');
-    if (operating != null) {
-      _operatingMode = operating['operating_mode']?.toString() ?? 'BALANCED';
-    }
-    final reserveMap = _map(reserve?['reserve_floor_units']);
-    final inputPriceMap = _map(standing?['max_input_price_units']);
-    final salePriceMap = _map(standing?['min_sale_price_units']);
-    final quantityMap = _map(operating?['procurement_quantity_units']);
+    final reserveMap = _map(config?['minimumReserve']);
+    final sellAboveMap = _map(config?['sellAbove']);
+    final inputPriceMap = _map(config?['maxInputPrice']);
+    final salePriceMap = _map(config?['minSalePrice']);
+    final quantityMap = _map(config?['maxBuyQuantity']);
+    final maxSellMap = _map(config?['maxSellQuantity']);
     _set(_foodReserve, reserveMap['FOOD']);
     _set(_energyReserve, reserveMap['ENERGY']);
     _set(_materialReserve, reserveMap['MATERIAL']);
     _set(_componentsReserve, reserveMap['COMPONENTS']);
     _set(_computeReserve, reserveMap['COMPUTE']);
+    _set(_foodSellAbove, sellAboveMap['FOOD']);
+    _set(_energySellAbove, sellAboveMap['ENERGY']);
+    _set(_materialSellAbove, sellAboveMap['MATERIAL']);
+    _set(_componentsSellAbove, sellAboveMap['COMPONENTS']);
+    _set(_computeSellAbove, sellAboveMap['COMPUTE']);
     _set(_foodPrice, inputPriceMap['FOOD']);
     _set(_energyPrice, inputPriceMap['ENERGY']);
     _set(_materialPrice, inputPriceMap['MATERIAL']);
@@ -163,7 +185,12 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
     _set(_materialQuantity, quantityMap['MATERIAL']);
     _set(_componentsQuantity, quantityMap['COMPONENTS']);
     _set(_computeQuantity, quantityMap['COMPUTE']);
-    _set(_spendCap, standing?['daily_spend_cap_units']);
+    _set(_foodMaxSell, maxSellMap['FOOD']);
+    _set(_energyMaxSell, maxSellMap['ENERGY']);
+    _set(_materialMaxSell, maxSellMap['MATERIAL']);
+    _set(_componentsMaxSell, maxSellMap['COMPONENTS']);
+    _set(_computeMaxSell, maxSellMap['COMPUTE']);
+    _set(_spendCap, config?['dailySpendCap']);
     if (mounted) setState(() {});
   }
 
@@ -193,12 +220,6 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
   }
 
   Future<void> _save() async {
-    final day = asInt(widget.state.clock['day']) ?? 0;
-    if (day < 1) {
-      setState(() => _error =
-          'The current game day is unavailable. Try again after the world state refreshes.');
-      return;
-    }
     setState(() {
       _saving = true;
       _error = null;
@@ -232,14 +253,41 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
         ('COMPONENTS', 'Components', _componentsQuantity),
         ('COMPUTE', 'Compute', _computeQuantity),
       ]);
+      final sellAbove = _values([
+        ('FOOD', 'Food', _foodSellAbove), ('ENERGY', 'Energy', _energySellAbove),
+        ('MATERIAL', 'Material', _materialSellAbove), ('COMPONENTS', 'Components', _componentsSellAbove), ('COMPUTE', 'Compute', _computeSellAbove),
+      ]);
+      final maxSell = _values([
+        ('FOOD', 'Food', _foodMaxSell), ('ENERGY', 'Energy', _energyMaxSell),
+        ('MATERIAL', 'Material', _materialMaxSell), ('COMPONENTS', 'Components', _componentsMaxSell), ('COMPUTE', 'Compute', _computeMaxSell),
+      ]);
+      final preview = await const EarthApi().previewHouseAutomation(
+        enabled: _automationEnabled,
+        dailySpendCap: _value(_spendCap) ?? '0',
+        minimumReserve: reserve,
+        sellAbove: sellAbove,
+        maxInputPrice: prices,
+        minSalePrice: salePrices,
+        maxBuyQuantity: quantities,
+        maxSellQuantity: maxSell,
+      );
+      if (preview['ok'] != true) {
+        throw StateError(preview['error']?.toString() ?? 'Automation preview failed');
+      }
+      final blockers = preview['blockers'] is List ? preview['blockers'] as List : const [];
+      if (blockers.isNotEmpty) {
+        throw StateError(blockers.map((item) => item is Map ? item['reason'] : item).join('; '));
+      }
+      if (!mounted || !await _confirmPreview(preview)) return;
       final response = await const EarthApi().saveHouseAutomation(
-        effectiveFromGameDay: day + 1,
-        operatingMode: _operatingMode,
-        dailySpendCapUnits: _value(_spendCap) ?? '0',
-        reserveFloorUnits: reserve,
-        maxInputPriceUnits: prices,
-        minSalePriceUnits: salePrices,
-        procurementQuantityUnits: quantities,
+        enabled: _automationEnabled,
+        dailySpendCap: _value(_spendCap) ?? '0',
+        minimumReserve: reserve,
+        sellAbove: sellAbove,
+        maxInputPrice: prices,
+        minSalePrice: salePrices,
+        maxBuyQuantity: quantities,
+        maxSellQuantity: maxSell,
       );
       if (response['ok'] != true) {
         throw StateError(
@@ -259,17 +307,42 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
     }
   }
 
+  Future<bool> _confirmPreview(Map<String, dynamic> preview) async {
+    final actions = preview['actions'] is List ? preview['actions'] as List : const [];
+    final reservation = preview['maximumCreditReservation']?.toString() ?? '0.00';
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('CONFIRM AUTOMATION'),
+            content: SizedBox(
+              width: 440,
+              child: actions.isEmpty
+                  ? const Text('No automated market action is currently required.')
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Preview reservation: $reservation C'),
+                        const SizedBox(height: 12),
+                        ...actions.map((action) => Text(
+                              '${action['actionType']} ${action['quantity']} ${action['product']} @ ${action['limitPrice']} C',
+                            )),
+                      ],
+                    ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('SAVE CONFIGURATION')),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final currentDay = asInt(widget.state.clock['day']);
-    final currentPolicies = _policies.where((p) =>
-        p['status'] == 'ACTIVE' &&
-        asInt(p['effective_from_game_day']) != null &&
-        asInt(p['effective_from_game_day'])! <= (currentDay ?? 0));
-    final scheduled = _policies.where((p) =>
-        p['status'] == 'ACTIVE' &&
-        asInt(p['effective_from_game_day']) != null &&
-        asInt(p['effective_from_game_day'])! > (currentDay ?? 0));
+    final currentPolicies = _policies.where((p) => p['status'] == 'ACTIVE');
+    final scheduled = _scheduledPolicies.where((p) => p['status'] == 'ACTIVE');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -277,59 +350,37 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
           tag: 'HOUSE CONTROL',
           status: _loading
               ? 'LOADING'
-              : currentPolicies.isEmpty
+              : currentPolicies.isEmpty || !_automationEnabled
                   ? 'AUTOMATION OFF'
                   : 'AUTOMATION ON',
           statusColor: context.primaryColor,
           infoTitle: 'HOUSE POLICY & AUTOMATION',
           infoDescription:
-              'Policies are evaluated by the server during daily settlement. They protect reserves and place normal market actions automatically; exceptions remain visible for human decisions.',
+              'The server evaluates the active configuration once after each closed game day has been finalized. It may submit market orders for the next market cycle; exceptions remain visible for human decisions.',
           title: 'HOUSE AUTOMATION',
           subtitle:
-              'Daily post-settlement rules for reserves and market orders',
+              'Server-evaluated resource controls after daily settlement finalization',
         ),
         const SizedBox(height: 24),
         if (_error != null) _message(context, _error!, true),
         if (_loading)
           const Center(child: CircularProgressIndicator())
         else ...[
+          _section(context, 'AUTOMATION STATE', SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Automation enabled'),
+              subtitle: const Text('Disabling takes effect on the server-resolved scheduled day.'),
+              value: _automationEnabled,
+              onChanged: _saving ? null : (value) => setState(() => _automationEnabled = value))),
+          if (_executionSummaries.isNotEmpty)
+            _section(context, 'RECENT EXECUTION', Column(
+              children: _executionSummaries.map(_executionSummary).toList(),
+            )),
           _section(context, 'SPENDING CONTROL',
               _field(_spendCap, 'Daily CREDIT spend cap')),
-          _section(
-              context,
-              'INVENTORY RESERVES',
-              Column(
-                  children: _resources.map((r) {
-                final controller = _reserveController(r.$1);
-                return _resourceRow(r.$2, controller, null);
-              }).toList())),
-          _section(
-              context,
-              'DAILY BUY RULES',
-              Column(
-                  children: _resources.map((r) {
-                final controller = _priceController(r.$1);
-                return _resourceRow('Maximum ${r.$2} input price', controller,
-                    'Leave blank to disable automatic buying');
-              }).toList())),
-          _section(
-              context,
-              'BUY QUANTITY (OPTIONAL)',
-              Column(
-                  children: _resources.map((r) {
-                final controller = _quantityController(r.$1);
-                return _resourceRow('${r.$2} units per buy order', controller,
-                    'Blank = top up to reserve');
-              }).toList())),
-          _section(
-              context,
-              'DAILY SELL RULES',
-              Column(
-                  children: _resources.map((r) {
-                final controller = _salePriceController(r.$1);
-                return _resourceRow('Minimum ${r.$2} sale price', controller,
-                    'Leave blank to disable automatic selling');
-              }).toList())),
+          _section(context, 'RESOURCE CONTROLS', Column(
+            children: _resources.map((resource) => _resourceCard(resource.$1, resource.$2)).toList(),
+          )),
           Align(
               alignment: Alignment.centerRight,
               child: EarthButton(
@@ -340,7 +391,7 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
               )),
           const SizedBox(height: 10),
           Text(
-              'Evaluated once after daily settlement. ${scheduled.isNotEmpty ? 'Scheduled changes begin on game day ${asInt(scheduled.first['effective_from_game_day'])}.' : 'Changes become effective on the next game day.'}',
+              'The saved configuration becomes effective on the next valid game day after settlement finalization. ${scheduled.isNotEmpty ? 'A scheduled configuration is set for game day ${scheduled.first['effectiveFromGameDay']}.' : 'No scheduled replacement is currently queued.'}',
               style: context.widgetFooterStyle),
         ],
       ],
@@ -351,6 +402,116 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
         padding: const EdgeInsets.only(bottom: 18),
         child: EarthSection(title: title, showSurface: true, child: child),
       );
+
+  Widget _resourceCard(String code, String label) {
+    final current = _policies.isEmpty ? null : _policies.first;
+    final scheduled = _scheduledPolicies.isEmpty ? null : _scheduledPolicies.first;
+    final scheduledDay = scheduled?['effectiveFromGameDay']?.toString();
+    final differences = _resourceDifferences(code, current, scheduled);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.surfaceColor.withValues(alpha: .55),
+        border: Border.all(color: context.mutedColor.withValues(alpha: .25)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(label.toUpperCase(), style: context.widgetTitleStyle)),
+              Text('INVENTORY ${_currentInventory[code] ?? 'UNAVAILABLE'}', style: context.widgetFooterStyle),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('Reference / last clearing price: ${_referencePrices[code] ?? 'UNAVAILABLE'} C per unit', style: context.widgetFooterStyle),
+          if (scheduled != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: Text(
+                differences.isEmpty
+                    ? 'No ${label.toLowerCase()} changes scheduled.'
+                    : 'SCHEDULED DIFFERENCE · effective game day $scheduledDay',
+                style: context.widgetFooterStyle.copyWith(color: differences.isEmpty ? context.mutedColor : context.primaryColor),
+              ),
+            ),
+          if (differences.isNotEmpty)
+            ...differences.map((difference) => Text(difference, style: context.widgetFooterStyle)),
+          const Divider(height: 20),
+          Text('BUY BAND', style: context.widgetFooterStyle.copyWith(color: context.primaryColor)),
+          _resourceRow('Minimum reserve', _reserveController(code), 'Blank = no automatic buy target'),
+          _resourceRow('Maximum input price', _priceController(code), 'Blank = buying disabled'),
+          _resourceRow('Maximum buy quantity', _quantityController(code), 'Blank = full reserve shortfall'),
+          const SizedBox(height: 4),
+          Text('SELL BAND', style: context.widgetFooterStyle.copyWith(color: context.primaryColor)),
+          _resourceRow('Sell above', _sellAboveController(code), 'Blank = no automatic selling'),
+          _resourceRow('Minimum sale price', _salePriceController(code), 'Blank = selling disabled'),
+          _resourceRow('Maximum sell quantity', _maxSellController(code), 'Blank = all available excess'),
+        ],
+      ),
+    );
+  }
+
+  List<String> _resourceDifferences(String code, Map<String, dynamic>? current, Map<String, dynamic>? scheduled) {
+    if (scheduled == null) return [];
+    const fields = <(String, String)>[
+      ('minimumReserve', 'Minimum reserve'),
+      ('maxInputPrice', 'Maximum input price'),
+      ('maxBuyQuantity', 'Maximum buy quantity'),
+      ('sellAbove', 'Sell above'),
+      ('minSalePrice', 'Minimum sale price'),
+      ('maxSellQuantity', 'Maximum sell quantity'),
+    ];
+    final differences = <String>[];
+    for (final field in fields) {
+      final activeValue = _policyMapValue(current, field.$1, code);
+      final scheduledValue = _policyMapValue(scheduled, field.$1, code);
+      if (activeValue != scheduledValue) {
+        differences.add('${field.$2}: ${activeValue ?? '—'} → ${scheduledValue ?? '—'}');
+      }
+    }
+    return differences;
+  }
+
+  String? _policyMapValue(Map<String, dynamic>? policy, String field, String code) {
+    final value = policy?[field];
+    if (value is! Map) return null;
+    final result = value[code] ?? value[code.toUpperCase()] ?? value[code.toLowerCase()];
+    return result?.toString();
+  }
+
+  Widget _executionSummary(Map<String, dynamic> summary) {
+    final day = summary['gameDay']?.toString() ?? '?';
+    final counts = <String, dynamic>{
+      'NO ACTION': summary['noActionCount'],
+      'ORDER PLACED': summary['orderPlacedCount'],
+      'PARTIALLY FILLED': summary['partiallyFilledCount'],
+      'FILLED': summary['filledCount'],
+      'EXPIRED': summary['expiredCount'],
+      'SKIPPED': summary['skippedCount'],
+      'FAILED': summary['failedCount'],
+    };
+    final visible = counts.entries.where((entry) => (entry.value is num ? entry.value : int.tryParse('${entry.value}') ?? 0) > 0);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            Text('DAY $day', style: context.widgetTitleStyle),
+            ...visible.map((entry) => Chip(
+              label: Text('${entry.key} ${entry.value}'),
+              visualDensity: VisualDensity.compact,
+            )),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _field(TextEditingController controller, String label) => TextField(
         controller: controller,
@@ -412,5 +573,21 @@ class _HousePolicyPanelState extends State<HousePolicyPanel> {
         'MATERIAL' => _materialQuantity,
         'COMPONENTS' => _componentsQuantity,
         _ => _computeQuantity,
+      };
+
+  TextEditingController _sellAboveController(String key) => switch (key) {
+        'FOOD' => _foodSellAbove,
+        'ENERGY' => _energySellAbove,
+        'MATERIAL' => _materialSellAbove,
+        'COMPONENTS' => _componentsSellAbove,
+        _ => _computeSellAbove,
+      };
+
+  TextEditingController _maxSellController(String key) => switch (key) {
+        'FOOD' => _foodMaxSell,
+        'ENERGY' => _energyMaxSell,
+        'MATERIAL' => _materialMaxSell,
+        'COMPONENTS' => _componentsMaxSell,
+        _ => _computeMaxSell,
       };
 }

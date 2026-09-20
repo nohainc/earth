@@ -28,11 +28,13 @@ extension EarthApiHouse on EarthApi {
     required String policyType,
     required int effectiveFromGameDay,
     String operatingMode = 'BALANCED',
-    String dailySpendCapUnits = '0',
-    Map<String, String> reserveFloorUnits = const {},
-    Map<String, String> maxInputPriceUnits = const {},
-    Map<String, String> minSalePriceUnits = const {},
-    Map<String, String> procurementQuantityUnits = const {},
+    String dailySpendCap = '0',
+    Map<String, String> minimumReserve = const {},
+    Map<String, String> sellAbove = const {},
+    Map<String, String> maxInputPrice = const {},
+    Map<String, String> minSalePrice = const {},
+    Map<String, String> maxBuyQuantity = const {},
+    Map<String, String> maxSellQuantity = const {},
   }) async {
     final response = await _request(
       '/api/house/policies',
@@ -41,11 +43,13 @@ extension EarthApiHouse on EarthApi {
         'policyType': policyType,
         'effectiveFromGameDay': effectiveFromGameDay,
         'operatingMode': operatingMode,
-        'dailySpendCapUnits': dailySpendCapUnits,
-        'reserveFloorUnits': reserveFloorUnits,
-        'maxInputPriceUnits': maxInputPriceUnits,
-        'minSalePriceUnits': minSalePriceUnits,
-        'procurementQuantityUnits': procurementQuantityUnits,
+        'dailySpendCap': dailySpendCap,
+        'minimumReserve': minimumReserve,
+        'sellAbove': sellAbove,
+        'maxInputPrice': maxInputPrice,
+        'minSalePrice': minSalePrice,
+        'maxBuyQuantity': maxBuyQuantity,
+        'maxSellQuantity': maxSellQuantity,
         'correlationId': newClientCorrelationId('HOUSE-POLICY'),
       },
     );
@@ -55,23 +59,28 @@ extension EarthApiHouse on EarthApi {
   }
 
   Future<Map<String, dynamic>> saveHouseAutomation({
-    required int effectiveFromGameDay,
-    String operatingMode = 'BALANCED',
-    String dailySpendCapUnits = '0',
-    Map<String, String> reserveFloorUnits = const {},
-    Map<String, String> maxInputPriceUnits = const {},
-    Map<String, String> minSalePriceUnits = const {},
-    Map<String, String> procurementQuantityUnits = const {},
+    int? effectiveFromGameDay,
+    bool enabled = true,
+    String dailySpendCap = '0',
+    Map<String, String> minimumReserve = const {},
+    Map<String, String> sellAbove = const {},
+    Map<String, String> maxInputPrice = const {},
+    Map<String, String> minSalePrice = const {},
+    Map<String, String> maxBuyQuantity = const {},
+    Map<String, String> maxSellQuantity = const {},
   }) async {
     final response =
         await _request('/api/house/automation', method: 'PUT', body: {
-      'effectiveFromGameDay': effectiveFromGameDay,
-      'operatingMode': operatingMode,
-      'dailySpendCapUnits': dailySpendCapUnits,
-      'reserveFloorUnits': reserveFloorUnits,
-      'maxInputPriceUnits': maxInputPriceUnits,
-      'minSalePriceUnits': minSalePriceUnits,
-      'procurementQuantityUnits': procurementQuantityUnits,
+      if (effectiveFromGameDay != null)
+        'effectiveFromGameDay': effectiveFromGameDay,
+      'enabled': enabled,
+      'dailySpendCap': dailySpendCap,
+      'minimumReserve': minimumReserve,
+      'sellAbove': sellAbove,
+      'maxInputPrice': maxInputPrice,
+      'minSalePrice': minSalePrice,
+      'maxBuyQuantity': maxBuyQuantity,
+      'maxSellQuantity': maxSellQuantity,
       'correlationId': newClientCorrelationId('HOUSE-AUTOMATION'),
     });
     return response is Map<String, dynamic>
@@ -90,6 +99,31 @@ extension EarthApiHouse on EarthApi {
             'ok': false,
             'error': 'Automation configuration unavailable'
           };
+  }
+
+  Future<Map<String, dynamic>> previewHouseAutomation({
+    bool enabled = true,
+    String dailySpendCap = '0',
+    Map<String, String> minimumReserve = const {},
+    Map<String, String> sellAbove = const {},
+    Map<String, String> maxInputPrice = const {},
+    Map<String, String> minSalePrice = const {},
+    Map<String, String> maxBuyQuantity = const {},
+    Map<String, String> maxSellQuantity = const {},
+  }) async {
+    final response = await _request('/api/house/automation/preview', method: 'POST', body: {
+      'enabled': enabled,
+      'dailySpendCap': dailySpendCap,
+      'minimumReserve': minimumReserve,
+      'sellAbove': sellAbove,
+      'maxInputPrice': maxInputPrice,
+      'minSalePrice': minSalePrice,
+      'maxBuyQuantity': maxBuyQuantity,
+      'maxSellQuantity': maxSellQuantity,
+    });
+    return response is Map<String, dynamic>
+        ? response
+        : <String, dynamic>{'ok': false, 'error': 'Automation preview unavailable'};
   }
 
   Future<Map<String, dynamic>> updateHouseProfile({

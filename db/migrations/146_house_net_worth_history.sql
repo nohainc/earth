@@ -1,3 +1,4 @@
+-- EARTH ACTIVE MIGRATION: V5 House net-worth history.
 -- V5 House net-worth history. Wealth belongs to the House, not to a Human.
 -- The current Human is retained only as settlement provenance.
 CREATE TABLE IF NOT EXISTS net_worth_snapshots (

@@ -871,7 +871,29 @@ export const REQUIRED_SCHEMA_TABLES = {
     "action_type",
     "action_correlation_id",
     "decision",
-    "created_at"
+    "created_at",
+    "execution_status",
+    "reason_code",
+    "market_order_id",
+    "market_order_status",
+    "evaluated_at_game_minute",
+    "updated_at"
+  ],
+  "policy_execution_daily_summaries": [
+    "id",
+    "house_id",
+    "automation_version_id",
+    "game_day",
+    "evaluated_at_game_minute",
+    "no_action_count",
+    "order_placed_count",
+    "partially_filled_count",
+    "filled_count",
+    "expired_count",
+    "skipped_count",
+    "failed_count",
+    "reason_codes",
+    "updated_at"
   ]
 } as const;
 export const REQUIRED_UNIQUE_CONSTRAINTS = [
@@ -912,6 +934,8 @@ export const REQUIRED_INDEXES = [
   "service_allocations_provider_day_idx",
   "house_operating_policies_active_idx",
   "policy_execution_log_house_day_idx",
+  "policy_execution_log_order_idx",
+  "policy_execution_daily_summaries_house_day_idx",
   "economic_entries_transaction_idx",
   "auth_email_deliveries_correlation_uq",
   "auth_email_deliveries_account_idx",

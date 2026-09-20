@@ -7,7 +7,7 @@ import {
   updateHouseProfile,
 } from './house-postgres.ts';
 import { getHouseDailySummary } from './house-daily-summary-postgres.ts';
-import { getHouseAutomation, listHousePolicies, saveHouseAutomation, saveHousePolicy } from './house-policy-postgres.ts';
+import { getHouseAutomation, previewHouseAutomation, saveHouseAutomation } from './house-policy-postgres.ts';
 import { advanceHouseOnboarding, getHouseOnboarding } from './house-onboarding-postgres.ts';
 import { getHouseResidency, moveHouseResidence, quoteHouseMove } from './residency-postgres.ts';
 import { claimHouseEntrySupport, getHouseEntrySupport } from './catch-up-postgres.ts';
@@ -171,31 +171,11 @@ export async function handleHouseRoutes(
   }
 
   if (url.pathname === '/api/house/policies' && request.method === 'GET') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const result = await withRepository(env, (repository) => listHousePolicies(repository, viewer.house_id));
-    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-    return Response.json({ ok: true, ...result, persistence: 'planetscale-postgres' });
+    return Response.json({ ok: false, error: 'House policy rows are deprecated; use /api/house/automation' }, { status: 410 });
   }
 
   if (url.pathname === '/api/house/policies' && request.method === 'POST') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<Record<string, unknown>>(request);
-    if (!parsed.ok) return parsed.response;
-    const value = parsed.value;
-    try {
-      const result = await withRepository(env, (repository) => saveHousePolicy(repository, viewer.house_id, {
-        policyType: String(value.policyType ?? '').toUpperCase() as 'OPERATING' | 'INVENTORY_RESERVE' | 'MARKET_STANDING',
-        operatingMode: String(value.operatingMode ?? 'BALANCED').toUpperCase() as 'CONSERVATIVE' | 'BALANCED' | 'GROWTH' | 'CUSTOM',
-        effectiveFromGameDay: Number(value.effectiveFromGameDay), dailySpendCapUnits: String(value.dailySpendCapUnits ?? '0'),
-        reserveFloorUnits: (value.reserveFloorUnits ?? {}) as Record<string, string | number>, maxInputPriceUnits: (value.maxInputPriceUnits ?? {}) as Record<string, string | number>, minSalePriceUnits: (value.minSalePriceUnits ?? {}) as Record<string, string | number>, procurementQuantityUnits: (value.procurementQuantityUnits ?? {}) as Record<string, string | number>, correlationId: resolveIdempotencyKey(request, String(value.correlationId ?? '')),
-      }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Policy save failed' }, { status: 400 });
-    }
+    return Response.json({ ok: false, error: 'House policy rows are deprecated; use /api/house/automation' }, { status: 410 });
   }
 
   if (url.pathname === '/api/house/automation' && request.method === 'GET') {
@@ -218,14 +198,38 @@ export async function handleHouseRoutes(
     const value = parsed.value;
     try {
       const result = await withRepository(env, (repository) => saveHouseAutomation(repository, viewer.house_id, {
-        operatingMode: String(value.operatingMode ?? 'BALANCED').toUpperCase() as 'CONSERVATIVE' | 'BALANCED' | 'GROWTH' | 'CUSTOM',
-        effectiveFromGameDay: Number(value.effectiveFromGameDay), dailySpendCapUnits: String(value.dailySpendCapUnits ?? '0'),
-        reserveFloorUnits: (value.reserveFloorUnits ?? {}) as Record<string, string | number>, maxInputPriceUnits: (value.maxInputPriceUnits ?? {}) as Record<string, string | number>, minSalePriceUnits: (value.minSalePriceUnits ?? {}) as Record<string, string | number>, procurementQuantityUnits: (value.procurementQuantityUnits ?? {}) as Record<string, string | number>, correlationId: resolveIdempotencyKey(request, String(value.correlationId ?? '')),
+        enabled: value.enabled !== false,
+        effectiveFromGameDay: value.effectiveFromGameDay == null ? undefined : Number(value.effectiveFromGameDay), dailySpendCap: String(value.dailySpendCap ?? '0'),
+        minimumReserve: (value.minimumReserve ?? {}) as Record<string, string | number>, sellAbove: (value.sellAbove ?? {}) as Record<string, string | number>, maxInputPrice: (value.maxInputPrice ?? {}) as Record<string, string | number>, minSalePrice: (value.minSalePrice ?? {}) as Record<string, string | number>, maxBuyQuantity: (value.maxBuyQuantity ?? {}) as Record<string, string | number>, maxSellQuantity: (value.maxSellQuantity ?? {}) as Record<string, string | number>, correlationId: resolveIdempotencyKey(request, String(value.correlationId ?? '')),
       }));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Automation save failed' }, { status: 400 });
+    }
+  }
+
+  if (url.pathname === '/api/house/automation/preview' && request.method === 'POST') {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<Record<string, unknown>>(request);
+    if (!parsed.ok) return parsed.response;
+    const value = parsed.value;
+    try {
+      const result = await withRepository(env, (repository) => previewHouseAutomation(repository, viewer.house_id, {
+        enabled: value.enabled !== false,
+        dailySpendCap: String(value.dailySpendCap ?? '0'),
+        minimumReserve: (value.minimumReserve ?? {}) as Record<string, string | number>,
+        sellAbove: (value.sellAbove ?? {}) as Record<string, string | number>,
+        maxInputPrice: (value.maxInputPrice ?? {}) as Record<string, string | number>,
+        minSalePrice: (value.minSalePrice ?? {}) as Record<string, string | number>,
+        maxBuyQuantity: (value.maxBuyQuantity ?? {}) as Record<string, string | number>,
+        maxSellQuantity: (value.maxSellQuantity ?? {}) as Record<string, string | number>,
+      }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Automation preview failed' }, { status: 400 });
     }
   }
 

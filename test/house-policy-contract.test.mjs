@@ -15,5 +15,6 @@ test('House policies are versioned, future-effective, bounded, and auditable', (
   assert.match(schema, /policy_execution_log/);
   assert.match(postgres, /ON CONFLICT \(correlation_id\) DO NOTHING|alreadyProcessed/);
   assert.match(postgres, /daily_spend_cap_units/);
-  assert.match(routes, /saveHousePolicy/);
+  assert.match(routes, /House policy rows are deprecated; use \/api\/house\/automation/);
+  assert.match(routes, /saveHouseAutomation/);
 });
