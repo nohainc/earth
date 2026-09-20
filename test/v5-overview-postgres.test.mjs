@@ -35,6 +35,19 @@ test('getV5Overview returns canonical V5 command overview with typed summaries',
           ],
         };
       }
+      if (query.includes('from house_resource_daily_flow')) {
+        return {
+          rows: [{
+            product: 'energy',
+            game_day: 99,
+            closing_balance_units: '10000000',
+            production_units: '3000000',
+            consumption_units: '2000000',
+            net_flow_units: '1000000',
+            shortage_units: '0',
+          }],
+        };
+      }
       if (query.includes('from house_succession_plans')) {
         return { rows: [{ has_successor: true }] };
       }
@@ -87,5 +100,8 @@ test('getV5Overview returns canonical V5 command overview with typed summaries',
   assert.equal(overview.buildings.suspendedCount, 1);
   assert.equal(overview.market.energyPriceUnits, '250');
   assert.equal(overview.market.materialsPriceUnits, '400');
+  assert.equal(overview.market.products[0].closingBalance, '10.000000');
+  assert.equal(overview.market.products[0].production, '3.000000');
+  assert.equal(overview.market.products[0].consumption, '2.000000');
   assert.equal(overview.decisions.totalCount >= 0, true);
 });

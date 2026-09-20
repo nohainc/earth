@@ -1,9 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
+import '../../core/models/market_models.dart';
+import '../../shared/design_system/earth_theme_context.dart';
 
 class CandlestickChartWidget extends StatefulWidget {
-  final List<Map<String, dynamic>> ohlc;
+  final List<MarketCandle> candles;
   final List<double?> ma7;
   final List<double?> ma25;
   final String commodity;
@@ -11,7 +12,7 @@ class CandlestickChartWidget extends StatefulWidget {
 
   const CandlestickChartWidget({
     super.key,
-    required this.ohlc,
+    required this.candles,
     required this.ma7,
     required this.ma25,
     required this.commodity,
@@ -27,29 +28,29 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.ohlc.isEmpty) {
+    if (widget.candles.isEmpty) {
       return Container(
         height: widget.height,
-        color: EarthColors.panelSurface,
+        color: context.panelColor,
         alignment: Alignment.center,
-        child: const Text(
-          'No historical OHLC data available.',
-          style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+        child: Text(
+          'No instrument candle data available.',
+          style: TextStyle(fontSize: 11, color: context.mutedColor),
         ),
       );
     }
 
-    final latest = widget.ohlc.last;
-    final first = widget.ohlc.first;
-    final close = _parseNum(latest['close_price']);
-    final openInitial = _parseNum(first['open_price']);
+    final latest = widget.candles.last;
+    final first = widget.candles.first;
+    final close = _parseNum(latest.close);
+    final openInitial = _parseNum(first.open);
     final changePct =
         openInitial > 0 ? ((close - openInitial) / openInitial) * 100 : 0.0;
     final isBullish = changePct >= 0;
 
     final inspected =
-        _hoveredIndex != null && _hoveredIndex! < widget.ohlc.length
-            ? widget.ohlc[_hoveredIndex!]
+        _hoveredIndex != null && _hoveredIndex! < widget.candles.length
+            ? widget.candles[_hoveredIndex!]
             : latest;
     final inspectedMa7 =
         _hoveredIndex != null && _hoveredIndex! < widget.ma7.length
@@ -62,9 +63,9 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF080B12),
+        color: context.canvasColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
+        border: Border.all(color: context.subtleBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,11 +73,12 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
           // Top Chart HUD Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: const BoxDecoration(
-              color: EarthColors.cardSurface,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+            decoration: BoxDecoration(
+              color: context.cardColor,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(8)),
               border:
-                  Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+                  Border(bottom: BorderSide(color: context.subtleBorderColor)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -86,8 +88,8 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                   children: [
                     Text(
                       widget.commodity.toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.inkColor,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                         letterSpacing: 1.1,
@@ -98,8 +100,8 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                       '${close.toStringAsFixed(2)} CR',
                       style: TextStyle(
                         color: isBullish
-                            ? const Color(0xFF00E676)
-                            : const Color(0xFFFF5252),
+                            ? context.successColor
+                            : context.errorColor,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
@@ -110,8 +112,8 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                           horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: (isBullish
-                                ? const Color(0xFF00E676)
-                                : const Color(0xFFFF5252))
+                                ? context.successColor
+                                : context.errorColor)
                             .withAlpha(30),
                         borderRadius: BorderRadius.circular(3),
                       ),
@@ -119,8 +121,8 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                         '${isBullish ? '+' : ''}${changePct.toStringAsFixed(2)}%',
                         style: TextStyle(
                           color: isBullish
-                              ? const Color(0xFF00E676)
-                              : const Color(0xFFFF5252),
+                              ? context.successColor
+                              : context.errorColor,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -137,40 +139,33 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _hudStat(
-                            'DAY', inspected['game_day']?.toString() ?? '-'),
+                        _hudStat(context, 'PERIOD', inspected.periodId),
                         const SizedBox(width: 8),
-                        _hudStat(
-                            'O',
-                            _parseNum(inspected['open_price'])
-                                .toStringAsFixed(2)),
+                        _hudStat(context, 'O',
+                            _parseNum(inspected.open).toStringAsFixed(2)),
                         const SizedBox(width: 8),
-                        _hudStat(
-                            'H',
-                            _parseNum(inspected['high_price'])
-                                .toStringAsFixed(2)),
+                        _hudStat(context, 'H',
+                            _parseNum(inspected.high).toStringAsFixed(2)),
                         const SizedBox(width: 8),
-                        _hudStat(
-                            'L',
-                            _parseNum(inspected['low_price'])
-                                .toStringAsFixed(2)),
+                        _hudStat(context, 'L',
+                            _parseNum(inspected.low).toStringAsFixed(2)),
                         const SizedBox(width: 8),
-                        _hudStat(
-                            'C',
-                            _parseNum(inspected['close_price'])
-                                .toStringAsFixed(2)),
+                        _hudStat(context, 'C',
+                            _parseNum(inspected.close).toStringAsFixed(2)),
                         const SizedBox(width: 8),
-                        _hudStat('VOL',
-                            _parseNum(inspected['volume']).toStringAsFixed(0)),
+                        _hudStat(context, 'VOL',
+                            _parseNum(inspected.volume).toStringAsFixed(0)),
                         if (inspectedMa7 != null) ...[
                           const SizedBox(width: 8),
-                          _hudStat('MA7', inspectedMa7.toStringAsFixed(2),
-                              color: EarthColors.goldMetallic),
+                          _hudStat(
+                              context, 'MA7', inspectedMa7.toStringAsFixed(2),
+                              color: context.goldColor),
                         ],
                         if (inspectedMa25 != null) ...[
                           const SizedBox(width: 8),
-                          _hudStat('MA25', inspectedMa25.toStringAsFixed(2),
-                              color: EarthColors.cyanAccent),
+                          _hudStat(
+                              context, 'MA25', inspectedMa25.toStringAsFixed(2),
+                              color: context.primaryColor),
                         ],
                       ],
                     ),
@@ -188,29 +183,35 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
                 return MouseRegion(
                   onHover: (event) {
                     final candleWidth =
-                        constraints.maxWidth / widget.ohlc.length;
+                        constraints.maxWidth / widget.candles.length;
                     final index = (event.localPosition.dx / candleWidth)
                         .floor()
-                        .clamp(0, widget.ohlc.length - 1);
+                        .clamp(0, widget.candles.length - 1);
                     setState(() => _hoveredIndex = index);
                   },
                   onExit: (_) => setState(() => _hoveredIndex = null),
                   child: GestureDetector(
                     onTapDown: (details) {
                       final candleWidth =
-                          constraints.maxWidth / widget.ohlc.length;
+                          constraints.maxWidth / widget.candles.length;
                       final index = (details.localPosition.dx / candleWidth)
                           .floor()
-                          .clamp(0, widget.ohlc.length - 1);
+                          .clamp(0, widget.candles.length - 1);
                       setState(() => _hoveredIndex = index);
                     },
                     child: CustomPaint(
                       size: Size(constraints.maxWidth, widget.height),
                       painter: _CandlestickPainter(
-                        ohlc: widget.ohlc,
+                        candles: widget.candles,
                         ma7: widget.ma7,
                         ma25: widget.ma25,
                         hoveredIndex: _hoveredIndex,
+                        gridColor: context.subtleBorderColor,
+                        bullishColor: context.successColor,
+                        bearishColor: context.errorColor,
+                        crosshairColor: context.inkColor,
+                        ma7Color: context.goldColor,
+                        ma25Color: context.primaryColor,
                       ),
                     ),
                   ),
@@ -223,16 +224,16 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
     );
   }
 
-  Widget _hudStat(String label, String val, {Color? color}) {
+  Widget _hudStat(BuildContext context, String label, String val,
+      {Color? color}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text('$label: ',
-            style:
-                const TextStyle(color: EarthColors.textMuted, fontSize: 9.5)),
+            style: TextStyle(color: context.mutedColor, fontSize: 9.5)),
         Text(val,
             style: TextStyle(
-                color: color ?? Colors.white70,
+                color: color ?? context.inkColor.withValues(alpha: .7),
                 fontWeight: FontWeight.bold,
                 fontSize: 9.5)),
       ],
@@ -247,23 +248,35 @@ class _CandlestickChartWidgetState extends State<CandlestickChartWidget> {
 }
 
 class _CandlestickPainter extends CustomPainter {
-  final List<Map<String, dynamic>> ohlc;
+  final List<MarketCandle> candles;
   final List<double?> ma7;
   final List<double?> ma25;
   final int? hoveredIndex;
+  final Color gridColor;
+  final Color bullishColor;
+  final Color bearishColor;
+  final Color crosshairColor;
+  final Color ma7Color;
+  final Color ma25Color;
 
   _CandlestickPainter({
-    required this.ohlc,
+    required this.candles,
     required this.ma7,
     required this.ma25,
+    required this.gridColor,
+    required this.bullishColor,
+    required this.bearishColor,
+    required this.crosshairColor,
+    required this.ma7Color,
+    required this.ma25Color,
     this.hoveredIndex,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (ohlc.isEmpty) return;
+    if (candles.isEmpty) return;
 
-    final count = ohlc.length;
+    final count = candles.length;
     final candleWidth = size.width / count;
     final barWidth = math.max(2.0, candleWidth * 0.7);
 
@@ -272,10 +285,10 @@ class _CandlestickPainter extends CustomPainter {
     double maxPrice = -double.infinity;
     double maxVolume = 0.0;
 
-    for (final candle in ohlc) {
-      final l = _parseNum(candle['low_price']);
-      final h = _parseNum(candle['high_price']);
-      final v = _parseNum(candle['volume']);
+    for (final candle in candles) {
+      final l = _parseNum(candle.low);
+      final h = _parseNum(candle.high);
+      final v = _parseNum(candle.volume);
       if (l < minPrice) minPrice = l;
       if (h > maxPrice) maxPrice = h;
       if (v > maxVolume) maxVolume = v;
@@ -291,7 +304,7 @@ class _CandlestickPainter extends CustomPainter {
     final volumeHeight = size.height * 0.22;
     // 1. Draw Grid Lines
     final gridPaint = Paint()
-      ..color = Colors.white.withAlpha(15)
+      ..color = gridColor.withAlpha(15)
       ..strokeWidth = 1.0;
 
     for (int i = 1; i <= 4; i++) {
@@ -299,23 +312,23 @@ class _CandlestickPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    final bullishPaint = Paint()..color = const Color(0xFF00E676);
-    final bearishPaint = Paint()..color = const Color(0xFFFF5252);
+    final bullishPaint = Paint()..color = bullishColor;
+    final bearishPaint = Paint()..color = bearishColor;
     final wickPaintBull = Paint()
-      ..color = const Color(0xFF00E676)
+      ..color = bullishColor
       ..strokeWidth = 1.5;
     final wickPaintBear = Paint()
-      ..color = const Color(0xFFFF5252)
+      ..color = bearishColor
       ..strokeWidth = 1.5;
 
     // 2. Draw Candlesticks & Volumes
     for (int i = 0; i < count; i++) {
-      final candle = ohlc[i];
-      final o = _parseNum(candle['open_price']);
-      final h = _parseNum(candle['high_price']);
-      final l = _parseNum(candle['low_price']);
-      final c = _parseNum(candle['close_price']);
-      final v = _parseNum(candle['volume']);
+      final candle = candles[i];
+      final o = _parseNum(candle.open);
+      final h = _parseNum(candle.high);
+      final l = _parseNum(candle.low);
+      final c = _parseNum(candle.close);
+      final v = _parseNum(candle.volume);
 
       final isBull = c >= o;
       final xCenter = (i * candleWidth) + (candleWidth / 2.0);
@@ -352,23 +365,22 @@ class _CandlestickPainter extends CustomPainter {
           vHeight,
         );
         final vPaint = Paint()
-          ..color = (isBull ? const Color(0xFF00E676) : const Color(0xFFFF5252))
-              .withAlpha(50);
+          ..color = (isBull ? bullishColor : bearishColor).withAlpha(50);
         canvas.drawRect(vRect, vPaint);
       }
     }
 
     // 3. Draw Moving Averages
-    _drawMovingAverage(canvas, ma7, minPrice, priceRange, chartHeight,
-        candleWidth, EarthColors.goldMetallic);
+    _drawMovingAverage(
+        canvas, ma7, minPrice, priceRange, chartHeight, candleWidth, ma7Color);
     _drawMovingAverage(canvas, ma25, minPrice, priceRange, chartHeight,
-        candleWidth, EarthColors.cyanAccent);
+        candleWidth, ma25Color);
 
     // 4. Draw Hover Crosshair
     if (hoveredIndex != null && hoveredIndex! < count) {
       final hX = (hoveredIndex! * candleWidth) + (candleWidth / 2.0);
       final crosshairPaint = Paint()
-        ..color = Colors.white.withAlpha(70)
+        ..color = crosshairColor.withAlpha(70)
         ..strokeWidth = 1.0
         ..style = PaintingStyle.stroke;
       canvas.drawLine(Offset(hX, 0), Offset(hX, size.height), crosshairPaint);
@@ -418,6 +430,7 @@ class _CandlestickPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CandlestickPainter oldDelegate) {
-    return oldDelegate.ohlc != ohlc || oldDelegate.hoveredIndex != hoveredIndex;
+    return oldDelegate.candles != candles ||
+        oldDelegate.hoveredIndex != hoveredIndex;
   }
 }

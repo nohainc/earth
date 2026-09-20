@@ -5,12 +5,28 @@ class OverviewMarketProduct {
   final String supplyUnits;
   final String demandUnits;
   final String priceUnits;
+  final String? openSellUnits;
+  final String? openBuyUnits;
+  final int? latestSettledGameDay;
+  final String? closingBalance;
+  final String? production;
+  final String? consumption;
+  final String? netFlow;
+  final String? shortage;
 
   const OverviewMarketProduct({
     required this.product,
     required this.supplyUnits,
     required this.demandUnits,
     required this.priceUnits,
+    this.openSellUnits,
+    this.openBuyUnits,
+    this.latestSettledGameDay,
+    this.closingBalance,
+    this.production,
+    this.consumption,
+    this.netFlow,
+    this.shortage,
   });
 
   factory OverviewMarketProduct.fromJson(Map<String, dynamic> json) =>
@@ -22,9 +38,17 @@ class OverviewMarketProduct {
         demandUnits: json['demandUnits']?.toString() ??
             json['demand']?.toString() ??
             '0',
-        priceUnits: json['priceUnits']?.toString() ??
-            json['price']?.toString() ??
-            '0',
+        priceUnits:
+            json['priceUnits']?.toString() ?? json['price']?.toString() ?? '0',
+        openSellUnits: json['openSellUnits']?.toString(),
+        openBuyUnits: json['openBuyUnits']?.toString(),
+        latestSettledGameDay:
+            int.tryParse(json['latestSettledGameDay']?.toString() ?? ''),
+        closingBalance: json['closingBalance']?.toString(),
+        production: json['production']?.toString(),
+        consumption: json['consumption']?.toString(),
+        netFlow: json['netFlow']?.toString(),
+        shortage: json['shortage']?.toString(),
       );
 }
 
@@ -39,8 +63,9 @@ class OverviewFinanceSummary {
 
   factory OverviewFinanceSummary.fromJson(Map<String, dynamic> json) =>
       OverviewFinanceSummary(
-        availableWalletUnits:
-            json['availableWalletUnits']?.toString() ?? json['balance']?.toString() ?? '0',
+        availableWalletUnits: json['availableWalletUnits']?.toString() ??
+            json['balance']?.toString() ??
+            '0',
         latestStatement: json['latestStatement'] as Map<String, dynamic>?,
       );
 }
@@ -122,8 +147,8 @@ class OverviewDecisionsSummary {
         .map((e) => DecisionQueueItem.fromJson(Map<String, dynamic>.from(e)))
         .toList();
     return OverviewDecisionsSummary(
-      totalCount: int.tryParse(json['totalCount']?.toString() ?? '') ??
-          items.length,
+      totalCount:
+          int.tryParse(json['totalCount']?.toString() ?? '') ?? items.length,
       criticalCount: int.tryParse(json['criticalCount']?.toString() ?? '') ??
           items.where((d) => d.riskLevel == 'critical').length,
       highCount: int.tryParse(json['highCount']?.toString() ?? '') ??
@@ -233,5 +258,4 @@ class CommandOverview {
       attention: attentionList,
     );
   }
-
 }

@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/market_models.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
+import 'candlestick_chart_widget.dart';
 
-class SuppliesTodayPanel extends StatelessWidget {
+class SuppliesTodayPanel extends StatefulWidget {
   final EarthState state;
   final Future<void> Function(Future<EarthState> Function()) action;
   final EarthApi api;
@@ -27,53 +29,89 @@ class SuppliesTodayPanel extends StatelessWidget {
     'compute'
   ];
 
-  int _reserved(String product) {
-    return state.marketOrders.whereType<Map>().where((order) {
-      final side = (order['side']?.toString() ?? '').toLowerCase();
-      final status = (order['status']?.toString() ?? '').toLowerCase();
-      return side == 'sell' &&
-          (status == 'open' || status == 'partial') &&
-          order['product']?.toString() == product;
-    }).fold<int>(
-        0,
-        (sum, order) =>
-            sum +
-            (asInt(order['quantity']) ?? 0) -
-            (asInt(order['filled_quantity'] ?? order['filled']) ?? 0));
+  @override
+  State<SuppliesTodayPanel> createState() => _SuppliesTodayPanelState();
+}
+
+class _SuppliesTodayPanelState extends State<SuppliesTodayPanel> {
+  Map<String, HouseCommodityPosition> _positions = const {};
+  bool _loadingPositions = false;
+
+  static const _products = SuppliesTodayPanel._products;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPositions();
   }
 
-  int _stock(String product) {
-    final value = state.resources[product] ??
-        (product == 'material' ? state.resources['materials'] : null);
-    return asInt(value) ?? 0;
+  @override
+  void didUpdateWidget(covariant SuppliesTodayPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.state, widget.state) ||
+        oldWidget.api != widget.api) {
+      _loadPositions();
+    }
   }
+
+  Future<void> _loadPositions() async {
+    if (_loadingPositions) return;
+    _loadingPositions = true;
+    try {
+      final response = await widget.api.marketHousePositions();
+      if (!mounted) return;
+      final positions = <String, HouseCommodityPosition>{};
+      for (final position in response) {
+        final product = position.product.toLowerCase();
+        if (product.isNotEmpty) positions[product] = position;
+      }
+      setState(() => _positions = positions);
+    } catch (_) {
+      // A missing read-model response is not permission to fall back to raw
+      // world balances; keep the position explicitly unavailable.
+      if (mounted) setState(() => _positions = const {});
+    } finally {
+      _loadingPositions = false;
+    }
+  }
+
+  HouseCommodityPosition? _position(String product) => _positions[product];
+
+  double? _displayQuantity(String? value) =>
+      value == null ? null : double.tryParse(value);
 
   @override
   Widget build(BuildContext context) {
     final shortages = <String>[];
     final watchlist = <String>[];
     final cards = <Widget>[];
-    final flowMap = state.json['resourceFlows'] is Map
-        ? Map<String, dynamic>.from(state.json['resourceFlows'] as Map)
+    final flowMap = widget.state.json['resourceFlows'] is Map
+        ? Map<String, dynamic>.from(widget.state.json['resourceFlows'] as Map)
         : const <String, dynamic>{};
-    double netFlow(String product) {
-      final raw = flowMap[product] ??
-          (product == 'material' ? flowMap['materials'] : null);
-      return asDoubleOr(raw is Map ? raw['net'] : raw, 0);
+    double? netFlow(String product) {
+      final raw = flowMap[product];
+      if (raw is! Map) return null;
+      return asDouble(raw['net'] ?? raw['netPerGameDay']);
     }
 
     for (final product in _products) {
-      final quantity = _stock(product);
-      final reserved = _reserved(product);
-      final available = quantity - reserved;
+      final position = _position(product);
+      final availableLabel = position?.availableQuantity;
+      final reservedLabel = position?.reservedQuantity ?? '0';
+      final available = _displayQuantity(availableLabel);
       final net = netFlow(product);
-      final market = state.market[product] is Map
-          ? Map<String, dynamic>.from(state.market[product] as Map)
+      final market = widget.state.market[product] is Map
+          ? Map<String, dynamic>.from(widget.state.market[product] as Map)
           : const <String, dynamic>{};
       final price = asDouble(market['price']);
-      final lowStock = net < 0 && available / net.abs() <= 3;
-      if (available <= 0 && net < 0) shortages.add(product);
-      if (available > 0 && lowStock) {
+      final runway = available == null || net == null || net >= 0
+          ? null
+          : available / net.abs();
+      final lowStock = runway != null && runway <= 3;
+      if (available != null && available <= 0 && net != null && net < 0) {
+        shortages.add(product);
+      }
+      if (available != null && available > 0 && lowStock) {
         watchlist.add(product);
       }
       final meta = CommodityMeta.forProduct(product);
@@ -84,7 +122,9 @@ class SuppliesTodayPanel extends StatelessWidget {
           color: surfaceColor.withValues(alpha: .75),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-              color: (available <= 0 ? Colors.orangeAccent : meta.color)
+              color: (available != null && available <= 0
+                      ? context.warningColor
+                      : meta.color)
                   .withValues(alpha: .3)),
         ),
         child: Column(
@@ -93,7 +133,9 @@ class SuppliesTodayPanel extends StatelessWidget {
             Row(children: [
               Icon(meta.icon,
                   size: 16,
-                  color: available <= 0 ? Colors.orangeAccent : meta.color),
+                  color: available != null && available <= 0
+                      ? context.warningColor
+                      : meta.color),
               const SizedBox(width: 7),
               Expanded(
                   child: Column(
@@ -105,20 +147,28 @@ class SuppliesTodayPanel extends StatelessWidget {
                             fontSize: 8.5,
                             fontWeight: FontWeight.w800)),
                     const SizedBox(height: 3),
-                    Text('$available available',
+                    Text(
+                        availableLabel == null
+                            ? 'Quantity unavailable'
+                            : '$availableLabel available · $reservedLabel reserved',
                         style: TextStyle(
-                            color:
-                                available <= 0 ? Colors.orangeAccent : inkColor,
+                            color: available != null && available <= 0
+                                ? context.warningColor
+                                : inkColor,
                             fontSize: 11,
                             fontWeight: FontWeight.w800)),
                     Text(
-                        net == 0
-                            ? 'Stable flow'
+                        net == null || net == 0
+                            ? 'Flow unavailable'
                             : net > 0
-                                ? '+${net.toStringAsFixed(1)} / cycle'
-                                : '${net.toStringAsFixed(1)} / cycle · ~${(available / net.abs()).floor()} cycles',
+                                ? '+${net.toStringAsFixed(1)} / game day'
+                                : available == null
+                                    ? '${net.toStringAsFixed(1)} / game day'
+                                    : '${net.toStringAsFixed(1)} / game day · ~${runway!.floor()} game days',
                         style: TextStyle(
-                            color: net < 0 ? Colors.orangeAccent : mutedColor,
+                            color: net != null && net < 0
+                                ? context.warningColor
+                                : mutedColor,
                             fontSize: 9.5,
                             fontWeight: FontWeight.w600)),
                     Text(
@@ -133,22 +183,26 @@ class SuppliesTodayPanel extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
-                onPressed: price == null
+                onPressed: price == null || available == null
                     ? null
                     : () => showPlaceOrderDialog(
                           context,
-                          action,
+                          widget.action,
                           initialProduct: product,
-                          initialPrice: price,
-                          initialSide: net < 0 && lowStock ? 'buy' : 'sell',
-                          api: api,
+                          initialPrice: price.toStringAsFixed(2),
+                          initialSide: net != null && net < 0 && lowStock
+                              ? 'buy'
+                              : 'sell',
+                          buyerFeeRate: widget.state.marketFeeRate.toString(),
+                          api: widget.api,
                         ),
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
                   minimumSize: const Size(0, 22),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: Text(net < 0 && lowStock ? 'BUY' : 'TRADE',
+                child: Text(
+                    net != null && net < 0 && lowStock ? 'BUY' : 'TRADE',
                     style: const TextStyle(fontSize: 9)),
               ),
             ),
@@ -156,23 +210,26 @@ class SuppliesTodayPanel extends StatelessWidget {
         ),
       ));
     }
-    final marketEntries = state.market.entries
+    final marketEntries = widget.state.market.entries
         .map((entry) => entry.value is Map
             ? Map<String, dynamic>.from(entry.value as Map)
             : const <String, dynamic>{})
         .toList();
     final marketStatus = marketEntries.map((item) {
       final product = item['product']?.toString() ?? 'resource';
-      final supply = asInt(item['supply']) ?? 0;
-      final demand = asInt(item['demand']) ?? 0;
-      final condition = demand > supply * 1.15
-          ? 'DEMAND HEAVY'
-          : supply > demand * 1.15
-              ? 'SUPPLY HEAVY'
-              : 'BALANCED';
+      final supply = asInt(item['supply']);
+      final demand = asInt(item['demand']);
+      final condition = supply == null || demand == null
+          ? 'OPEN INTEREST UNAVAILABLE'
+          : demand > supply * 1.15
+              ? 'OPEN BUY INTEREST HIGH'
+              : supply > demand * 1.15
+                  ? 'OPEN SELL INTEREST HIGH'
+                  : 'OPEN INTEREST BALANCED';
       return '${CommodityMeta.forProduct(product).name}: $condition';
     }).join(' · ');
-    final activeOrders = state.marketOrders.whereType<Map>().where((order) {
+    final activeOrders =
+        widget.state.marketOrders.whereType<Map>().where((order) {
       final status = order['status']?.toString().toLowerCase();
       return status == 'open' || status == 'partial';
     }).length;
@@ -217,8 +274,8 @@ class SuppliesTodayPanel extends StatelessWidget {
                 : 'Needs attention: ${shortages.map((p) => CommodityMeta.forProduct(p).name).join(' · ')}',
             style: TextStyle(
                 color: shortages.isEmpty && watchlist.isEmpty
-                    ? Colors.tealAccent
-                    : Colors.orangeAccent,
+                    ? context.successColor
+                    : context.warningColor,
                 fontSize: 12,
                 fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
@@ -260,7 +317,6 @@ class MarketWorkspace extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
-  final Map<String, dynamic> priceHistory;
   final EarthApi api;
 
   const MarketWorkspace({
@@ -268,7 +324,6 @@ class MarketWorkspace extends StatefulWidget {
     required this.state,
     required this.busy,
     required this.action,
-    this.priceHistory = const {},
     this.api = const EarthApi(),
   });
 
@@ -365,7 +420,6 @@ class _MarketWorkspaceState extends State<MarketWorkspace> {
           MarketSignalsPanel(
             state: widget.state,
             busy: widget.busy,
-            priceHistory: widget.priceHistory,
             api: widget.api,
             action: widget.action,
           )
@@ -569,28 +623,72 @@ class CommodityMeta {
   }
 }
 
+BigInt? _parseFixedDecimal(String value, int decimals) {
+  final text = value.trim();
+  if (text.isEmpty || text.startsWith('-')) return null;
+  final parts = text.split('.');
+  if (parts.length > 2) return null;
+  final whole = BigInt.tryParse(parts.first.isEmpty ? '0' : parts.first);
+  if (whole == null) return null;
+  final fraction = parts.length == 2 ? parts[1] : '';
+  if (fraction.length > decimals || !RegExp(r'^\d*$').hasMatch(fraction)) {
+    return null;
+  }
+  return whole * BigInt.from(10).pow(decimals) +
+      BigInt.parse(fraction.padRight(decimals, '0').isEmpty
+          ? '0'
+          : fraction.padRight(decimals, '0'));
+}
+
+BigInt _roundDivide(BigInt numerator, BigInt denominator) =>
+    (numerator + denominator ~/ BigInt.from(2)) ~/ denominator;
+
+BigInt? _estimatedQuoteUnits(String quantity, String price) {
+  final quantityUnits = _parseFixedDecimal(quantity, 6);
+  final priceUnits = _parseFixedDecimal(price, 2);
+  if (quantityUnits == null ||
+      priceUnits == null ||
+      quantityUnits <= BigInt.zero ||
+      priceUnits <= BigInt.zero) {
+    return null;
+  }
+  return _roundDivide(quantityUnits * priceUnits, BigInt.from(1000000));
+}
+
+BigInt? _estimatedFeeUnits(BigInt? quoteUnits, String feeRate) {
+  final rateUnits = _parseFixedDecimal(feeRate, 6);
+  if (quoteUnits == null || rateUnits == null) return null;
+  return _roundDivide(quoteUnits * rateUnits, BigInt.from(1000000));
+}
+
 Future<void> showPlaceOrderDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action, {
   required String initialProduct,
-  required double initialPrice,
+  required String initialPrice,
   String initialSide = 'buy',
+  String buyerFeeRate = '0',
   EarthApi api = const EarthApi(),
 }) async {
   String selectedProduct = initialProduct;
   String side = initialSide;
-  Map<String, dynamic> serverQuote = const {};
+  MarketQuote serverQuote = MarketQuote.failure('');
   bool quoteLoading = false;
+  bool reviewed = false;
   final qtyController = TextEditingController(text: '10');
-  final priceController = TextEditingController(
-      text: initialPrice > 0 ? initialPrice.toStringAsFixed(2) : '');
+  final priceController = TextEditingController(text: initialPrice.trim());
 
   Future<void> refreshQuote(
       void Function(void Function()) setDialogState) async {
-    final quantity = double.tryParse(qtyController.text.trim()) ?? 0;
-    final price = double.tryParse(priceController.text.trim()) ?? 0;
-    if (quantity <= 0 || price <= 0) {
-      setDialogState(() => serverQuote = const {});
+    final quantity = qtyController.text.trim();
+    final price = priceController.text.trim();
+    final parsedQuantity = double.tryParse(quantity);
+    final parsedPrice = double.tryParse(price);
+    if (parsedQuantity == null ||
+        parsedQuantity <= 0 ||
+        parsedPrice == null ||
+        parsedPrice <= 0) {
+      setDialogState(() => serverQuote = MarketQuote.failure(''));
       return;
     }
     setDialogState(() => quoteLoading = true);
@@ -607,7 +705,7 @@ Future<void> showPlaceOrderDialog(
       });
     } catch (_) {
       setDialogState(() {
-        serverQuote = const {};
+        serverQuote = MarketQuote.failure('Market quote unavailable');
         quoteLoading = false;
       });
     }
@@ -617,21 +715,26 @@ Future<void> showPlaceOrderDialog(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) {
-        final qty = int.tryParse(qtyController.text.trim()) ?? 0;
-        final price = double.tryParse(priceController.text.trim()) ?? 0.0;
-        final quoteOk = serverQuote['ok'] == true;
-        double? cents(String? value) =>
-            value == null ? null : (double.tryParse(value) ?? 0) / 100;
-        final baseTotal = cents(serverQuote['baseValueUnits']?.toString());
-        final fee = cents(serverQuote['feeUnits']?.toString());
-        final grandTotal = cents(serverQuote['totalEscrowUnits']?.toString());
+        final quantityText = qtyController.text.trim();
+        final priceText = priceController.text.trim();
+        final qty = double.tryParse(quantityText) ?? 0.0;
+        final price = double.tryParse(priceText) ?? 0.0;
+        final quoteOk = serverQuote.ok;
+        final estimateBaseUnits = _estimatedQuoteUnits(quantityText, priceText);
+        final estimateFeeUnits = side == 'buy'
+            ? _estimatedFeeUnits(estimateBaseUnits, buyerFeeRate)
+            : BigInt.zero;
+        final estimateTotalUnits =
+            estimateBaseUnits == null || estimateFeeUnits == null
+                ? null
+                : estimateBaseUnits + estimateFeeUnits;
         final meta = CommodityMeta.forProduct(selectedProduct);
 
         return AlertDialog(
           backgroundColor: surfaceColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Colors.white12),
+            side: BorderSide(color: context.subtleBorderColor),
           ),
           title: Row(
             children: [
@@ -663,8 +766,11 @@ Future<void> showPlaceOrderDialog(
                         ],
                         selected: {side},
                         onSelectionChanged: (set) {
-                          setDialogState(() => side = set.first);
-                          refreshQuote(setDialogState);
+                          setDialogState(() {
+                            side = set.first;
+                            reviewed = false;
+                            serverQuote = MarketQuote.failure('');
+                          });
                         },
                       ),
                     ),
@@ -682,8 +788,11 @@ Future<void> showPlaceOrderDialog(
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      setDialogState(() => selectedProduct = value);
-                      refreshQuote(setDialogState);
+                      setDialogState(() {
+                        selectedProduct = value;
+                        reviewed = false;
+                        serverQuote = MarketQuote.failure('');
+                      });
                     }
                   },
                 ),
@@ -696,8 +805,10 @@ Future<void> showPlaceOrderDialog(
                     hintText: 'e.g. 10',
                   ),
                   onChanged: (_) {
-                    setDialogState(() {});
-                    refreshQuote(setDialogState);
+                    setDialogState(() {
+                      reviewed = false;
+                      serverQuote = MarketQuote.failure('');
+                    });
                   },
                 ),
                 const SizedBox(height: 12),
@@ -710,17 +821,19 @@ Future<void> showPlaceOrderDialog(
                     hintText: 'e.g. 45.00',
                   ),
                   onChanged: (_) {
-                    setDialogState(() {});
-                    refreshQuote(setDialogState);
+                    setDialogState(() {
+                      reviewed = false;
+                      serverQuote = MarketQuote.failure('');
+                    });
                   },
                 ),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: context.inkColor.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
+                    border: Border.all(color: context.subtleBorderColor),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -728,62 +841,76 @@ Future<void> showPlaceOrderDialog(
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Base value:',
+                          const Text('EST. base value:',
                               style:
                                   TextStyle(fontSize: 11, color: mutedColor)),
                           Text(
-                              baseTotal == null
-                                  ? 'Awaiting server quote'
-                                  : '${baseTotal.toStringAsFixed(2)} C',
+                              estimateBaseUnits == null
+                                  ? 'Enter valid values'
+                                  : formatCreditUnits(
+                                      estimateBaseUnits.toString()),
                               style: const TextStyle(
                                   fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
-                      if (quoteOk && (fee ?? 0) > 0) ...[
+                      if (estimateFeeUnits != null &&
+                          estimateFeeUnits > BigInt.zero) ...[
                         const SizedBox(height: 4),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Exchange fee (${serverQuote['feeBps'] ?? '—'} bps):',
-                              style: const TextStyle(
-                                  fontSize: 11, color: mutedColor),
+                            const Text(
+                              'EST. buyer fee:',
+                              style: TextStyle(fontSize: 11, color: mutedColor),
                             ),
-                            Text('${fee!.toStringAsFixed(2)} C',
+                            Text(formatCreditUnits(estimateFeeUnits.toString()),
                                 style: const TextStyle(
                                     fontSize: 11, color: mutedColor)),
                           ],
                         ),
                       ],
-                      const Divider(height: 14, color: Colors.white12),
+                      Divider(height: 14, color: context.subtleBorderColor),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             side == 'buy'
-                                ? 'Total required escrow:'
-                                : 'Expected gross proceeds:',
+                                ? 'EST. total escrow:'
+                                : 'EST. gross proceeds:',
                             style: const TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           Text(
-                            quoteLoading
-                                ? 'Calculating…'
-                                : grandTotal == null
-                                    ? 'Awaiting server quote'
-                                    : '${grandTotal.toStringAsFixed(2)} C',
+                            estimateTotalUnits == null
+                                ? 'Enter valid values'
+                                : formatCreditUnits(
+                                    estimateTotalUnits.toString()),
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
                               color: side == 'buy'
                                   ? cyanAccentColor
-                                  : Colors.orangeAccent,
+                                  : context.warningColor,
                             ),
                           ),
                         ],
                       ),
+                      if (quoteOk) ...[
+                        Divider(height: 14, color: context.subtleBorderColor),
+                        const Text('AUTHORITATIVE SERVER QUOTE',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: cyanAccentColor)),
+                        Text(
+                            'Base value: ${formatCreditUnits(serverQuote.baseValueUnits)}'),
+                        Text(
+                            'Buyer fee (${serverQuote.feeBps} bps): ${formatCreditUnits(serverQuote.feeUnits)}'),
+                        Text(
+                            'Total escrow: ${formatCreditUnits(serverQuote.totalEscrowUnits)}'),
+                      ],
                     ],
                   ),
                 ),
@@ -796,18 +923,26 @@ Future<void> showPlaceOrderDialog(
               child: const Text('CANCEL'),
             ),
             FilledButton(
-              onPressed: qty <= 0 || price <= 0 || !quoteOk || quoteLoading
+              onPressed: qty <= 0 || price <= 0 || quoteLoading
                   ? null
                   : () async {
+                      if (!reviewed || !quoteOk) {
+                        await refreshQuote(setDialogState);
+                        if (serverQuote.ok) {
+                          setDialogState(() => reviewed = true);
+                        }
+                        return;
+                      }
                       Navigator.pop(dialogContext);
                       await action(() => api.submitOrder(
                             selectedProduct,
-                            price,
+                            priceText,
                             side: side,
-                            quantity: qty,
+                            quantity: quantityText,
                           ));
                     },
-              child: const Text('SUBMIT ORDER'),
+              child:
+                  Text(reviewed && quoteOk ? 'SUBMIT ORDER' : 'REVIEW ORDER'),
             ),
           ],
         );
@@ -819,12 +954,23 @@ Future<void> showPlaceOrderDialog(
   priceController.dispose();
 }
 
+class _DepthLevel {
+  final String price;
+  final String quantity;
+  final int orderCount;
+
+  const _DepthLevel({
+    required this.price,
+    required this.quantity,
+    required this.orderCount,
+  });
+}
+
 class MarketSignalsPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
   final Key? panelKey;
-  final Map<String, dynamic> priceHistory;
   final EarthApi api;
 
   const MarketSignalsPanel({
@@ -833,7 +979,6 @@ class MarketSignalsPanel extends StatefulWidget {
     required this.state,
     required this.busy,
     required this.action,
-    this.priceHistory = const {},
     this.api = const EarthApi(),
   });
 
@@ -854,6 +999,16 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   final TextEditingController _priceController = TextEditingController();
   final FocusNode _qtyFocusNode = FocusNode();
   final FocusNode _priceFocusNode = FocusNode();
+  Map<String, HouseCommodityPosition> _positions = const {};
+  final Map<String, List<MarketCandle>> _hourlyCandles = {};
+  final Map<String, List<MarketCandle>> _dailyCandles = {};
+  final Map<String, MarketBook> _books = {};
+  MarketCandleInterval _candleInterval = MarketCandleInterval.hourly;
+  bool _loadingCandles = false;
+  bool _loadingPositions = false;
+  bool _showDepth = false;
+  bool _loadingDepth = false;
+  String? _depthError;
 
   Color get _groupSurface => EarthThemeController.instance.cardSurface;
 
@@ -861,6 +1016,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   void initState() {
     super.initState();
     _initDefaultCommodity();
+    _loadPositions();
+    _loadCandles(_selectedCommodity, _candleInterval);
     _qtyController.addListener(() {
       if (_orderSide == 'buy') {
         _buyQty = _qtyController.text;
@@ -877,22 +1034,122 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     });
   }
 
-  int _reservedSellUnits(String product) {
-    return widget.state.marketOrders.whereType<Map>().where((order) {
-      final side = order['side']?.toString().toLowerCase();
-      final status = order['status']?.toString().toLowerCase();
-      return side == 'sell' &&
-          (status == 'open' || status == 'partial') &&
-          order['product']?.toString() == product;
-    }).fold<int>(0, (sum, order) {
-      final quantity = asInt(order['quantity']) ?? 0;
-      final filled = asInt(order['filled_quantity'] ?? order['filled']) ?? 0;
-      return sum + (quantity - filled).clamp(0, quantity);
-    });
+  String _instrumentFor(String product) => 'SPOT-${product.toUpperCase()}';
+
+  List<MarketCandle> _candlesFor(String product) =>
+      (_candleInterval == MarketCandleInterval.hourly
+          ? _hourlyCandles[product]
+          : _dailyCandles[product]) ??
+      const [];
+
+  Future<void> _loadCandles(
+      String product, MarketCandleInterval interval) async {
+    if (_loadingCandles || _candlesFor(product).isNotEmpty) return;
+    _loadingCandles = true;
+    try {
+      final candles = await widget.api.marketCandles(
+        _instrumentFor(product),
+        interval: interval,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (interval == MarketCandleInterval.hourly) {
+          _hourlyCandles[product] = candles;
+        } else {
+          _dailyCandles[product] = candles;
+        }
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          if (interval == MarketCandleInterval.hourly) {
+            _hourlyCandles[product] = const [];
+          } else {
+            _dailyCandles[product] = const [];
+          }
+        });
+      }
+    } finally {
+      _loadingCandles = false;
+    }
+  }
+
+  void _setCandleInterval(MarketCandleInterval interval) {
+    if (_candleInterval == interval) return;
+    setState(() => _candleInterval = interval);
+    _loadCandles(_selectedCommodity, interval);
+  }
+
+  Future<void> _loadPositions() async {
+    if (_loadingPositions) return;
+    _loadingPositions = true;
+    try {
+      final response = await widget.api.marketHousePositions();
+      if (!mounted) return;
+      final positions = <String, HouseCommodityPosition>{};
+      for (final position in response) {
+        final product = position.product.toLowerCase();
+        if (product.isNotEmpty) positions[product] = position;
+      }
+      setState(() => _positions = positions);
+    } catch (_) {
+      if (mounted) setState(() => _positions = const {});
+    } finally {
+      _loadingPositions = false;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MarketSignalsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.state, widget.state) ||
+        oldWidget.api != widget.api) {
+      _loadPositions();
+    }
+  }
+
+  HouseCommodityPosition? _position(String product) => _positions[product];
+
+  double? _availableQuantity(String product) =>
+      double.tryParse(_position(product)?.availableQuantity ?? '');
+
+  double? _reservedQuantity(String product) =>
+      double.tryParse(_position(product)?.reservedQuantity ?? '');
+
+  String _quantityLabel(double? value) => value == null
+      ? 'UNAVAILABLE'
+      : value.toString().replaceFirst(RegExp(r'\.0$'), '');
+
+  @override
+  void dispose() {
+    _qtyController.dispose();
+    _priceController.dispose();
+    _qtyFocusNode.dispose();
+    _priceFocusNode.dispose();
+    super.dispose();
   }
 
   void _refreshOrderTotals() {
     if (mounted) setState(() {});
+  }
+
+  void _setSellQuantityFraction(double fraction) {
+    final available = _availableQuantity(_selectedCommodity);
+    if (available == null || available <= 0) return;
+    _qtyController.text = _quantityLabel(available * fraction);
+    _refreshOrderTotals();
+  }
+
+  Widget _sellQuantityPreset(String label, double fraction) {
+    return OutlinedButton(
+      onPressed: () => _setSellQuantityFraction(fraction),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+      ),
+      child: Text(label),
+    );
   }
 
   void _initDefaultCommodity() {
@@ -916,6 +1173,89 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       _sellPrice = pStr;
       _priceController.text = pStr;
     });
+    _loadCandles(key, _candleInterval);
+    if (_showDepth) _loadDepth(key);
+  }
+
+  Future<void> _loadDepth(String product) async {
+    if (_loadingDepth || _books.containsKey(product)) return;
+    setState(() {
+      _loadingDepth = true;
+      _depthError = null;
+    });
+    try {
+      final book = await widget.api.marketBook(_instrumentFor(product));
+      if (!mounted) return;
+      setState(() => _books[product] = book);
+    } catch (_) {
+      if (mounted) setState(() => _depthError = 'Market depth unavailable.');
+    } finally {
+      if (mounted) setState(() => _loadingDepth = false);
+    }
+  }
+
+  Future<void> _toggleDepth() async {
+    if (_showDepth) {
+      setState(() => _showDepth = false);
+      return;
+    }
+    setState(() => _showDepth = true);
+    await _loadDepth(_selectedCommodity);
+  }
+
+  BigInt? _parseFixed(String value, int decimals) {
+    final text = value.trim();
+    if (text.isEmpty) return null;
+    final negative = text.startsWith('-');
+    final unsigned =
+        (negative || text.startsWith('+')) ? text.substring(1) : text;
+    final parts = unsigned.split('.');
+    if (parts.length > 2 || parts.first.isEmpty) return null;
+    final whole = BigInt.tryParse(parts.first);
+    final fraction = parts.length == 2 ? parts[1] : '';
+    if (whole == null ||
+        !RegExp(r'^\d*$').hasMatch(fraction) ||
+        fraction.length > decimals) {
+      return null;
+    }
+    final scaled = whole * BigInt.from(10).pow(decimals) +
+        BigInt.parse(fraction.padRight(decimals, '0').isEmpty
+            ? '0'
+            : fraction.padRight(decimals, '0'));
+    return negative ? -scaled : scaled;
+  }
+
+  String _formatFixed(BigInt value, int decimals) {
+    final negative = value < BigInt.zero;
+    final magnitude = value.abs();
+    final scale = BigInt.from(10).pow(decimals);
+    final whole = magnitude ~/ scale;
+    final fraction = (magnitude % scale).toString().padLeft(decimals, '0');
+    return '${negative ? '-' : ''}$whole.$fraction';
+  }
+
+  List<_DepthLevel> _aggregateDepth(List<MarketOrder> orders,
+      {required bool bids}) {
+    final quantities = <BigInt, BigInt>{};
+    final counts = <BigInt, int>{};
+    for (final order in orders) {
+      final price = _parseFixed(order.limitPrice, 2);
+      final quantity = _parseFixed(order.remainingQuantity, 6);
+      if (price == null || quantity == null || quantity <= BigInt.zero) {
+        continue;
+      }
+      quantities[price] = (quantities[price] ?? BigInt.zero) + quantity;
+      counts[price] = (counts[price] ?? 0) + 1;
+    }
+    final prices = quantities.keys.toList()
+      ..sort((a, b) => bids ? b.compareTo(a) : a.compareTo(b));
+    return prices
+        .map((price) => _DepthLevel(
+              price: _formatFixed(price, 2),
+              quantity: _formatFixed(quantities[price]!, 6),
+              orderCount: counts[price]!,
+            ))
+        .toList(growable: false);
   }
 
   void _onSideChanged(String newSide) {
@@ -941,32 +1281,20 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     });
   }
 
-  @override
-  void dispose() {
-    _qtyController.dispose();
-    _priceController.dispose();
-    _qtyFocusNode.dispose();
-    _priceFocusNode.dispose();
-    super.dispose();
-  }
-
   Future<void> _confirmOrder({
     required BuildContext context,
-    required int quantity,
-    required double limitPrice,
+    required String quantity,
+    required String limitPrice,
     required String product,
     required String side,
   }) async {
     final quote = await widget.api.quoteOrder(
       product: product,
-      quantity: quantity.toDouble(),
+      quantity: quantity,
       limitPrice: limitPrice,
       side: side,
     );
-    if (!mounted || !context.mounted || quote['ok'] != true) return;
-    double cents(String? value) => (double.tryParse(value ?? '0') ?? 0) / 100;
-    final fee = cents(quote['feeUnits']?.toString());
-    final total = cents(quote['totalEscrowUnits']?.toString());
+    if (!mounted || !context.mounted || !quote.ok) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -983,16 +1311,16 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             const SizedBox(height: 12),
             Text('Quantity: $quantity units',
                 style: const TextStyle(fontSize: 12)),
-            Text('Limit price: ${limitPrice.toStringAsFixed(2)} Credits / unit',
+            Text('Limit price: $limitPrice Credits / unit',
                 style: const TextStyle(fontSize: 12)),
             if (side == 'buy')
-              Text('Fee: ${fee.toStringAsFixed(2)} Credits',
+              Text('Buyer fee: ${formatCreditUnits(quote.feeUnits)}',
                   style: const TextStyle(fontSize: 12, color: mutedColor)),
             const SizedBox(height: 6),
             Text(
               side == 'buy'
-                  ? 'Total escrow: ${total.toStringAsFixed(2)} Credits'
-                  : 'Expected proceeds: ${total.toStringAsFixed(2)} Credits',
+                  ? 'Total escrow: ${formatCreditUnits(quote.totalEscrowUnits)}'
+                  : 'Expected proceeds: ${formatCreditUnits(quote.totalEscrowUnits)}',
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
             ),
           ],
@@ -1034,17 +1362,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final chartPrice = currentPrice ?? 0.0;
     final supply = asInt(productData['supply']) ?? 0;
     final demand = asInt(productData['demand']) ?? 0;
-    final history = widget.priceHistory[_selectedCommodity];
-
-    final userStock = asInt(widget.state.resources[_selectedCommodity]) ??
-        (asInt(widget.state.resources['materials']) ?? 0);
-
-    final historyList = (history is Map && history['history'] is List)
-        ? (history['history'] as List).whereType<Map>().toList()
-        : <Map>[];
-
-    final prices = historyList
-        .map((p) => asDouble(p['price']))
+    final candles = _candlesFor(_selectedCommodity);
+    final prices = candles
+        .map((candle) => double.tryParse(candle.close))
         .whereType<double>()
         .toList();
 
@@ -1062,14 +1382,23 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final totalPressure = (supply + demand).clamp(1, 999999);
     final demandPct = (demand / totalPressure).clamp(0.0, 1.0);
 
-    final qty = int.tryParse(_qtyController.text.trim()) ?? 0;
+    final qty = double.tryParse(_qtyController.text.trim()) ?? 0;
     final limitPrice = double.tryParse(_priceController.text.trim()) ?? 0.0;
-    final reservedSellUnits = _reservedSellUnits(_selectedCommodity);
-    final maxSellableUnits =
-        (userStock - reservedSellUnits).clamp(0, userStock);
-
     final isBuy = _orderSide == 'buy';
-    final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
+    final estimatedBaseUnits =
+        _estimatedQuoteUnits(_qtyController.text, _priceController.text);
+    final estimatedFeeUnits = isBuy
+        ? _estimatedFeeUnits(
+            estimatedBaseUnits, widget.state.marketFeeRate.toString())
+        : BigInt.zero;
+    final estimatedEscrowUnits =
+        estimatedBaseUnits == null || estimatedFeeUnits == null
+            ? null
+            : estimatedBaseUnits + estimatedFeeUnits;
+    final availableSellQuantity = _availableQuantity(_selectedCommodity);
+    final reservedSellQuantity = _reservedQuantity(_selectedCommodity);
+
+    final sideColor = isBuy ? cyanAccentColor : context.warningColor;
     final canSubmit = !widget.busy && qty > 0 && limitPrice > 0;
 
     final currentDay = asIntOr(widget.state.clock['day'], 1);
@@ -1175,9 +1504,19 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             context,
             'MARKET PRICES & STOCK',
             description:
-                '• Choose a commodity to compare its clearing price, liquidity, demand, supply, and your current inventory.',
+                '• Choose a commodity to compare its clearing price, best bid/ask, open buy/sell interest, and your current inventory.',
           ),
           _buildCommodityMarketTable(),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _loadingDepth ? null : _toggleDepth,
+              icon: Icon(_showDepth ? Icons.expand_less : Icons.unfold_more,
+                  size: 15),
+              label: Text(_showDepth ? 'HIDE DEPTH' : 'VIEW DEPTH'),
+            ),
+          ),
+          if (_showDepth) _buildDepthPanel(context),
           const SizedBox(height: 34),
 
           // 2. INLINE COMMODITY GRAPH & BUY/SELL TRADING CONTROLS (NO EXTRA SUBWIDGET CONTAINER)
@@ -1188,28 +1527,40 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
               final chartAndDepthSection = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Price trend chart
+                  _buildChartModeToggle(context),
+                  const SizedBox(height: 8),
+                  // Price trend/candle chart
                   Container(
-                    height: 140,
+                    height: _candleInterval == MarketCandleInterval.daily
+                        ? 280
+                        : 140,
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: prices.length >= 2
-                        ? CustomPaint(
-                            painter: _PriceAreaChartPainter(
-                              prices: prices,
-                              minPrice: minPrice,
-                              maxPrice: maxPrice,
-                              lineColor: meta.color,
-                            ),
+                    child: _candleInterval == MarketCandleInterval.daily
+                        ? CandlestickChartWidget(
+                            candles: candles,
+                            ma7: const [],
+                            ma25: const [],
+                            commodity: meta.name,
+                            height: 260,
                           )
-                        : Center(
-                            child: Text(
-                              'Aggregating periodic batch clearing history…',
-                              style: TextStyle(
-                                  fontSize: 10.5,
-                                  color: mutedColor.withValues(alpha: .7)),
-                            ),
-                          ),
+                        : prices.length >= 2
+                            ? CustomPaint(
+                                painter: _PriceAreaChartPainter(
+                                  prices: prices,
+                                  minPrice: minPrice,
+                                  maxPrice: maxPrice,
+                                  lineColor: meta.color,
+                                ),
+                              )
+                            : Center(
+                                child: Text(
+                                  'No candle data available for this instrument.',
+                                  style: TextStyle(
+                                      fontSize: 10.5,
+                                      color: mutedColor.withValues(alpha: .7)),
+                                ),
+                              ),
                   ),
                   const SizedBox(height: 12),
 
@@ -1229,10 +1580,10 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                   fontWeight: FontWeight.w700,
                                   color: cyanAccentColor));
                           final supplyText = Text(supplyLabel,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.orangeAccent));
+                                  color: context.warningColor));
                           if (constraints.maxWidth < 520) {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1262,7 +1613,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               ),
                               Expanded(
                                 flex: ((1 - demandPct) * 100).round(),
-                                child: Container(color: Colors.orangeAccent),
+                                child: Container(color: context.warningColor),
                               ),
                             ],
                           ),
@@ -1290,7 +1641,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                           onTap: (index) =>
                               _onSideChanged(index == 0 ? 'buy' : 'sell'),
                           indicatorColor:
-                              isBuy ? cyanAccentColor : Colors.orangeAccent,
+                              isBuy ? cyanAccentColor : context.warningColor,
                           indicatorSize: TabBarIndicatorSize.tab,
                           indicatorWeight: 2.5,
                           dividerColor: EarthColors.borderSubtle,
@@ -1333,10 +1684,15 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                       suffixIcon: TextButton(
                                         onPressed: () {
                                           if (isBuy) return;
-                                          final maxUnits = maxSellableUnits;
-                                          _qtyController.text = maxUnits
-                                              .clamp(1, 99999)
-                                              .toString();
+                                          final maxQuantity =
+                                              _availableQuantity(
+                                                  _selectedCommodity);
+                                          if (maxQuantity == null ||
+                                              maxQuantity <= 0) {
+                                            return;
+                                          }
+                                          _qtyController.text =
+                                              _quantityLabel(maxQuantity);
                                           _refreshOrderTotals();
                                         },
                                         child: const Text('MAX'),
@@ -1382,34 +1738,64 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 Expanded(
                                   flex: 1,
                                   child: _orderValue(
-                                      'FEE', isBuy ? 'SERVER QUOTE' : '—'),
+                                    'EST. BUYER FEE',
+                                    estimatedFeeUnits == null
+                                        ? '—'
+                                        : formatCreditUnits(
+                                            estimatedFeeUnits.toString()),
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   flex: 3,
                                   child: _orderValue(
-                                      isBuy ? 'TOTAL' : 'PROCEEDS',
-                                      'SERVER QUOTE'),
+                                    isBuy ? 'EST. ESCROW' : 'EST. PROCEEDS',
+                                    estimatedEscrowUnits == null
+                                        ? '—'
+                                        : formatCreditUnits(
+                                            estimatedEscrowUnits.toString()),
+                                  ),
                                 ),
                               ],
                             ),
+                            if (!isBuy) ...[
+                              const SizedBox(height: 7),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  const Text('SELL PRESET',
+                                      style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          color: mutedColor)),
+                                  _sellQuantityPreset('25%', .25),
+                                  _sellQuantityPreset('50%', .50),
+                                  _sellQuantityPreset('75%', .75),
+                                  _sellQuantityPreset('MAX', 1),
+                                ],
+                              ),
+                            ],
                             const SizedBox(height: 12),
 
                             Text(
                               isBuy
                                   ? 'Available balance and fee are verified by the server during review.'
-                                  : 'Sellable: $maxSellableUnits units · Reserved: $reservedSellUnits units',
+                                  : 'Sellable: ${_quantityLabel(availableSellQuantity)} units · Reserved: ${_quantityLabel(reservedSellQuantity)} units',
                               style: const TextStyle(
                                   fontSize: 10, color: mutedColor),
                             ),
-                            if (!isBuy && qty > maxSellableUnits) ...[
+                            if (!isBuy &&
+                                (availableSellQuantity == null ||
+                                    qty > availableSellQuantity)) ...[
                               const SizedBox(height: 4),
                               Text(
                                 isBuy
                                     ? 'Reduce quantity or price to fit your available Credits.'
                                     : 'Some inventory is already reserved by another sell order.',
-                                style: const TextStyle(
-                                    fontSize: 10, color: Colors.orangeAccent),
+                                style: TextStyle(
+                                    fontSize: 10, color: context.warningColor),
                               ),
                             ],
                             const SizedBox(height: 12),
@@ -1423,8 +1809,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                     : () async {
                                         await _confirmOrder(
                                           context: context,
-                                          quantity: qty,
-                                          limitPrice: limitPrice,
+                                          quantity: _qtyController.text.trim(),
+                                          limitPrice:
+                                              _priceController.text.trim(),
                                           product: _selectedCommodity,
                                           side: _orderSide,
                                         );
@@ -1432,7 +1819,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 style: FilledButton.styleFrom(
                                   backgroundColor:
                                       sideColor.withValues(alpha: .85),
-                                  foregroundColor: Colors.black,
+                                  foregroundColor: context.canvasColor,
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 12),
                                   shape: RoundedRectangleBorder(
@@ -1513,6 +1900,102 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         ],
       );
 
+  Widget _buildDepthPanel(BuildContext context) {
+    final book = _books[_selectedCommodity];
+    if (_loadingDepth && book == null) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: Text('Loading batch-auction depth…',
+            style: TextStyle(fontSize: 11, color: mutedColor)),
+      );
+    }
+    if (_depthError != null && book == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(_depthError!,
+            style: TextStyle(fontSize: 11, color: context.warningColor)),
+      );
+    }
+    if (book == null) return const SizedBox.shrink();
+    final bids = _aggregateDepth(book.bids, bids: true);
+    final asks = _aggregateDepth(book.asks, bids: false);
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _groupSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: EarthColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('BATCH-AUCTION DEPTH',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .8)),
+          const SizedBox(height: 3),
+          const Text(
+            'Open bids and asks waiting for the next uniform-price clearing; this is not a continuous matching order book.',
+            style: TextStyle(fontSize: 10, color: mutedColor),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildDepthSide('BIDS', bids, cyanAccentColor)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _buildDepthSide('ASKS', asks, context.warningColor)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDepthSide(String title, List<_DepthLevel> levels, Color color) {
+    if (levels.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: TextStyle(
+                  fontSize: 10, color: color, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          const Text('No open levels',
+              style: TextStyle(fontSize: 10, color: mutedColor)),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title,
+            style: TextStyle(
+                fontSize: 10, color: color, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        for (final level in levels.take(6))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Row(
+              children: [
+                Expanded(
+                    child: Text(level.price,
+                        style: const TextStyle(fontSize: 10))),
+                Text(level.quantity,
+                    style: const TextStyle(fontSize: 10, color: mutedColor)),
+                const SizedBox(width: 5),
+                Text('(${level.orderCount})',
+                    style: const TextStyle(fontSize: 9, color: mutedColor)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildCommodityMarketTable() => Container(
         decoration: BoxDecoration(
           color: _groupSurface,
@@ -1531,10 +2014,11 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                 final meta = CommodityMeta.forProduct(key);
                 final supply = asInt(data['supply']) ?? 0;
                 final demand = asInt(data['demand']) ?? 0;
-                final ownedUnits = asInt(widget.state.resources[key]) ?? 0;
-                final reservedUnits = _reservedSellUnits(key);
-                final availableUnits =
-                    (ownedUnits - reservedUnits).clamp(0, ownedUnits);
+                final position = _position(key);
+                final availableQuantity =
+                    position?.availableQuantity ?? 'UNAVAILABLE';
+                final reservedQuantity =
+                    position?.reservedQuantity ?? 'UNAVAILABLE';
                 final selected = key == _selectedCommodity;
                 final pressure = _marketPressure(supply, demand);
                 final last = indexed.$1 == entries.length - 1;
@@ -1571,17 +2055,24 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               const SizedBox(height: 4),
                               Row(children: [
                                 Text(
-                                    'Available: $availableUnits · Reserved: $reservedUnits',
+                                    'Available: $availableQuantity · Reserved: $reservedQuantity',
                                     style: const TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
                                         color: mutedColor)),
                                 const Spacer(),
                                 _MiniTrendBadge(
-                                    history: widget.priceHistory[key]),
+                                    candles: _hourlyCandles[key] ?? const []),
                                 const SizedBox(width: 10),
-                                _pressureLabel(pressure, supply, demand),
+                                _pressureLabel(
+                                    context, pressure, supply, demand),
                               ]),
+                              const SizedBox(height: 3),
+                              Text(
+                                'BEST BID ${data['bestBid']?.toString() ?? 'UNAVAILABLE'} · BEST ASK ${data['bestAsk']?.toString() ?? 'UNAVAILABLE'} · OPEN BUY ${data['demand']?.toString() ?? 'UNAVAILABLE'} · OPEN SELL ${data['supply']?.toString() ?? 'UNAVAILABLE'}',
+                                style: const TextStyle(
+                                    fontSize: 9, color: mutedColor),
+                              ),
                             ],
                           ),
                         ),
@@ -1607,37 +2098,59 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       );
 
   String _marketPressure(int supply, int demand) {
-    if (demand > supply * 1.15) return 'DEMAND HIGH';
-    if (supply > demand * 1.15) return 'SUPPLY HIGH';
-    return 'BALANCED';
+    if (demand > supply * 1.15) return 'OPEN BUY HIGH';
+    if (supply > demand * 1.15) return 'OPEN SELL HIGH';
+    return 'OPEN INTEREST BALANCED';
   }
 
-  Widget _pressureLabel(String pressure, int supply, int demand) {
-    final color = pressure == 'DEMAND HIGH'
+  Widget _pressureLabel(
+      BuildContext context, String pressure, int supply, int demand) {
+    final color = pressure == 'OPEN BUY HIGH'
         ? cyanAccentColor
-        : pressure == 'SUPPLY HIGH'
-            ? Colors.orangeAccent
-            : mutedColor;
+        : pressure == 'OPEN SELL HIGH'
+            ? context.warningColor
+            : context.mutedColor;
     return Text(pressure,
         style: TextStyle(
             fontSize: 9.5, fontWeight: FontWeight.w700, color: color));
   }
 }
 
-class _MiniTrendBadge extends StatelessWidget {
-  final dynamic history;
+extension on _MarketSignalsPanelState {
+  Widget _buildChartModeToggle(BuildContext context) => Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          SegmentedButton<MarketCandleInterval>(
+            segments: const [
+              ButtonSegment(
+                  value: MarketCandleInterval.hourly, label: Text('TREND')),
+              ButtonSegment(
+                  value: MarketCandleInterval.daily, label: Text('CANDLES')),
+            ],
+            selected: {_candleInterval},
+            onSelectionChanged: (selection) =>
+                _setCandleInterval(selection.first),
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              textStyle: WidgetStatePropertyAll(
+                  TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ],
+      );
+}
 
-  const _MiniTrendBadge({required this.history});
+class _MiniTrendBadge extends StatelessWidget {
+  final List<MarketCandle> candles;
+
+  const _MiniTrendBadge({required this.candles});
 
   @override
   Widget build(BuildContext context) {
-    if (history is! Map || history['history'] is! List) {
-      return const SizedBox.shrink();
-    }
-    final points = (history['history'] as List).whereType<Map>().toList();
-    if (points.length < 2) return const SizedBox.shrink();
-    final latest = asDouble(points.first['price']);
-    final oldest = asDouble(points.last['price']);
+    if (candles.length < 2) return const SizedBox.shrink();
+    final latest = double.tryParse(candles.last.close);
+    final oldest = double.tryParse(candles.first.close);
     if (latest == null || oldest == null || oldest == 0) {
       return const SizedBox.shrink();
     }
@@ -1648,7 +2161,7 @@ class _MiniTrendBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
-        color: (isPos ? Colors.tealAccent : Colors.orangeAccent)
+        color: (isPos ? context.successColor : context.warningColor)
             .withValues(alpha: .15),
         borderRadius: BorderRadius.circular(4),
       ),
@@ -1657,7 +2170,7 @@ class _MiniTrendBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,
-          color: isPos ? Colors.tealAccent : Colors.orangeAccent,
+          color: isPos ? context.successColor : context.warningColor,
         ),
       ),
     );
@@ -1781,7 +2294,7 @@ class MarketOrderBookPanel extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: surfaceColor.withValues(alpha: .6),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
+                    border: Border.all(color: context.subtleBorderColor),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1836,14 +2349,62 @@ class MyMarketOrdersPanel extends StatefulWidget {
 
 class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
   String _filter = 'all';
+  List<MarketOrder> _orders = const [];
+  String? _nextCursor;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _orders = _snapshotOrders(widget.state);
+    _loadOrders();
+  }
+
+  List<MarketOrder> _snapshotOrders(EarthState state) => state.marketOrders
+      .whereType<Map>()
+      .map((raw) => MarketOrder.fromJson(Map<String, dynamic>.from(raw)))
+      .toList();
+
+  @override
+  void didUpdateWidget(covariant MyMarketOrdersPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.state, widget.state) ||
+        oldWidget.api != widget.api) {
+      _loadOrders();
+    }
+  }
+
+  Future<void> _loadOrders({bool append = false}) async {
+    if (_loading) return;
+    _loading = true;
+    try {
+      final page = await widget.api.marketOrders(
+        cursor: append ? _nextCursor : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _orders = append ? [..._orders, ...page.orders] : page.orders;
+        _nextCursor = page.nextCursor;
+      });
+    } catch (_) {
+      // Keep current/open snapshot orders visible while the complete history
+      // read model is temporarily unavailable. No closed order is synthesized.
+      if (!mounted || append) return;
+      setState(() {
+        _orders = _snapshotOrders(widget.state);
+        _nextCursor = null;
+      });
+    } finally {
+      _loading = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final allOrders = widget.state.marketOrders;
+    final allOrders = _orders;
 
-    final filtered = allOrders.where((raw) {
-      if (raw is! Map) return false;
-      final status = (raw['status']?.toString() ?? 'open').toLowerCase();
+    final filtered = allOrders.where((order) {
+      final status = order.status.toLowerCase();
       if (_filter == 'active') return status == 'open' || status == 'partial';
       if (_filter == 'filled') return status == 'filled';
       if (_filter == 'cancelled') {
@@ -1870,13 +2431,13 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
           // Filter Tabs
           Row(
             children: [
-              _tabButton('ALL (${allOrders.length})', 'all'),
+              _tabButton(context, 'ALL (${allOrders.length})', 'all'),
               const SizedBox(width: 6),
-              _tabButton('ACTIVE ORDERS', 'active'),
+              _tabButton(context, 'ACTIVE ORDERS', 'active'),
               const SizedBox(width: 6),
-              _tabButton('FILLED ORDERS', 'filled'),
+              _tabButton(context, 'FILLED ORDERS', 'filled'),
               const SizedBox(width: 6),
-              _tabButton('CANCELLED ORDERS', 'cancelled'),
+              _tabButton(context, 'CANCELLED ORDERS', 'cancelled'),
             ],
           ),
           const SizedBox(height: 14),
@@ -1887,39 +2448,24 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
               style: TextStyle(color: mutedColor, fontSize: 11),
             )
           else
-            ...filtered.map((raw) {
-              final order = raw as Map<String, dynamic>;
-              final id = order['id']?.toString() ?? '';
-              final side = (order['side']?.toString() ?? 'buy').toUpperCase();
-              final product =
-                  (order['product']?.toString() ?? '').toUpperCase();
-              final quantity = asInt(order['quantity']) ?? 1;
-              final filledQty = asInt(order['filled_quantity']) ??
-                  asInt(order['filled']) ??
-                  0;
-              final remaining = (quantity - filledQty).clamp(0, quantity);
-              final limitPrice = asDouble(order['limit_price']) ??
-                  asDouble(order['limitPrice']) ??
-                  0.0;
-              final settlementPrice = asDouble(order['settlement_price']) ??
-                  asDouble(order['clearing_price']) ??
-                  asDouble(order['price']);
-              final status =
-                  (order['status']?.toString() ?? 'open').toLowerCase();
-              final reservedCredits = asDouble(order['reserved_credits']) ??
-                  asDouble(order['reservedCredits']) ??
-                  (side == 'BUY' && (status == 'open' || status == 'partial')
-                      ? remaining * limitPrice
-                      : 0.0);
-              final releasedEscrow = asDouble(order['released_escrow']) ??
-                  asDouble(order['releasedEscrow']) ??
-                  (status == 'cancelled' || status == 'refunded'
-                      ? remaining * limitPrice
-                      : 0.0);
-              final fee = asDouble(order['fee']) ?? 0.0;
-              final totalValue = filledQty > 0
-                  ? filledQty * (settlementPrice ?? limitPrice)
-                  : quantity * limitPrice;
+            ...filtered.map((order) {
+              final id = order.id;
+              final side = order.side.toUpperCase();
+              final product = (order.product ?? '').toUpperCase();
+              final quantityText = order.quantity;
+              final filledText = order.filledQuantity;
+              final remainingText = order.remainingQuantity;
+              final quantity = double.tryParse(quantityText) ?? 0;
+              final filledQty = double.tryParse(filledText) ?? 0;
+              final remaining = double.tryParse(remainingText) ?? 0;
+              final limitPriceText = order.limitPrice;
+              final status = order.status.toLowerCase();
+              final reservedEscrow = order.remainingReservation;
+              final releasedEscrow = order.releasedEscrow;
+              final cancellationRefund = order.cancellationRefund;
+              final fee = order.totalFeePaid;
+              final totalValue = order.filledGrossValue;
+              final settlementPrice = order.weightedAverageFillPrice;
 
               final isBuy = side == 'BUY';
               final fillProgress =
@@ -1928,13 +2474,13 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                   (status == 'open' || status == 'partial') && !widget.busy;
 
               Color statusColor = mutedColor;
-              if (status == 'open') statusColor = Colors.lightBlueAccent;
-              if (status == 'partial') statusColor = Colors.orangeAccent;
+              if (status == 'open') statusColor = context.primaryColor;
+              if (status == 'partial') statusColor = context.warningColor;
               if (status == 'filled') statusColor = cyanAccentColor;
               if (status == 'cancelled' || status == 'rejected') {
-                statusColor = Colors.redAccent;
+                statusColor = context.errorColor;
               }
-              if (status == 'refunded') statusColor = Colors.tealAccent;
+              if (status == 'refunded') statusColor = context.successColor;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -1942,7 +2488,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                 decoration: BoxDecoration(
                   color: surfaceColor.withValues(alpha: .72),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white10),
+                  border: Border.all(color: context.subtleBorderColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1955,7 +2501,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color:
-                                (isBuy ? cyanAccentColor : Colors.orangeAccent)
+                                (isBuy ? cyanAccentColor : context.warningColor)
                                     .withValues(alpha: .15),
                             borderRadius: BorderRadius.circular(4),
                           ),
@@ -1964,8 +2510,9 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                             style: TextStyle(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w800,
-                              color:
-                                  isBuy ? cyanAccentColor : Colors.orangeAccent,
+                              color: isBuy
+                                  ? cyanAccentColor
+                                  : context.warningColor,
                             ),
                           ),
                         ),
@@ -1975,7 +2522,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '$side $product · $quantity units @ ${limitPrice.toStringAsFixed(2)} C',
+                                '$side $product · $quantityText units @ $limitPriceText C',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,
@@ -1983,7 +2530,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Filled: $filledQty / $quantity ($remaining remaining) · Total: ${totalValue.toStringAsFixed(2)} C',
+                                'Filled: $filledText / $quantityText ($remainingText remaining) · Filled gross: $totalValue C',
                                 style: const TextStyle(
                                     fontSize: 10, color: mutedColor),
                               ),
@@ -2017,7 +2564,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                       child: LinearProgressIndicator(
                         value: fillProgress,
                         minHeight: 4,
-                        backgroundColor: Colors.white10,
+                        backgroundColor: context.subtleBorderColor,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           fillProgress >= 1.0 ? cyanAccentColor : violetColor,
                         ),
@@ -2032,21 +2579,30 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                       children: [
                         if (settlementPrice != null && filledQty > 0)
                           Text(
-                            'Settlement price: ${settlementPrice.toStringAsFixed(2)} C · Fee paid: ${fee.toStringAsFixed(2)} C',
+                            'Weighted fill price: $settlementPrice C · ${isBuy ? 'Buyer fee paid' : 'Fee paid'}: $fee C',
                             style: const TextStyle(
                                 fontSize: 9.5, color: cyanAccentColor),
                           ),
-                        if (reservedCredits > 0)
+                        if (reservedEscrow != '0' &&
+                            reservedEscrow != '0.000000')
                           Text(
-                            'Reserved Credits in escrow: ${reservedCredits.toStringAsFixed(2)} C',
-                            style: const TextStyle(
-                                fontSize: 9.5, color: Colors.lightBlueAccent),
+                            'Reserved escrow: $reservedEscrow',
+                            style: TextStyle(
+                                fontSize: 9.5, color: context.primaryColor),
                           ),
-                        if (releasedEscrow > 0)
+                        if (releasedEscrow != '0' &&
+                            releasedEscrow != '0.000000')
                           Text(
-                            'Released escrow refund: ${releasedEscrow.toStringAsFixed(2)} C',
-                            style: const TextStyle(
-                                fontSize: 9.5, color: Colors.tealAccent),
+                            'Released escrow: $releasedEscrow',
+                            style: TextStyle(
+                                fontSize: 9.5, color: context.successColor),
+                          ),
+                        if (cancellationRefund != '0' &&
+                            cancellationRefund != '0.000000')
+                          Text(
+                            'Cancellation refund: $cancellationRefund',
+                            style: TextStyle(
+                                fontSize: 9.5, color: context.successColor),
                           ),
                       ],
                     ),
@@ -2103,12 +2659,22 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                 ),
               );
             }),
+          if (_nextCursor != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.center,
+              child: OutlinedButton(
+                onPressed: _loading ? null : () => _loadOrders(append: true),
+                child: Text(_loading ? 'LOADING…' : 'LOAD MORE ORDERS'),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _tabButton(String label, String key) {
+  Widget _tabButton(BuildContext context, String label, String key) {
     final isSel = _filter == key;
     return InkWell(
       onTap: () => setState(() => _filter = key),
@@ -2117,17 +2683,19 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isSel
-              ? violetColor.withValues(alpha: .2)
-              : Colors.white.withValues(alpha: .04),
+              ? context.secondaryColor.withValues(alpha: .2)
+              : context.inkColor.withValues(alpha: .04),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: isSel ? violetColor : Colors.white10),
+          border: Border.all(
+              color:
+                  isSel ? context.secondaryColor : context.subtleBorderColor),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 9.5,
             fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-            color: isSel ? inkColor : mutedColor,
+            color: isSel ? context.inkColor : context.mutedColor,
             letterSpacing: .8,
           ),
         ),

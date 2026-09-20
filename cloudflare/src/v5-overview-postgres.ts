@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { getV5HouseCapacity } from './v5-capacity-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { getDecisionQueue } from './decision-queue-postgres.ts';
+import { unitsToDisplayQuantity } from './market-units.ts';
 
 /** Convert database bigint values to the JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -19,7 +20,7 @@ function toJsonSafe<T>(value: T): T {
  * prices, resource balances, or Territory capacity on the client.
  */
 export async function getV5Overview(repository: PostgresRepository, houseId: string) {
-  const [clock, house, affiliation, wallet, statement, delinquency, buildingCounts, marketRows, decisionQueue] = await Promise.all([
+  const [clock, house, affiliation, wallet, statement, delinquency, buildingCounts, marketRows, resourceRows, decisionQueue] = await Promise.all([
     readAuthoritativeGameTime(repository),
     repository.query<{ id: string; house_name: string; generation: number; status: string }>(
       'SELECT id, house_name, generation, status FROM houses WHERE id = $1', [houseId]),
@@ -55,6 +56,22 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
          LEFT JOIN market_instrument_state s ON s.instrument_id = i.id
         WHERE i.instrument_type = 'SPOT' AND i.status = 'ACTIVE'
         ORDER BY i.symbol`),
+    repository.query<{ product: string; game_day: number; closing_balance_units: string; production_units: string; consumption_units: string; net_flow_units: string; shortage_units: string }>(
+      `SELECT DISTINCT ON (a.code)
+              LOWER(a.code) AS product,
+              f.game_day,
+              f.closing_balance_units::TEXT,
+              f.production_units::TEXT,
+              f.consumption_units::TEXT,
+              f.net_flow_units::TEXT,
+              f.shortage_units::TEXT
+         FROM house_resource_daily_flow f
+         JOIN owner_registry o ON o.economic_id = f.house_economic_id
+         JOIN economic_assets a ON a.id = f.asset_id
+        WHERE o.id = $1
+          AND o.owner_type = 'HOUSE'
+          AND a.asset_kind = 'RESOURCE'
+        ORDER BY a.code, f.game_day DESC`, [houseId]),
     getDecisionQueue(repository, houseId, 20),
   ]);
 
@@ -93,12 +110,24 @@ export async function getV5Overview(repository: PostgresRepository, houseId: str
     other_count: '0',
   };
 
-  const marketProducts = marketRows.rows.map((r) => ({
+  const resourceByProduct = new Map(resourceRows.rows.map((row) => [row.product, row]));
+  const marketProducts = marketRows.rows.map((r) => {
+    const flow = resourceByProduct.get(r.product);
+    return {
     product: r.product,
-    supplyUnits: r.supply,
-    demandUnits: r.demand,
+    supplyUnits: unitsToDisplayQuantity(r.supply),
+    demandUnits: unitsToDisplayQuantity(r.demand),
+    openSellUnits: unitsToDisplayQuantity(r.supply),
+    openBuyUnits: unitsToDisplayQuantity(r.demand),
     priceUnits: r.price,
-  }));
+    latestSettledGameDay: flow?.game_day ?? null,
+    closingBalance: flow ? unitsToDisplayQuantity(flow.closing_balance_units) : null,
+    production: flow ? unitsToDisplayQuantity(flow.production_units) : null,
+    consumption: flow ? unitsToDisplayQuantity(flow.consumption_units) : null,
+    netFlow: flow ? unitsToDisplayQuantity(flow.net_flow_units) : null,
+    shortage: flow ? unitsToDisplayQuantity(flow.shortage_units) : null,
+    };
+  });
 
   const energyPriceUnits = marketRows.rows.find((r) => r.product === 'energy')?.price ?? '0';
   const materialsPriceUnits = marketRows.rows.find((r) => r.product === 'material' || r.product === 'materials')?.price ?? '0';

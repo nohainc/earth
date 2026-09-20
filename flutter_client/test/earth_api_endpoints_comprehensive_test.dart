@@ -127,16 +127,17 @@ void main() {
       () async {
     await api.registerSuccessor('Kaelen Vance');
 
-    await api.submitOrder('energy', 1.25, side: 'buy', quantity: 100);
+    await api.submitOrder('energy', '1.25', side: 'buy', quantity: '100');
     await api.cancelOrder('ORD-1');
-    await api.marketPriceHistory('energy');
+    await api.marketHourlyCandles('SPOT-ENERGY');
+    await api.marketDailyCandles('SPOT-ENERGY');
 
     await api.personalFinance();
 
     await api.startResearch('Hyperdrive', 1000);
     await api.fundResearch();
 
-    expect(recordedCalls.contains('POST /api/life/successor'), true);
+    expect(recordedCalls.contains('POST /api/house/succession'), true);
     expect(recordedCalls.contains('POST /api/market/orders'), true);
     expect(recordedCalls.contains('DELETE /api/market/orders/ORD-1'), true);
     expect(recordedCalls.contains('POST /api/technology/projects'), true);

@@ -16,6 +16,9 @@ test('HouseFinanceOverview has one canonical server-owned contract', () => {
   assert.match(helper, /balanceUnits: walletUnits\.toString\(\)/);
   assert.match(helper, /nextSettlement/);
   assert.match(helper, /recentTransactions: transactions\.rows/);
+  assert.match(helper, /SELECT t\.id, t\.tax_type/);
+  assert.match(routes, /SELECT t\.id, t\.tax_type/);
+  assert.match(helper, /t\.transaction_kind AS reason_code/);
   assert.match(helper, /loanSchedules/);
   assert.match(helper, /otherObligations/);
   assert.match(helper, /normalizeObligationStatus/);

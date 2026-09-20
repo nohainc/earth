@@ -72,7 +72,6 @@ class _CommandCenterState extends State<CommandCenter>
   CommandOverview? commandOverview;
   List<dynamic> ownershipEvents = const [];
   List<dynamic> membershipEvents = const [];
-  Map<String, dynamic> marketHistory = const {};
   Map<String, dynamic> pantheon = const {};
   Map<String, dynamic> personalFinanceData = const {};
   Map<String, dynamic> mutualCreditData = const {};
@@ -100,8 +99,6 @@ class _CommandCenterState extends State<CommandCenter>
   final Set<String> _pendingRefreshTopics = <String>{};
   int _requestGeneration = 0;
   final Set<String> _loadingPanels = <String>{};
-  final Map<String, Future<dynamic>> _historyRequests =
-      <String, Future<dynamic>>{};
 
   bool get _isLiveConnected => liveClient != null || liveSocket != null;
 
@@ -157,6 +154,10 @@ class _CommandCenterState extends State<CommandCenter>
             ? (decoded['topics'] as List).map((value) => value.toString())
             : <String>[];
         if (type == 'refresh_required') {
+          final payload = decoded['payload'];
+          if (payload is Map && (topics.contains('market') || topic == 'market')) {
+            _showMarketOutcomeToast(Map<String, dynamic>.from(payload));
+          }
           _queueRefresh(topics.isEmpty ? [topic ?? 'world'] : topics);
         } else if (type == 'world_day_started' ||
             type == 'world_tick' ||
@@ -167,6 +168,33 @@ class _CommandCenterState extends State<CommandCenter>
       }
     } catch (_) {}
     return true;
+  }
+
+  void _showMarketOutcomeToast(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final targetHouse = payload['houseId']?.toString();
+    final currentHouse = state?.house['id']?.toString();
+    if (targetHouse == null || targetHouse.isEmpty || currentHouse == null || targetHouse != currentHouse) return;
+    final outcome = payload['outcome']?.toString().toUpperCase() ?? 'UPDATED';
+    final side = payload['side']?.toString().toUpperCase() ?? '';
+    final product = payload['product']?.toString().toUpperCase() ?? 'RESOURCE';
+    final quantity = payload['quantity']?.toString() ?? 'UNAVAILABLE';
+    final credit = payload['creditAmount']?.toString() ?? 'UNAVAILABLE';
+    final releasedQuantity = payload['releasedQuantity']?.toString();
+    final releasedCredit = payload['releasedCredit']?.toString();
+    final action = side == 'BUY' ? 'Bought' : 'Sold';
+    final message = switch (outcome) {
+      'FILLED' => '$action $quantity $product for $credit C.',
+      'PARTIAL' => 'Partially filled: $action $quantity $product for $credit C.',
+      'EXPIRED' => side == 'BUY'
+          ? 'Market order expired: $releasedCredit C released.'
+          : 'Market order expired: $releasedQuantity $product returned.',
+      'CANCELLED' => side == 'BUY'
+          ? 'Market order cancelled: $releasedCredit C released.'
+          : 'Market order cancelled: $releasedQuantity $product returned.',
+      _ => 'Market order updated: $quantity $product for $credit C.',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _connectLiveChannel() async {
@@ -628,14 +656,6 @@ class _CommandCenterState extends State<CommandCenter>
   }
 
   Future<void> _loadSecondaryPanels(EarthState value) async {
-    for (final product in value.market.keys) {
-      if (marketHistory.containsKey(product)) continue;
-      final request = _historyRequests.putIfAbsent(
-          product, () => api.marketPriceHistory(product));
-      request.then((history) {
-        if (mounted) setState(() => marketHistory[product] = history);
-      }).catchError((_) => null);
-    }
     if (selectedSection == 'life' ||
         selectedSection == 'command' ||
         selectedSection == 'history' ||
@@ -978,7 +998,6 @@ class _CommandCenterState extends State<CommandCenter>
                                             commandOverview: commandOverview,
                                             ownershipEvents: ownershipEvents,
                                             membershipEvents: membershipEvents,
-                                            marketHistory: marketHistory,
                                             pantheon: pantheon,
                                             personalFinanceData:
                                                 personalFinanceData,

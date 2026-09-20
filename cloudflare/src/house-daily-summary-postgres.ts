@@ -144,8 +144,8 @@ export async function getHouseDailySummary(
         AND j.status IN ('OPERATED', 'PARTIAL')`, [houseId, summaryDay]),
     repository.query(`
       SELECT
-        COALESCE(SUM(assessed_units), 0)::text AS assessed,
-        COALESCE(SUM(paid_units), 0)::text AS paid,
+        COALESCE(SUM(assessed_rent_units), 0)::text AS assessed,
+        COALESCE(SUM(paid_rent_units), 0)::text AS paid,
         COALESCE(SUM(arrears_units), 0)::text AS arrears,
         COALESCE(MAX(delinquency_status), 'CURRENT') AS status
       FROM house_capacity_statements_v5

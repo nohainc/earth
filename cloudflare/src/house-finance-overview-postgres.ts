@@ -118,12 +118,12 @@ export async function getHouseFinanceOverview(
     repository.query(`SELECT game_day, food_required_units, food_consumed_units, food_shortfall_units,
              status, shortfall_notes
       FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1`, [humanId]),
-    repository.query(`SELECT id, tax_type, tax_base_units::TEXT, amount_units::TEXT,
+    repository.query(`SELECT t.id, t.tax_type, t.tax_base_units::TEXT, t.amount_units::TEXT,
              rule_version, game_day, status
       FROM tax_obligations t JOIN owner_registry o ON o.economic_id = t.taxpayer_economic_id
       WHERE o.id = $1 ORDER BY t.game_day DESC, t.id DESC`, [houseId]),
     repository.query(`SELECT d.id, d.principal_units::TEXT, d.accrued_interest_units::TEXT,
-             d.rate_bps, d.start_total_game_minute, d.maturity_total_game_minute, d.status,
+             d.rate_bps, d.maturity_total_game_minute, d.status,
              d.created_transaction_id, d.payout_transaction_id, d.correlation_id
       FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id
       WHERE o.id = $1 ORDER BY d.id DESC`, [houseId]),
@@ -145,7 +145,7 @@ export async function getHouseFinanceOverview(
       WHERE o.id = $1 AND f.obligation_type NOT IN ('TAX','CAPACITY_RENT')
       ORDER BY f.due_game_day, f.id`, [houseId]).catch(() => ({ rows: [] })),
     repository.query(`SELECT t.id, t.game_day, t.game_minute, t.transaction_kind, t.correlation_id,
-             e.asset_id, e.delta_units::TEXT, e.reason_code
+             e.asset_id, e.delta_units::TEXT, t.transaction_kind AS reason_code
       FROM economic_transactions t JOIN economic_entries e ON e.transaction_id = t.id
       WHERE e.account_id IN (SELECT a.id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1)
       ORDER BY t.id DESC LIMIT 100`, [houseId]),

@@ -5,6 +5,7 @@ export type RealtimeInvalidation = {
   gameDay: number | null;
   gameMinute: number | null;
   eventKey: string;
+  payload?: Record<string, unknown>;
   at: string;
 };
 
@@ -33,19 +34,24 @@ function safeNumber(value: unknown): number | null {
 export function mapToRealtimeInvalidation(event: {
   topic?: string;
   aggregate_type?: string;
+  event_key?: string;
   payload?: Record<string, unknown>;
 }): RealtimeInvalidation {
   const topic = topicFor(event);
   const payload = event.payload ?? {};
   const eventName = String(event.topic ?? event.aggregate_type ?? 'changed')
     .toLowerCase().split(/[.:/_-]+/).filter((part) => /^[a-z]+$/.test(part)).pop() ?? 'changed';
+  // Outbox payloads are private by default. Only the deliberately public,
+  // participant-scoped market outcome contract is forwarded to clients.
+  const publicPayload = payload.kind === 'MARKET_ORDER_OUTCOME' ? payload : undefined;
   return {
     version: 1,
     type: 'refresh_required',
     topics: [topic],
     gameDay: safeNumber(payload.gameDay ?? payload.game_day),
     gameMinute: safeNumber(payload.gameMinute ?? payload.game_minute),
-    eventKey: `${topic}.${eventName}`,
+    eventKey: publicPayload ? (event.event_key ?? `${topic}.${eventName}`) : `${topic}.${eventName}`,
+    ...(publicPayload ? { payload: publicPayload } : {}),
     at: new Date().toISOString(),
   };
 }

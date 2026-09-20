@@ -4,6 +4,7 @@ import { parseCreditAmount, centsToMoney } from './money.ts';
 import { formatFixedUnits } from './units.ts';
 import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { compileHousePolicy } from './house-policy-execution.ts';
+import { readMarketOrderRows, serializeMarketOrder } from './market-order-read-model.ts';
 
 type PolicyInput = {
   policyType: 'OPERATING' | 'INVENTORY_RESERVE' | 'MARKET_STANDING';
@@ -83,25 +84,6 @@ function displayPolicy(row: Record<string, any>): Record<string, unknown> {
   };
 }
 
-function displayAutomationOrder(row: Record<string, any>): Record<string, unknown> {
-  const quantity = BigInt(String(row.quantity_units ?? '0'));
-  const remaining = BigInt(String(row.remaining_units ?? '0'));
-  return {
-    id: row.id,
-    product: String(row.symbol ?? '').replace(/^SPOT-/, '').toLowerCase(),
-    side: String(row.side).toUpperCase(),
-    status: row.status,
-    quantity: unitsToDisplayQuantity(quantity),
-    filledQuantity: unitsToDisplayQuantity(quantity - remaining),
-    remainingQuantity: unitsToDisplayQuantity(remaining),
-    limitPrice: priceUnitsToDisplayPrice(String(row.limit_price_units ?? '0')),
-    sourceType: row.source_type,
-    policyId: row.policy_id,
-    goodTilGameDay: row.good_til_game_day == null ? null : Number(row.good_til_game_day),
-    createdAt: row.created_at,
-  };
-}
-
 export async function listHousePolicies(repository: PostgresRepository, houseId: string): Promise<Record<string, unknown>> {
   const result = await repository.query(`SELECT id, policy_type, version, effective_from_game_day, status, operating_mode, daily_spend_cap_units::TEXT, reserve_floor_units, max_input_price_units, min_sale_price_units, procurement_quantity_units, rules_version FROM house_operating_policies WHERE house_id = $1 ORDER BY policy_type, version DESC`, [houseId]);
   return { policies: result.rows.map(displayPolicy), generatedFrom: 'postgres-canonical-facts' };
@@ -130,16 +112,7 @@ export async function getHouseAutomation(repository: PostgresRepository, houseId
         LEFT JOIN market_instrument_state s ON s.instrument_id = i.id
        WHERE i.instrument_type = 'SPOT' AND i.status = 'ACTIVE'
        ORDER BY i.id`, []),
-    repository.query(`SELECT o.id, i.symbol, o.side, o.status, o.quantity_units::TEXT,
-             o.remaining_units::TEXT, o.limit_price_units::TEXT, o.source_type,
-             o.policy_id, o.good_til_game_day, o.created_at
-        FROM market_orders o
-        JOIN owner_registry owner ON owner.economic_id = o.owner_economic_id
-        JOIN market_instruments i ON i.id = o.instrument_id
-       WHERE owner.id = $1 AND o.source_type = 'HOUSE_POLICY'
-         AND o.status IN ('OPEN', 'PARTIAL')
-       ORDER BY o.created_at DESC
-       LIMIT 100`, [houseId]),
+    readMarketOrderRows(repository, { ownerRegistryId: houseId, sourceType: 'HOUSE_POLICY', statuses: ['OPEN', 'PARTIAL'], limit: 100 }),
     repository.query(`SELECT game_day AS "gameDay", evaluated_at_game_minute AS "evaluatedAtGameMinute",
              no_action_count AS "noActionCount", order_placed_count AS "orderPlacedCount",
              partially_filled_count AS "partiallyFilledCount", filled_count AS "filledCount",
@@ -175,7 +148,7 @@ export async function getHouseAutomation(repository: PostgresRepository, houseId
       bestBid: row.best_bid_units ? priceUnitsToDisplayPrice(String(row.best_bid_units)) : null,
       bestAsk: row.best_ask_units ? priceUnitsToDisplayPrice(String(row.best_ask_units)) : null,
     })),
-    openAutomatedOrders: orders.rows.map(displayAutomationOrder),
+    openAutomatedOrders: orders.rows.map(serializeMarketOrder),
     recentExecutionSummaries: history.rows,
     generatedFrom: 'postgres-canonical-facts',
   };

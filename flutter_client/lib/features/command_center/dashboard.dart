@@ -61,7 +61,6 @@ class Dashboard extends StatelessWidget {
   final List<dynamic> decisionQueue;
   final List<dynamic> ownershipEvents;
   final List<dynamic> membershipEvents;
-  final Map<String, dynamic> marketHistory;
   final Map<String, dynamic> pantheon;
   final Map<String, dynamic> personalFinanceData;
   final Map<String, dynamic> mutualCreditData;
@@ -97,7 +96,6 @@ class Dashboard extends StatelessWidget {
     this.decisionQueue = const [],
     required this.ownershipEvents,
     required this.membershipEvents,
-    this.marketHistory = const {},
     this.pantheon = const {},
     this.personalFinanceData = const {},
     this.mutualCreditData = const {},
@@ -194,7 +192,6 @@ class Dashboard extends StatelessWidget {
             key: sectionKeys['market'],
             state: state,
             busy: busy,
-            priceHistory: marketHistory,
             action: action,
           ),
         ];

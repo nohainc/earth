@@ -18,6 +18,7 @@ import { getInstitutionFinancialProjection } from './financial-projections.ts';
 import type { HumanProfile } from './human-profile.ts';
 import type { HumanAuthoritySummary } from './human-authority-summary.ts';
 import { buildingPortfolio } from './building-contract.ts';
+import { readMarketOrderRows, serializeMarketOrder } from './market-order-read-model.ts';
 
 /** PostgreSQL BIGINT values must have one explicit JSON wire representation. */
 function toJsonSafe<T>(value: T): T {
@@ -391,19 +392,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
                         LEFT JOIN market_instrument_state s ON s.instrument_id = i.id
                        WHERE i.instrument_type = 'SPOT' AND i.status = 'ACTIVE'
                        ORDER BY i.symbol`),
-    repository.query(`SELECT o.id, i.symbol, o.side, o.status, o.quantity_units::TEXT,
-                             o.remaining_units::TEXT, o.limit_price_units::TEXT,
-                             o.rules_version, o.good_til_game_day, o.created_at,
-                             i.asset_id,
-                             COALESCE(r.remaining_units, 0)::TEXT AS reserved_credit_units
-                        FROM market_orders o
-                        JOIN market_instruments i ON i.id = o.instrument_id
-                        LEFT JOIN market_order_reservations r
-                          ON r.order_id = o.id AND r.asset_id = 1 AND r.status = 'ACTIVE'
-                       WHERE o.status IN ('OPEN', 'PARTIAL')
-                         AND ($1::TEXT IS NOT NULL AND o.owner_economic_id =
-                              (SELECT economic_id FROM owner_registry WHERE id = $1))
-                       ORDER BY o.created_at DESC LIMIT 500`, [viewerHouseId]),
+    readMarketOrderRows(repository, { ownerRegistryId: viewerHouseId ?? '__NO_HOUSE__', statuses: ['OPEN', 'PARTIAL'] }),
     viewerHouseId ? getHouseSettlementProfileSnapshot(repository, viewerHouseId) : Promise.resolve(null),
     corpId ? getCorporationSettlementProfileSnapshot(repository, corpId) : Promise.resolve(null),
     corpId ? repository.query(`SELECT a.account_type, asset.code, a.balance_units::TEXT AS balance_units
@@ -498,26 +487,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId?: s
   }));
   const market = {
     products: marketProducts,
-    orders: marketOrders.rows.map((row: any) => {
-      const quantity = unitsToDisplayQuantity(String(row.quantity_units ?? '0'), assetUnitScale(Number(row.asset_id ?? 2)));
-      const remaining = unitsToDisplayQuantity(String(row.remaining_units ?? '0'), assetUnitScale(Number(row.asset_id ?? 2)));
-      return {
-        id: row.id,
-        product: String(row.symbol).replace(/^SPOT-/, '').toLowerCase(),
-        side: String(row.side).toLowerCase(),
-        status: row.status,
-        quantity,
-        filledQuantity: quantity - remaining,
-        remainingQuantity: remaining,
-        limitPrice: priceUnitsToDisplayPrice(String(row.limit_price_units ?? '0')),
-        rulesVersion: row.rules_version,
-        goodTilGameDay: row.good_til_game_day,
-        createdAt: row.created_at,
-        reservedCredits: row.side === 'BUY' ? priceUnitsToDisplayPrice(String(row.reserved_credit_units ?? '0')) : 0,
-      };
-    }),
+    orders: marketOrders.rows.map((row: Record<string, unknown>) => serializeMarketOrder(row)),
     feeRate: Number(await marketFeeRate(repository, viewerId)),
-    reservedCredits: marketOrders.rows.reduce((sum: number, row: any) => sum + (row.side === 'BUY' ? Number(priceUnitsToDisplayPrice(String(row.reserved_credit_units ?? '0'))) : 0), 0),
+    reservedCredits: priceUnitsToDisplayPrice(marketOrders.rows.reduce((sum: bigint, row: Record<string, unknown>) =>
+      sum + (String(row.side) === 'BUY' ? BigInt(String(row.reserved_escrow_units ?? '0')) : 0n), 0n)),
     clearingIntervalMinutes: MARKET_BATCH_GAME_MINUTES,
     nextClearingGameMinute: (gameMinute + (MARKET_BATCH_GAME_MINUTES - (gameMinute % MARKET_BATCH_GAME_MINUTES))) % 1440,
     nextClearingAbsoluteMinute: (Math.floor(clock.totalGameMinutes / MARKET_BATCH_GAME_MINUTES) + 1) * MARKET_BATCH_GAME_MINUTES,

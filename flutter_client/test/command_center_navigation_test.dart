@@ -119,7 +119,6 @@ void main() {
               businessFinancials: const <String, dynamic>{},
               businessProfile: const <String, dynamic>{},
               membershipEvents: const <dynamic>[],
-              marketHistory: const <String, dynamic>{},
               pantheon: const <String, dynamic>{},
               personalFinanceData: const <String, dynamic>{},
               isLiveConnected: true,

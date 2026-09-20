@@ -145,7 +145,8 @@ export async function releaseReservation(
     { accountId: input.destinationAccountId, delta: input.amountUnits, assetId: input.assetId, reason: input.reason ?? 'market_order_release' },
   ];
   if (input.context) {
-    await postEscrowTransaction(tx, input.context, `market-order:${input.orderId}:release:${input.gameDay}`, input.orderId, entries);
+    const releaseKind = input.reason === 'market_order_cancellation' ? 'cancel' : 'release';
+    await postEscrowTransaction(tx, input.context, `market-order:${input.orderId}:${releaseKind}:${input.gameDay}`, input.orderId, entries);
   } else if (input.settlement) {
     await postSettlementTransaction(tx, {
       correlationId: `market-order:${input.orderId}:release:${input.gameDay}`,

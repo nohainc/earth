@@ -4,11 +4,15 @@ import { withRepository, type PostgresRepository } from './repository.ts';
 import { cancelMarketOrder, submitMarketOrder } from './market-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
 import { assertEconomyCaughtUp, isSettlementBarrierError, SettlementCatchupBarrierError } from './settlement-barrier-postgres.ts';
-import { assetUnitScale, MARKET_ASSET_IDS } from './market-model.ts';
+import { MARKET_ASSET_IDS } from './market-model.ts';
 import { calculateFeeUnits, calculateQuoteUnits, displayPriceToUnits, displayQuantityToUnits, displayRateToBps, priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
+import { formatCreditUnits } from './money.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 import { marketFeeRate } from './market-rules.ts';
+import { readHouseCommodityPositions } from './market-house-position-postgres.ts';
+import type { MarketBook, MarketInstrumentSummary, MarketOrder, MarketQuote } from './types/market.dto.ts';
+import { readMarketOrderRows, serializeMarketOrder } from './market-order-read-model.ts';
 
 type InstrumentRow = {
   id: string;
@@ -23,18 +27,14 @@ type InstrumentRow = {
   genesis_reference_price_units?: string;
 };
 
-function numberUnits(value: unknown, scale: number): number {
-  return Number(BigInt(String(value ?? 0))) / scale;
-}
-
-function instrumentPayload(row: InstrumentRow): Record<string, unknown> {
+function instrumentPayload(row: InstrumentRow): MarketInstrumentSummary {
   return {
-    id: row.id,
+    id: String(row.id),
     symbol: row.symbol,
     instrumentType: 'SPOT',
-    baseAsset: { id: row.asset_id, code: row.base_code ?? null, decimals: row.base_decimals ?? null },
-    quoteAsset: { id: row.quote_asset_id, code: row.quote_code ?? null, decimals: row.quote_decimals ?? null },
-    lotSize: 1,
+    baseAsset: { id: String(row.asset_id), code: row.base_code ?? null, decimals: row.base_decimals ?? null },
+    quoteAsset: { id: String(row.quote_asset_id), code: row.quote_code ?? null, decimals: row.quote_decimals ?? null },
+    lotSize: '1',
     priceTick: priceUnitsToDisplayPrice('1'),
     status: row.status,
     rulesVersion: 'spot-market-v1',
@@ -57,37 +57,28 @@ async function findInstrument(repository: PostgresRepository, key: string): Prom
   return result.rows[0] ?? null;
 }
 
-function serializeOrder(row: Record<string, unknown>, baseAssetId = Number(row.base_asset_id ?? row.asset_id ?? MARKET_ASSET_IDS.MATERIAL)): Record<string, unknown> {
-  const quantity = BigInt(String(row.quantity_units ?? 0));
-  const remaining = BigInt(String(row.remaining_units ?? 0));
-  const filled = quantity - remaining;
-  return {
-    id: row.id,
-    instrumentId: row.instrument_id,
-    product: row.symbol ? String(row.symbol).replace(/^SPOT-/, '').toLowerCase() : null,
-    side: row.side,
-    status: row.status,
-    quantity: numberUnits(quantity, assetUnitScale(baseAssetId)),
-    filledQuantity: numberUnits(filled, assetUnitScale(baseAssetId)),
-    remainingQuantity: numberUnits(remaining, assetUnitScale(baseAssetId)),
-    limitPrice: priceUnitsToDisplayPrice(String(row.limit_price_units ?? 0)),
-    rulesVersion: row.rules_version,
-    sourceType: row.source_type ?? 'MANUAL',
-    policyId: row.policy_id ?? null,
-    goodTilGameDay: row.good_til_game_day ?? null,
-    createdAt: row.created_at,
-  };
-}
-
 function unavailable(): Response {
   return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+}
+
+function decodeOrderCursor(value: string | null): { createdAt: string; id: string } | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(atob(value)) as { createdAt?: string; id?: string };
+    return parsed.createdAt && parsed.id ? { createdAt: parsed.createdAt, id: parsed.id } : null;
+  } catch {
+    throw new Error('Invalid market order cursor');
+  }
+}
+
+function encodeOrderCursor(row: Record<string, unknown>): string | null {
+  if (!row.created_at || !row.id) return null;
+  return btoa(JSON.stringify({ createdAt: String(row.created_at), id: String(row.id) }));
 }
 
 async function readInstrumentRoute(repository: PostgresRepository, key: string, resource: string, url: URL): Promise<Record<string, unknown>> {
   const instrument = await findInstrument(repository, decodeURIComponent(key));
   if (!instrument) throw new Error('Market instrument not found');
-  const baseScale = assetUnitScale(instrument.base_asset_id);
-
   if (resource === 'book') {
     const [result, state] = await Promise.all([repository.query<Record<string, unknown>>(
       `SELECT o.id, o.instrument_id, i.symbol, o.side, o.status, o.quantity_units::TEXT, o.remaining_units::TEXT,
@@ -101,8 +92,8 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
          FROM market_instrument_state WHERE instrument_id = $1`, [instrument.id])]);
     return {
       instrument: instrumentPayload(instrument),
-      bids: result.rows.filter((row) => row.side === 'buy').map((row) => serializeOrder(row, baseScale === 100 ? instrument.base_asset_id : instrument.base_asset_id)),
-      asks: result.rows.filter((row) => row.side === 'sell').map((row) => serializeOrder(row, instrument.base_asset_id)),
+      bids: result.rows.filter((row) => row.side === 'buy').map((row) => serializeMarketOrder(row)),
+      asks: result.rows.filter((row) => row.side === 'sell').map((row) => serializeMarketOrder(row)),
       state: state.rows[0] ?? { last_clearing_price_units: null, best_bid_units: null, best_ask_units: null, open_buy_units: '0', open_sell_units: '0', rolling_volume_units: '0' },
     };
   }
@@ -119,7 +110,7 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
         GROUP BY b.id, b.game_day, b.game_minute, b.status ORDER BY b.id DESC LIMIT 200`, [instrument.id]);
     return { instrument: instrumentPayload(instrument), batches: result.rows.map((row) => ({
       id: row.id, gameDay: row.game_day, gameMinute: row.game_minute, status: row.status,
-      fillCount: row.fill_count, volume: numberUnits(row.volume_units, baseScale), economicTransactionId: row.economic_transaction_id,
+      fillCount: row.fill_count, volume: unitsToDisplayQuantity(String(row.volume_units ?? '0')), economicTransactionId: row.economic_transaction_id,
     })) };
   }
 
@@ -165,9 +156,9 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
     return { instrument: instrumentPayload(instrument), fills: result.rows.map((row) => ({
       id: row.id, batchId: row.batch_id, buyOrderId: row.buy_order_id, sellOrderId: row.sell_order_id,
       buyerEconomicId: row.buyer_economic_id, sellerEconomicId: row.seller_economic_id,
-      quantity: numberUnits(row.quantity_units, baseScale), price: priceUnitsToDisplayPrice(String(row.price_units)),
-      grossQuote: numberUnits(row.gross_quote_units, assetUnitScale(instrument.quote_asset_id)),
-      buyerFee: numberUnits(row.buyer_fee_units, assetUnitScale(instrument.quote_asset_id)), sellerFee: numberUnits(row.seller_fee_units, assetUnitScale(instrument.quote_asset_id)),
+      quantity: unitsToDisplayQuantity(String(row.quantity_units ?? '0')), price: priceUnitsToDisplayPrice(String(row.price_units)),
+      grossQuote: formatCreditUnits(BigInt(String(row.gross_quote_units ?? '0'))),
+      buyerFee: formatCreditUnits(BigInt(String(row.buyer_fee_units ?? '0'))), sellerFee: formatCreditUnits(BigInt(String(row.seller_fee_units ?? '0'))),
       economicTransactionId: row.economic_transaction_id, sequenceNo: row.sequence_no,
     })) };
   }
@@ -181,7 +172,7 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
   return { instrument: instrumentPayload(instrument), interval, candles: result.rows.map((row) => ({
     periodId: row.period_id, open: priceUnitsToDisplayPrice(String(row.open_price_units)), high: priceUnitsToDisplayPrice(String(row.high_price_units)),
     low: priceUnitsToDisplayPrice(String(row.low_price_units)), close: priceUnitsToDisplayPrice(String(row.close_price_units)),
-    volume: numberUnits(row.volume_units, baseScale), fillCount: row.fill_count,
+    volume: unitsToDisplayQuantity(String(row.volume_units ?? '0')), fillCount: row.fill_count,
   })) };
 }
 
@@ -190,10 +181,11 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
   const instrumentsPath = path === '/api/market/instruments' && request.method === 'GET';
   const instrumentMatch = path.match(/^\/api\/market\/([^/]+)\/(book|batches|fills|candles)$/);
   const myOrders = path === '/api/market/orders/my' && request.method === 'GET';
+  const housePositions = path === '/api/market/positions' && request.method === 'GET';
   const orderQuote = path === '/api/market/order-quote' && request.method === 'POST';
   const orderPost = path === '/api/market/orders' && request.method === 'POST';
   const cancelMatch = path.match(/^\/api\/market\/orders\/([^/]+)$/);
-  if (!instrumentsPath && !instrumentMatch && !myOrders && !orderQuote && !orderPost && !(cancelMatch && request.method === 'DELETE')) return null;
+  if (!instrumentsPath && !instrumentMatch && !myOrders && !housePositions && !orderQuote && !orderPost && !(cancelMatch && request.method === 'DELETE')) return null;
   if ((orderPost || (cancelMatch && request.method === 'DELETE')) && !featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
 
   try {
@@ -209,8 +201,8 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       return Response.json({ instruments: result.rows.map(instrumentPayload), persistence: 'planetscale-postgres' });
     }
 
-    const viewer = myOrders || orderQuote || orderPost || cancelMatch ? await currentHuman(request, env) : null;
-    if ((myOrders || orderQuote || orderPost || cancelMatch) && !viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const viewer = myOrders || housePositions || orderQuote || orderPost || cancelMatch ? await currentHuman(request, env) : null;
+    if ((myOrders || housePositions || orderQuote || orderPost || cancelMatch) && !viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
 
     if (instrumentMatch) {
       const result = await withRepository(env, (repository) => readInstrumentRoute(repository, instrumentMatch[1], instrumentMatch[2], url));
@@ -219,35 +211,36 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
     }
     if (myOrders) {
       const corpId = url.searchParams.get('corporationId')?.trim();
+      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 100) || 100, 1), 200);
+      const cursor = decodeOrderCursor(url.searchParams.get('cursor'));
       const result = await withRepository(env, async (repository) => {
         const rows = corpId
-          ? await repository.query<Record<string, unknown>>(
-              `SELECT market_orders.*
-                 FROM market_orders
-                 JOIN owner_registry owner ON owner.economic_id = market_orders.owner_economic_id
-                WHERE owner.id = $1 AND owner.owner_type = 'CORPORATION'
-                ORDER BY market_orders.created_at DESC LIMIT 500`, [corpId])
-          : await repository.query<Record<string, unknown>>(
-              `SELECT market_orders.*
-                 FROM market_orders
-                 JOIN owner_registry owner ON owner.economic_id = market_orders.owner_economic_id
-                WHERE owner.id = (SELECT house_id FROM humans WHERE id = $1)
-                ORDER BY market_orders.created_at DESC LIMIT 500`, [viewer!.id]);
-        return { orders: rows.rows.map((row) => serializeOrder(row, Number(row.instrument_base_asset_id ?? row.base_asset_id ?? MARKET_ASSET_IDS.MATERIAL))) };
+          ? await readMarketOrderRows(repository, { ownerRegistryId: corpId, limit, beforeCreatedAt: cursor?.createdAt, beforeId: cursor?.id })
+          : await readMarketOrderRows(repository, { ownerRegistryId: viewer!.house_id, limit, beforeCreatedAt: cursor?.createdAt, beforeId: cursor?.id });
+        return {
+          orders: rows.rows.map((row) => serializeMarketOrder(row)),
+          nextCursor: rows.rows.length === limit ? encodeOrderCursor(rows.rows[rows.rows.length - 1]) : null,
+        };
       });
       if (!result) return unavailable();
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
+    if (housePositions) {
+      const result = await withRepository(env, (repository) =>
+        readHouseCommodityPositions(repository, viewer!.house_id));
+      if (!result) return unavailable();
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
     if (orderQuote) {
-      const parsed = await parseJsonBody<{ product?: string; quantity?: number | string; limitPrice?: number | string; side?: string; instrumentId?: string; corporationId?: string; ownerId?: string }>(request);
+      const parsed = await parseJsonBody<{ product?: string; quantity?: string; limitPrice?: string; side?: string; instrumentId?: string; corporationId?: string; ownerId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const product = body.product?.trim().toLowerCase() ?? '';
       const side = body.side === 'sell' ? 'sell' : 'buy';
-      const quantity = Number(body.quantity);
-      const limitPrice = Number(body.limitPrice);
+      const quantity = body.quantity?.trim() ?? '';
+      const limitPrice = body.limitPrice?.trim() ?? '';
       const corpId = body.corporationId || (body.ownerId?.startsWith('CORP-') ? body.ownerId : null);
-      if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) {
+      if (!product || !quantity || !limitPrice) {
         return Response.json({ ok: false, error: 'A positive product, quantity, and limit price are required' }, { status: 400 });
       }
       const result = await withRepository(env, async (repository) => {
@@ -260,26 +253,10 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
         const quoteUnits = calculateQuoteUnits(quantityUnits, priceUnits);
         const feeRate = side === 'buy' ? await marketFeeRate(repository, viewer!.id) : '0';
         const feeUnits = calculateFeeUnits(quoteUnits, feeRate);
-        const assetId = side === 'buy' ? MARKET_ASSET_IDS.CREDIT : instrument.asset_id;
-        const balances = corpId
-          ? await repository.query<{ available_units: string; reserved_units: string }>(
-              `SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS available_units,
-                      COALESCE((SELECT SUM(r.remaining_units) FROM market_order_reservations r
-                        WHERE r.escrow_account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = a.owner_economic_id)
-                          AND r.asset_id = $2 AND r.status = 'ACTIVE'), 0)::TEXT AS reserved_units
-                 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-                WHERE o.id = $1 AND o.owner_type = 'CORPORATION' AND a.asset_id = $2
-                  AND a.account_type IN ('TREASURY','INVENTORY') AND a.status = 'ACTIVE'
-                GROUP BY a.owner_economic_id`, [corpId, assetId])
-          : await repository.query<{ available_units: string; reserved_units: string }>(
-              `SELECT COALESCE(SUM(a.balance_units), 0)::TEXT AS available_units,
-                      COALESCE((SELECT SUM(r.remaining_units) FROM market_order_reservations r
-                        WHERE r.escrow_account_id IN (SELECT id FROM economic_accounts WHERE owner_economic_id = a.owner_economic_id)
-                          AND r.asset_id = $2 AND r.status = 'ACTIVE'), 0)::TEXT AS reserved_units
-                 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-                WHERE o.id = $1 AND o.owner_type = 'HOUSE' AND a.asset_id = $2
-                  AND a.account_type IN ('WALLET','INVENTORY') AND a.status = 'ACTIVE'
-                GROUP BY a.owner_economic_id`, [viewer!.house_id, assetId]);
+        const housePosition = !corpId
+          ? (await readHouseCommodityPositions(repository, viewer!.house_id)).positions
+              .find((position) => position.product === product)
+          : null;
         const clock = await readAuthoritativeGameTime(repository);
         const currentDay = clock.gameDay;
         const currentMinute = clock.gameMinute;
@@ -290,8 +267,10 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
           instrument: instrumentPayload(instrument),
           side, quantity: unitsToDisplayQuantity(quantityUnits), limitPrice: priceUnitsToDisplayPrice(priceUnits),
           baseValueUnits: quoteUnits.toString(), feeUnits: feeUnits.toString(), totalEscrowUnits: (quoteUnits + feeUnits).toString(),
-          feeBps: displayRateToBps(feeRate),
-          availableUnits: balances.rows[0]?.available_units ?? '0', reservedUnits: balances.rows[0]?.reserved_units ?? '0',
+          feeBps: String(displayRateToBps(feeRate)),
+          availableQuantity: housePosition?.availableQuantity ?? null,
+          reservedQuantity: housePosition?.reservedQuantity ?? null,
+          currentQuantity: housePosition?.currentQuantity ?? null,
           nextClearing: {
             gameDay: currentDay + Math.floor(nextMinute / 1440),
             gameMinute: nextMinute % 1440,
@@ -305,15 +284,15 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (orderPost) {
-      const parsed = await parseJsonBody<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string; instrumentId?: string; corporationId?: string; ownerId?: string }>(request);
+      const parsed = await parseJsonBody<{ product?: string; quantity?: string; limitPrice?: string; side?: string; correlationId?: string; instrumentId?: string; corporationId?: string; ownerId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const product = body.product?.trim().toLowerCase() ?? '';
       const side = body.side === 'sell' ? 'sell' : 'buy';
-      const quantity = Number(body.quantity);
-      const limitPrice = Number(body.limitPrice);
+      const quantity = body.quantity?.trim() ?? '';
+      const limitPrice = body.limitPrice?.trim() ?? '';
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0 || !correlationId) {
+      if (!product || !quantity || !limitPrice || !correlationId) {
         return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
       }
       const result = await withRepository(env, async (repository) => {
@@ -321,7 +300,12 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
         return submitMarketOrder(repository, { humanId: viewer!.id, product, side, quantity, limitPrice, correlationId, instrumentId: body.instrumentId, corporationId: body.corporationId, ownerId: body.ownerId });
       });
       if (!result) return unavailable();
-      const order = result.order && typeof result.order === 'object' ? serializeOrder(result.order as Record<string, unknown>) : result.order;
+      const order = result.order && typeof result.order === 'object'
+        ? await withRepository(env, async (repository) => {
+            const rows = await readMarketOrderRows(repository, { orderId: String((result.order as Record<string, unknown>).id ?? '') });
+            return rows.rows[0] ? serializeMarketOrder(rows.rows[0]) : null;
+          })
+        : result.order;
       return Response.json({ ...result, order, persistence: 'planetscale-postgres' });
     }
     if (cancelMatch) {

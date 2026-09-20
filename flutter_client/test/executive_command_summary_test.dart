@@ -164,7 +164,6 @@ void main() {
                 personalFinanceData: const {},
                 pantheon: const {},
                 membershipEvents: const [],
-                marketHistory: const {},
                 unreadNotifications: 0,
                 action: (_) async {},
                 onNavigate: (_) {},

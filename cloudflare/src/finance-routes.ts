@@ -336,7 +336,7 @@ export async function handleFinanceRoutes(
         repository.query<{ age_years: number; corporation_id: string | null; living_cost_index: string }>("SELECT h.age_years, ha.corporation_id, w.living_cost_index FROM humans h LEFT JOIN house_affiliations ha ON ha.house_id = h.house_id AND ha.status = 'ACTIVE' CROSS JOIN world_state w WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
         repository.query('SELECT game_day, food_required_units, food_consumed_units, food_shortfall_units, shortfall_notes, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
         repository.query<{ total: string }>('SELECT COALESCE(SUM(food_shortfall_units), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
-        repository.query('SELECT id, tax_type, tax_base_units, rate_bps, amount_units, rule_version, game_day, status, due_game_day FROM tax_obligations t JOIN owner_registry o ON o.economic_id = t.taxpayer_economic_id WHERE o.id = $1 ORDER BY t.game_day DESC, t.id DESC', [viewer.house_id]),
+        repository.query('SELECT t.id, t.tax_type, t.tax_base_units, t.rate_bps, t.amount_units, t.rule_version, t.game_day, t.status, t.due_game_day FROM tax_obligations t JOIN owner_registry o ON o.economic_id = t.taxpayer_economic_id WHERE o.id = $1 ORDER BY t.game_day DESC, t.id DESC', [viewer.house_id]),
         repository.query(`SELECT d.id, d.principal_units, d.accrued_interest_units, d.rate_bps, d.rate_rule_version,
                                  d.start_total_game_minute, d.maturity_total_game_minute, d.status,
                                  d.created_transaction_id, d.payout_transaction_id, d.correlation_id

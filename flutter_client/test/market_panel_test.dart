@@ -9,6 +9,35 @@ class _MarketQuoteTransport extends EarthApiTransport {
   @override
   Future<dynamic> request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
+    if (path.contains('/book')) {
+      return {
+        'bids': [
+          {
+            'id': 'bid-1',
+            'side': 'buy',
+            'status': 'OPEN',
+            'remainingQuantity': '3.000000',
+            'limitPrice': '12.00'
+          },
+          {
+            'id': 'bid-2',
+            'side': 'buy',
+            'status': 'OPEN',
+            'remainingQuantity': '2.000000',
+            'limitPrice': '12.00'
+          },
+        ],
+        'asks': [
+          {
+            'id': 'ask-1',
+            'side': 'sell',
+            'status': 'OPEN',
+            'remainingQuantity': '4.000000',
+            'limitPrice': '13.00'
+          },
+        ],
+      };
+    }
     return const {
       'ok': true,
       'baseValueUnits': '12500',
@@ -16,6 +45,50 @@ class _MarketQuoteTransport extends EarthApiTransport {
       'totalEscrowUnits': '12750',
       'feeBps': 200,
     };
+  }
+}
+
+class _MarketPositionTransport extends EarthApiTransport {
+  @override
+  Future<dynamic> request(String path,
+      {String method = 'GET', Map<String, dynamic>? body}) async {
+    if (path == '/api/market/positions') {
+      return {
+        'positions': [
+          {
+            'product': 'energy',
+            'currentQuantity': '20.000000',
+            'reservedQuantity': '0.000000',
+            'availableQuantity': '20.000000'
+          },
+          {
+            'product': 'food',
+            'currentQuantity': '0.000000',
+            'reservedQuantity': '0.000000',
+            'availableQuantity': '0.000000'
+          },
+          {
+            'product': 'material',
+            'currentQuantity': '80.000000',
+            'reservedQuantity': '0.000000',
+            'availableQuantity': '80.000000'
+          },
+          {
+            'product': 'components',
+            'currentQuantity': '50.000000',
+            'reservedQuantity': '0.000000',
+            'availableQuantity': '50.000000'
+          },
+          {
+            'product': 'compute',
+            'currentQuantity': '4.000000',
+            'reservedQuantity': '0.000000',
+            'availableQuantity': '4.000000'
+          },
+        ],
+      };
+    }
+    return _MarketQuoteTransport().request(path, method: method, body: body);
   }
 }
 
@@ -62,14 +135,6 @@ void main() {
               state: state,
               busy: false,
               api: EarthApi(transport: _MarketQuoteTransport()),
-              priceHistory: const {
-                'energy': {
-                  'history': [
-                    {'gameDay': 10, 'price': 12.5},
-                    {'gameDay': 9, 'price': 10.0},
-                  ],
-                },
-              },
               action: (callback) async {
                 executedAction = 'called';
               },
@@ -82,8 +147,18 @@ void main() {
     expect(find.text('TRADE'), findsOneWidget);
     expect(find.text('ENERGY'), findsOneWidget);
     expect(find.text('12.50 C'), findsOneWidget);
-    expect(find.text('SUPPLY HIGH'), findsOneWidget);
+    expect(find.text('OPEN SELL HIGH'), findsOneWidget);
     expect(find.text('PLACE BUY ORDER'), findsOneWidget);
+    expect(find.text('TREND'), findsOneWidget);
+    expect(find.text('CANDLES'), findsOneWidget);
+    expect(find.text('VIEW DEPTH'), findsOneWidget);
+
+    await tester.tap(find.text('VIEW DEPTH'));
+    await tester.pumpAndSettle();
+    expect(find.text('BATCH-AUCTION DEPTH'), findsOneWidget);
+    expect(find.text('5.000000'), findsOneWidget);
+    expect(find.textContaining('not a continuous matching order book'),
+        findsOneWidget);
 
     // Verify info icon is present and opens description dialog
     expect(find.byIcon(Icons.info_outline), findsWidgets);
@@ -130,7 +205,7 @@ void main() {
             child: MarketSignalsPanel(
               state: state,
               busy: false,
-              priceHistory: const {},
+              api: EarthApi(transport: _MarketPositionTransport()),
               action: (callback) async {},
             ),
           ),
@@ -154,6 +229,13 @@ void main() {
     await tester.ensureVisible(find.text('SELL NRG'));
     await tester.tap(find.text('SELL NRG'));
     await tester.pumpAndSettle();
+
+    expect(find.text('25%'), findsOneWidget);
+    expect(find.text('50%'), findsOneWidget);
+    expect(find.text('75%'), findsOneWidget);
+    await tester.tap(find.text('50%'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(qtyField).controller!.text, '10');
 
     // Change sell qty to 7 and price to 20.00
     await tester.enterText(qtyField, '7');
@@ -196,34 +278,45 @@ void main() {
             'id': 'ORD-01',
             'side': 'buy',
             'product': 'components',
-            'quantity': 10,
-            'filled_quantity': 4,
-            'limit_price': 120.0,
-            'settlement_price': 118.0,
+            'quantity': '10.000000',
+            'filledQuantity': '4.000000',
+            'remainingQuantity': '6.000000',
+            'limitPrice': '120.00',
+            'averageFillPrice': '118.00',
             'status': 'partial',
-            'reserved_credits': 720.0,
-            'fee': 14.16,
+            'reservedEscrow': '720.00',
+            'releasedEscrow': '0.00',
+            'feesPaid': '14.16',
+            'grossValue': '472.00',
           },
           {
             'id': 'ORD-02',
             'side': 'buy',
             'product': 'material',
-            'quantity': 50,
-            'filled_quantity': 50,
-            'limit_price': 30.0,
-            'settlement_price': 28.5,
+            'quantity': '50.000000',
+            'filledQuantity': '50.000000',
+            'remainingQuantity': '0.000000',
+            'limitPrice': '30.00',
+            'averageFillPrice': '28.50',
             'status': 'filled',
-            'fee': 28.5,
+            'reservedEscrow': '0.00',
+            'releasedEscrow': '0.00',
+            'feesPaid': '28.50',
+            'grossValue': '1425.00',
           },
           {
             'id': 'ORD-03',
             'side': 'buy',
             'product': 'energy',
-            'quantity': 100,
-            'filled_quantity': 0,
-            'limit_price': 0.85,
+            'quantity': '100.000000',
+            'filledQuantity': '0.000000',
+            'remainingQuantity': '100.000000',
+            'limitPrice': '0.85',
             'status': 'cancelled',
-            'released_escrow': 85.0,
+            'reservedEscrow': '0.00',
+            'releasedEscrow': '85.00',
+            'feesPaid': '0.00',
+            'grossValue': '0.00',
           },
         ],
       },
@@ -248,18 +341,20 @@ void main() {
     );
 
     expect(find.text('MY ORDERS'), findsOneWidget);
-    expect(find.textContaining('BUY COMPONENTS · 10 units @ 120.00 C'),
+    expect(find.textContaining('BUY COMPONENTS · 10.000000 units @ 120.00 C'),
         findsOneWidget);
     expect(find.text('PARTIAL'), findsOneWidget);
-    expect(find.textContaining('Filled: 4 / 10 (6 remaining)'), findsOneWidget);
-    expect(find.textContaining('Settlement price: 118.00 C'), findsOneWidget);
-    expect(find.textContaining('Reserved Credits in escrow: 720.00 C'),
+    expect(
+        find.textContaining(
+            'Filled: 4.000000 / 10.000000 (6.000000 remaining)'),
         findsOneWidget);
+    expect(
+        find.textContaining('Weighted fill price: 118.00 C'), findsOneWidget);
+    expect(find.textContaining('Reserved escrow: 720.00'), findsOneWidget);
 
     expect(find.text('FILLED'), findsOneWidget);
     expect(find.text('CANCELLED'), findsOneWidget);
-    expect(
-        find.textContaining('Released escrow refund: 85.00 C'), findsOneWidget);
+    expect(find.textContaining('Released escrow: 85.00'), findsOneWidget);
 
     // Cancel order button appears only for the open/partial order
     expect(find.text('CANCEL ORDER'), findsOneWidget);
@@ -298,13 +393,17 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-          body: SuppliesTodayPanel(state: state, action: (fn) async {})),
+          body: SuppliesTodayPanel(
+              state: state,
+              api: EarthApi(transport: _MarketPositionTransport()),
+              action: (fn) async {})),
     ));
+    await tester.pumpAndSettle();
 
     expect(find.text('STOCK & SHORTAGES'), findsOneWidget);
     expect(
         find.textContaining('No immediate commodity shortage'), findsOneWidget);
-    expect(find.text('0 available'), findsOneWidget);
+    expect(find.text('0.000000 available · 0.000000 reserved'), findsOneWidget);
     expect(find.textContaining('Buildings and businesses drive demand'),
         findsOneWidget);
   });
