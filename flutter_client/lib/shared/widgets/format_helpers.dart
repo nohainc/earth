@@ -161,6 +161,53 @@ String formatAssetQuantity(String assetCode, dynamic value,
   return units.toString();
 }
 
+/// Formats a ranking value from the server-owned metric contract. Ranking
+/// values are never display-ready strings: their value type determines the
+/// unit and presentation.
+String formatRankingMetricValue(String metricCode, dynamic value,
+    {String? valueType, String fallback = 'UNAVAILABLE'}) {
+  if (value == null) return fallback;
+  final type = (valueType ?? '').trim().toUpperCase();
+  switch (type.isEmpty ? metricCode.toUpperCase() : type) {
+    case 'CREDIT_UNITS':
+    case 'LIQUID_CREDIT':
+    case 'PUBLIC_GOODS':
+    case 'MARKET_VOLUME_30D':
+    case 'CORPORATION_LIQUID_CREDIT':
+    case 'CORPORATION_TREASURY':
+    case 'CORPORATION_FISCAL_HEADROOM':
+    case 'CORPORATION_MARKET_VOLUME_30D':
+      return formatCreditUnits(value, fallback: fallback);
+    case 'CAPACITY_UNITS':
+    case 'PRODUCTIVE_CAPACITY':
+    case 'CORPORATION_OCCUPIED_CAPACITY':
+    case 'CORPORATION_CAPACITY':
+    case 'CORPORATION_SERVICE_CAPACITY':
+      final capacity = _exactIntegerString(value);
+      return capacity == null ? fallback : '$capacity capacity';
+    case 'RESOURCE_UNITS':
+      return formatAssetQuantity('RESOURCE', value, fallback: fallback);
+    case 'POINTS':
+    case 'LEGACY':
+      final points = _exactIntegerString(value);
+      return points == null ? fallback : '$points LP';
+    case 'COUNT':
+    case 'TECHNOLOGY':
+    case 'CORPORATION_MEMBER_HOUSES':
+    case 'CORPORATION_TECHNOLOGY':
+      return _exactIntegerString(value) ?? fallback;
+    default:
+      return fallback;
+  }
+}
+
+String? _exactIntegerString(dynamic value) {
+  final raw = value.toString().trim();
+  if (raw.isEmpty) return null;
+  final integer = BigInt.tryParse(raw);
+  return integer?.toString();
+}
+
 String formatPercent(dynamic value) {
   final number = value is num ? value.toDouble() : 0.0;
   return '${(number.clamp(0, 1) * 100).round()}%';

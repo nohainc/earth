@@ -6,7 +6,6 @@ import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'lifecycle_dialogs.dart';
-import 'global_rankings_dialog.dart';
 
 Widget _lifecycleTopicHeading(BuildContext context, String title,
     {required String description}) {
@@ -1638,6 +1637,10 @@ class LegacyWorldRankingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The V5 Rankings page in institutions_panels.dart is the only active
+    // ranking surface. Keep this compatibility shell inert for old imports.
+    return const SizedBox.shrink();
+    /*
     final cities = state.rankings['cities'] is List
         ? state.rankings['cities'] as List
         : [];
@@ -1703,8 +1706,7 @@ class LegacyWorldRankingsPanel extends StatelessWidget {
                 const SizedBox(width: 8),
                 Builder(
                   builder: (ctx) => ElevatedButton.icon(
-                    onPressed: () =>
-                        showGlobalRankingsDialog(ctx, state: state),
+                  onPressed: null,
                     icon: const Icon(Icons.leaderboard, size: 16),
                     label: const Text('EXPLORE LEADERBOARDS'),
                     style: ElevatedButton.styleFrom(
@@ -1733,10 +1735,9 @@ class LegacyWorldRankingsPanel extends StatelessWidget {
         ],
       ),
     );
+    */
   }
 }
-
-typedef WorldRankingsPanel = LegacyWorldRankingsPanel;
 
 class HistoryArchivePanel extends StatelessWidget {
   final EarthState state;

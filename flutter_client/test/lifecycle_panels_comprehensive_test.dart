@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/lifecycle/lifecycle_panels.dart';
+import 'package:earth_client/features/institutions/institutions_panels.dart'
+    as institutions;
 
 void main() {
   testWidgets(
@@ -191,7 +193,7 @@ void main() {
                     action: (cb) async {}),
                 OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
                 CivicMembershipHistoryPanel(membershipEvents: membershipEvents),
-                const WorldRankingsPanel(state: state),
+                const institutions.WorldRankingsPanel(state: state),
                 const HistoryArchivePanel(state: state),
               ],
             ),

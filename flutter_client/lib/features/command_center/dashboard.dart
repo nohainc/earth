@@ -11,7 +11,7 @@ import '../finance/personal_finance_panel.dart';
 import '../governance/governance_panels.dart';
 import '../institutions/institutions_panels.dart';
 import '../institutions/organization_directory_panel.dart';
-import '../lifecycle/lifecycle_panels.dart' hide WorldRankingsPanel;
+import '../lifecycle/lifecycle_panels.dart';
 import '../market/market_panels.dart';
 import '../operations/technology_panel.dart';
 import '../operations/buildings_hub_screen.dart';
@@ -363,7 +363,13 @@ class Dashboard extends StatelessWidget {
       case 'public-finance':
         return [RulesInForcePanel(state: state)];
       case 'civic-rankings':
-        return [WorldRankingsPanel(state: state)];
+        return [
+          WorldRankingsPanel(
+            state: state,
+            api: api ?? const EarthApi(),
+            onNavigate: onNavigate,
+          ),
+        ];
       case 'history':
       case 'pantheon':
       case 'memorial':

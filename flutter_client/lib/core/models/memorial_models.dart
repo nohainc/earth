@@ -11,6 +11,7 @@ class MemorialCitizenSummary {
   final String? successorName;
   final int? generation;
   final String? epitaph;
+  final String? status;
 
   const MemorialCitizenSummary({
     required this.humanId,
@@ -25,6 +26,7 @@ class MemorialCitizenSummary {
     required this.successorName,
     required this.generation,
     required this.epitaph,
+    required this.status,
   });
 
   factory MemorialCitizenSummary.fromJson(Map<String, dynamic> json) =>
@@ -41,6 +43,7 @@ class MemorialCitizenSummary {
         successorName: _string(json['successorName'] ?? json['successor_name']),
         generation: _int(json['generation']),
         epitaph: _string(json['epitaph']),
+        status: _string(json['status'] ?? json['lifeStatus'] ?? json['life_status']),
       );
 }
 
@@ -69,6 +72,7 @@ class MemorialCitizenDetail extends MemorialCitizenSummary {
     required super.successorName,
     required super.generation,
     required super.epitaph,
+    required super.status,
     required this.causeOfDeathCode,
     required this.causeDetails,
     required this.corporationId,
@@ -95,6 +99,7 @@ class MemorialCitizenDetail extends MemorialCitizenSummary {
       finalStanding: summary.finalStanding,
       successorName: summary.successorName,
       generation: summary.generation,
+      status: summary.status,
       causeOfDeathCode: _string(json['causeOfDeathCode'] ?? json['cause_of_death']),
       causeDetails: _mapOrNull(json['causeDetails'] ?? json['cause_details']),
       corporationId: _string(json['corporationId'] ?? json['corporation_id']),

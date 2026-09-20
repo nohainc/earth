@@ -456,13 +456,21 @@ export async function handleReadModelRoutes(
   }
 
   if (url.pathname === '/api/rankings' && request.method === 'GET') {
-    const category = url.searchParams.get('category') ?? undefined;
+    if (url.searchParams.has('category')) {
+      return Response.json({ ok: false, error: 'The category parameter is retired; use subjectType.' }, { status: 400 });
+    }
+    const subjectTypeParam = url.searchParams.get('subjectType')?.toUpperCase() ?? 'HOUSE';
+    if (subjectTypeParam !== 'HOUSE' && subjectTypeParam !== 'CORPORATION') {
+      return Response.json({ ok: false, error: 'subjectType must be HOUSE or CORPORATION.' }, { status: 400 });
+    }
     const metric = url.searchParams.get('metric') ?? undefined;
     const search = url.searchParams.get('search') ?? undefined;
+    const cursor = url.searchParams.get('cursor') ?? undefined;
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
     const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
+    const viewer = await currentViewer(request, env);
     const result = await withRepository(env, (repository) =>
-      listRankingsPostgres(repository, { category, metric, search, limit, offset }),
+      listRankingsPostgres(repository, { subjectType: subjectTypeParam, metric, search, cursor, limit, offset, currentHumanId: viewer?.currentHumanId }),
     );
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });

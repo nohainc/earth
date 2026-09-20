@@ -1420,62 +1420,108 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
 class WorldRankingsPanel extends StatefulWidget {
   final EarthState state;
-  const WorldRankingsPanel({super.key, required this.state});
+  final EarthApi api;
+  final ValueChanged<String>? onNavigate;
+
+  const WorldRankingsPanel({
+    super.key,
+    required this.state,
+    this.api = const EarthApi(),
+    this.onNavigate,
+  });
 
   @override
   State<WorldRankingsPanel> createState() => _WorldRankingsPanelState();
 }
 
-// Kept as a source-compatible alias for downstream page integrations.
-typedef CivicRankingsPanel = WorldRankingsPanel;
-
 class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
-  int _singleTab = 0; // Legacy compatibility view.
-  int _leftTab = 0; // 0: Citizens, 1: Houses
-  int _rightTab = 0; // 0: Corporations, 1: Territories
   int _metricTab = 0;
-  int _citizenPage = 0;
-  int _housePage = 0;
-  int _corpPage = 0;
-  int _cityPage = 0;
-  bool _initializedPages = false;
+  String _subjectType = 'HOUSE';
+  String _search = '';
+  String? _serverMetric;
+  List<Map<String, dynamic>>? _serverRows;
+  Map<String, dynamic>? _serverViewer;
+  String? _nextCursor;
+  bool _serverLoading = false;
+  String? _serverError;
+  final TextEditingController _searchController = TextEditingController();
 
-  void _initPagesOnce({
-    required List<Map<String, dynamic>> corp,
-    required List<Map<String, dynamic>> cities,
-    required List<Map<String, dynamic>> citizens,
-    required List<Map<String, dynamic>> houses,
-    required String? myCorpId,
-    required String? myCityId,
-    required String? myHumanId,
-    required String? myHouseName,
-  }) {
-    if (_initializedPages) return;
-    _initializedPages = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadServerPage(reset: true);
+    });
+  }
 
-    if (myHumanId != null && myHumanId.isNotEmpty) {
-      final idx = citizens.indexWhere((r) =>
-          (r['id']?.toString() ?? r['human_id']?.toString()) == myHumanId);
-      if (idx != -1) _citizenPage = idx ~/ 10;
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadServerPage({String? cursor, bool reset = false}) async {
+    final metrics = _canonicalMetrics(widget.state.rankings['metrics']);
+    final definitions = widget.state.rankings['metricDefinitions'];
+    final definedCodes = definitions is List
+        ? definitions.whereType<Map>().where((definition) {
+            final type = definition['subjectType']?.toString() ??
+                definition['subject_type']?.toString();
+            return type == _subjectType;
+          }).map((definition) => definition['code']?.toString()).whereType<String>().toList()
+        : const <String>[];
+    final available = definedCodes.isNotEmpty ? definedCodes : metrics.keys.toList();
+    final metric = available.isEmpty
+        ? null
+        : available[_metricTab.clamp(0, available.length - 1)];
+    setState(() {
+      _serverLoading = true;
+      _serverError = null;
+      if (reset) {
+        _serverRows = null;
+        _nextCursor = null;
+      }
+    });
+    try {
+      final response = await widget.api.rankings(
+        subjectType: _subjectType,
+        metric: metric,
+        search: _search.isEmpty ? null : _search,
+        cursor: cursor,
+        limit: 25,
+      );
+      if (!mounted) return;
+      final rawItems = response['items'];
+      final fetchedRows = rawItems is List
+          ? rawItems.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
+          : <Map<String, dynamic>>[];
+      setState(() {
+        _serverMetric = metric;
+        _serverRows = cursor != null && _serverRows != null
+            ? [..._serverRows!, ...fetchedRows]
+            : fetchedRows;
+        _serverViewer = response['viewerPosition'] is Map
+            ? Map<String, dynamic>.from(response['viewerPosition'] as Map)
+            : null;
+        _nextCursor = response['nextCursor']?.toString();
+        _serverLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverLoading = false;
+        _serverError = error.toString().replaceFirst('Exception: ', '');
+      });
     }
-    if (myHouseName != null && myHouseName.isNotEmpty) {
-      final idx = houses.indexWhere((r) =>
-          (r['house_name']?.toString() ??
-              r['dynasty_name']?.toString() ??
-              r['name']?.toString()) ==
-          myHouseName);
-      if (idx != -1) _housePage = idx ~/ 10;
-    }
-    if (myCorpId != null && myCorpId.isNotEmpty) {
-      final idx = corp.indexWhere((r) =>
-          (r['id']?.toString() ?? r['corporation_id']?.toString()) == myCorpId);
-      if (idx != -1) _corpPage = idx ~/ 10;
-    }
-    if (myCityId != null && myCityId.isNotEmpty) {
-      final idx = cities.indexWhere(
-          (r) => (r['id']?.toString() ?? r['city_id']?.toString()) == myCityId);
-      if (idx != -1) _cityPage = idx ~/ 10;
-    }
+  }
+
+  void _selectMetric(int index) {
+    setState(() {
+      _metricTab = index;
+      _serverRows = null;
+      _serverMetric = null;
+      _nextCursor = null;
+    });
   }
 
   @override
@@ -1484,14 +1530,15 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
       builder: (context, constraints) {
         final canonicalMetrics =
             _canonicalMetrics(widget.state.rankings['metrics']);
-        if (canonicalMetrics.isNotEmpty) {
-          return _buildCanonicalMetricRankings(
-              context,
-              canonicalMetrics,
-              widget.state.rankings['gameDay'],
-              widget.state.rankings['rulesVersion']);
-        }
+        return _buildCanonicalMetricRankings(
+            context,
+            canonicalMetrics,
+            widget.state.rankings['gameDay'],
+            widget.state.rankings['rulesVersion']);
 
+        /* Legacy quad-sphere rankings were intentionally retired. The
+         * canonical V5 projection is the only supported ranking source. */
+        /*
         final citizens = _citizenRows(
           widget.state.rankings['citizens'],
           widget.state.rankings['humans'],
@@ -1837,6 +1884,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
             contentWidget,
           ],
         );
+        */
       },
     );
   }
@@ -1869,8 +1917,8 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
         icon: Icons.shield_outlined,
       ),
       (
-        code: 'WEALTH',
-        label: 'WEALTH',
+        code: 'LIQUID_CREDIT',
+        label: 'LIQUID CREDIT',
         icon: Icons.account_balance_wallet_outlined,
       ),
       (
@@ -1885,27 +1933,55 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
       ),
     ];
 
-    final availableCore = coreMetricDefinitions
+    final corporationMetricDefinitions = [
+      (code: 'CORPORATION_MEMBER_HOUSES', label: 'MEMBER HOUSES', icon: Icons.groups_outlined),
+      (code: 'CORPORATION_LIQUID_CREDIT', label: 'LIQUID CREDIT', icon: Icons.account_balance_wallet_outlined),
+      (code: 'CORPORATION_OCCUPIED_CAPACITY', label: 'OCCUPIED CAPACITY', icon: Icons.domain_outlined),
+      (code: 'CORPORATION_TECHNOLOGY', label: 'TECHNOLOGY', icon: Icons.biotech_outlined),
+      (code: 'CORPORATION_MARKET_VOLUME_30D', label: 'MARKET VOLUME · 30D', icon: Icons.storefront_outlined),
+    ];
+    final definedCodes = widget.state.rankings['metricDefinitions'] is List
+        ? (widget.state.rankings['metricDefinitions'] as List)
+            .whereType<Map>()
+            .where((definition) =>
+                (definition['subjectType'] ?? definition['subject_type']) == _subjectType)
+            .map((definition) => definition['code']?.toString())
+            .whereType<String>()
+            .toSet()
+        : <String>{};
+    final availableCore = (_subjectType == 'CORPORATION'
+            ? corporationMetricDefinitions
+            : coreMetricDefinitions)
         .where((m) => metrics.containsKey(m.code))
         .toList();
-    final activeList = availableCore.isNotEmpty
-        ? availableCore
-        : metrics.keys
-            .map((k) => (
-                  code: k,
-                  label: k.replaceAll('_', ' '),
-                  icon: Icons.leaderboard_outlined,
-                ))
-            .toList();
+    late final List<({String code, String label, IconData icon})> activeList;
+    if (availableCore.isNotEmpty && _subjectType == 'HOUSE') {
+      activeList = availableCore;
+    } else if (_subjectType == 'CORPORATION' && definedCodes.isNotEmpty) {
+      activeList = corporationMetricDefinitions
+          .where((definition) => definedCodes.contains(definition.code))
+          .toList();
+    } else {
+      activeList = metrics.keys
+          .map((code) => (
+                code: code,
+                label: code.replaceAll('_', ' '),
+                icon: Icons.leaderboard_outlined,
+              ))
+          .toList();
+    }
 
     final metricIndex = activeList.isEmpty
         ? 0
         : (_metricTab < activeList.length ? _metricTab : 0);
     final selectedItem = activeList.isEmpty ? null : activeList[metricIndex];
     final selectedCode = selectedItem?.code ?? '';
-    final rows = selectedCode.isNotEmpty
+    final snapshotRows = selectedCode.isNotEmpty
         ? (metrics[selectedCode] ?? const <Map<String, dynamic>>[])
         : const <Map<String, dynamic>>[];
+    final rows = _serverMetric == selectedCode && _serverRows != null
+        ? _serverRows!
+        : snapshotRows;
     final title = selectedItem?.label ??
         (selectedCode.isEmpty
             ? 'NO SETTLED LEADERBOARDS'
@@ -1926,46 +2002,90 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                   row?['subject_name']?.toString() == houseName),
           orElse: () => null,
         );
-    String topPercent(dynamic raw) {
-      final value = asDouble(raw);
-      if (value == null) return '—';
-      if (value >= 99) return 'Top 1%';
-      if (value >= 90) return 'Top 10%';
-      if (value >= 75) return 'Top 25%';
-      return '${value.toStringAsFixed(1)} percentile';
+    String topPercent(Map<String, dynamic> row) {
+      final value = asDouble(row['topPercent'] ?? row['top_percent']);
+      if (value != null) {
+        final normalized = value < 0.01 ? 0.01 : value;
+        return 'Top ${normalized.toStringAsFixed(normalized >= 10 ? 1 : 2)}%';
+      }
+      final percentile = asDouble(row['percentile']);
+      if (percentile == null) return '—';
+      final top = (100 - percentile).clamp(0.01, 100.0);
+      return 'Top ${top.toStringAsFixed(top >= 10 ? 1 : 2)}%';
     }
 
     String description(String code) => switch (code) {
-          'WEALTH' =>
-            'Total settled House account balances at the latest daily snapshot.',
+          'LIQUID_CREDIT' =>
+            'Settled CREDIT balances held by the House at the latest daily snapshot.',
           'PRODUCTIVE_CAPACITY' =>
             'Active and under-construction buildings owned by the House.',
           'LEGACY' =>
             'The House legacy recorded by the canonical lineage system.',
           'TECHNOLOGY' =>
-            'Patents and Corporation technology access attributed to the House.',
+            'House-specific technology capability published by the ranking authority.',
           'PUBLIC_GOODS' => 'Settled contributions to public projects.',
-          'ORGANIZATION_SCALE' =>
-            'Active memberships held by the House in Organizations.',
-          'TERRITORY_QUALITY' =>
-            'Latest settled service capacity of the House primary Territory.',
-          'MARKET_ROLE' => 'Completed market fills associated with the House.',
+          'MARKET_VOLUME_30D' =>
+            'Finalized CREDIT trading volume over the trailing 30 game days.',
           _ =>
             'Published House performance dimension from the daily ranking snapshot.',
         };
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    String metricValue(Map<String, dynamic> row) {
+      final definitions = widget.state.rankings['metricDefinitions'];
+      String? valueType = row['metric_value_type']?.toString() ??
+          row['metricValueType']?.toString();
+      if (valueType == null && definitions is List) {
+        for (final definition in definitions.whereType<Map>()) {
+          if (definition['code']?.toString() == selectedCode) {
+            valueType = definition['valueType']?.toString() ??
+                definition['value_type']?.toString();
+            break;
+          }
+        }
+      }
+      return formatRankingMetricValue(
+        selectedCode,
+        row['metric_value'] ?? row['metricValue'],
+        valueType: valueType,
+      );
+    }
+
+    final rawViewer = _serverViewer ?? widget.state.rankings['viewerPosition'];
+    final viewer = rawViewer is Map
+        ? Map<String, dynamic>.from(rawViewer)
+        : <String, dynamic>{};
+    final viewerName = _subjectType == 'CORPORATION'
+        ? (widget.state.membership?['corporation_name'] ??
+                widget.state.institutions['corporation']?['name'])
+            ?.toString()
+        : houseName;
+    String viewerTopPercent() {
+      final rank = asInt(viewer['rank']);
+      final population = asInt(viewer['populationSize'] ??
+          viewer['population_size'] ?? widget.state.rankings['populationSize']);
+      if (rank == null || population == null || population == 0) return '—';
+      final top = (rank / population * 100).clamp(0.01, 100.0);
+      return 'Top ${top.toStringAsFixed(top >= 10 ? 1 : 2)}%';
+    }
+    String rankDeltaLabel(Map<String, dynamic> row) {
+      final delta = asInt(row['rankDelta'] ?? row['rank_delta']);
+      if (delta == null) return '';
+      return '${delta >= 0 ? '↑' : '↓'} ${delta.abs()} since yesterday';
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         EarthPageCockpit(
           status: activeList.isEmpty ? 'NOT SETTLED' : 'WORLD · RANKINGS',
           statusColor: context.goldColor,
           infoTitle: 'HOW RANKINGS WORK',
           infoDescription:
               'Each leaderboard is an independent, server-settled metric snapshot. Values are not combined into a hidden composite score. Rankings are ordered by the finalized game day. Rules version: $version.',
-          title: 'WORLD RANKINGS',
+          title: title,
           subtitle:
-              'Compare Houses across independent, published performance dimensions.',
+              'Published ${_subjectType == 'HOUSE' ? 'House' : 'Corporation'} rankings · Day $gameDay',
           metrics: [
             CockpitMetric(
                 label: 'Categories',
@@ -1973,7 +2093,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                 icon: Icons.stacked_bar_chart_outlined,
                 color: context.primaryColor),
             CockpitMetric(
-                label: 'Total Houses',
+                label: _subjectType == 'HOUSE' ? 'Total Houses' : 'Total Corporations',
                 value:
                     '${widget.state.rankings['populationSize'] ?? (rows.isEmpty ? '—' : rows.first['population_size'] ?? '—')}',
                 icon: Icons.shield_outlined,
@@ -1981,6 +2101,83 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
           ],
         ),
         const SizedBox(height: 28),
+        Container(
+          padding: EdgeInsets.all(context.cardPadding),
+          decoration: BoxDecoration(
+            color: context.surfaceColor.withValues(alpha: .7),
+            borderRadius: BorderRadius.circular(context.radiusCard),
+            border: Border.all(color: context.subtleBorderColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildNarrowTabButton(
+                      context,
+                      title: 'HOUSES',
+                      icon: Icons.shield_outlined,
+                      isSelected: _subjectType == 'HOUSE',
+                      onTap: () {
+                        setState(() {
+                          _subjectType = 'HOUSE';
+                          _metricTab = 0;
+                          _serverRows = null;
+                          _serverMetric = null;
+                        });
+                        _loadServerPage(reset: true);
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildNarrowTabButton(
+                      context,
+                      title: 'CORPORATIONS',
+                      icon: Icons.account_balance_outlined,
+                      isSelected: _subjectType == 'CORPORATION',
+                      onTap: () {
+                        setState(() {
+                          _subjectType = 'CORPORATION';
+                          _metricTab = 0;
+                          _serverRows = null;
+                          _serverMetric = null;
+                        });
+                        _loadServerPage(reset: true);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: 'SEARCH ${_subjectType == 'HOUSE' ? 'HOUSES' : 'CORPORATIONS'}',
+                  hintText: 'Search the full leaderboard',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: IconButton(
+                    tooltip: 'Search',
+                    icon: const Icon(Icons.arrow_forward),
+                    onPressed: () {
+                      _search = _searchController.text.trim();
+                      _loadServerPage(reset: true);
+                    },
+                  ),
+                ),
+                onSubmitted: (value) {
+                  _search = value.trim();
+                  _loadServerPage(reset: true);
+                },
+              ),
+              if (_serverError != null) ...[
+                const SizedBox(height: 6),
+                Text(_serverError!, style: context.widgetFooterStyle),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         Container(
           margin: EdgeInsets.only(bottom: context.spacingControl),
           decoration: BoxDecoration(
@@ -1999,7 +2196,8 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                     isSelected: index == metricIndex,
                     onTap: () {
                       EarthAudioEngine.instance.playClick();
-                      setState(() => _metricTab = index);
+                      _selectMetric(index);
+                      _loadServerPage(reset: true);
                     },
                   ),
                 ),
@@ -2007,7 +2205,7 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
           ),
         ),
         const SizedBox(height: 16),
-        if (myHouse != null || houseName != null) ...[
+        if (viewer['rank'] != null || myHouse != null || viewerName != null) ...[
           Container(
             padding: EdgeInsets.all(context.cardPadding),
             decoration: BoxDecoration(
@@ -2017,28 +2215,79 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                   color: context.primaryColor.withValues(alpha: .35)),
             ),
             child: Row(children: [
-              Icon(Icons.shield_outlined, color: context.primaryColor),
+              Icon(
+                _subjectType == 'HOUSE'
+                    ? Icons.shield_outlined
+                    : Icons.account_balance_outlined,
+                color: context.primaryColor,
+              ),
               const SizedBox(width: 10),
               Expanded(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                    Text('YOUR HOUSE',
+                    Text(
+                        _subjectType == 'HOUSE'
+                            ? 'YOUR HOUSE'
+                            : 'YOUR CORPORATION',
                         style: context.captionStyle
                             .copyWith(color: context.primaryColor)),
                     Text(
-                        houseName ??
+                        viewerName ??
                             myHouse?['subject_name']?.toString() ??
-                            'House',
+                            (_subjectType == 'HOUSE'
+                                ? 'House'
+                                : 'Corporation'),
                         style: context.widgetValueStyle),
                   ])),
-              if (myHouse != null)
+              if (viewer['rank'] != null || myHouse != null)
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('#${myHouse['rank'] ?? '—'}',
+                  Text('#${viewer['rank'] ?? myHouse?['rank'] ?? '—'}',
                       style: context.widgetValueStyle
                           .copyWith(color: context.goldColor)),
-                  Text(topPercent(myHouse['percentile']),
-                      style: context.captionStyle),
+                  Text(viewerTopPercent(), style: context.captionStyle),
+                  if (viewer['rankDelta'] != null)
+                    Text(rankDeltaLabel(viewer), style: context.captionStyle),
+                  if (viewer['metricValue'] != null ||
+                      viewer['metric_value'] != null)
+                    Text(
+                      metricValue({
+                        'metric_value':
+                            viewer['metricValue'] ?? viewer['metric_value'],
+                      }),
+                      style: context.captionStyle,
+                    ),
+                  if (viewer['valueDelta'] != null ||
+                      viewer['value_delta'] != null)
+                    Text(
+                      'Δ ${metricValue({
+                        'metric_value':
+                            viewer['valueDelta'] ?? viewer['value_delta'],
+                      })}',
+                      style: context.captionStyle,
+                    ),
+                  if (_subjectType == 'CORPORATION' &&
+                      widget.onNavigate != null)
+                    TextButton(
+                      onPressed: () => widget.onNavigate?.call('my-corporation'),
+                      child: const Text('VIEW CORPORATION'),
+                    ),
+                  if (_subjectType == 'HOUSE' &&
+                      (viewer['subjectId'] ??
+                              viewer['subject_id'] ??
+                              myHouseId) !=
+                          null)
+                    TextButton(
+                      onPressed: () => showHouseLineageDialog(
+                        context,
+                        houseId: (viewer['subjectId'] ??
+                                viewer['subject_id'] ??
+                                myHouseId)
+                            .toString(),
+                        api: widget.api,
+                      ),
+                      child: const Text('VIEW LINEAGE'),
+                    ),
                 ]),
             ]),
           ),
@@ -2083,10 +2332,47 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                             Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  Text(row['metric_value']?.toString() ?? '0',
+                                  Text(metricValue(row),
                                       style: context.widgetValueStyle),
-                                  Text(topPercent(row['percentile']),
+                                  Text(topPercent(row),
                                       style: context.captionStyle),
+                                  if (row['rankDelta'] != null ||
+                                      row['rank_delta'] != null)
+                                    Text(rankDeltaLabel(row),
+                                        style: context.captionStyle),
+                                  if (row['valueDelta'] != null ||
+                                      row['value_delta'] != null)
+                                    Text(
+                                      'Δ ${metricValue({
+                                        ...row,
+                                        'metric_value': row['valueDelta'] ??
+                                            row['value_delta'],
+                                      })}',
+                                      style: context.captionStyle,
+                                    ),
+                                  if (widget.onNavigate != null &&
+                                      _subjectType == 'CORPORATION')
+                                    TextButton(
+                                      onPressed: () => widget.onNavigate?.call(
+                                          'my-corporation'),
+                                      child: Text(
+                                          'VIEW CORPORATION'),
+                                    ),
+                                  if (_subjectType == 'HOUSE')
+                                    TextButton(
+                                      onPressed: () {
+                                        final id = row['subjectId'] ??
+                                            row['subject_id'];
+                                        if (id != null) {
+                                          showHouseLineageDialog(
+                                            context,
+                                            houseId: id.toString(),
+                                            api: widget.api,
+                                          );
+                                        }
+                                      },
+                                      child: const Text('VIEW LINEAGE'),
+                                    ),
                                 ]),
                           ],
                         ),
@@ -2095,9 +2381,25 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
                 ),
         ),
         const SizedBox(height: 8),
+        if (_serverLoading)
+          const Center(child: Padding(
+            padding: EdgeInsets.all(12),
+            child: CircularProgressIndicator(),
+          )),
+        if (!_serverLoading && _nextCursor != null)
+          Align(
+            alignment: Alignment.center,
+            child: OutlinedButton.icon(
+              onPressed: () => _loadServerPage(cursor: _nextCursor),
+              icon: const Icon(Icons.expand_more),
+              label: const Text('LOAD MORE'),
+            ),
+          ),
+        const SizedBox(height: 8),
         if (selectedCode.isNotEmpty)
           Text(description(selectedCode), style: context.widgetFooterStyle),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2417,7 +2719,6 @@ class _WorldRankingsPanelState extends State<WorldRankingsPanel> {
     Map<String, String>? cityNames,
     Map<String, String>? cityToCorpMap,
     String? myAffiliationId,
-    String? formulaInfo,
   }) {
     final isCitizen = title == 'CITIZENS';
     final isCity = title == 'CITIES';

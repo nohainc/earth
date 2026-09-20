@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { mapTechnologyCatalogRow, normalizeResearchProject, type TechnologyCatalogRow } from './technology-postgres.ts';
 import { listRankings as listRankingsSnapshot } from './rankings-postgres.ts';
+import type { RankingSubjectType } from './rankings.ts';
 import { priceUnitsToDisplayPrice } from './market-units.ts';
 import { getConstitutionReadModel } from './constitutional-kernel-postgres.ts';
 import { readAuthoritativeGameTime } from './world-clock-postgres.ts';
@@ -48,7 +49,7 @@ export async function listInstitutions(repository: PostgresRepository): Promise<
   return { institutions: institutions.rows, community: [], territories: territories.rows, corporation: corporations.rows, membership: [], budgets: budgets.rows, earth: { treasury: earth.treasury ?? '0', budgets: budgets.rows.filter((row) => row.institution_id === 'EARTH') } };
 }
 
-export interface RankingsQueryOptions { category?: string; metric?: string; search?: string; limit?: number; offset?: number; currentHumanId?: string; }
+export interface RankingsQueryOptions { subjectType?: RankingSubjectType; metric?: string; search?: string; limit?: number; offset?: number; cursor?: string; currentHumanId?: string; }
 
 export async function listRankings(repository: PostgresRepository, options: RankingsQueryOptions = {}): Promise<Record<string, unknown>> {
   return listRankingsSnapshot(repository, options);
