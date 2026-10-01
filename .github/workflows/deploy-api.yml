@@ -66,7 +66,7 @@ jobs:
       - name: Capture production restore point
         run: EARTH_BACKUP_DIR=backups npm run db:backup:postgres
       - name: Upload restore point metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: earth-production-restore-point-${{ github.sha }}
           path: backups/
