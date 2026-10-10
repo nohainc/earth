@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "nanomarkup": "^1.0.0",
-    "pg": "^8.16.3"
+    "pg": "^8.23.1"
   },
   "scripts": {
     "start": "node server.js",
